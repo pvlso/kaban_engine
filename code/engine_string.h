@@ -1,23 +1,12 @@
-#if !defined(ENGINE_STRING_H)
+#if !defined(EDITOR_STRING_H)
 /* ========================================================================
    $File: $
-   $Date: 2025 $
+   $Date: 2024 $
    $Revision: $
-   $Creator: Pavlo Solodrai  $
+   $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
 #include <stdarg.h>
-
-inline u32
-StringLength(char *String)
-{
-    u32 Count = 0;
-    while(*String++)
-    {
-        ++Count;
-    }
-    return(Count);
-}
 
 inline b32
 IsEndOfLine(char C)
@@ -196,7 +185,7 @@ ReadVarArgSignedInteger(u32 Length, va_list *ArgList)
 inline f64
 ReadVarArgFloat(u32 Length, va_list *ArgList)
 {
-    f64 Result = 0;
+    r64 Result = 0;
     switch(Length)
     {
         case 4:
@@ -644,5 +633,5 @@ FormatString(umm DestSize, char *Dest, char *Format, ...)
     return(Result);
 }
 
-#define ENGINE_STRING_H
+#define EDITOR_STRING_H
 #endif

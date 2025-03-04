@@ -1,0 +1,260 @@
+#if !defined(EDITOR_UI_H)
+/* ========================================================================
+   $File: $
+   $Date: 2024 $
+   $Revision: $
+   $Creator: BabyKaban $
+   $Notice: $
+   ======================================================================== */
+
+#define UI_COLOR_RGB1_3F3F3F V3(0.247058823529f, 0.247058823529f, 0.247058823529f)
+#define UI_COLOR_RGB1_4D3020 V3(0.301960784314f, 0.188235294118f, 0.125490196078f)
+#define UI_COLOR_RGB1_67412C V3(0.403921568627f, 0.254901960784f, 0.172549019608f)
+#define UI_COLOR_RGB1_784A32 V3(0.470588235294f, 0.290196078431f, 0.196078431373f)
+#define UI_COLOR_RGB1_7f7f7f V3(0.498039215686f, 0.498039215686f, 0.498039215686f)
+#define UI_COLOR_RGB1_880015 V3(0.533333333333f, 0.0f,            0.082352941176f)
+#define UI_COLOR_RGB1_ED1C24 V3(0.929411764706f, 0.109803921569f, 0.141176470588f)
+#define UI_COLOR_RGB1_FF7F27 V3(1.0f,            0.498039215686f, 0.152941176471f)
+#define UI_COLOR_RGB1_B97A57 V3(0.725490196078f, 0.478431372549f, 0.341176470588f)
+#define UI_COLOR_RGB1_22B14C V3(0.133333333333f, 0.694117647059f, 0.298039215686f)
+#define UI_COLOR_RGB1_B5E61D V3(0.709803921569f, 0.901960784314f, 0.113725490196f)
+#define UI_COLOR_RGB1_3F48CC V3(0.247058823529f, 0.282352941176f, 0.8f           )
+#define UI_COLOR_RGB1_7092BE V3(0.439215686275f, 0.572549019608f, 0.745098039216f)
+#define UI_COLOR_RGB1_00A2E8 V3(0.0f,            0.635294117647f, 0.909803921569f)
+#define UI_COLOR_RGB1_CB9C83 V3(0.796078431373f, 0.611764705882f, 0.513725490196f)
+#define UI_COLOR_RGB1_F78C92 V3(0.96862745098f,  0.549019607843f, 0.572549019608f)
+#define UI_COLOR_RGB1_DCBCAB V3(0.862745098039f, 0.737254901961f, 0.670588235294f)
+#define UI_COLOR_RGB1_DDF398 V3(0.866666666667f, 0.952941176471f, 0.596078431373f)
+#define UI_COLOR_RGB1_EFE4B0 V3(0.937254901961f, 0.894117647059f, 0.690196078431f)
+#define UI_COLOR_RGB1_99D9EA V3(0.6f,            0.850980392157f, 0.917647058824f)
+#define UI_COLOR_RGB1_C3C3C3 V3(0.764705882353f, 0.764705882353f, 0.764705882353f)
+#define UI_COLOR_RGB1_CFEEF5 V3(0.811764705882f, 0.933333333333f, 0.960784313725f)
+#define UI_COLOR_RGB1_E1E1E1 V3(0.882352941176f, 0.882352941176f, 0.882352941176f)
+#define UI_COLOR_RGB1_FFFFFF V3(1.0f,            1.0f,            1.0f           )
+
+#define UI_COLOR_RGBA1_3F3F3FFF V4(0.247058823529f, 0.247058823529f, 0.247058823529f, 1.0f)
+#define UI_COLOR_RGBA1_4D3020FF V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1.0f)
+#define UI_COLOR_RGBA1_67412CFF V4(0.403921568627f, 0.254901960784f, 0.172549019608f, 1.0f)
+#define UI_COLOR_RGBA1_784A32FF V4(0.470588235294f, 0.290196078431f, 0.196078431373f, 1.0f)
+#define UI_COLOR_RGBA1_7F7F7FFF V4(0.498039215686f, 0.498039215686f, 0.498039215686f, 1.0f)
+#define UI_COLOR_RGBA1_880015FF V4(0.533333333333f, 0.0f,            0.082352941176f, 1.0f)
+#define UI_COLOR_RGBA1_ED1C24FF V4(0.929411764706f, 0.109803921569f, 0.141176470588f, 1.0f)
+#define UI_COLOR_RGBA1_FF7F27FF V4(1.0f,            0.498039215686f, 0.152941176471f, 1.0f)
+#define UI_COLOR_RGBA1_B97A57FF V4(0.725490196078f, 0.478431372549f, 0.341176470588f, 1.0f)
+#define UI_COLOR_RGBA1_22B14CFF V4(0.133333333333f, 0.694117647059f, 0.298039215686f, 1.0f)
+#define UI_COLOR_RGBA1_B5E61DFF V4(0.709803921569f, 0.901960784314f, 0.113725490196f, 1.0f)
+#define UI_COLOR_RGBA1_3F48CCFF V4(0.247058823529f, 0.282352941176f, 0.8f           , 1.0f)
+#define UI_COLOR_RGBA1_7092BEFF V4(0.439215686275f, 0.572549019608f, 0.745098039216f, 1.0f)
+#define UI_COLOR_RGBA1_00A2E8FF V4(0.0f,            0.635294117647f, 0.909803921569f, 1.0f)
+#define UI_COLOR_RGBA1_CB9C83FF V4(0.796078431373f, 0.611764705882f, 0.513725490196f, 1.0f)
+#define UI_COLOR_RGBA1_F78C92FF V4(0.96862745098f,  0.549019607843f, 0.572549019608f, 1.0f)
+#define UI_COLOR_RGBA1_DCBCABFF V4(0.862745098039f, 0.737254901961f, 0.670588235294f, 1.0f)
+#define UI_COLOR_RGBA1_DDF398FF V4(0.866666666667f, 0.952941176471f, 0.596078431373f, 1.0f)
+#define UI_COLOR_RGBA1_EFE4B0FF V4(0.937254901961f, 0.894117647059f, 0.690196078431f, 1.0f)
+#define UI_COLOR_RGBA1_99D9EAFF V4(0.6f,            0.850980392157f, 0.917647058824f, 1.0f)
+#define UI_COLOR_RGBA1_C3C3C3FF V4(0.764705882353f, 0.764705882353f, 0.764705882353f, 1.0f)
+#define UI_COLOR_RGBA1_CFEEF5FF V4(0.811764705882f, 0.933333333333f, 0.960784313725f, 1.0f)
+#define UI_COLOR_RGBA1_E1E1E1FF V4(0.882352941176f, 0.882352941176f, 0.882352941176f, 1.0f)
+#define UI_COLOR_RGBA1_FFFFFFFF V4(1.0f,            1.0f,            1.0f           , 1.0f)
+
+global_variable u32 TagValueCounts[Tag_Count] =
+{
+    Value_Count,        Value_Count,         AnimationType_Count,
+    Asset_Count,        Value_Count,         FontType_Count,
+    Value_Count,        BiomeType_Count,     TileType_Count,
+    Height_Count,       CliffHillType_Count, TileSurface_Count,
+    TileSurface_Count,  TreeType_Count,      LightLevel_Count,
+    SizeLevel_Count,    Color_Count,         VarietyType_Count,
+    MagicElement_Count, Sex_Count,           Age_Count,
+    Color_Count,        Beard_Count,         Accessories_Count,
+    TopOutfit_Count,    Color_Count,         BottomOutfit_Count,
+    Color_Count,        NPCName_Count,       
+    QuestType_Count,
+    QuestName_Count,    Haircut_Count,       Spell_Count,
+    MagicEffect_Count,  ItemName_Count,      FileData_Count,
+    MusicType_Count,    SoundEffect_Count,   PropType_Count,
+};
+
+struct ui_state;
+
+struct array_cursor
+{
+    u32 ArrayPosition;
+    u32 ArrayCount;
+    u32 ElementCount;
+    u32 Array[256];
+};
+
+struct interaction_id
+{
+    u32 Owner;
+    u32 Value;
+};
+
+enum ui_text_op
+{
+    UITextOp_DrawText,
+    UITextOp_SizeText,
+};
+
+enum interaction_type
+{
+    Interaction_None,
+
+    Interaction_NOP,
+
+    Interaction_AutoModifyVariable,
+
+    Interaction_ToggleValue,
+    Interaction_DragValue,
+    Interaction_TearValue,
+
+    Interaction_Resize,
+    Interaction_Move,
+
+    Interaction_Select,
+
+    Interaction_ToggleExpansion,
+
+    Interaction_SetUInt32,
+    Interaction_SetPointer,
+};
+
+struct interaction
+{
+    interaction_id ID;
+    interaction_type Type;
+
+    void *Target;
+    union
+    {
+        void *Generic;
+        void *Pointer;
+        u32 UInt32;
+        v2 *P;
+    };
+};
+
+struct ui_layout
+{
+    ui_state *UIState;
+    v2 MouseP;
+    v2 BaseCorner;
+
+    u32 Depth;
+
+    v2 At;
+    r32 LineAdvance;
+    r32 NextYDelta;
+    r32 SpacingX;
+    r32 SpacingY;
+    
+    u32 NoLineFeed;
+    b32 LineInitialized;
+};
+
+struct ui_layout_element
+{
+    // NOTE(casey): Storage;
+    ui_layout *Layout;
+    v2 *Dim;
+    v2 *Size;
+    interaction Interaction;
+
+    // NOTE(casey): Out
+    rectangle2 Bounds;
+};
+
+struct ui_window
+{
+    v2 Dim;
+};
+
+struct ui_scroll_window
+{
+    v2 Dim;
+    b32 Viewable;
+
+    u32 CursorElementCount;
+    array_cursor Cursor;
+};
+
+enum ui_object_type
+{
+    UIObjectType_None,
+    UIObjectType_Window,
+    UIObjectType_ScrollWindow,
+};
+
+struct ui_object_id
+{
+    u32 High;
+    u32 Low;
+};
+
+struct ui_object
+{
+    ui_object_id ID;
+    ui_object *NextInHash;
+
+    b32 Initialized;
+    ui_object_type Type;
+    union
+    {
+        ui_window Window;
+        ui_scroll_window ScrollWindow;
+    };
+};
+
+struct string_array
+{
+    char *Key;
+    u32 StringCount;
+
+    char **Strings;
+
+    string_array *NextInHash;
+};
+
+struct ui_state
+{
+    b32 Initialized;
+    memory_arena UIArena;
+    memory_arena StringsArena;
+
+    json_element *JsonStringsHead;
+
+    u32 DefaultClipRect;
+    render_group RenderGroup;
+    loaded_font *Font;
+    ssa_font *FontInfo;
+
+    object_transform TextTransform;
+    object_transform ShadowTransform;
+    object_transform UITransform;
+    object_transform BackingTransform;
+
+    v2 LastMouseP;
+    b32 AltUI;
+    s16 MouseZ;
+    
+    interaction Interaction;
+    interaction HotInteraction;
+    interaction NextHotInteraction;
+
+    r32 LeftEdge;
+    r32 RightEdge;
+    r32 FontScale;
+    font_id FontID;
+    r32 GlobalWidth;
+    r32 GlobalHeight;
+
+    u32 NextInteractionID;
+    ui_layout MouseTextLayout;
+
+    ui_object *UIObjectsHash[4096];
+    string_array *EnumStringArraysHash[4096];
+};
+
+#define EDITOR_UI_H
+#endif

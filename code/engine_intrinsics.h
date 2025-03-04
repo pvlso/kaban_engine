@@ -1,9 +1,9 @@
-#if !defined(ENGINE_INTRINSICS_H)
+#if !defined(EDITOR_INTRINSICS_H)
 /* ========================================================================
    $File: $
-   $Date: 2025 $
+   $Date: 2024 $
    $Revision: $
-   $Creator: Pavlo Solodrai $
+   $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
 
@@ -14,24 +14,24 @@
 
 #include "math.h"
 
-inline s32
-SignOf(s32 Value)
+inline int32
+SignOf(int32 Value)
 {
-    s32 Result = (Value >= 0) ? 1 : -1;
+    int32 Result = (Value >= 0) ? 1 : -1;
     return(Result);
 }
 
-inline f32
-SignOf(f32 Value)
+inline real32
+SignOf(real32 Value)
 {
-    f32 Result = (Value >= 0) ? 1.0f : -1.0f;
+    real32 Result = (Value >= 0) ? 1.0f : -1.0f;
     return(Result);
 }
 
-inline f32
-SquareRoot(f32 F32)
+inline real32
+SquareRoot(real32 Real32)
 {
-    f32 Result = sqrtf(F32);
+    real32 Result = sqrtf(Real32);
     return(Result);
 }
 
@@ -42,10 +42,10 @@ SquareRoot(f64 Float64)
     return(Result);
 }
 
-inline f32
-AbsoluteValue(f32 F32)
+inline real32
+AbsoluteValue(real32 Real32)
 {
-    f32 Result = (f32)fabs(F32);
+    real32 Result = (r32)fabs(Real32);
     return(Result);
 }
 
@@ -56,94 +56,94 @@ AbsoluteValue(f64 Float64)
     return(Result);
 }
 
-inline s32
-AbsoluteValue(s32 S32)
+inline int32
+AbsoluteValue(int32 Int32)
 {
-    s32 Result = abs(S32);
+    int32 Result = abs(Int32);
     return(Result);
 }
 
-inline u32
-RotateLeft(u32 Value, s32 Amount)
+inline uint32
+RotateLeft(uint32 Value, int32 Amount)
 {
 #if COMPILER_MSVC
-    u32 Result = _rotl(Value, Amount);
+    uint32 Result = _rotl(Value, Amount);
 #else
     // TODO(casey): Actually port this to other compiler platforms!
     Amount &= 31;
-    u32 Result = ((Value << Amount) | (Value >> (32 - Amount)));
+    uint32 Result = ((Value << Amount) | (Value >> (32 - Amount)));
 #endif
 
     return(Result);
 }
 
-inline u32
-RotateRight(u32 Value, s32 Amount)
+inline uint32
+RotateRight(uint32 Value, int32 Amount)
 {
 #if COMPILER_MSVC
-    u32 Result = _rotr(Value, Amount);
+    uint32 Result = _rotr(Value, Amount);
 #else
     // TODO(casey): Actually port this to other compiler platforms!
     Amount &= 31;
-    us32 Result = ((Value >> Amount) | (Value << (32 - Amount)));
+    uint32 Result = ((Value >> Amount) | (Value << (32 - Amount)));
 #endif
 
     return(Result);
 }
 
-inline s32
-RoundF32ToS32(f32 F32)
+inline int32
+RoundReal32ToInt32(real32 Real32)
 {
-    s32 Result = (s32)roundf(F32);
+    int32 Result = (int32)roundf(Real32);
     return(Result);
 }
 
-inline u32
-RoundF32ToUS32(f32 F32)
+inline uint32
+RoundReal32ToUInt32(real32 Real32)
 {
-    u32 Result = (u32)roundf(F32);
+    uint32 Result = (uint32)roundf(Real32);
     return(Result);
 }
 
-inline s32 
-FloorF32ToS32(f32 F32)
+inline int32 
+FloorReal32ToInt32(real32 Real32)
 {
-    s32 Result = (s32)floorf(F32);
+    int32 Result = (int32)floorf(Real32);
     return(Result);
 }
 
-inline s32 
-CeilF32ToS32(f32 F32)
+inline int32 
+CeilReal32ToInt32(real32 Real32)
 {
-    s32 Result = (s32)ceilf(F32);
+    int32 Result = (int32)ceilf(Real32);
     return(Result);
 }
 
-inline s32
-TruncateF32ToS32(f32 F32)
+inline int32
+TruncateReal32ToInt32(real32 Real32)
 {
-    s32 Result = (s32)F32;
+    int32 Result = (int32)Real32;
     return(Result);
 }
 
-inline f32
-Sin(f32 Angle)
+inline real32
+Sin(real32 Angle)
 {
-    f32 Result = sinf(Angle);
+    real32 Result = sinf(Angle);
     return(Result);
 }
 
-inline f32
-Cos(f32 Angle)
+inline real32
+Cos(real32 Angle)
 {
-    f32 Result = cosf(Angle);
+    real32 Result = cosf(Angle);
     return(Result);
 }
 
-inline f32
-ATan2(f32 Y, f32 X)
+inline real32
+ATan2(real32 Y, real32 X)
 {
-    f32 Result = atan2f(Y, X);
+    real32 Result = atan2f(Y, X);
     return(Result);
 }
 
@@ -157,19 +157,19 @@ AToF(char *A)
 
 struct bit_scan_result
 {
-    b32 Found;
-    u32 Index;
+    bool32 Found;
+    uint32 Index;
 };
 
 inline bit_scan_result
-FindLeastSignificantSetBit(u32 Value)
+FindLeastSignificantSetBit(uint32 Value)
 {
     bit_scan_result Result = {};
 
 #if COMPILER_MSVC
     Result.Found = _BitScanForward((unsigned long *)&Result.Index, Value);
 #else
-    for(u32 Test = 0;
+    for(uint32 Test = 0;
         Test < 32;
         ++Test)
     {
@@ -185,5 +185,5 @@ FindLeastSignificantSetBit(u32 Value)
     return(Result);
 }
 
-#define ENGINE_INTRINSICS_H
+#define EDITOR_INTRINSICS_H
 #endif

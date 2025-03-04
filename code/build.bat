@@ -6,7 +6,13 @@ set CommonLinkerFlags= -incremental:no -opt:ref user32.lib gdi32.lib winmm.lib o
 IF NOT EXIST ..\build mkdir ..\build
 pushd ..\build
 
-:: cl %CommonCompilerFlags% ..\..\SpellweaverSaga\code\spellweaver.cpp -Fmspellweaver.map -LD /link -incremental:no -opt:ref -PDB:spellweaver_%random%.pdb -EXPORT:GameGetSoundSamples -EXPORT:GameUpdateAndRender -EXPORT:DEBUGGameFrameEnd
 
+REM 64-bit build
+del *.pdb > NUL 2> NUL
+REM Optimization switches /O2
+echo WAITING FOR PDB > lock.tmp
+cl %CommonCompilerFlags% ..\code\engine.cpp -Fmengine.map -LD /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EditorGetSoundSamples -EXPORT:EngineUpdateAndRender -EXPORT:DEBUGEditorFrameEnd
+del lock.tmp
 cl %CommonCompilerFlags% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%
+
 popd

@@ -1,12 +1,12 @@
 /* ========================================================================
    $File: $
-   $Date: 2025 $
+   $Date: 2024 $
    $Revision: $
-   $Creator: Pavlo Solodrai  $
-   $Notice: $
+   $Creator: BabyKaban $
+   $Notice:  $
    ======================================================================== */
 
-#include "engine_render.h"
+#include "engine_render_group.h"
 
 #define GL_MAJOR_VERSION                                   0x821B
 #define GL_MINOR_VERSION                                   0x821C
@@ -147,9 +147,9 @@ OpenGLSetScreenspace(s32 Width, s32 Height)
     glLoadIdentity();
 
     glMatrixMode(GL_PROJECTION);
-    f32 a = SafeRatio1(2.0f, (f32)Width);
-    f32 b = SafeRatio1(2.0f, (f32)Height);
-    f32 Proj[] =
+    r32 a = SafeRatio1(2.0f, (r32)Width);
+    r32 b = SafeRatio1(2.0f, (r32)Height);
+    r32 Proj[] =
     {
          a,  0,  0,  0,
          0,  b,  0,  0,
@@ -256,7 +256,7 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
     }
     else
     {
-        glViewport(DrawRegion.Min.x, DrawRegion.Min.y, WindowWidth, WindowHeight);
+        glViewport(DrawRegion.MinX, DrawRegion.MinY, WindowWidth, WindowHeight);
     }
 }
 
@@ -292,7 +292,7 @@ OpenGLDisplayBitmap(s32 Width, s32 Height, void *Memory, int Pitch,
     // TODO(casey): Decide how we want to handle aspect ratio - black bars or crop?
 
     v2 MinP = {0, 0};
-    v2 MaxP = {(f32)Width, (f32)Height};
+    v2 MaxP = {(r32)Width, (r32)Height};
     v4 Color = {1, 1, 1, 1};
 
     OpenGLRectangle(MinP, MaxP, Color);
@@ -318,7 +318,7 @@ OpenGLLineVertices(v2 MinP, v2 MaxP)
 }
 
 internal void
-OpenGLRenderCommands(render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
+OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
                      u32 WindowWidth, u32 WindowHeight)
 {    
     glEnable(GL_TEXTURE_2D);
@@ -415,13 +415,13 @@ OpenGLRenderCommands(render_commands *Commands, editor_render_prep *Prep, rectan
 
                 if(!UseRenderTargets || (Clip->RenderTargetIndex == 0))
                 {
-                    ClipRect = Offset(ClipRect, DrawRegion.Min.x, DrawRegion.Min.y);
+                    ClipRect = Offset(ClipRect, DrawRegion.MinX, DrawRegion.MinY);
                 }
             
-                glScissor(ClipRect.Min.x, ClipRect.Min.y, GetWidth(ClipRect), GetHeight(ClipRect));
+                glScissor(ClipRect.MinX, ClipRect.MinY, ClipRect.MaxX - ClipRect.MinX, ClipRect.MaxY - ClipRect.MinY);
             }
             
-            void *Data = (u8 *)Header + sizeof(*Header);
+            void *Data = (uint8 *)Header + sizeof(*Header);
             switch(Header->Type)
             {
                 case RenderGroupEntryType_render_entry_bitmap:
@@ -438,8 +438,8 @@ OpenGLRenderCommands(render_commands *Commands, editor_render_prep *Prep, rectan
 
                         glBindTexture(GL_TEXTURE_2D, (GLuint)U32FromPointer(Entry->Bitmap->TextureHandle));
 
-                        f32 OneTexelU = 0.5f / (f32)Entry->Bitmap->Width;
-                        f32 OneTexelV = 0.5f / (f32)Entry->Bitmap->Height;
+                        r32 OneTexelU = 0.5f / (r32)Entry->Bitmap->Width;
+                        r32 OneTexelV = 0.5f / (r32)Entry->Bitmap->Height;
 
                         v2 MinUV = V2(OneTexelU, OneTexelV);
                         v2 MaxUV = V2(1.0f - OneTexelU, 1.0f - OneTexelV);
@@ -471,6 +471,11 @@ OpenGLRenderCommands(render_commands *Commands, editor_render_prep *Prep, rectan
                     glDisable(GL_TEXTURE_2D);
                     OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
                     glEnable(GL_TEXTURE_2D);
+                } break;
+
+                case RenderGroupEntryType_render_entry_coordinate_system:
+                {
+                    render_entry_coordinate_system *Entry = (render_entry_coordinate_system *)Data;
                 } break;
 
                 case RenderGroupEntryType_render_entry_blend_render_target:

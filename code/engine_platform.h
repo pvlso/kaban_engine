@@ -1,19 +1,32 @@
-#if !defined(ENGINE_PLATFORM_H)
+#if !defined(EDITOR_PLATFORM_H)
 /* ========================================================================
    $File: $
-   $Date: 2025 $
+   $Date: 2024 $
    $Revision: $
-   $Creator: Pavlo Solodrai  $
+   $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
+
+/*
+  NOTE(casey):
+
+  EDITOR_INTERNAL:
+    0 - Build for public release
+    1 - Build for developer only
+
+  EDITOR_SLOW:
+    0 - Not slow code allowed!
+    1 - Slow code welcome.
+*/
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 //
-// NOTE(paul): Compilers
+// NOTE(casey): Compilers
 //
-
+    
 #if !defined(COMPILER_MSVC)
 #define COMPILER_MSVC 0
 #endif
@@ -40,49 +53,83 @@ extern "C" {
 #error SEE/NEON optimizations are not available for this compiler yet!!!!
 #endif
     
-//
+//=================================================================================
 // NOTE(paul): Types
-//
+//=================================================================================
 
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
 #include <float.h>
     
-typedef int8_t  s8;
-typedef int16_t s16;
-typedef int32_t s32;
-typedef int64_t s64;
-typedef s32     b32;
+typedef int8_t int8;
+typedef int16_t int16;
+typedef int32_t int32;
+typedef int64_t int64;
+typedef int32 bool32;
 
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
+typedef uint8_t uint8;
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef uint64_t uint64;
+
+typedef intptr_t intptr;
+typedef uintptr_t uintptr;
     
-typedef float  f32;
-typedef double f64;
+typedef float real32;
+typedef double real64;
+    
+typedef int8 s8;
+typedef int8 s08;
+typedef int16 s16;
+typedef int32 s32;
+typedef int64 s64;
+typedef bool32 b32;
 
+typedef uint8 u8;
+typedef uint8 u08;
+typedef uint16 u16;
+typedef uint32 u32;
+typedef uint64 u64;
+
+typedef real32 r32;
+typedef real64 r64;
+typedef real32 f32;
+typedef real64 f64;
 
 typedef uintptr_t umm;
 typedef intptr_t  smm;
 
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+struct memory_arena
+{
+    umm Size;
+    u8 *Base;
+    umm Used;
+
+    umm MinimumBlockSize;
+    
+    u32 BlockCount;
+    s32 TempCount;
+};
+    
 union v2
 {
     struct
     {
-        f32 x, y;
+        real32 x, y;
     };
-
     struct
     {
-        f32 u, v;
+        real32 u, v;
     };
-
-    f32 E[2];
+    real32 E[2];
 };
 
-union v2i
+union v2_s32
 {
     struct
     {
@@ -91,52 +138,42 @@ union v2i
 
     s32 E[2];
 };
-    
-union v2d
-{
-    __m128d V;
-
-    struct
-    {
-        f64 x, y;
-    };
-};
 
 union v3
 {
     struct
     {
-        f32 x, y, z;
+        real32 x, y, z;
     };
     struct
     {
-        f32 u, v, w;
+        real32 u, v, w;
     };
     struct
     {
-        f32 r, g, b;
+        real32 r, g, b;
     };
     struct
     {
         v2 xy;
-        f32 Ignored0_;
+        real32 Ignored0_;
     };
     struct
     {
-        f32 Ignored1_;
+        real32 Ignored1_;
         v2 yz;
     };
     struct
     {
         v2 uv;
-        f32 Ignored2_;
+        real32 Ignored2_;
     };
     struct
     {
-        f32 Ignored3_;
+        real32 Ignored3_;
         v2 vw;
     };
-    f32 E[3];
+    real32 E[3];
 };
 
 union v4
@@ -148,11 +185,11 @@ union v4
             v3 xyz;
             struct
             {
-                f32 x, y, z;
+                real32 x, y, z;
             };
         };
         
-        f32 w;        
+        real32 w;        
     };
     struct
     {
@@ -161,31 +198,31 @@ union v4
             v3 rgb;
             struct
             {
-                f32 r, g, b;
+                real32 r, g, b;
             };
         };
         
-        f32 a;        
+        real32 a;        
     };
     struct
     {
         v2 xy;
-        f32 Ignored0_;
-        f32 Ignored1_;
+        real32 Ignored0_;
+        real32 Ignored1_;
     };
     struct
     {
-        f32 Ignored2_;
+        real32 Ignored2_;
         v2 yz;
-        f32 Ignored3_;
+        real32 Ignored3_;
     };
     struct
     {
-        f32 Ignored4_;
-        f32 Ignored5_;
+        real32 Ignored4_;
+        real32 Ignored5_;
         v2 zw;
     };
-    f32 E[4];
+    real32 E[4];
 };
 
 struct rectangle2
@@ -194,36 +231,31 @@ struct rectangle2
     v2 Max;
 };
 
-struct rectangle2i
-{
-    v2i Min;
-    v2i Max;
-};
-
 struct rectangle3
 {
     v3 Min;
     v3 Max;
 };
 
-//
+//=================================================================================
 // NOTE(paul): Defines
-//
+//=================================================================================
 
 #define U32FromPointer(Pointer) ((u32)(umm)(Pointer))
 #define PointerFromU32(type, Value) (type *)((umm)Value)
+
 #define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
     
 #define U16Maximum 0xFFFF
 #define U32Maximum 0xFFFFFFFF
 #define U64Maximum 0xFFFFFFFFFFFFFFFF
 
-#define F32Maximum FLT_MAX
-#define F32Minimum -FLT_MAX
+#define Real32Maximum FLT_MAX
+#define Real32Minimum -FLT_MAX
 
 #define Real64Maximum DBL_MAX
 #define Real64Minimum -DBL_MAX
-    
+
 #if !defined(internal)
 #define internal static
 #endif
@@ -233,7 +265,9 @@ struct rectangle3
 #define Pi32 3.14159265359f
 #define Tau32 6.28318530717958647692f
     
-#if ENGINE_SLOW
+#if EDITOR_SLOW
+
+// TODO(casey): Complete assertion macro - don't worry everyone!
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 #else
 #define Assert(Expression)
@@ -251,83 +285,106 @@ struct rectangle3
 
 #define Minimum(A, B) ((A < B) ? (A) : (B))
 #define Maximum(A, B) ((A > B) ? (A) : (B))
+// TODO(casey): swap, min, max ... macros???
 
 #define AlignPow2(Value, Alignment) ((Value + ((Alignment) - 1)) & ~((Alignment) - 1))
 #define Align4(Value) ((Value + 3) & ~3)
 #define Align8(Value) ((Value + 7) & ~7)
 #define Align16(Value) ((Value + 15) & ~15)
 
-//
-// NOTE(paul): Atomics
-//
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+#include "engine_file_formats.h"
+    
+inline uint32
+SafeTruncateUInt64(uint64 Value)
+{
+    Assert(Value <= U32Maximum);
+    uint32 Result = (uint32)Value;
+    return(Result);
+}
+
+inline u16
+SafeTruncateToU16(uint32 Value)
+{
+    Assert(Value <= U16Maximum);
+    u16 Result = (u16)Value;
+    return(Result);
+}
+
+//=================================================================================
+// NOTE(paul): Atomic/Multiy Threading
+//=================================================================================
+
 #if COMPILER_MSVC
 #define CompletePreviousReadsBeforeFutureReads _ReadBarrier()
 #define CompletePreviousWritesBeforeFutureWrites _WriteBarrier()
+    inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+    {
+        uint32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
 
-inline u32 AtomicCompareExchangeUInt32(u32 volatile *Value, u32 New, u32 Expected)
-{
-    u32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
+        return(Result);
+    }
+    inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
+    {
+        u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
 
-    return(Result);
-}
-inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
+        return(Result);
+    }
+    inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
+    {
+        // NOTE(casey): Returns the original value _prior_ to adding
+        u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
 
-    return(Result);
-}
-inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
+        return(Result);
+    }    
+    inline u32 GetThreadID(void)
+    {
+        u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
+        u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
 
-    return(Result);
-}    
-inline u32 GetThreadID(void)
-{
-    u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
-    u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
-
-    return(ThreadID);
-}
+        return(ThreadID);
+    }
 
 #elif COMPILER_LLVM
 #define CompletePreviousReadsBeforeFutureReads asm volatile("" ::: "memory")
 #define CompletePreviousWritesBeforeFutureWrites asm volatile("" ::: "memory")
-inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
-{
-    uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
+    inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+    {
+        uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
 
-    return(Result);
-}
-inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = __sync_lock_test_and_set(Value, New);
+        return(Result);
+    }
+    inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
+    {
+        u64 Result = __sync_lock_test_and_set(Value, New);
 
-    return(Result);
-}
-inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = __sync_fetch_and_add(Value, Addend);
+        return(Result);
+    }
+    inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
+    {
+        // NOTE(casey): Returns the original value _prior_ to adding
+        u64 Result = __sync_fetch_and_add(Value, Addend);
 
-    return(Result);
-}    
-inline u32 GetThreadID(void)
-{
-    u32 ThreadID;
+        return(Result);
+    }    
+    inline u32 GetThreadID(void)
+    {
+        u32 ThreadID;
 #if defined(__APPLE__) && defined(__x86_64__)
-    asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
+        asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
 #elif defined(__i386__)
-    asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
+        asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
 #elif defined(__x86_64__)
-    asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
+        asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
 #else
 #error Unsupported architecture
 #endif
 
-    return(ThreadID);
-}
+        return(ThreadID);
+    }
 #else
 // TODO(casey): Other compilers/platforms??
 #endif
@@ -351,12 +408,59 @@ EndTicketMutex(ticket_mutex *Mutex)
     AtomicAddU64(&Mutex->Serving, 1);
 }
 
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+//=================================================================================
+// NOTE(paul): DEBUG
+//=================================================================================
+
 /*
   NOTE(casey): Services that the platform layer provides to the editor
 */
 #if EDITOR_INTERNAL
-// TODO(paul): Debug Staff
+
+typedef struct debug_read_file_result
+{
+    uint32 ContentsSize;
+    void *Contents;
+} debug_read_file_result;
+
+typedef struct debug_executing_process
+{
+    u64 OSHandle;
+} debug_executing_process;
+    
+typedef struct debug_process_state
+{
+    b32 StartedSuccessfully;
+    b32 IsRunning;
+    s32 ReturnCode;
+} debug_process_state;
+    
+#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void *Memory)
+typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
+
+#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char *Filename)
+typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
+
+#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char *Filename, uint32 MemorySize, void *Memory)
+typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
+
+#define DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(name) debug_executing_process name(char *Path, char *Command, char *CommandLine)
+typedef DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(debug_platform_execute_system_command);
+
+#define DEBUG_PLATFORM_GET_PROCESS_STATE(name) debug_process_state name(debug_executing_process Process)
+typedef DEBUG_PLATFORM_GET_PROCESS_STATE(debug_platform_get_process_state);
+
+extern struct editor_memory *DebugGlobalMemory;
+    
 #endif
+
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
 
 /*
   NOTE(casey): Services that the editor provides to the platform layer.
@@ -366,16 +470,16 @@ EndTicketMutex(ticket_mutex *Mutex)
 // FOUR THINGS - timing, controller/keyboard input, bitmap buffer to use, sound buffer to use
 
 #define BITMAP_BYTES_PER_PIXEL 4
-typedef struct offscreen_buffer
+typedef struct editor_offscreen_buffer
 {
     // NOTE(casey): Pixels are always 32-bits wide, Memory Order BB GG RR XX
     void *Memory;
-    s32 Width;
-    s32 Height;
-    s32 Pitch;
-} offscreen_buffer;
+    int Width;
+    int Height;
+    int Pitch;
+} editor_offscreen_buffer;
 
-typedef struct render_commands
+typedef struct editor_render_commands
 {
     u32 Width;
     u32 Height;
@@ -395,13 +499,13 @@ typedef struct render_commands
 
     struct render_entry_cliprect *FirstRect;
     struct render_entry_cliprect *LastRect;
-} render_commands;
+} editor_render_commands;
 
 #define RenderCommandStruct(MaxPushBufferSize, PushBuffer, Width, Height) \
     {Width, Height, MaxPushBufferSize, 0, (u8 *)PushBuffer, 0, MaxPushBufferSize};
 
 inline struct sort_sprite_bound *
-GetSortEntries(render_commands *Commands)
+GetSortEntries(editor_render_commands *Commands)
 {
     sort_sprite_bound *Result = (sort_sprite_bound *)Commands->PushBufferBase;
 
@@ -413,60 +517,69 @@ typedef struct editor_render_prep
     struct render_entry_cliprect *ClipRects;
 } editor_rende_prep;
 
-typedef struct button_state
+typedef struct editor_sound_output_buffer
 {
-    s32 HalfTransitionCount;
-    b32 EndedDown;
-} button_state;
+    int SamplesPerSecond;
+    int SampleCount;
 
-typedef struct controller_input
+    // IMPORTANT(casey): Samples must be padded to a multiple of 4 samples!
+    int16 *Samples;
+} editor_sound_output_buffer;
+
+typedef struct editor_button_state
 {
-    b32 IsConnected;
-    b32 IsAnalog;    
-    f32 StickAverageX;
-    f32 StickAverageY;
+    int HalfTransitionCount;
+    bool32 EndedDown;
+} editor_button_state;
+
+typedef struct editor_controller_input
+{
+    bool32 IsConnected;
+    bool32 IsAnalog;    
+    real32 StickAverageX;
+    real32 StickAverageY;
     
     union
     {
-        button_state Buttons[20];
+        editor_button_state Buttons[20];
         struct
         {
-            button_state MoveUp;
-            button_state MoveDown;
-            button_state MoveLeft;
-            button_state MoveRight;
+            editor_button_state MoveUp;
+            editor_button_state MoveDown;
+            editor_button_state MoveLeft;
+            editor_button_state MoveRight;
             
-            button_state ActionUp;
-            button_state ActionDown;
-            button_state ActionLeft;
-            button_state ActionRight;
+            editor_button_state ActionUp;
+            editor_button_state ActionDown;
+            editor_button_state ActionLeft;
+            editor_button_state ActionRight;
 
-            button_state FirstMode;
-            button_state SecondMode;
-            button_state ThirdMode;
-            button_state Fill;
+            editor_button_state FirstMode;
+            editor_button_state SecondMode;
+            editor_button_state ThirdMode;
+            editor_button_state Fill;
             
-            button_state LeftShoulder;
-            button_state RightShoulder;
+            editor_button_state LeftShoulder;
+            editor_button_state RightShoulder;
 
-            button_state Back;
-            button_state Start;
+            editor_button_state Back;
+            editor_button_state Start;
 
-            button_state PlayMusic;
-            button_state TerminateSound;
+            editor_button_state PlayMusic;
+            editor_button_state TerminateSound;
 
-            button_state Undo;
-            button_state UIEnable;
+            editor_button_state Undo;
+            editor_button_state UIEnable;
 
             // NOTE(casey): All buttons must be added above this line
             
-            button_state Terminator;
+            editor_button_state Terminator;
         };
     };
 
-} controller_input;
+} editor_controller_input;
 
-enum input_mouse_button
+enum editor_input_mouse_button
 {
     PlatformMouseButton_Left,
     PlatformMouseButton_Middle,
@@ -477,33 +590,34 @@ enum input_mouse_button
     PlatformMouseButton_Count,
 };
 
-typedef struct input
+typedef struct editor_input
 {
-    f32 dtForFrame;
+    r32 dtForFrame;
 
-    controller_input Controllers[2];
+    editor_controller_input Controllers[2];
 
     // NOTE(casey): Signals back to the platform layer
     b32 QuitRequested;
 
-    button_state MouseButtons[PlatformMouseButton_Count];
-    f32 MouseX, MouseY;
+    // NOTE(casey): For debugging only
+    editor_button_state MouseButtons[PlatformMouseButton_Count];
+    r32 MouseX, MouseY;
     s16 MouseZ;
     
     b32 ShiftDown, AltDown, ControlDown;
-} input;
+} editor_input;
 
-inline controller_input *
-GetController(input *Input, u32 ControllerIndex)
+inline editor_controller_input *
+GetController(editor_input *Input, int unsigned ControllerIndex)
 {
     Assert(ControllerIndex < ArrayCount(Input->Controllers));
     
-    controller_input *Result = &Input->Controllers[ControllerIndex];
+    editor_controller_input *Result = &Input->Controllers[ControllerIndex];
     return(Result);
 }
 
 inline b32
-WasPressed(button_state State)
+WasPressed(editor_button_state State)
 {
     b32 Result = ((State.HalfTransitionCount > 1) ||
                   ((State.HalfTransitionCount == 1) && (State.EndedDown)));
@@ -511,20 +625,151 @@ WasPressed(button_state State)
     return(Result);
 }
 
-typedef struct memory
+typedef struct platform_file_handle
+{
+    b32 NoErrors;
+    void *Platform;
+} platform_file_handle;
+    
+typedef struct platform_file_group
+{
+    u32 FileCount;
+    void *Platform;
+} platform_file_group;
+
+typedef enum platform_file_type
+{
+    PlatformFileType_AssetFile,
+    PlatformFileType_SavedEditorFile,
+    PlatformFileType_PNG,
+    PlatformFileType_BMP,
+    PlatformFileType_SSBMP, // Sprite Sheet
+    PlatformFileType_TSBMP, // Tile Set
+    PlatformFileType_STBMP, // Solid Tile
+    PlatformFileType_WAV,
+    PlatformFileType_TXT,
+    PlatformFileType_JSON,
+    PlatformFileType_TTF,
+    PlatformFileType_BIN,
+    PlatformFileType_SSWM,
+    
+    PlatformFileType_Count,
+} platform_file_type;
+    
+#define PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(name) platform_file_group name(platform_file_type Type)
+typedef PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(platform_get_all_files_of_type_begin);
+
+#define PLATFORM_GET_ALL_FILE_OF_TYPE_END(name) void name(platform_file_group *FileGroup)
+typedef PLATFORM_GET_ALL_FILE_OF_TYPE_END(platform_get_all_files_of_type_end);
+
+#define PLATFORM_OPEN_FILE(name) platform_file_handle name(platform_file_group *FileGroup)
+typedef PLATFORM_OPEN_FILE(platform_open_next_file);
+
+#define PLATFORM_READ_DATA_FROM_FILE(name) void name(platform_file_handle *Source, u64 Offset, u64 Size, void *Dest)
+typedef PLATFORM_READ_DATA_FROM_FILE(platform_read_data_from_file);
+
+#define PLATFORM_FILE_ERROR(name) void name(platform_file_handle *Handle, char *Message)
+typedef PLATFORM_FILE_ERROR(platform_file_error);
+
+// NOTE(paul): Dest and Arena can be specified to 0 if you want to know only count
+#define PLATFORM_LIST_FILES_IN_DIRECTORY(name) u32 name(platform_file_type Type, char **Dest, memory_arena *Arena)
+typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
+
+typedef struct read_file_result
+{
+    u32 Size;
+    void *Contents;
+} read_file_result;
+
+#define PLATFORM_FREE_FILE_MEMORY(name) void name(void *Memory)
+typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
+
+#define PLATFORM_READ_ENTIRE_FILE(name) read_file_result name(char *FileName, platform_file_type Type, memory_arena *Arena)
+typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);
+
+#define PlatformNoFileErrors(Handle) ((Handle)->NoErrors)
+
+struct platform_work_queue;
+#define PLATFORM_WORK_QUEUE_CALLBACK(name) void name(platform_work_queue *Queue, void *Data)
+typedef PLATFORM_WORK_QUEUE_CALLBACK(platform_work_queue_callback);
+
+#define PLATFORM_ALLOCATE_MEMORY(name) void *name(umm Size)
+typedef PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory);
+
+#define PLATFORM_DEALLOCATE_MEMORY(name) void name(void *Memory)
+typedef PLATFORM_DEALLOCATE_MEMORY(platform_deallocate_memory);
+    
+typedef void platform_add_entry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data);
+typedef void platform_complete_all_work(platform_work_queue *Queue);
+
+struct platform_texture_op_queue
+{
+    ticket_mutex Mutex;
+
+    struct texture_op *First;
+    texture_op *Last;
+    texture_op *FirstFree;
+};
+
+typedef struct platform_api
+{
+    platform_add_entry *AddEntry;
+    platform_complete_all_work *CompleteAllWork;
+
+    platform_get_all_files_of_type_begin *GetAllFilesOfTypeBegin;
+    platform_get_all_files_of_type_end *GetAllFilesOfTypeEnd;
+    platform_open_next_file *OpenNextFile;
+    platform_read_data_from_file *ReadDataFromFile;
+    platform_file_error *FileError;
+
+    platform_list_files_in_directory *ListFilesInDirectory;
+    platform_free_file_memory *FreeFileMemory;
+    platform_read_entire_file *ReadEntireFile;
+
+    platform_allocate_memory *AllocateMemory;
+    platform_deallocate_memory *DeallocateMemory;
+
+#if EDITOR_INTERNAL
+    debug_platform_free_file_memory *DEBUGFreeFileMemory;    
+    debug_platform_read_entire_file *DEBUGReadEntireFile;
+    debug_platform_write_entire_file *DEBUGWriteEntireFile;
+    debug_platform_execute_system_command *DEBUGExecuteSystemCommand;
+    debug_platform_get_process_state *DEBUGGetProcessState;
+#endif
+
+} platform_api;
+
+extern platform_api Platform;
+
+typedef struct editor_memory
 {
     struct editor_state *EditorState;
     struct transient_state *TransientState;
     
-    b32 ExecutableReloaded;
-} memory;
+#if EDITOR_INTERNAL
+    struct debug_table *DebugTable;
+    struct debug_state *DebugState;
+#endif
 
-#define ENGINE_UPDATE_AND_RENDER(name) void name(memory *Memory, input *Input, render_commands *RenderCommands)
+    platform_work_queue *HighPriorityQueue;
+    platform_work_queue *LowPriorityQueue;
+    platform_texture_op_queue TextureOpQueue;
+    
+    b32 ExecutableReloaded;
+    platform_api PlatformAPI;
+} editor_memory;
+
+#define ENGINE_UPDATE_AND_RENDER(name) void name(editor_memory *Memory, editor_input *Input, editor_render_commands *RenderCommands)
 typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 
-#ifdef __cplusplus
-}
-#endif
+// NOTE(casey): At the moment, this has to be a very fast function, it cannot be
+// more than a millisecond or so.
+// TODO(casey): Reduce the pressure on this function's performance by measuring it
+// or asking about it, etc.
+#define EDITOR_GET_SOUND_SAMPLES(name) void name(editor_memory *Memory, editor_sound_output_buffer *SoundBuffer)
+typedef EDITOR_GET_SOUND_SAMPLES(editor_get_sound_samples);
     
-#define ENGINE_PLATFORM_H
+#include "engine_debug_interface.h"
+
+#define EDITOR_PLATFORM_H
 #endif
