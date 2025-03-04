@@ -421,12 +421,6 @@ EndTicketMutex(ticket_mutex *Mutex)
 */
 #if EDITOR_INTERNAL
 
-typedef struct debug_read_file_result
-{
-    uint32 ContentsSize;
-    void *Contents;
-} debug_read_file_result;
-
 typedef struct debug_executing_process
 {
     u64 OSHandle;
@@ -438,15 +432,6 @@ typedef struct debug_process_state
     b32 IsRunning;
     s32 ReturnCode;
 } debug_process_state;
-    
-#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void *Memory)
-typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
-
-#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char *Filename)
-typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
-
-#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char *Filename, uint32 MemorySize, void *Memory)
-typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 
 #define DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(name) debug_executing_process name(char *Path, char *Command, char *CommandLine)
 typedef DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(debug_platform_execute_system_command);
@@ -468,6 +453,10 @@ extern struct editor_memory *DebugGlobalMemory;
 */
 
 // FOUR THINGS - timing, controller/keyboard input, bitmap buffer to use, sound buffer to use
+
+//=================================================================================
+// NOTE(paul): RENDER
+//=================================================================================
 
 #define BITMAP_BYTES_PER_PIXEL 4
 typedef struct editor_offscreen_buffer
@@ -517,6 +506,15 @@ typedef struct editor_render_prep
     struct render_entry_cliprect *ClipRects;
 } editor_rende_prep;
 
+
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+//=================================================================================
+// NOTE(paul): SOUND
+//=================================================================================
+
 typedef struct editor_sound_output_buffer
 {
     int SamplesPerSecond;
@@ -525,6 +523,15 @@ typedef struct editor_sound_output_buffer
     // IMPORTANT(casey): Samples must be padded to a multiple of 4 samples!
     int16 *Samples;
 } editor_sound_output_buffer;
+
+
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+//=================================================================================
+// NOTE(paul): Input
+//=================================================================================
 
 typedef struct editor_button_state
 {
@@ -625,6 +632,14 @@ WasPressed(editor_button_state State)
     return(Result);
 }
 
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+//=================================================================================
+// NOTE(paul): FILE API
+//=================================================================================
+
 typedef struct platform_file_handle
 {
     b32 NoErrors;
@@ -702,6 +717,10 @@ typedef PLATFORM_DEALLOCATE_MEMORY(platform_deallocate_memory);
 typedef void platform_add_entry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data);
 typedef void platform_complete_all_work(platform_work_queue *Queue);
 
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
 struct platform_texture_op_queue
 {
     ticket_mutex Mutex;
@@ -730,9 +749,6 @@ typedef struct platform_api
     platform_deallocate_memory *DeallocateMemory;
 
 #if EDITOR_INTERNAL
-    debug_platform_free_file_memory *DEBUGFreeFileMemory;    
-    debug_platform_read_entire_file *DEBUGReadEntireFile;
-    debug_platform_write_entire_file *DEBUGWriteEntireFile;
     debug_platform_execute_system_command *DEBUGExecuteSystemCommand;
     debug_platform_get_process_state *DEBUGGetProcessState;
 #endif

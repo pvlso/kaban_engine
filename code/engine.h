@@ -39,14 +39,6 @@
 #include "engine_render_group.h"
 #include "engine_asset.h"
 #include "engine_audio.h"
-#include "engine_json_parser.h"
-
-//#include "engine_ui.h"
-
-//#include "engine_title_mode.h"
-//#include "engine_assets_mode.h"
-//#include "engine_game_mode.h"
-//#include "engine_ssa_file_builder.h"
 
 enum editor_mode
 {
@@ -56,25 +48,6 @@ enum editor_mode
     EditorMode_GameMode,
 };
 
-struct working_version
-{
-    u8 MajorHigh;
-    u8 MajorLow;
-    u8 MinorHigh;
-    u8 MinorLow;
-};
-
-struct world_map_startup
-{
-    b32 NewMap;
-    u32 MapID;
-    u32 MapWidth;
-    u32 MapHeight;
-
-    working_version MapVersion;
-    sswm_id ID;
-};
-
 struct editor_state
 {
     memory_arena TotalArena;
@@ -82,19 +55,10 @@ struct editor_state
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
 
     audio_state AudioState;
-    b32 UIEnable;
-//    ui_state UIState;
-
-    working_version Version;
-    world_map_startup MapStartup;
-    
     editor_mode EditorMode;
     union
     {
         u32 PlaceHolder;
-//        editor_mode_title_screen *TitleScreen;
-//        editor_mode_assets *AssetsMode;
-//        editor_mode_game *GameMode;
     };
 };
 

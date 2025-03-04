@@ -579,90 +579,6 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock, DWORD By
 global_variable debug_table GlobalDebugTable_;
 debug_table *GlobalDebugTable = &GlobalDebugTable_;
 
-DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory)
-{
-    if(Memory)
-    {
-        VirtualFree(Memory, 0, MEM_RELEASE);
-    }
-}
-
-DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
-{
-    debug_read_file_result Result = {};
-
-    HANDLE FileHandle = CreateFileA(Filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
-    if(FileHandle != INVALID_HANDLE_VALUE)
-    {
-        LARGE_INTEGER FileSize;
-        if(GetFileSizeEx(FileHandle, &FileSize))
-        {
-            uint32 FileSize32 = SafeTruncateUInt64(FileSize.QuadPart);
-            Result.Contents = VirtualAlloc(0, FileSize32, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-            if(Result.Contents)
-            {
-                DWORD BytesRead;
-                if(ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) &&
-                   (FileSize32 == BytesRead))
-                {
-                    // NOTE(casey): File read successfully
-                    Result.ContentsSize = FileSize32;
-                }
-                else
-                {                    
-                    // TODO: Logging
-                    DEBUGPlatformFreeFileMemory(Result.Contents);
-                    Result.Contents = 0;
-                }
-            }
-            else
-            {
-                // TODO: Logging
-            }
-        }
-        else
-        {
-            // TODO: Logging
-        }
-
-        CloseHandle(FileHandle);
-    }
-    else
-    {
-        // TODO: Logging
-    }
-
-    return(Result);
-}
-
-DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
-{
-    bool32 Result = false;
-
-    HANDLE FileHandle = CreateFileA(Filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
-    if(FileHandle != INVALID_HANDLE_VALUE)
-    {
-        DWORD BytesWritten;
-        if(WriteFile(FileHandle, Memory, MemorySize, &BytesWritten, 0))
-        {
-            // NOTE(casey): File read successfully
-            Result = (BytesWritten == MemorySize);
-        }
-        else
-        {
-            // TODO: Logging
-        }
-
-        CloseHandle(FileHandle);
-    }
-    else
-    {
-        // TODO: Logging
-    }
-
-    return(Result);
-}
-
 DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(DEBUGExecuteSystemCommand)
 {
     debug_executing_process Result = {};
@@ -1677,23 +1593,15 @@ WinMain(HINSTANCE Instance,
     Win32GetEXEFileName(&Win32State);
 
     wchar_t Win32EXEFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"win32_editor.exe",
+    Win32BuildEXEPathFileName(&Win32State, L"win32_engine.exe",
                               sizeof(Win32EXEFullPath), Win32EXEFullPath);
 
-    wchar_t TempWin32EXEFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"win32_editor_temp.exe",
-                              sizeof(TempWin32EXEFullPath), TempWin32EXEFullPath);
-
-    wchar_t DeleteWin32EXEFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"win32_editor_old.exe",
-                              sizeof(DeleteWin32EXEFullPath), DeleteWin32EXEFullPath);
-
     wchar_t SourceEditorCodeDLLFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"editor.dll",
+    Win32BuildEXEPathFileName(&Win32State, L"engine.dll",
                               sizeof(SourceEditorCodeDLLFullPath), SourceEditorCodeDLLFullPath);
                           
     wchar_t TempEditorCodeDLLFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"editor_temp.dll",
+    Win32BuildEXEPathFileName(&Win32State, L"engine_temp.dll",
                               sizeof(TempEditorCodeDLLFullPath), TempEditorCodeDLLFullPath);
 
     wchar_t EditorCodeLockFullPath[WIN32_STATE_FILE_NAME_COUNT];
@@ -1798,8 +1706,6 @@ WinMain(HINSTANCE Instance,
             LPVOID BaseAddress = 0;
 #endif
 
-            GenerateCRC64Table();
-
             editor_memory EditorMemory = {};
 
 #if EDITOR_INTERNAL
@@ -1824,9 +1730,6 @@ WinMain(HINSTANCE Instance,
             EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
 
 #if EDITOR_INTERNAL
-            EditorMemory.PlatformAPI.DEBUGFreeFileMemory = DEBUGPlatformFreeFileMemory;
-            EditorMemory.PlatformAPI.DEBUGReadEntireFile = DEBUGPlatformReadEntireFile;
-            EditorMemory.PlatformAPI.DEBUGWriteEntireFile = DEBUGPlatformWriteEntireFile;
             EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
             EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
 #endif
@@ -2198,7 +2101,6 @@ WinMain(HINSTANCE Instance,
                     //
                     //
 
-#if 1
                     BEGIN_BLOCK("FramerateWait");
 
                     if(!GlobalPause)
@@ -2239,7 +2141,6 @@ WinMain(HINSTANCE Instance,
                     }
 
                     END_BLOCK();
-#endif
 
                     LARGE_INTEGER EndCounter = Win32GetWallClock();                    
                     FRAME_MARKER(Win32GetSecondsElapsed(LastCounter, EndCounter));

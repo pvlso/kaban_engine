@@ -913,8 +913,10 @@ GetTileBitmapByChecksumTag(editor_assets *Assets, u32 Checksum)
 }
 
 internal uint32
-GetRandomAssetFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomAssetFrom(editor_assets *Assets, asset_type_id TypeID/*, random_series *Series*/)
 {
+    // TODO(paul): Fix once the engine has random generation
+
 //    TIMED_FUNCTION();
 
     uint32 Result = 0;
@@ -923,7 +925,7 @@ GetRandomAssetFrom(editor_assets *Assets, asset_type_id TypeID, random_series *S
     if(Type->FirstAssetIndex != Type->OnePastLastAssetIndex)
     {
         uint32 Count = (Type->OnePastLastAssetIndex - Type->FirstAssetIndex);
-        uint32 Choice = RandomChoice(Series, Count);
+        uint32 Choice = 0;//RandomChoice(Series, Count);
         Result = Type->FirstAssetIndex + Choice;
     }
 
@@ -970,9 +972,9 @@ GetFirstBitmapFrom(editor_assets *Assets, asset_type_id TypeID)
 }
 
 inline bitmap_id
-GetRandomBitmapFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomBitmapFrom(editor_assets *Assets, asset_type_id TypeID)
 {
-    bitmap_id Result = {GetRandomAssetFrom(Assets, TypeID, Series)};
+    bitmap_id Result = {GetRandomAssetFrom(Assets, TypeID)};
     return(Result);
 }
 
@@ -992,9 +994,9 @@ GetFirstSoundFrom(editor_assets *Assets, asset_type_id TypeID)
 }
 
 inline sound_id
-GetRandomSoundFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomSoundFrom(editor_assets *Assets, asset_type_id TypeID)
 {
-    sound_id Result = {GetRandomAssetFrom(Assets, TypeID, Series)};
+    sound_id Result = {GetRandomAssetFrom(Assets, TypeID)};
     return(Result);
 }
 

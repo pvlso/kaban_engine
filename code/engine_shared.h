@@ -9,10 +9,8 @@
 
 #include "engine_intrinsics.h"
 #include "engine_math.h"
-#include "engine_random.h"
 #include "engine_memory.h"
 #include "engine_string.h"
-#include "engine_crc.h"
 
 inline u32
 SortKeyToU32(r32 SortKey)
@@ -149,144 +147,6 @@ Swap(sort_entry *A, sort_entry *B)
     sort_entry Temp = *B;
     *B = *A;
     *A = Temp;
-}
-
-inline void
-MinHeapifyDown(heap *Heap, u32 Index)
-{
-    u32 Smallest = Index;
-    u32 Left = 2*Index + 1;
-    u32 Right = 2*Index + 2;
-
-    if((Left < Heap->Size) && (Heap->Nodes[Left].SortKey < Heap->Nodes[Smallest].SortKey))
-    {
-        Smallest = Left;
-    }
-
-    if((Right < Heap->Size) && (Heap->Nodes[Right].SortKey < Heap->Nodes[Smallest].SortKey))
-    {
-        Smallest = Right;
-    }
-
-    if(Smallest != Index)
-    {
-        Swap(Heap->Nodes + Index, Heap->Nodes + Smallest);
-        MinHeapifyDown(Heap, Smallest);
-    }
-}
-
-inline void
-MaxHeapifyDown(heap *Heap, u32 Index)
-{
-    u32 Largest = Index;
-    u32 Left = 2*Index + 1;
-    u32 Right = 2*Index + 2;
-
-    if((Left < Heap->Size) && (Heap->Nodes[Left].SortKey > Heap->Nodes[Largest].SortKey))
-    {
-        Largest = Left;
-    }
-
-    if((Right < Heap->Size) && (Heap->Nodes[Right].SortKey > Heap->Nodes[Largest].SortKey))
-    {
-        Largest = Right;
-    }
-
-    if(Largest != Index)
-    {
-        Swap(Heap->Nodes + Index, Heap->Nodes + Largest);
-        MaxHeapifyDown(Heap, Largest);
-    }
-}
-
-inline void
-MinHeapifyUp(heap *Heap, u32 Index)
-{
-    u32 Parent = (Index - 1) / 2;
-
-    if((Index) && (Heap->Nodes[Parent].SortKey > Heap->Nodes[Index].SortKey))
-    {
-        Swap(Heap->Nodes + Index, Heap->Nodes + Parent);
-        MinHeapifyUp(Heap, Parent);
-    }
-}
-
-inline void
-MaxHeapifyUp(heap *Heap, u32 Index)
-{
-    u32 Parent = (Index - 1) / 2;
-
-    if((Index) && (Heap->Nodes[Parent].SortKey < Heap->Nodes[Index].SortKey))
-    {
-        Swap(Heap->Nodes + Index, Heap->Nodes + Parent);
-        MaxHeapifyUp(Heap, Parent);
-    }
-}
-
-inline void
-MinHeapInsertNode(heap *Heap, sort_entry Key)
-{
-    Assert(Heap->Size != Heap->MaxSize);
-
-    Heap->Nodes[Heap->Size] = Key;
-    ++Heap->Size;
-    MinHeapifyUp(Heap, Heap->Size - 1);
-}
-
-inline void
-MaxHeapInsertNode(heap *Heap, sort_entry Key)
-{
-    Assert(Heap->Size != Heap->MaxSize);
-
-    Heap->Nodes[Heap->Size] = Key;
-    ++Heap->Size;
-    MaxHeapifyUp(Heap, Heap->Size - 1);
-}
-
-inline sort_entry
-MinHeapExtractNode(heap *Heap)
-{
-    Assert(Heap->Size > 0);
-
-    sort_entry Result = {};
-    Result = Heap->Nodes[0];
-    Heap->Nodes[0] = Heap->Nodes[Heap->Size - 1];
-    --Heap->Size;
-
-    MinHeapifyDown(Heap, 0);
-
-    return(Result);
-}
-
-inline sort_entry
-MaxHeapExtractNode(heap *Heap)
-{
-    Assert(Heap->Size > 0);
-
-    sort_entry Result = {};
-    Result = Heap->Nodes[0];
-    Heap->Nodes[0] = Heap->Nodes[Heap->Size - 1];
-    --Heap->Size;
-
-    MaxHeapifyDown(Heap, 0);
-
-    return(Result);
-}
-
-inline r32
-CalculateBitmapScaleForSquareCanvas(r32 CanvasSize, u32 Width, u32 Height)
-{
-    r32 Result = 1.0f;
-    if(Width > Height)
-    {
-        Result = CanvasSize / Width;
-    }
-    else
-    {
-        Result = CanvasSize / Height;
-    }
-
-    return(Result);
 }
 
 #define ENGINE_SHARED_H
