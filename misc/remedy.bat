@@ -1,2 +1,2 @@
 @echo off
-start d:\remedybg\remedybg.exe %*
+start c:\remedybg\remedybg.exe %*

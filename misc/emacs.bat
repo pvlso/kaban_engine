@@ -1,2 +1,2 @@
 @echo off
-"C:\Program Files (x86)\emacs\bin\runemacs.exe" -q -l D:\paul\kaban_engine\misc\.emacs
+"C:\Program Files\Emacs\emacs-30.1\bin\runemacs.exe" -q -l C:\Paul\kaban_engine\misc\.emacs

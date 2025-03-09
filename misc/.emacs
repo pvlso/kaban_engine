@@ -16,8 +16,8 @@
 (setq casey-linux (featurep 'x))
 (setq casey-win32 (not (or casey-aquamacs casey-linux)))
 
-(setq casey-todo-file "d:/paul/kaban_engine/code/todo.txt")
-(setq casey-log-file "d:/paul/kaban_engine/code/log.txt")
+(setq casey-todo-file "c:/Paul/kaban_engine/code/todo.txt")
+(setq casey-log-file "c:/Paul/kaban_engine/code/log.txt")
 
 (global-hl-line-mode 1)
 (set-face-background 'hl-line "midnight blue")
