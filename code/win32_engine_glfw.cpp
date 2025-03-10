@@ -18,7 +18,7 @@
 #include <dsound.h>
 #include <gl/gl.h>
 
-#include "win32_engine.h"
+#include "win32_engine_glfw.h"
 
 // ================================================================================
 // NOTE(paul): GLOBALS
@@ -32,11 +32,18 @@ global_variable b32 GlobalAppIsActive;
 global_variable win32_offscreen_buffer GlobalBackbuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 global_variable s64 GlobalPerfCountFrequency;
+global_variable b32 DEBUGGlobalShowCursor;
 global_variable GLuint GlobalBlitTextureHandle;
 global_variable VOID *GlobalFontBits;
-// ================================================================================
-// --------------------------------------------------------------------------------
-// ================================================================================
+
+//=================================================================================
+//---------------------------------------------------------------------------------
+//=================================================================================
+
+//#include "engine_sort.cpp"
+//#include "engine_render.h"
+//#include "engine_opengl.cpp"
+//#include "engine_render.cpp"
 
 //=================================================================================
 // NOTE(paul): DIRECT SOUND
@@ -931,7 +938,6 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 //---------------------------------------------------------------------------------
 //=================================================================================
 
-
 int
 main(int argc, char *argv[])
 {
@@ -961,33 +967,29 @@ main(int argc, char *argv[])
     Win32BuildEXEPathFileName(&Win32State, L"lock.tmp",
                               sizeof(EditorCodeLockFullPath), EditorCodeLockFullPath);
 
-    // NOTE(casey): Set the Windows scheduler granularity to 1ms
-    // so that our Sleep() can be more granular.
-    UINT DesiredSchedulerMS = 1;
-    bool32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
+    glfwInitHint(GLFW_PLATFORM_WIN32, GLFW_TRUE);
+    glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE_OPENGL, GLFW_TRUE);
 
-    if(!glfwInit())
+    if(glfwInit())
     {
-        return(-1);
-    }
-
-    GLFWmonitor *Monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode *Mode = glfwGetVideoMode(Monitor);
-
-    // Set OpenGL version (e.g., 3.3 core profile)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    int WindowWidth = Mode->width;
-    int WindowHeight = Mode->height;
-
-    GLFWwindow *Window = glfwCreateWindow(WindowWidth, WindowHeight, "Game", 0, 0);
-    if(Window)
-    {
+        
     }
     else
     {
+        const char *Description;
+        int ErrorCode = glfwGetError(&Description);
+        if(ErrorCode != GLFW_NO_ERROR)
+        {
+            // TODO(paul): Handle Error
+            /*
+              glfwSetErrorCallback(error_callback);
+              void error_callback(int code, const char* description)
+              {
+                  display_error_message(code, description);
+              }
+              
+             */
+        }
     }
 
     glfwTerminate();
