@@ -938,41 +938,24 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 //---------------------------------------------------------------------------------
 //=================================================================================
 
+void
+Win32FramebufferSizeCallback(GLFWwindow *Window, int Width, int Height)
+{
+    glViewport(0, 0, Width, Height);
+}
+
 int
 main(int argc, char *argv[])
 {
-    DEBUGSetEventRecording(true);
-
-    win32_state Win32State = {};
-
-    LARGE_INTEGER PerfCountFrequencyResult;
-    QueryPerformanceFrequency(&PerfCountFrequencyResult);
-    GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
-
-    Win32GetEXEFileName(&Win32State);
-
-    wchar_t Win32EXEFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"win32_engine.exe",
-                              sizeof(Win32EXEFullPath), Win32EXEFullPath);
-
-    wchar_t SourceEditorCodeDLLFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"engine.dll",
-                              sizeof(SourceEditorCodeDLLFullPath), SourceEditorCodeDLLFullPath);
-                          
-    wchar_t TempEditorCodeDLLFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"engine_temp.dll",
-                              sizeof(TempEditorCodeDLLFullPath), TempEditorCodeDLLFullPath);
-
-    wchar_t EditorCodeLockFullPath[WIN32_STATE_FILE_NAME_COUNT];
-    Win32BuildEXEPathFileName(&Win32State, L"lock.tmp",
-                              sizeof(EditorCodeLockFullPath), EditorCodeLockFullPath);
-
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
     glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
     glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
 
     if(glfwInit())
     {
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
         GLFWmonitor *PrimaryMonitor = glfwGetPrimaryMonitor();
         const GLFWvidmode *VideoMode = glfwGetVideoMode(PrimaryMonitor);
@@ -980,413 +963,51 @@ main(int argc, char *argv[])
         glfwWindowHint(GLFW_RED_BITS, VideoMode->redBits);
         glfwWindowHint(GLFW_GREEN_BITS, VideoMode->greenBits);
         glfwWindowHint(GLFW_BLUE_BITS, VideoMode->blueBits);
-        glfwWindowHint(GLFW_REFRESH_RATE, VideoMode->refreshRate);
+
+        glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
         
-        GLFWwindow *MainWindow = glfwCreateWindow(VideoMode->width, VideoMode->height, "Window", PrimaryMonitor, 0);
+        GLFWwindow *MainWindow = glfwCreateWindow(1920, 1080, "Window", 0, 0);
+
+        glfwSetWindowAspectRatio(MainWindow, 16, 9);
+        glfwSetWindowMonitor(MainWindow, PrimaryMonitor, 0, 0,
+                             VideoMode->width, VideoMode->height, VideoMode->refreshRate);
+
         if(MainWindow)
         {
-            win32_thread_startup HighPriStartups[3] = {};
-            platform_work_queue HighPriorityQueue = {};
-            Win32MakeQueue(&HighPriorityQueue, ArrayCount(HighPriStartups), HighPriStartups);
+            glfwMakeContextCurrent(MainWindow);
 
-            win32_thread_startup LowPriStartups[3] = {};
-            platform_work_queue LowPriorityQueue = {};
-            Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
-
-#if 0
-            win32_sound_output SoundOutput = {};
-
-            // TODO(casey): How do we reliably query on this on Windows?
-            int MonitorRefreshHz = 60;
-            HDC RefreshDC = GetDC(Window);
-            int Win32RefreshRate = GetDeviceCaps(RefreshDC, VREFRESH);
-            ReleaseDC(Window, RefreshDC);
-            if((Win32RefreshRate > 1) && (Win32RefreshRate <= 60))
+            glewExperimental = GL_TRUE;
+            if(glewInit() == GLEW_OK)
             {
-                MonitorRefreshHz = Win32RefreshRate;
-            }
-            
-            real32 EditorUpdateHz = (real32)(MonitorRefreshHz);
-            real32 TargetSecondsPerFrame = 1.0f / (real32)EditorUpdateHz;
+                int Width = 0;
+                int Height = 0;
+                glfwGetFramebufferSize(MainWindow, &Width, &Height);
+                glViewport(0, 0, Width, Height);
 
-            // TODO(casey): Make this like sixty seconds?
-            SoundOutput.SamplesPerSecond = 48000;
-            SoundOutput.BytesPerSample = sizeof(int16)*2;
-            SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample;
-            // TODO(casey): Actually compute this variance and see
-            // what the lowest reasonable value is.
-            SoundOutput.SafetyBytes = (int)(((real32)SoundOutput.SamplesPerSecond*(real32)SoundOutput.BytesPerSample / EditorUpdateHz)/3.0f);
-            Win32InitDSound(Window, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
-            Win32ClearSoundBuffer(&SoundOutput);
-            GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
+                glfwSetFramebufferSizeCallback(MainWindow, Win32FramebufferSizeCallback);
 
-            u32 MaxPossibleOverrun = 2*8*sizeof(u16);
-            int16 *Samples = (int16 *)VirtualAlloc(0, SoundOutput.SecondaryBufferSize + MaxPossibleOverrun,
-                                                   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-#endif
-
-            GlobalRunning = true;
-
-            memory_arena FrameTempArena = {};
-            
-            // TODO(casey): Decide what our pushbuffer size is!
-            u32 PushBufferSize = Megabytes(64);
-            void *PushBuffer = Win32AllocateMemory(PushBufferSize);
-
-#if EDITOR_INTERNAL
-            LPVOID BaseAddress = (LPVOID)Terabytes(2);
-#else
-            LPVOID BaseAddress = 0;
-#endif
-
-            editor_memory EditorMemory = {};
-
-#if EDITOR_INTERNAL
-            EditorMemory.DebugTable = GlobalDebugTable;
-#endif
-            EditorMemory.HighPriorityQueue = &HighPriorityQueue;
-            EditorMemory.LowPriorityQueue = &LowPriorityQueue;
-            EditorMemory.PlatformAPI.AddEntry = Win32AddEntry;
-            EditorMemory.PlatformAPI.CompleteAllWork = Win32CompleteAllWork;
-
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
-            EditorMemory.PlatformAPI.OpenNextFile = Win32OpenNextFile;
-            EditorMemory.PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
-            EditorMemory.PlatformAPI.FileError = Win32FileError;
-            EditorMemory.PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
-
-            EditorMemory.PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
-            EditorMemory.PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
-
-            EditorMemory.PlatformAPI.AllocateMemory = Win32AllocateMemory;
-            EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
-
-#if EDITOR_INTERNAL
-            EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
-            EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
-#endif
-
-            u32 TextureOpCount = 1024;
-            platform_texture_op_queue *TextureOpQueue = &EditorMemory.TextureOpQueue;
-            TextureOpQueue->FirstFree = (texture_op *)Win32AllocateMemory(sizeof(texture_op)*TextureOpCount);
-
-            for(u32 TextureOpIndex = 0;
-                TextureOpIndex < (TextureOpCount - 1);
-                ++TextureOpIndex)
-            {
-                texture_op *Op = TextureOpQueue->FirstFree + TextureOpIndex;
-                Op->Next = TextureOpQueue->FirstFree + TextureOpIndex + 1;
-            }
-
-            Platform = EditorMemory.PlatformAPI;
-
-//            if(Samples)
-            {
-                editor_input Input[2] = {};
-                editor_input *NewInput = &Input[0];
-                editor_input *OldInput = &Input[1];
-
-                LARGE_INTEGER LastCounter = Win32GetWallClock();
-                LARGE_INTEGER FlipWallClock = Win32GetWallClock();
-
-                int DebugTimeMarkerIndex = 0;
-                win32_debug_time_marker DebugTimeMarkers[30] = {0};
-
-                DWORD AudioLatencyBytes = 0;
-                real32 AudioLatencySeconds = 0;
-                bool32 SoundIsValid = false;
-
-                win32_editor_code Editor = Win32LoadEditorCode(SourceEditorCodeDLLFullPath,
-                                                               TempEditorCodeDLLFullPath,
-                                                               EditorCodeLockFullPath);
-                DEBUGSetEventRecording(Editor.IsValid);
-                while(GlobalRunning)
+                GlobalRunning = true;
+                while(GlobalRunning && !glfwWindowShouldClose(MainWindow))
                 {
-                    {DEBUG_DATA_BLOCK("Platform/Controls");
-                        DEBUG_B32(GlobalPause);
-                    }
-                    //
-                    //
-                    //
-
-                    NewInput->dtForFrame = 0.01f;//TargetSecondsPerFrame;
-                        
-                    //
-                    //
-                    //
-
-                    BEGIN_BLOCK("Input Processing");
-
-                    editor_render_commands RenderCommands = RenderCommandStruct(
-                        PushBufferSize, PushBuffer,
-                        (u32)GlobalBackbuffer.Width,
-                        (u32)GlobalBackbuffer.Height);
-
-                    BEGIN_BLOCK("Editor Update");
-
-                    editor_offscreen_buffer Buffer = {};
-                    Buffer.Memory = GlobalBackbuffer.Memory;
-                    Buffer.Width = GlobalBackbuffer.Width; 
-                    Buffer.Height = GlobalBackbuffer.Height;
-                    Buffer.Pitch = GlobalBackbuffer.Pitch;
-                    if(!GlobalPause)
+                    if(glfwGetKey(MainWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
                     {
-                        if(Editor.UpdateAndRender)
-                        {
-                            Editor.UpdateAndRender(&EditorMemory, NewInput, &RenderCommands);
-                            if(NewInput->QuitRequested)
-                            {
-                                GlobalRunning = false;
-                            }
-                        }
-                        else
-                        {
-                            // TODO: Logging
-                        }
+                        GlobalRunning = false;
+//                        glfwSetWindowMonitor(MainWindow, 0, 100, 100, 1920, 1080, 0);
                     }
 
-                    END_BLOCK();
+                    glClearColor(1.0f, 0.2f, 1.0f, 1.0f);
+                    glClear(GL_COLOR_BUFFER_BIT);
 
-                    //
-                    //
-                    //
-#if 0
-                    BEGIN_BLOCK("Audio Update");
-
-                    if(!GlobalPause)
-                    {
-                        LARGE_INTEGER AudioWallClock = Win32GetWallClock();
-                        real32 FromBeginToAudioSeconds = Win32GetSecondsElapsed(FlipWallClock, AudioWallClock);
-
-                        DWORD PlayCursor;
-                        DWORD WriteCursor;
-                        if(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
-                        {
-                            /* NOTE(casey):
-
-                               Here is how sound output computation works.
-
-                               We define a safety value that is the number
-                               of samples we think our editor update loop
-                               may vary by (let's say up to 2ms)
-
-                               When we wake up to write audio, we will look
-                               and see what the play cursor position is and we
-                               will forecast ahead where we think the play
-                               cursor will be on the next frame boundary.
-
-                               We will then look to see if the write cursor is
-                               before that by at least our safety value.  If
-                               it is, the target fill position is that frame
-                               boundary plus one frame.  This gives us perfect
-                               audio sync in the case of a card that has low
-                               enough latency.
-
-                               If the write cursor is _after_ that safety
-                               margin, then we assume we can never sync the
-                               audio perfectly, so we will write one frame's
-                               worth of audio plus the safety margin's worth
-                               of guard samples.
-                            */
-                            if(!SoundIsValid)
-                            {
-                                SoundOutput.RunningSampleIndex = WriteCursor / SoundOutput.BytesPerSample;
-                                SoundIsValid = true;
-                            }
-
-                            DWORD ByteToLock = ((SoundOutput.RunningSampleIndex*SoundOutput.BytesPerSample) %
-                                                SoundOutput.SecondaryBufferSize);
-
-                            DWORD ExpectedSoundBytesPerFrame =
-                                (int)((real32)(SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample) /
-                                      EditorUpdateHz);
-                            real32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-                            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(real32)ExpectedSoundBytesPerFrame);
-
-                            DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
-
-                            DWORD SafeWriteCursor = WriteCursor;
-                            if(SafeWriteCursor < PlayCursor)
-                            {
-                                SafeWriteCursor += SoundOutput.SecondaryBufferSize;
-                            }
-                            Assert(SafeWriteCursor >= PlayCursor);
-                            SafeWriteCursor += SoundOutput.SafetyBytes;
-
-                            bool32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);                        
-
-                            DWORD TargetCursor = 0;
-                            if(AudioCardIsLowLatency)
-                            {
-                                TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
-                            }
-                            else
-                            {
-                                TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame +
-                                                SoundOutput.SafetyBytes);
-                            }
-                            TargetCursor = (TargetCursor % SoundOutput.SecondaryBufferSize);
-
-                            DWORD BytesToWrite = 0;
-                            if(ByteToLock > TargetCursor)
-                            {
-                                BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
-                                BytesToWrite += TargetCursor;
-                            }
-                            else
-                            {
-                                BytesToWrite = TargetCursor - ByteToLock;
-                            }
-
-                            editor_sound_output_buffer SoundBuffer = {};
-                            SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
-                            SoundBuffer.SampleCount = Align8(BytesToWrite / SoundOutput.BytesPerSample);
-                            BytesToWrite = SoundBuffer.SampleCount*SoundOutput.BytesPerSample;
-                            SoundBuffer.Samples = Samples;
-                            if(Editor.GetSoundSamples)
-                            {
-                                Editor.GetSoundSamples(&EditorMemory, &SoundBuffer);
-                            }
-
-                            Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite, &SoundBuffer);
-                        }
-                        else
-                        {
-                            SoundIsValid = false;
-                        }
-                    }
-
-                    END_BLOCK();
-#endif
-                    //
-                    //
-                    //
-
-#if EDITOR_INTERNAL
-                    BEGIN_BLOCK("Debug Collation");
-                    
-                    FILETIME NewDLLWriteTime = Win32GetLastWriteTime(SourceEditorCodeDLLFullPath);
-                    b32 ExecutableNeedsToBeReloaded = 
-                        (CompareFileTime(&NewDLLWriteTime, &Editor.DLLLastWriteTime) != 0);
-
-                    EditorMemory.ExecutableReloaded = false;
-                    if(ExecutableNeedsToBeReloaded)
-                    {
-                        Win32CompleteAllWork(&HighPriorityQueue);
-                        Win32CompleteAllWork(&LowPriorityQueue);
-                        DEBUGSetEventRecording(false);
-                    }
-                    
-                    if(Editor.DEBUGFrameEnd)
-                    {
-                        Editor.DEBUGFrameEnd(&EditorMemory, NewInput, &RenderCommands);
-                    }
-                    
-                    if(ExecutableNeedsToBeReloaded)
-                    {
-                        Win32UnloadEditorCode(&Editor);
-                        for(u32 LoadTryIndex = 0;
-                            !Editor.IsValid && (LoadTryIndex < 100);
-                            ++LoadTryIndex)
-                        {
-                            Editor = Win32LoadEditorCode(SourceEditorCodeDLLFullPath,
-                                                         TempEditorCodeDLLFullPath,
-                                                         EditorCodeLockFullPath);
-                            Sleep(100);
-                        }
-                        
-                        EditorMemory.ExecutableReloaded = true;
-                        DEBUGSetEventRecording(Editor.IsValid);
-                    }
-
-                    
-                    END_BLOCK();
-#endif
-
-                    BEGIN_BLOCK("Frame Display");
-
-                    BeginTicketMutex(&TextureOpQueue->Mutex);
-                    texture_op *FirstTextureOp = TextureOpQueue->First;
-                    texture_op *LastTextureOp = TextureOpQueue->Last;
-                    TextureOpQueue->First = 0;
-                    TextureOpQueue->Last = 0;
-                    EndTicketMutex(&TextureOpQueue->Mutex);
-
-                    if(FirstTextureOp)
-                    {
-                        Assert(LastTextureOp);
-                        OpenGLManageTextures(FirstTextureOp);
-
-                        BeginTicketMutex(&TextureOpQueue->Mutex);
-                        LastTextureOp->Next = TextureOpQueue->FirstFree;
-                        TextureOpQueue->FirstFree = FirstTextureOp;
-                        EndTicketMutex(&TextureOpQueue->Mutex);
-                    }
-                    
-                    
-//                    Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
-//                                               DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-
-                    FlipWallClock = Win32GetWallClock();
-
-                    editor_input *Temp = NewInput;
-                    NewInput = OldInput;
-                    OldInput = Temp;
-
-                    END_BLOCK();
-
-                    //
-                    //
-                    //
-
-#if 0
-                    BEGIN_BLOCK("FramerateWait");
-
-                    if(!GlobalPause)
-                    {
-                        LARGE_INTEGER WorkCounter = Win32GetWallClock();
-                        real32 WorkSecondsElapsed = Win32GetSecondsElapsed(LastCounter, WorkCounter);
-
-                        // TODO(casey): NOT TESTED YET!  PROBABLY BUGGY!!!!!
-                        real32 SecondsElapsedForFrame = WorkSecondsElapsed;
-                        if(SecondsElapsedForFrame < TargetSecondsPerFrame)
-                        {                        
-                            if(SleepIsGranular)
-                            {
-                                DWORD SleepMS = (DWORD)(1000.0f * (TargetSecondsPerFrame -
-                                                                   SecondsElapsedForFrame));
-                                if(SleepMS > 0)
-                                {
-                                    Sleep(SleepMS);
-                                }
-                            }
-
-                            real32 TestSecondsElapsedForFrame = Win32GetSecondsElapsed(LastCounter,
-                                                                                       Win32GetWallClock());
-                            if(TestSecondsElapsedForFrame < TargetSecondsPerFrame)
-                            {
-                                // TODO: Logging
-                            }
-
-                            while(SecondsElapsedForFrame < TargetSecondsPerFrame)
-                            {                            
-                                SecondsElapsedForFrame = Win32GetSecondsElapsed(LastCounter,
-                                                                                Win32GetWallClock());
-                            }
-                        }
-                        else
-                        {
-                        }
-                    }
-
-                    END_BLOCK();
-#endif
-                    LARGE_INTEGER EndCounter = Win32GetWallClock();                    
-                    FRAME_MARKER(Win32GetSecondsElapsed(LastCounter, EndCounter));
-                    LastCounter = EndCounter;
+                    glfwSwapBuffers(MainWindow);
+                    glfwPollEvents();
                 }
-            }            
+                
+            }
+            else
+            {
+                glfwDestroyWindow(MainWindow);
+                // TODO(paul): Logging
+            }
         }
         else
         {
