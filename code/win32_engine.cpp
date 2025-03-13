@@ -272,7 +272,7 @@ Win32InitOpenGL(HDC WindowDC)
     {
         opengl_info Info = OpenGLInit(ModernContext, OpenGLSupportsSRGBFramebuffer);
 
-//        if(Info.GL_ARB_framebuffer_object)
+        if(Info.GL_ARB_framebuffer_object)
         {
             glCheckFramebufferStatus = (gl_check_framebuffer_status *)wglGetProcAddress("glCheckFramebufferStatus");
             glBindFramebuffer = (gl_bind_framebuffer *)wglGetProcAddress("glBindFramebuffer");

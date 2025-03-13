@@ -36,6 +36,7 @@
 #define WGL_CONTEXT_CORE_PROFILE_BIT_ARB                   0x00000001
 #define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB          0x00000002
 
+#if 0
 struct opengl_info
 {
     b32 ModernContext;
@@ -139,6 +140,7 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
 
     return(Info);
 }       
+#endif
 
 inline void
 OpenGLSetScreenspace(s32 Width, s32 Height)
@@ -329,7 +331,7 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     glMatrixMode(GL_TEXTURE);
     glLoadIdentity();
 
-    b32 UseRenderTargets = (glBindFramebuffer != 0);
+    b32 UseRenderTargets = 0; //(glBindFramebuffer != 0);
 
     u32 MaxRenderTargetIndex = UseRenderTargets ? Commands->MaxRenderTargetIndex : 0;
      if(MaxRenderTargetIndex >= GlobalFramebufferCount)

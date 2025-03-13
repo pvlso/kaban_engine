@@ -35,13 +35,16 @@ global_variable b32 DEBUGGlobalShowCursor;
 global_variable GLuint GlobalBlitTextureHandle;
 global_variable VOID *GlobalBlitTextureHandlelFontBits;
 
+global_variable GLuint OpenGLDefaultInternalTextureFormat;
+global_variable GLuint OpenGLReservedBlitTexture;
+
 //=================================================================================
 //---------------------------------------------------------------------------------
 //=================================================================================
 
 #include "engine_sort.cpp"
 #include "engine_render.h"
-#include "engine_opengl_glfw.cpp"
+#include "engine_opengl.cpp"
 #include "engine_render.cpp"
 
 //=================================================================================
@@ -50,26 +53,15 @@ global_variable VOID *GlobalBlitTextureHandlelFontBits;
 
 internal void
 Win32DisplayBufferInWindow(GLFWwindow *Window, platform_work_queue *RenderQueue,
-                           editor_render_commands *Commands, memory_arena *TempArena)
+                           editor_render_commands *Commands, rectangle2i DrawRegion,
+                           int WindowWidth, int WindowHeight, memory_arena *TempArena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(TempArena);
 
     editor_render_prep Prep = PrepForRender(Commands, TempArena);
-
-    glfwSetWindowAspectRatio(Window, 16, 9);
-
-    int WindowWidth = 0;
-    int WindowHeight = 0;
-    glfwGetWindowSize(Window, &WindowWidth, &WindowHeight);
-
-    int DrawWidth = 0;
-    int DrawHeight = 0;
-    glfwGetFramebufferSize(Window, &DrawWidth, &DrawHeight);
-    
-    rectangle2i DrawRegion = {0, 0, DrawWidth, DrawHeight};
     
     BEGIN_BLOCK("OpenGLRenderCommands");
-//    OpenGLRenderCommands(Commands, &Prep, DrawRegion, WindowWidth, WindowHeight);        
+    OpenGLRenderCommands(Commands, &Prep, DrawRegion, WindowWidth, WindowHeight);        
     END_BLOCK();
 
     BEGIN_BLOCK("SwapBuffers");
@@ -1028,8 +1020,6 @@ main(int argc, char *argv[])
     {
         // NOTE(paul): GLFW Window Creating Hints
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
         GLFWmonitor *PrimaryMonitor = glfwGetPrimaryMonitor();
         const GLFWvidmode *VideoMode = glfwGetVideoMode(PrimaryMonitor);
@@ -1041,9 +1031,9 @@ main(int argc, char *argv[])
         glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
         
         GLFWwindow *MainWindow = glfwCreateWindow(1920, 1080, "Window", 0, 0);
-
-        glfwSetWindowMonitor(MainWindow, PrimaryMonitor, 0, 0,
-                             VideoMode->width, VideoMode->height, VideoMode->refreshRate);
+        
+//        glfwSetWindowMonitor(MainWindow, PrimaryMonitor, 0, 0,
+//                             VideoMode->width, VideoMode->height, VideoMode->refreshRate);
 
         if(MainWindow)
         {
@@ -1052,6 +1042,12 @@ main(int argc, char *argv[])
             glewExperimental = GL_TRUE;
             if(glewInit() == GLEW_OK)
             {
+                OpenGLDefaultInternalTextureFormat = GL_SRGB8_ALPHA8;
+                glEnable(GL_FRAMEBUFFER_SRGB);
+                glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+                glfwSwapInterval(1);
+                glGenTextures(1, &OpenGLReservedBlitTexture);
+                
                 int FramebufferWidth = 0;
                 int FramebufferHeight = 0;
                 glfwGetFramebufferSize(MainWindow, &FramebufferWidth, &FramebufferHeight);
@@ -1160,10 +1156,22 @@ main(int argc, char *argv[])
 
                     NewInput->dtForFrame = TargetSecondsPerFrame;
 
+                    int width, height;
+                    glfwGetFramebufferSize(MainWindow, &width, &height);
+
                     editor_render_commands RenderCommands = RenderCommandStruct(
                         PushBufferSize, PushBuffer,
-                        (u32)FramebufferWidth,
-                        (u32)FramebufferHeight);
+                        (u32)width,
+                        (u32)height);
+
+                    glfwSetWindowAspectRatio(MainWindow, 16, 9);
+
+                    int WindowWidth = 0;
+                    int WindowHeight = 0;
+                    glfwGetWindowSize(MainWindow, &WindowWidth, &WindowHeight);
+
+                    rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
+                                                            WindowWidth, WindowHeight);
 
 #if 0
                     BEGIN_BLOCK("Input Processing");
@@ -1329,7 +1337,8 @@ main(int argc, char *argv[])
                     
                     glClearColor(0.2f, 0.0f, 0.2f, 1.0f);
                     glClear(GL_COLOR_BUFFER_BIT);
-                    Win32DisplayBufferInWindow(MainWindow, &HighPriorityQueue, &RenderCommands, &FrameTempArena);
+                    Win32DisplayBufferInWindow(MainWindow, &HighPriorityQueue, &RenderCommands,
+                                               DrawRegion, WindowWidth, WindowHeight, &FrameTempArena);
                     glfwPollEvents();
 
                     END_BLOCK();
