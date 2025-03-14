@@ -8,35 +8,7 @@
 
 #include "engine_render_group.h"
 
-#define GL_MAJOR_VERSION                                   0x821B
-#define GL_MINOR_VERSION                                   0x821C
-
-#define GL_FRAMEBUFFER_SRGB                                0x8DB9
-#define GL_SRGB8_ALPHA8                                    0x8C43
-#define GL_SRGB8                                           0x8C41
-#define GL_SRGB_ALPHA                                      0x8C42
-#define GL_SHADING_LANGUAGE_VERSION                        0x8B8C
-
-#define GL_CLAMP_TO_EDGE                                   0x812F
-
-#define GL_FRAMEBUFFER                                     0x8D40
-#define GL_COLOR_ATTACHMENT0                               0x8CE0
-#define GL_FRAMEBUFFER_COMPLETE                            0x8CD5
-
-// NOTE(casey): Windows-specific
-#define WGL_CONTEXT_MAJOR_VERSION_ARB                      0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB                      0x2092
-#define WGL_CONTEXT_LAYER_PLANE_ARB                        0x2093
-#define WGL_CONTEXT_FLAGS_ARB                              0x2094
-#define WGL_CONTEXT_PROFILE_MASK_ARB                       0x9126
-
-#define WGL_CONTEXT_DEBUG_BIT_ARB                          0x0001
-#define WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB             0x0002
-
-#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB                   0x00000001
-#define WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB          0x00000002
-
-#if 0
+#if 1
 struct opengl_info
 {
     b32 ModernContext;
@@ -46,10 +18,6 @@ struct opengl_info
     char *Version;
     char *ShadingLanguageVersion;
     char *Extensions;
-
-    b32 GL_EXT_texture_sRGB;
-    b32 GL_EXT_framebuffer_sRGB;
-    b32 GL_ARB_framebuffer_object;
 };
 
 internal opengl_info
@@ -73,23 +41,6 @@ OpenGLGetInfo(b32 ModernContext)
     Result.Extensions = (char *)glGetString(GL_EXTENSIONS);
 
     char *At = Result.Extensions;
-    while(*At)
-    {
-        while(IsWhitespace(*At)) {++At;}
-        char *End = At;
-        while(*End && !IsWhitespace(*End)) {++End;}
-
-        umm Count = End - At;        
-
-        if(0) {}
-        else if(StringsAreEqual(Count, At, "GL_EXT_texture_sRGB")) {Result.GL_EXT_texture_sRGB=true;}
-        else if(StringsAreEqual(Count, At, "GL_EXT_framebuffer_sRGB")) {Result.GL_EXT_framebuffer_sRGB=true;}
-        else if(StringsAreEqual(Count, At, "GL_ARB_framebuffer_sRGB")) {Result.GL_EXT_framebuffer_sRGB=true;}
-        else if(StringsAreEqual(Count, At, "GL_ARB_framebuffer_object")) {Result.GL_ARB_framebuffer_object=true;}
-        // TODO(casey): Is there some kind of ARB string to look for that indicates GL_EXT_texture_sRGB?
-
-        At = End;
-    }
 
     char *MajorAt = Result.Version;
     char *MinorAt = 0;
@@ -111,11 +62,6 @@ OpenGLGetInfo(b32 ModernContext)
         Major = S32FromZ(MajorAt);
         Minor = S32FromZ(MinorAt);
     }
-
-    if((Major > 2) || (Major == 2) && (Minor >= 1))
-    {
-        Result.GL_EXT_texture_sRGB = true;
-    }
     
     return(Result);
 }
@@ -129,7 +75,7 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
     // and the framebuffer side, then we can enable it, otherwise it is
     // safer for us to pass it straight through.
     OpenGLDefaultInternalTextureFormat = GL_RGBA8;
-    if(FramebufferSupportsSRGB && Info.GL_EXT_texture_sRGB && Info.GL_EXT_framebuffer_sRGB)
+    if(FramebufferSupportsSRGB && GL_EXT_texture_sRGB && GL_EXT_framebuffer_sRGB)
     {
         OpenGLDefaultInternalTextureFormat = GL_SRGB8_ALPHA8;
 
@@ -331,7 +277,7 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     glMatrixMode(GL_TEXTURE);
     glLoadIdentity();
 
-    b32 UseRenderTargets = 0; //(glBindFramebuffer != 0);
+    b32 UseRenderTargets = (glBindFramebuffer != 0);
 
     u32 MaxRenderTargetIndex = UseRenderTargets ? Commands->MaxRenderTargetIndex : 0;
      if(MaxRenderTargetIndex >= GlobalFramebufferCount)

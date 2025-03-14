@@ -13,7 +13,9 @@
 #include <malloc.h>
 #include <xinput.h>
 #include <dsound.h>
-#include <gl/gl.h>
+#include "GL/glew.h"
+#include "GLFW/glfw3.h"
+//#include <gl/gl.h>
 
 #include "win32_engine.h"
 
@@ -26,7 +28,6 @@ platform_api Platform;
 global_variable b32 GlobalRunning;
 global_variable b32 GlobalPause;
 global_variable b32 GlobalAppIsActive;
-global_variable win32_offscreen_buffer GlobalBackbuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 global_variable s64 GlobalPerfCountFrequency;
 global_variable b32 DEBUGGlobalShowCursor;
@@ -44,61 +45,6 @@ global_variable HDC GlobalFontDeviceContext;
 // NOTE(paul): OpenGL win32 defines
 // ================================================================================
 
-#define WGL_DRAW_TO_WINDOW_ARB                  0x2001
-#define WGL_ACCELERATION_ARB                    0x2003
-#define WGL_SUPPORT_OPENGL_ARB                  0x2010
-#define WGL_DOUBLE_BUFFER_ARB                   0x2011
-#define WGL_PIXEL_TYPE_ARB                      0x2013
-
-#define WGL_TYPE_RGBA_ARB                       0x202B
-#define WGL_FULL_ACCELERATION_ARB               0x2027
-
-#define WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB        0x20A9
-
-typedef HGLRC WINAPI wgl_create_context_attribs_arb(HDC hDC, HGLRC hShareContext,
-    const int *attribList);
-
-typedef BOOL WINAPI wgl_get_pixel_format_attrib_iv_arb(HDC hdc,
-    int iPixelFormat,
-    int iLayerPlane,
-    UINT nAttributes,
-    const int *piAttributes,
-    int *piValues);
-
-typedef BOOL WINAPI wgl_get_pixel_format_attrib_fv_arb(HDC hdc,
-    int iPixelFormat,
-    int iLayerPlane,
-    UINT nAttributes,
-    const int *piAttributes,
-    FLOAT *pfValues);
-
-typedef BOOL WINAPI wgl_choose_pixel_format_arb(HDC hdc,
-    const int *piAttribIList,
-    const FLOAT *pfAttribFList,
-    UINT nMaxFormats,
-    int *piFormats,
-    UINT *nNumFormats);
-
-typedef GLenum WINAPI gl_check_framebuffer_status(GLenum target);
-typedef void WINAPI gl_bind_framebuffer(GLenum target, GLuint framebuffer);
-typedef void WINAPI gl_gen_framebuffers(GLsizei n, GLuint *framebuffers);
-typedef void WINAPI gl_framebuffer_texture_2d(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-
-global_variable gl_check_framebuffer_status *glCheckFramebufferStatus;
-global_variable gl_bind_framebuffer *glBindFramebuffer;
-global_variable gl_gen_framebuffers *glGenFramebuffers;
-global_variable gl_framebuffer_texture_2d *glFramebufferTexture2D;
-
-typedef int WINAPI wgl_get_swap_interval_ext(void);
-typedef BOOL WINAPI wgl_swap_interval_ext(int interval);
-typedef const char * WINAPI wgl_get_extensions_string_ext(void);
-
-global_variable wgl_create_context_attribs_arb *wglCreateContextAttribsARB;
-global_variable wgl_choose_pixel_format_arb *wglChoosePixelFormatARB;
-global_variable wgl_swap_interval_ext *wglSwapIntervalEXT;
-global_variable wgl_get_swap_interval_ext *wglGetSwapIntervalEXT;
-global_variable wgl_get_extensions_string_ext *wglGetExtensionsStringEXT;
-global_variable b32 OpenGLSupportsSRGBFramebuffer;
 global_variable GLuint OpenGLDefaultInternalTextureFormat;
 global_variable GLuint OpenGLReservedBlitTexture;
 
@@ -115,180 +61,13 @@ global_variable GLuint OpenGLReservedBlitTexture;
 // NOTE(paul): OPENGL INIT & Win32 Part
 //=================================================================================
 
-int Win32OpenGLAttribs[] =
-{
-    WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-    WGL_CONTEXT_MINOR_VERSION_ARB, 0,
-    WGL_CONTEXT_FLAGS_ARB, 0 // NOTE(casey): Enable for testing WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB
-#if EDITOR_INTERNAL
-    |WGL_CONTEXT_DEBUG_BIT_ARB
-#endif
-    ,
-    WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
-    0,
-};
-
 internal void
-Win32SetPixelFormat(HDC WindowDC)
+Win32InitOpenGL(GLFWwindow *Window)
 {
-    int SuggestedPixelFormatIndex = 0;
-    GLuint ExtendedPick = 0;
-    if(wglChoosePixelFormatARB)
-    {
-        int IntAttribList[] =
-        {
-            WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
-            WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
-            WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
-            WGL_DOUBLE_BUFFER_ARB, GL_TRUE,
-            WGL_PIXEL_TYPE_ARB, WGL_TYPE_RGBA_ARB,
-            WGL_FRAMEBUFFER_SRGB_CAPABLE_ARB, GL_TRUE,
-            0,
-        };
-
-        if(!OpenGLSupportsSRGBFramebuffer)
-        {
-            IntAttribList[10] = 0;
-        }
-
-        wglChoosePixelFormatARB(WindowDC, IntAttribList, 0, 1, 
-            &SuggestedPixelFormatIndex, &ExtendedPick);
-    }
-
-    if(!ExtendedPick)
-    {
-        PIXELFORMATDESCRIPTOR DesiredPixelFormat = {};
-        DesiredPixelFormat.nSize = sizeof(DesiredPixelFormat);
-        DesiredPixelFormat.nVersion = 1;
-        DesiredPixelFormat.iPixelType = PFD_TYPE_RGBA;
-        DesiredPixelFormat.dwFlags = PFD_SUPPORT_OPENGL|PFD_DRAW_TO_WINDOW|PFD_DOUBLEBUFFER;
-        DesiredPixelFormat.cColorBits = 32;
-        DesiredPixelFormat.cAlphaBits = 8;
-        DesiredPixelFormat.iLayerType = PFD_MAIN_PLANE;
-
-        SuggestedPixelFormatIndex = ChoosePixelFormat(WindowDC, &DesiredPixelFormat);
-    }
-
-    PIXELFORMATDESCRIPTOR SuggestedPixelFormat;
-    DescribePixelFormat(WindowDC, SuggestedPixelFormatIndex,
-        sizeof(SuggestedPixelFormat), &SuggestedPixelFormat);
-    SetPixelFormat(WindowDC, SuggestedPixelFormatIndex, &SuggestedPixelFormat);
-}
-
-internal void
-Win32LoadWGLExtensions(void)
-{
-    WNDCLASSA WindowClass = {};
-
-    WindowClass.lpfnWndProc = DefWindowProcA;
-    WindowClass.hInstance = GetModuleHandle(0);
-    WindowClass.lpszClassName = "EditorWGLLoader";
-
-    if(RegisterClassA(&WindowClass))
-    {
-        HWND Window = CreateWindowExA(
-            0,
-            WindowClass.lpszClassName,
-            "Editor",
-            0,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            0,
-            0,
-            WindowClass.hInstance,
-            0);
-
-        HDC WindowDC = GetDC(Window);
-        Win32SetPixelFormat(WindowDC);
-        HGLRC OpenGLRC = wglCreateContext(WindowDC);
-        if(wglMakeCurrent(WindowDC, OpenGLRC))        
-        {
-            wglChoosePixelFormatARB = 
-                (wgl_choose_pixel_format_arb *)wglGetProcAddress("wglChoosePixelFormatARB");
-            wglCreateContextAttribsARB =
-               (wgl_create_context_attribs_arb *)wglGetProcAddress("wglCreateContextAttribsARB");
-            wglSwapIntervalEXT = (wgl_swap_interval_ext *)wglGetProcAddress("wglSwapIntervalEXT");
-            wglGetSwapIntervalEXT = (wgl_get_swap_interval_ext *)wglGetProcAddress("wglGetSwapIntervalEXT");
-            wglGetExtensionsStringEXT = (wgl_get_extensions_string_ext *)wglGetProcAddress("wglGetExtensionsStringEXT");
-
-            if(wglGetExtensionsStringEXT)
-            {
-                char *Extensions = (char *)wglGetExtensionsStringEXT();
-                char *At = Extensions;
-                while(*At)
-                {
-                    while(IsWhitespace(*At)) {++At;}
-                    char *End = At;
-                    while(*End && !IsWhitespace(*End)) {++End;}
-
-                    umm Count = End - At;        
-
-                    if(0) {}
-                    else if(StringsAreEqual(Count, At, "WGL_EXT_framebuffer_sRGB"))
-                    {
-                        OpenGLSupportsSRGBFramebuffer = true;
-                    }
-                    else if(StringsAreEqual(Count, At, "WGL_ARB_framebuffer_sRGB"))
-                    {
-                        OpenGLSupportsSRGBFramebuffer = true;
-                    }
-
-                    At = End;
-                }
-            }
-
-            wglMakeCurrent(0, 0);
-        }
-
-        wglDeleteContext(OpenGLRC);
-        ReleaseDC(Window, WindowDC);
-        DestroyWindow(Window);
-    }
-}
-
-internal HGLRC
-Win32InitOpenGL(HDC WindowDC)
-{
-    Win32LoadWGLExtensions();
-
-    Win32SetPixelFormat(WindowDC);
-
-    b32 ModernContext = true;
-    HGLRC OpenGLRC = 0;
-    if(wglCreateContextAttribsARB)
-    {
-        OpenGLRC = wglCreateContextAttribsARB(WindowDC, 0, Win32OpenGLAttribs);
-    }
-
-    if(!OpenGLRC)
-    {
-        ModernContext = false;
-        OpenGLRC = wglCreateContext(WindowDC);
-    }
-
-    if(wglMakeCurrent(WindowDC, OpenGLRC))
-    {
-        opengl_info Info = OpenGLInit(ModernContext, OpenGLSupportsSRGBFramebuffer);
-
-        if(Info.GL_ARB_framebuffer_object)
-        {
-            glCheckFramebufferStatus = (gl_check_framebuffer_status *)wglGetProcAddress("glCheckFramebufferStatus");
-            glBindFramebuffer = (gl_bind_framebuffer *)wglGetProcAddress("glBindFramebuffer");
-            glGenFramebuffers = (gl_gen_framebuffers *)wglGetProcAddress("glGenFramebuffers");
-            glFramebufferTexture2D = (gl_framebuffer_texture_2d *)wglGetProcAddress("glFramebufferTexture2D");
-        }
-
-        if(wglSwapIntervalEXT)
-        {
-            wglSwapIntervalEXT(1);
-        }
-
-        glGenTextures(1, &OpenGLReservedBlitTexture);
-    }
-
-    return(OpenGLRC);
+    glfwMakeContextCurrent(Window);
+    opengl_info Info = OpenGLInit(true, true);
+    glfwSwapInterval(1);
+    glGenTextures(1, &OpenGLReservedBlitTexture);
 }
 
 //=================================================================================
@@ -299,57 +78,9 @@ Win32InitOpenGL(HDC WindowDC)
 // NOTE(paul): Win32 Display Buffer and Window Utils
 //=================================================================================
 
-internal win32_window_dimension
-Win32GetWindowDimension(HWND Window)
-{
-    win32_window_dimension Result;
-
-    RECT ClientRect;
-    GetClientRect(Window, &ClientRect);
-    Result.Width = ClientRect.right - ClientRect.left;
-    Result.Height = ClientRect.bottom - ClientRect.top;
-
-    return(Result);
-}
-
-internal void
-Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
-{
-    if(Buffer->Memory)
-    {
-        VirtualFree(Buffer->Memory, 0, MEM_RELEASE);
-    }
-
-    Buffer->Width = Width;
-    Buffer->Height = Height;
-
-    int BytesPerPixel = 4;
-    Buffer->BytesPerPixel = BytesPerPixel;
-
-    // NOTE(casey): When the biHeight field is negative, this is the clue to
-    // Windows to treat this bitmap as top-down, not bottom-up, meaning that
-    // the first three bytes of the image are the color for the top left pixel
-    // in the bitmap, not the bottom left!
-    Buffer->Info.bmiHeader.biSize = sizeof(Buffer->Info.bmiHeader);
-    Buffer->Info.bmiHeader.biWidth = Buffer->Width;
-    Buffer->Info.bmiHeader.biHeight = Buffer->Height;
-    Buffer->Info.bmiHeader.biPlanes = 1;
-    Buffer->Info.bmiHeader.biBitCount = 32;
-    Buffer->Info.bmiHeader.biCompression = BI_RGB;
-
-    // NOTE(casey): Thank you to Chris Hecker of Spy Party fame
-    // for clarifying the deal with StretchDIBits and BitBlt!
-    // No more DC for us.
-    Buffer->Pitch = Width*BytesPerPixel;
-    int BitmapMemorySize = (Buffer->Pitch*Buffer->Height);
-    Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-    // NOTE(casey): VirtualAlloc should _only_ have given us back
-    // zero'd memory which is all black, so we don't need to clear it.
-}
-
 internal void
 Win32DisplayBufferInWindow(platform_work_queue *RenderQueue, editor_render_commands *Commands,
-                           HDC DeviceContext, rectangle2i DrawRegion, u32 WindowWidth, u32 WindowHeight,
+                           GLFWwindow *Window, rectangle2i DrawRegion, u32 WindowWidth, u32 WindowHeight,
                            memory_arena *TempArena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(TempArena);
@@ -361,42 +92,10 @@ Win32DisplayBufferInWindow(platform_work_queue *RenderQueue, editor_render_comma
     END_BLOCK();
 
     BEGIN_BLOCK("SwapBuffers");
-    SwapBuffers(DeviceContext);
+    glfwSwapBuffers(Window);
     END_BLOCK();
 
     EndTemporaryMemory(TempMem);
-}
-
-internal void
-ToggleFullscreen(HWND Window)
-{
-    // NOTE(casey): This follows Raymond Chen's prescription
-    // for fullscreen toggling, see:
-    // http://blogs.msdn.com/b/oldnewthing/archive/2010/04/12/9994016.aspx
-
-    DWORD Style = GetWindowLong(Window, GWL_STYLE);
-    if(Style & WS_OVERLAPPEDWINDOW)
-    {
-        MONITORINFO MonitorInfo = {sizeof(MonitorInfo)};
-        if(GetWindowPlacement(Window, &GlobalWindowPosition) &&
-           GetMonitorInfo(MonitorFromWindow(Window, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo))
-        {
-            SetWindowLong(Window, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
-            SetWindowPos(Window, HWND_TOP,
-                         MonitorInfo.rcMonitor.left, MonitorInfo.rcMonitor.top,
-                         MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left,
-                         MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top,
-                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-        }
-    }
-    else
-    {
-        SetWindowLong(Window, GWL_STYLE, Style | WS_OVERLAPPEDWINDOW);
-        SetWindowPlacement(Window, &GlobalWindowPosition);
-        SetWindowPos(Window, 0, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-    }
 }
 
 //=================================================================================
@@ -802,40 +501,6 @@ Win32MainWindowCallback(HWND Window,
 
         case WM_WINDOWPOSCHANGING:
         {
-            if(GetKeyState(VK_SHIFT) & 0x8000)
-            {
-                WINDOWPOS *NewPos = (WINDOWPOS *)LParam;
-
-                RECT WindowRect;
-                RECT ClientRect;
-                GetWindowRect(Window, &WindowRect);
-                GetClientRect(Window, &ClientRect);
-
-                s32 ClientWidth = (ClientRect.right - ClientRect.left);
-                s32 ClientHeight = (ClientRect.bottom - ClientRect.top);
-                s32 WidthAdd = ((WindowRect.right - WindowRect.left) - ClientWidth);
-                s32 HeightAdd = ((WindowRect.bottom - WindowRect.top) - ClientHeight);
-
-                s32 RenderWidth = GlobalBackbuffer.Width;
-                s32 RenderHeight = GlobalBackbuffer.Height;
-
-                s32 SugX = NewPos->cx;
-                s32 SugY = NewPos->cy;
-
-                s32 NewCx = (RenderWidth * (NewPos->cy - HeightAdd)) / RenderHeight;
-                s32 NewCy = (RenderHeight * (NewPos->cx - WidthAdd)) / RenderWidth;
-
-                if(AbsoluteValue((r32)(NewPos->cx - NewCx)) < AbsoluteValue((r32)(NewPos->cy - NewCy)))
-                {
-                    NewPos->cx = NewCx + WidthAdd;
-                }
-                else
-                {
-                    NewPos->cy = NewCy + HeightAdd;
-                }
-
-                Result = DefWindowProcA(Window, Message, WParam, LParam);
-            }
         } break;
         
         case WM_SETCURSOR:
@@ -1038,7 +703,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                         {
                             if(Message.hwnd)
                             {
-                                ToggleFullscreen(Message.hwnd);
+//                                ToggleFullscreen(Message.hwnd);
                             }
                         }
                     }
@@ -1612,154 +1277,129 @@ WinMain(HINSTANCE Instance,
     // so that our Sleep() can be more granular.
     UINT DesiredSchedulerMS = 1;
     bool32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
-    
-#if EDITOR_INTERNAL
-    DEBUGGlobalShowCursor = true;
-#endif
-    WNDCLASSA WindowClass = {};
 
-    int ScreenDimX = GetSystemMetrics(SM_CXSCREEN);
-    int ScreenDimY = GetSystemMetrics(SM_CYSCREEN);
-    Win32ResizeDIBSection(&GlobalBackbuffer, ScreenDimX, ScreenDimY);
+    // NOTE(paul): GLFW Init Hints  ===========================================
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
+    glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
+    glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_OPENGL);
 
-    WindowClass.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
-    WindowClass.lpfnWndProc = Win32MainWindowCallback;
-    WindowClass.hInstance = Instance;
-    WindowClass.hCursor = LoadCursor(0, IDC_ARROW);
-    WindowClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    WindowClass.lpszClassName = "EditorWindowClass";
-
-    if(RegisterClassA(&WindowClass))
+    if(glfwInit())
     {
-        HWND Window =
-            CreateWindowExA(
-                0, // WS_EX_TOPMOST|WS_EX_LAYERED,
-                WindowClass.lpszClassName,
-                "Editor",
-                WS_OVERLAPPEDWINDOW,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                0,
-                0,
-                Instance,
-                0);
-        if(Window)
+        // NOTE(paul): GLFW Window Creating Hints
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+
+        GLFWmonitor *PrimaryMonitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode *VideoMode = glfwGetVideoMode(PrimaryMonitor);
+
+        glfwWindowHint(GLFW_RED_BITS, VideoMode->redBits);
+        glfwWindowHint(GLFW_GREEN_BITS, VideoMode->greenBits);
+        glfwWindowHint(GLFW_BLUE_BITS, VideoMode->blueBits);
+
+        glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+        glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
+        
+        GLFWwindow *MainWindow = glfwCreateWindow(VideoMode->width,
+                                                  VideoMode->height,
+                                                  "Window", 0, 0);
+        
+//        glfwSetWindowMonitor(MainWindow, PrimaryMonitor, 0, 0,
+//                             VideoMode->width, VideoMode->height, VideoMode->refreshRate);
+        if(MainWindow)
         {
-            ToggleFullscreen(Window);
-            HDC OpenGLDC = GetDC(Window);
-            HGLRC OpenGLRC = 0;
-
-            OpenGLRC = Win32InitOpenGL(OpenGLDC);
-
-            win32_thread_startup HighPriStartups[3] = {};
-            platform_work_queue HighPriorityQueue = {};
-            Win32MakeQueue(&HighPriorityQueue, ArrayCount(HighPriStartups), HighPriStartups);
-
-            win32_thread_startup LowPriStartups[3] = {};
-            platform_work_queue LowPriorityQueue = {};
-            Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
-
-            win32_sound_output SoundOutput = {};
-
-            // TODO(casey): How do we reliably query on this on Windows?
-            int MonitorRefreshHz = 60;
-            HDC RefreshDC = GetDC(Window);
-            int Win32RefreshRate = GetDeviceCaps(RefreshDC, VREFRESH);
-            ReleaseDC(Window, RefreshDC);
-            if((Win32RefreshRate > 1) && (Win32RefreshRate <= 60))
+            glfwMakeContextCurrent(MainWindow);
+            glewExperimental = GL_TRUE;
+            if(glewInit() == GLEW_OK)
             {
-                MonitorRefreshHz = Win32RefreshRate;
-            }
+                Win32InitOpenGL(MainWindow);
+
+                int FramebufferWidth = 0;
+                int FramebufferHeight = 0;
+                glfwGetFramebufferSize(MainWindow, &FramebufferWidth, &FramebufferHeight);
+                glViewport(0, 0, FramebufferWidth, FramebufferHeight);
+
+                win32_thread_startup HighPriStartups[3] = {};
+                platform_work_queue HighPriorityQueue = {};
+                Win32MakeQueue(&HighPriorityQueue, ArrayCount(HighPriStartups), HighPriStartups);
+
+                win32_thread_startup LowPriStartups[3] = {};
+                platform_work_queue LowPriorityQueue = {};
+                Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
+
+                win32_sound_output SoundOutput = {};
+
+
+                // NOTE(paul): Setting refresh rate  ===========================================
+                // TODO(casey): How do we reliably query on this on Windows?
+                int MonitorRefreshHz = VideoMode->refreshRate;
+                real32 EditorUpdateHz = (real32)(MonitorRefreshHz);
+                real32 TargetSecondsPerFrame = 1.0f / (real32)EditorUpdateHz;
+
+                GlobalRunning = true;
+
+                memory_arena FrameTempArena = {};
             
-            real32 EditorUpdateHz = (real32)(MonitorRefreshHz);
-            real32 TargetSecondsPerFrame = 1.0f / (real32)EditorUpdateHz;
-
-            // TODO(casey): Make this like sixty seconds?
-            SoundOutput.SamplesPerSecond = 48000;
-            SoundOutput.BytesPerSample = sizeof(int16)*2;
-            SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample;
-            // TODO(casey): Actually compute this variance and see
-            // what the lowest reasonable value is.
-            SoundOutput.SafetyBytes = (int)(((real32)SoundOutput.SamplesPerSecond*(real32)SoundOutput.BytesPerSample / EditorUpdateHz)/3.0f);
-            Win32InitDSound(Window, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
-            Win32ClearSoundBuffer(&SoundOutput);
-            GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
-
-            GlobalRunning = true;
-
-            memory_arena FrameTempArena = {};
-            
-            // TODO(casey): Decide what our pushbuffer size is!
-            u32 PushBufferSize = Megabytes(64);
-            void *PushBuffer = Win32AllocateMemory(PushBufferSize);
-
-            u32 MaxPossibleOverrun = 2*8*sizeof(u16);
-            int16 *Samples = (int16 *)VirtualAlloc(0, SoundOutput.SecondaryBufferSize + MaxPossibleOverrun,
-                                                   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-
+                // TODO(casey): Decide what our pushbuffer size is!
+                u32 PushBufferSize = Megabytes(64);
+                void *PushBuffer = Win32AllocateMemory(PushBufferSize);
 
 #if EDITOR_INTERNAL
-            LPVOID BaseAddress = (LPVOID)Terabytes(2);
+                LPVOID BaseAddress = (LPVOID)Terabytes(2);
 #else
-            LPVOID BaseAddress = 0;
+                LPVOID BaseAddress = 0;
 #endif
 
-            editor_memory EditorMemory = {};
+                editor_memory EditorMemory = {};
 
 #if EDITOR_INTERNAL
-            EditorMemory.DebugTable = GlobalDebugTable;
+                EditorMemory.DebugTable = GlobalDebugTable;
 #endif
-            EditorMemory.HighPriorityQueue = &HighPriorityQueue;
-            EditorMemory.LowPriorityQueue = &LowPriorityQueue;
-            EditorMemory.PlatformAPI.AddEntry = Win32AddEntry;
-            EditorMemory.PlatformAPI.CompleteAllWork = Win32CompleteAllWork;
+                EditorMemory.HighPriorityQueue = &HighPriorityQueue;
+                EditorMemory.LowPriorityQueue = &LowPriorityQueue;
+                EditorMemory.PlatformAPI.AddEntry = Win32AddEntry;
+                EditorMemory.PlatformAPI.CompleteAllWork = Win32CompleteAllWork;
 
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
-            EditorMemory.PlatformAPI.OpenNextFile = Win32OpenNextFile;
-            EditorMemory.PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
-            EditorMemory.PlatformAPI.FileError = Win32FileError;
-            EditorMemory.PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
+                EditorMemory.PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
+                EditorMemory.PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
+                EditorMemory.PlatformAPI.OpenNextFile = Win32OpenNextFile;
+                EditorMemory.PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
+                EditorMemory.PlatformAPI.FileError = Win32FileError;
+                EditorMemory.PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
 
-            EditorMemory.PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
-            EditorMemory.PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
+                EditorMemory.PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
+                EditorMemory.PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
 
-            EditorMemory.PlatformAPI.AllocateMemory = Win32AllocateMemory;
-            EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
+                EditorMemory.PlatformAPI.AllocateMemory = Win32AllocateMemory;
+                EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
 
 #if EDITOR_INTERNAL
-            EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
-            EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
+                EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
+                EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
 #endif
 
-            u32 TextureOpCount = 1024;
-            platform_texture_op_queue *TextureOpQueue = &EditorMemory.TextureOpQueue;
-            TextureOpQueue->FirstFree = (texture_op *)Win32AllocateMemory(sizeof(texture_op)*TextureOpCount);
+                u32 TextureOpCount = 1024;
+                platform_texture_op_queue *TextureOpQueue = &EditorMemory.TextureOpQueue;
+                TextureOpQueue->FirstFree = (texture_op *)Win32AllocateMemory(sizeof(texture_op)*TextureOpCount);
 
-            for(u32 TextureOpIndex = 0;
-                TextureOpIndex < (TextureOpCount - 1);
-                ++TextureOpIndex)
-            {
-                texture_op *Op = TextureOpQueue->FirstFree + TextureOpIndex;
-                Op->Next = TextureOpQueue->FirstFree + TextureOpIndex + 1;
-            }
+                for(u32 TextureOpIndex = 0;
+                    TextureOpIndex < (TextureOpCount - 1);
+                    ++TextureOpIndex)
+                {
+                    texture_op *Op = TextureOpQueue->FirstFree + TextureOpIndex;
+                    Op->Next = TextureOpQueue->FirstFree + TextureOpIndex + 1;
+                }
 
-            Platform = EditorMemory.PlatformAPI;
+                Platform = EditorMemory.PlatformAPI;
             
-            // TODO(casey): Handle various memory footprints (USING
-            // SYSTEM METRICS)
+                // TODO(casey): Handle various memory footprints (USING
+                // SYSTEM METRICS)
 
-            // TODO(casey): Use MEM_LARGE_PAGES and
-            // call adjust token privileges when not on Windows XP?
+                // TODO(casey): Use MEM_LARGE_PAGES and
+                // call adjust token privileges when not on Windows XP?
 
-            // TODO(casey): TransientStorage needs to be broken up
-            // into editor transient and cache transient, and only the
-            // former need be saved for state playback.
-
-            if(Samples)
-            {
+                // TODO(casey): TransientStorage needs to be broken up
+                // into editor transient and cache transient, and only the
+                // former need be saved for state playback.
                 editor_input Input[2] = {};
                 editor_input *NewInput = &Input[0];
                 editor_input *OldInput = &Input[1];
@@ -1779,7 +1419,6 @@ WinMain(HINSTANCE Instance,
                                                                EditorCodeLockFullPath);
                 DEBUGSetEventRecording(Editor.IsValid);
 
-                ShowWindow(Window, SW_SHOW);
                 while(GlobalRunning)
                 {
                     {DEBUG_DATA_BLOCK("Platform/Controls");
@@ -1797,14 +1436,20 @@ WinMain(HINSTANCE Instance,
 
                     BEGIN_BLOCK("Input Processing");
 
+                    glfwSetWindowAspectRatio(MainWindow, 16, 9);
+
+                    glfwGetFramebufferSize(MainWindow, &FramebufferWidth, &FramebufferHeight);
                     editor_render_commands RenderCommands = RenderCommandStruct(
                         PushBufferSize, PushBuffer,
-                        (u32)GlobalBackbuffer.Width,
-                        (u32)GlobalBackbuffer.Height);
+                        (u32)FramebufferWidth,
+                        (u32)FramebufferHeight);
 
-                    win32_window_dimension Dimension = Win32GetWindowDimension(Window);
+                    int WindowWidth = 0;
+                    int WindowHeight = 0;
+                    glfwGetWindowSize(MainWindow, &WindowWidth, &WindowHeight);
+
                     rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
-                                                            Dimension.Width, Dimension.Height);
+                                                            WindowWidth, WindowHeight);
 
 
                     // TODO(casey): Zeroing macro
@@ -1831,6 +1476,7 @@ WinMain(HINSTANCE Instance,
 
                     if(!GlobalPause && GlobalAppIsActive)
                     {
+#if 0
                         {
                             TIMED_BLOCK("Mouse Position");
 
@@ -1851,18 +1497,19 @@ WinMain(HINSTANCE Instance,
                             NewInput->AltDown = (GetKeyState(VK_MENU) & (1 << 15));
                             NewInput->ControlDown = (GetKeyState(VK_CONTROL) & (1 << 15));
                         }
-
+#endif
+#if 0
                         {
                             TIMED_BLOCK("Keyboard Processing");
 
                             DWORD WinButtonID[PlatformMouseButton_Count] =
-                            {
-                                VK_LBUTTON,
-                                VK_MBUTTON,
-                                VK_RBUTTON,
-                                VK_XBUTTON1,
-                                VK_XBUTTON2,
-                            };
+                                {
+                                    VK_LBUTTON,
+                                    VK_MBUTTON,
+                                    VK_RBUTTON,
+                                    VK_XBUTTON1,
+                                    VK_XBUTTON2,
+                                };
 
                             for(u32 ButtonIndex = 0;
                                 ButtonIndex < PlatformMouseButton_Count;
@@ -1871,9 +1518,10 @@ WinMain(HINSTANCE Instance,
                                 NewInput->MouseButtons[ButtonIndex] = OldInput->MouseButtons[ButtonIndex];
                                 NewInput->MouseButtons[ButtonIndex].HalfTransitionCount = 0;
                                 Win32ProcessKeyboardMessage(&NewInput->MouseButtons[ButtonIndex],
-                                    GetKeyState(WinButtonID[ButtonIndex]) & (1 << 15));
+                                                            GetKeyState(WinButtonID[ButtonIndex]) & (1 << 15));
                             }
                         }
+#endif
                     }
 
                     END_BLOCK();
@@ -1883,12 +1531,6 @@ WinMain(HINSTANCE Instance,
                     //
 
                     BEGIN_BLOCK("Editor Update");
-
-                    editor_offscreen_buffer Buffer = {};
-                    Buffer.Memory = GlobalBackbuffer.Memory;
-                    Buffer.Width = GlobalBackbuffer.Width; 
-                    Buffer.Height = GlobalBackbuffer.Height;
-                    Buffer.Pitch = GlobalBackbuffer.Pitch;
                     if(!GlobalPause)
                     {
                         if(Editor.UpdateAndRender)
@@ -1902,117 +1544,6 @@ WinMain(HINSTANCE Instance,
                         else
                         {
                             // TODO: Logging
-                        }
-                    }
-
-                    END_BLOCK();
-
-                    //
-                    //
-                    //
-
-                    BEGIN_BLOCK("Audio Update");
-
-                    if(!GlobalPause)
-                    {
-                        LARGE_INTEGER AudioWallClock = Win32GetWallClock();
-                        real32 FromBeginToAudioSeconds = Win32GetSecondsElapsed(FlipWallClock, AudioWallClock);
-
-                        DWORD PlayCursor;
-                        DWORD WriteCursor;
-                        if(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
-                        {
-                            /* NOTE(casey):
-
-                               Here is how sound output computation works.
-
-                               We define a safety value that is the number
-                               of samples we think our editor update loop
-                               may vary by (let's say up to 2ms)
-
-                               When we wake up to write audio, we will look
-                               and see what the play cursor position is and we
-                               will forecast ahead where we think the play
-                               cursor will be on the next frame boundary.
-
-                               We will then look to see if the write cursor is
-                               before that by at least our safety value.  If
-                               it is, the target fill position is that frame
-                               boundary plus one frame.  This gives us perfect
-                               audio sync in the case of a card that has low
-                               enough latency.
-
-                               If the write cursor is _after_ that safety
-                               margin, then we assume we can never sync the
-                               audio perfectly, so we will write one frame's
-                               worth of audio plus the safety margin's worth
-                               of guard samples.
-                            */
-                            if(!SoundIsValid)
-                            {
-                                SoundOutput.RunningSampleIndex = WriteCursor / SoundOutput.BytesPerSample;
-                                SoundIsValid = true;
-                            }
-
-                            DWORD ByteToLock = ((SoundOutput.RunningSampleIndex*SoundOutput.BytesPerSample) %
-                                                SoundOutput.SecondaryBufferSize);
-
-                            DWORD ExpectedSoundBytesPerFrame =
-                                (int)((real32)(SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample) /
-                                      EditorUpdateHz);
-                            real32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
-                            DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(real32)ExpectedSoundBytesPerFrame);
-
-                            DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
-
-                            DWORD SafeWriteCursor = WriteCursor;
-                            if(SafeWriteCursor < PlayCursor)
-                            {
-                                SafeWriteCursor += SoundOutput.SecondaryBufferSize;
-                            }
-                            Assert(SafeWriteCursor >= PlayCursor);
-                            SafeWriteCursor += SoundOutput.SafetyBytes;
-
-                            bool32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);                        
-
-                            DWORD TargetCursor = 0;
-                            if(AudioCardIsLowLatency)
-                            {
-                                TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
-                            }
-                            else
-                            {
-                                TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame +
-                                                SoundOutput.SafetyBytes);
-                            }
-                            TargetCursor = (TargetCursor % SoundOutput.SecondaryBufferSize);
-
-                            DWORD BytesToWrite = 0;
-                            if(ByteToLock > TargetCursor)
-                            {
-                                BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
-                                BytesToWrite += TargetCursor;
-                            }
-                            else
-                            {
-                                BytesToWrite = TargetCursor - ByteToLock;
-                            }
-
-                            editor_sound_output_buffer SoundBuffer = {};
-                            SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
-                            SoundBuffer.SampleCount = Align8(BytesToWrite / SoundOutput.BytesPerSample);
-                            BytesToWrite = SoundBuffer.SampleCount*SoundOutput.BytesPerSample;
-                            SoundBuffer.Samples = Samples;
-                            if(Editor.GetSoundSamples)
-                            {
-                                Editor.GetSoundSamples(&EditorMemory, &SoundBuffer);
-                            }
-
-                            Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite, &SoundBuffer);
-                        }
-                        else
-                        {
-                            SoundIsValid = false;
                         }
                     }
 
@@ -2050,8 +1581,8 @@ WinMain(HINSTANCE Instance,
                             ++LoadTryIndex)
                         {
                             Editor = Win32LoadEditorCode(SourceEditorCodeDLLFullPath,
-                                TempEditorCodeDLLFullPath,
-                                EditorCodeLockFullPath);
+                                                         TempEditorCodeDLLFullPath,
+                                                         EditorCodeLockFullPath);
                             Sleep(100);
                         }
                         
@@ -2084,10 +1615,9 @@ WinMain(HINSTANCE Instance,
                     }
                     
                     
-                    HDC DeviceContext = GetDC(Window);
-                    Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
-                                               DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                    ReleaseDC(Window, DeviceContext);
+                    Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, MainWindow,
+                                               DrawRegion, WindowWidth, WindowHeight, &FrameTempArena);
+                    glfwPollEvents();
 
                     FlipWallClock = Win32GetWallClock();
 

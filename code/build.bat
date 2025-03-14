@@ -40,8 +40,8 @@ if %BuildDebug% == true (
    cl %CommonCompilerFlagsD% ..\code\engine.cpp -Fmengine.map -LD /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EditorGetSoundSamples -EXPORT:EngineUpdateAndRender -EXPORT:DEBUGEditorFrameEnd
    del lock.tmp
 
-::   cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%
-   cl %CommonCompilerFlagsD% ..\code\win32_engine_glfw.cpp -Fmwin32_engine_glfw.map /link %CommonLinkerFlags% glfw3dll.lib
+   cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%
+REM   cl %CommonCompilerFlagsD% ..\code\win32_engine_glfw.cpp -Fmwin32_engine_glfw.map /link %CommonLinkerFlags% glfw3dll.lib
 
 ) else (
    echo Building in OPTIMIZED mode.
@@ -61,7 +61,7 @@ if %BuildDebug% == true (
    cl %CommonCompilerFlagsO% ..\code\engine.cpp -Fmengine.map -LD /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EditorGetSoundSamples -EXPORT:EngineUpdateAndRender -EXPORT:DEBUGEditorFrameEnd
 
    cl %CommonCompilerFlagsO% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%
-   cl %CommonCompilerFlagsO% ..\code\win32_engine_glfw.cpp -Fmwin32_engine_glfw.map /link %CommonLinkerFlags%
+REM   cl %CommonCompilerFlagsO% ..\code\win32_engine_glfw.cpp -Fmwin32_engine_glfw.map /link %CommonLinkerFlags%
 )
 
 popd

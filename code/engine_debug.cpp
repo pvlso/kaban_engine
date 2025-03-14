@@ -1941,7 +1941,24 @@ DEBUGEnd(debug_state *DebugState, editor_input *Input)
     PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, V3(0, 0.5f*DebugState->GlobalHeight, 3.0f),
              V2(DebugState->GlobalWidth, 50.0f) - V2(0.0f, 12.0f),
              V4(0.6f, 0.850980392157f, 0.917647058824f, 1));
-    
+
+    PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform,
+             V3(0, 0, 10.0f),
+             V2(200.0f, 50.0f),
+             V4(0.15f, 0.0f, 0.15f, 1));
+
+    loaded_font *Font = DebugState->DebugFont;
+    ssa_font *Info = DebugState->DebugFontInfo;
+    bitmap_id BitmapID = GetBitmapForGlyph(RenderGroup->Assets, Info, Font, 100);
+    ssa_bitmap *BInfo = GetBitmapInfo(RenderGroup->Assets, BitmapID);
+    r32 BitmapScale = 2.0f*(r32)BInfo->Dim[1];
+    v3 BitmapOffset = V3(0, 0, 10.0f);
+
+    v4 Color = {0.25f, 0, 0.25f, 1.0f};
+    PushBitmap(RenderGroup, &DebugState->TextTransform, BitmapID, BitmapScale,
+               BitmapOffset, Color, 1.0f);
+
+#if 1    
     debug_frame *MostRecentFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
     FormatString(DebugState->RootInfoSize, DebugState->RootInfo, "%.02fms %de %dp %dd",
                  MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
@@ -1956,7 +1973,7 @@ DEBUGEnd(debug_state *DebugState, editor_input *Input)
     EndLayout(&DebugState->MouseTextLayout);
 
     DEBUGInteract(DebugState, Input, MouseP);
-    
+#endif    
     EndRenderGroup(&DebugState->RenderGroup);
 
     // NOTE(casey): Clear the UI state for the next frame
