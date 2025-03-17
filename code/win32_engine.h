@@ -7,28 +7,10 @@
    $Notice: $
    ======================================================================== */
 
-struct win32_sound_output
+struct win32_window_dimension
 {
-    int SamplesPerSecond;
-    uint32 RunningSampleIndex;
-    int BytesPerSample;
-    DWORD SecondaryBufferSize;
-    DWORD SafetyBytes;
-
-    // TODO(casey): Should running sample index be in bytes as well
-    // TODO(casey): Math gets simpler if we add a "bytes per second" field?
-};
-
-struct win32_debug_time_marker
-{
-    DWORD OutputPlayCursor;
-    DWORD OutputWriteCursor;
-    DWORD OutputLocation;
-    DWORD OutputByteCount;
-    DWORD ExpectedFlipPlayCursor;
-
-    DWORD FlipPlayCursor;
-    DWORD FlipWriteCursor;
+    s32 Width;
+    s32 Height;
 };
 
 struct win32_editor_code
@@ -39,7 +21,6 @@ struct win32_editor_code
     // IMPORTANT(casey): Either of the callbacks can be 0!  You must
     // check before calling.
     engine_update_and_render *UpdateAndRender;
-    editor_get_sound_samples *GetSoundSamples;
     debug_editor_frame_end *DEBUGFrameEnd;
 
     bool32 IsValid;
@@ -48,9 +29,6 @@ struct win32_editor_code
 #define WIN32_STATE_FILE_NAME_COUNT MAX_PATH
 struct win32_state
 {
-    uint64 TotalSize;
-    void *EditorMemoryBlock;
-
     wchar_t EXEFileName[WIN32_STATE_FILE_NAME_COUNT];
     wchar_t *OnePastLastEXEFileNameSlash;
 };
@@ -77,21 +55,6 @@ struct win32_thread_startup
 {
     platform_work_queue *Queue;
 };
-
-inline u32
-StringLengthW(wchar_t *String)
-{
-    u32 Result = (DWORD)wcslen(String)*sizeof(wchar_t);
-    return(Result);
-}
-
-inline LARGE_INTEGER
-Win32GetWallClock(void)
-{    
-    LARGE_INTEGER Result;
-    QueryPerformanceCounter(&Result);
-    return(Result);
-}
 
 #define WIN32_EDITOR_H
 #endif

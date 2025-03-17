@@ -6,19 +6,27 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
+
+inline fp22_10
+F32ToFixed(f32 Value)
+{
+    fp22_10 Result = (fp22_10)((f32)(Value * (1 << 10)) +
+                                   ((Value >= 0.0f) ? 0.5f : -0.5f));
+
+    return(Result);
+}
+
+inline f32
+FixedToF32(fp22_10 Value)
+{
+    f32 Result = (f32)Value / (f32)(1 << 10);
+    return(Result);
+}
     
 inline v2
 V2i(int32 X, int32 Y)
 {
     v2 Result = {(real32)X, (real32)Y};
-
-    return(Result);
-}
-    
-inline v2
-V2i(v2_s32 A)
-{
-    v2 Result = {(f32)A.x, (f32)A.y};
 
     return(Result);
 }
@@ -41,30 +49,6 @@ V2(real32 X, real32 Y)
 
     return(Result);
 }
-
-#if 0
-inline v2
-V2(fp22_10 X, fp22_10 Y)
-{
-    v2 Result;
-
-    Result.x = FixedToF32(X);
-    Result.y = FixedToF32(Y);
-
-    return(Result);
-}
-
-inline v2
-V2(fp22_10_v2 A)
-{
-    v2 Result;
-
-    Result.x = FixedToF32(A.x);
-    Result.y = FixedToF32(A.y);
-
-    return(Result);
-}
-#endif
 
 inline v3
 V3i(s32 X, s32 Y, s32 Z)
@@ -1411,39 +1395,6 @@ CalculateTriangleBoundingBox(triangle *T)
         if(T->Vertices[I].y > T->Bounds.Max.y) T->Bounds.Max.y = T->Vertices[I].y;
     }
 }
-
-
-inline f32
-TriangleArea2(v2 a, v2 b, v2 c)
-{
-    f32 Result = Cross(a, b) + Cross(c, a) + Cross(b, c);
-    return(Result);
-}
-
-inline f32
-TriangleArea2(triangle *T)
-{
-    f32 Result = (Cross(T->Vertices[0], T->Vertices[1]) +
-                  Cross(T->Vertices[2], T->Vertices[0]) +
-                  Cross(T->Vertices[1], T->Vertices[2]));
-    return(Result);
-}
-
-inline f32
-PolygonSignedArea2(polygon2 *P)
-{
-    f32 Result = 0.0f;
-    for(s32 I = 1;
-        I < (P->VertexCount - 1);
-        ++I)
-    {
-        Result += TriangleArea2(P->Vertices[0], P->Vertices[I], P->Vertices[I + 1]);
-    }
-    
-    return(Result);
-}
-
-//#include "engine_triangle.h"
 
 #define ENGINE_MATH_H
 #endif

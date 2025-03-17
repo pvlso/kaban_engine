@@ -8,7 +8,6 @@
 
 #include "engine_render_group.h"
 
-#if 1
 struct opengl_info
 {
     b32 ModernContext;
@@ -40,11 +39,9 @@ OpenGLGetInfo(b32 ModernContext)
 
     Result.Extensions = (char *)glGetString(GL_EXTENSIONS);
 
-    char *At = Result.Extensions;
-
     char *MajorAt = Result.Version;
     char *MinorAt = 0;
-    for(At = Result.Version;
+    for(char *At = Result.Version;
         *At;
         ++At)
     {
@@ -75,7 +72,7 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
     // and the framebuffer side, then we can enable it, otherwise it is
     // safer for us to pass it straight through.
     OpenGLDefaultInternalTextureFormat = GL_RGBA8;
-    if(FramebufferSupportsSRGB && GL_EXT_texture_sRGB && GL_EXT_framebuffer_sRGB)
+    if(FramebufferSupportsSRGB && GLEW_EXT_texture_sRGB && GLEW_EXT_framebuffer_sRGB)
     {
         OpenGLDefaultInternalTextureFormat = GL_SRGB8_ALPHA8;
 
@@ -86,7 +83,6 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
 
     return(Info);
 }       
-#endif
 
 inline void
 OpenGLSetScreenspace(s32 Width, s32 Height)
@@ -419,6 +415,11 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                     glDisable(GL_TEXTURE_2D);
                     OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
                     glEnable(GL_TEXTURE_2D);
+                } break;
+
+                case RenderGroupEntryType_render_entry_coordinate_system:
+                {
+                    render_entry_coordinate_system *Entry = (render_entry_coordinate_system *)Data;
                 } break;
 
                 case RenderGroupEntryType_render_entry_blend_render_target:

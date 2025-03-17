@@ -38,7 +38,6 @@
 #include "engine_render.h"
 #include "engine_render_group.h"
 #include "engine_asset.h"
-#include "engine_audio.h"
 
 enum editor_mode
 {
@@ -54,11 +53,10 @@ struct editor_state
     memory_arena ModeArena;
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
 
-    audio_state AudioState;
     editor_mode EditorMode;
     union
     {
-        u32 PlaceHolder;
+        s64 PlaceHolder;
     };
 };
 

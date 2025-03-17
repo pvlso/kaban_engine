@@ -9,8 +9,10 @@
 
 #include "engine_intrinsics.h"
 #include "engine_math.h"
+#include "engine_random.h"
 #include "engine_memory.h"
 #include "engine_string.h"
+#include "engine_crc.h"
 
 inline u32
 SortKeyToU32(r32 SortKey)
@@ -119,27 +121,6 @@ struct sort_entry
         v3 P;
     };
 };
-
-struct heap
-{
-    sort_entry *Nodes;
-    u32 MaxSize;
-    u32 Size;
-};
-
-inline void
-S32RemoveAt(s32 *Array, s32 Count, s32 Index)
-{
-    Array[Index] = 0;
-    for(s32 I = Index;
-        I < Count - 1;
-        ++I)
-    {
-        Array[I] = Array[I + 1];
-    }
-
-    Array[Count] = 0;
-}
 
 inline void
 Swap(sort_entry *A, sort_entry *B)

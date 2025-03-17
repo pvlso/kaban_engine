@@ -42,6 +42,12 @@ struct loaded_bitmap
     void *TextureHandle;
 };
 
+struct environment_map
+{    
+    loaded_bitmap LOD[4];
+    real32 Pz;
+};
+
 enum render_group_entry_type
 {
     RenderGroupEntryType_render_entry_bitmap,
@@ -49,6 +55,7 @@ enum render_group_entry_type
     RenderGroupEntryType_render_entry_cliprect,
     RenderGroupEntryType_render_entry_line,
     RenderGroupEntryType_render_entry_triangle,
+    RenderGroupEntryType_render_entry_coordinate_system,
     RenderGroupEntryType_render_entry_blend_render_target,
 };
 struct render_group_entry_header // TODO(casey): Don't store type here, store in sort index?
@@ -62,6 +69,11 @@ struct render_entry_cliprect
     render_entry_cliprect *Next;
     rectangle2i Rect;
     u32 RenderTargetIndex;
+};
+
+struct render_entry_saturation
+{
+    real32 Level;
 };
 
 struct render_entry_bitmap
@@ -94,6 +106,25 @@ struct render_entry_triangle
     v2 B;
     v2 C;
 };
+
+// NOTE(casey): This is only for test:
+// {
+struct render_entry_coordinate_system
+{
+    v2 Origin;
+    v2 XAxis;
+    v2 YAxis;
+    v4 Color;
+    loaded_bitmap *Texture;
+    loaded_bitmap *NormalMap;
+
+//    real32 PixelsToMeters; // TODO(casey): Need to store this for lighting!
+
+    environment_map *Top;
+    environment_map *Middle;
+    environment_map *Bottom;
+};
+// }
 
 struct render_entry_blend_render_target
 {
@@ -166,6 +197,10 @@ struct push_buffer_result
     sort_sprite_bound *SortEntry;
     render_group_entry_header *Header;
 };
+
+void DrawRectangleQuickly(loaded_bitmap *Buffer, v2 Origin, v2 XAxis, v2 YAxis, v4 Color,
+                          loaded_bitmap *Texture, real32 PixelsToMeters,
+                          rectangle2i ClipRect);
                       
 inline object_transform
 DefaultUprightTransform(void)

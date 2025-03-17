@@ -10,7 +10,6 @@
 #include "engine_sort.cpp"
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
-#include "engine_audio.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
@@ -93,6 +92,39 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     EditorState->EditorMode = EditorMode;
 }
 
+internal b32
+CheckForMetaInput(editor_state *EditorState, transient_state *TranState, editor_input *Input)
+{
+    b32 Result = false;
+    for(u32 ControllerIndex = 0;
+        ControllerIndex < ArrayCount(Input->Controllers);
+        ++ControllerIndex)
+    {
+        editor_controller_input *Controller = GetController(Input, ControllerIndex);
+        if(Controller->IsConnected)
+        {
+            if(WasPressed(Controller->Back))
+            {
+                switch(EditorState->EditorMode)
+                {
+                    case EditorMode_TitleScreen:
+                    {
+                        Input->QuitRequested = true;
+                        break;
+                    } break;
+                }
+            }
+        }
+    }
+
+    if(WasPressed(Input->MouseButtons[PlatformMouseButton_Middle]))
+    {
+//        EditorState->UIEnable = !EditorState->UIEnable;
+    }
+
+    return(Result);
+}
+
 #if EDITOR_INTERNAL
 debug_table *GlobalDebugTable;
 editor_memory *DebugGlobalMemory;
@@ -101,6 +133,7 @@ editor_memory *DebugGlobalMemory;
 platform_api Platform;
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
+    GenerateCRC64Table();
     Platform = Memory->PlatformAPI;    
     
 #if EDITOR_INTERNAL
@@ -137,7 +170,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(!EditorState)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
-        InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
     }
 
     // NOTE(casey): Transient initialization
@@ -178,16 +210,49 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     TranState->MainGenerationID = BeginGeneration(TranState->Assets);
     
+    //
+    // NOTE(casey): Render
+    //
+    temporary_memory RenderMemory = BeginTemporaryMemory(&TranState->TranArena);
+
+    render_group RenderGroup_ = BeginRenderGroup(TranState->Assets, RenderCommands, TranState->MainGenerationID,
+                                                 false, RenderCommands->Width, RenderCommands->Height);
+    render_group *RenderGroup = &RenderGroup_;
+
+    u32 RenderWidth = RenderCommands->Width;
+    u32 RenderHeight = RenderCommands->Height;
+
+    b32 Rerun = false;
+    do
+    {
+        switch(EditorState->EditorMode)
+        {
+            case EditorMode_None:
+            {
+            } break;
+
+            case EditorMode_TitleScreen:
+            {
+            } break;
+            
+            case EditorMode_AssetsMode:
+            {
+            } break;
+
+            case EditorMode_GameMode:
+            {
+            } break;
+
+            InvalidDefaultCase;
+        }
+    } while(Rerun);
+
+    EndRenderGroup(RenderGroup);
+
+    EndTemporaryMemory(RenderMemory);
+    
     CheckArena(&EditorState->ModeArena);
     CheckArena(&TranState->TranArena);
-}
-
-extern "C" EDITOR_GET_SOUND_SAMPLES(EditorGetSoundSamples)
-{
-    editor_state *EditorState = Memory->EditorState;
-    transient_state *TranState = Memory->TransientState;
-
-    OutputPlayingSounds(&EditorState->AudioState, SoundBuffer, TranState->Assets, &TranState->TranArena);
 }
 
 #if EDITOR_INTERNAL

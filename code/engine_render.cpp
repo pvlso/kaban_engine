@@ -6,6 +6,83 @@
    $Notice:  $
    ======================================================================== */
 
+inline v4
+Unpack4x8(uint32 Packed)
+{
+    v4 Result = {(real32)((Packed >> 16) & 0xFF),
+                 (real32)((Packed >> 8) & 0xFF),
+                 (real32)((Packed >> 0) & 0xFF),
+                 (real32)((Packed >> 24) & 0xFF)};
+
+    return(Result);
+}
+
+inline u32
+Pack4x8(v4 Unpacked)
+{
+    u32 Result = ((RoundReal32ToUInt32(Unpacked.a) << 24) |
+                  (RoundReal32ToUInt32(Unpacked.r) << 16) |
+                  (RoundReal32ToUInt32(Unpacked.g) << 8) |
+                  (RoundReal32ToUInt32(Unpacked.b) << 0));
+
+    return(Result);
+}
+
+inline v4
+UnscaleAndBiasNormal(v4 Normal)
+{
+    v4 Result;
+
+    real32 Inv255 = 1.0f / 255.0f;
+
+    Result.x = -1.0f + 2.0f*(Inv255*Normal.x);
+    Result.y = -1.0f + 2.0f*(Inv255*Normal.y);
+    Result.z = -1.0f + 2.0f*(Inv255*Normal.z);
+
+    Result.w = Inv255*Normal.w;
+
+    return(Result);
+}
+
+struct bilinear_sample
+{
+    uint32 A, B, C, D;
+};
+inline bilinear_sample
+BilinearSample(loaded_bitmap *Texture, int32 X, int32 Y)
+{
+    bilinear_sample Result;
+    
+    uint8 *TexelPtr = ((uint8 *)Texture->Memory) + Y*Texture->Pitch + X*sizeof(uint32);
+    Result.A = *(uint32 *)(TexelPtr);
+    Result.B = *(uint32 *)(TexelPtr + sizeof(uint32));
+    Result.C = *(uint32 *)(TexelPtr + Texture->Pitch);
+    Result.D = *(uint32 *)(TexelPtr + Texture->Pitch + sizeof(uint32));
+
+    return(Result);
+}
+
+inline v4
+SRGBBilinearBlend(bilinear_sample TexelSample, real32 fX, real32 fY)
+{
+    v4 TexelA = Unpack4x8(TexelSample.A);
+    v4 TexelB = Unpack4x8(TexelSample.B);
+    v4 TexelC = Unpack4x8(TexelSample.C);
+    v4 TexelD = Unpack4x8(TexelSample.D);
+
+    // NOTE(casey): Go from sRGB to "linear" brightness space
+    TexelA = SRGB255ToLinear1(TexelA);
+    TexelB = SRGB255ToLinear1(TexelB);
+    TexelC = SRGB255ToLinear1(TexelC);
+    TexelD = SRGB255ToLinear1(TexelD);
+
+    v4 Result = Lerp(Lerp(TexelA, fX, TexelB),
+                     fY,
+                     Lerp(TexelC, fX, TexelD));
+
+    return(Result);
+}
+
 internal void
 SortEntries(editor_render_commands *Commands, memory_arena *TempArena, editor_render_prep *Prep)
 {
