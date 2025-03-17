@@ -56,5 +56,16 @@ struct win32_thread_startup
     platform_work_queue *Queue;
 };
 
+struct win32_platform_file_handle
+{
+    HANDLE Win32Handle;
+};
+
+struct win32_platform_file_group
+{
+    HANDLE FindHandle;
+    WIN32_FIND_DATAW FindData;
+};
+
 #define WIN32_EDITOR_H
 #endif

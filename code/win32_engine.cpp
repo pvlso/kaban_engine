@@ -11,14 +11,15 @@
 
 #include <windows.h>
 #include <malloc.h>
-#include <xinput.h>
-#include <dsound.h>
 
 #include "GL/glew.h"
 #include "GL/wglew.h"
 
 #include "win32_engine.h"
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): GLOBAL VARIABLES
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 platform_api Platform;
 
 global_variable b32 GlobalRunning;
@@ -35,12 +36,34 @@ global_variable b32 OpenGLSupportsSRGBFramebuffer;
 global_variable GLuint OpenGLDefaultInternalTextureFormat;
 global_variable GLuint OpenGLReservedBlitTexture;
 global_variable GLuint GlobalBlitTextureHandle;
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #include "engine_sort.cpp"
 #include "engine_render.h"
 #include "engine_opengl.cpp"
 #include "engine_render.cpp"
 
+inline LARGE_INTEGER
+Win32GetWallClock(void)
+{    
+    LARGE_INTEGER Result;
+    QueryPerformanceCounter(&Result);
+    return(Result);
+}
+
+inline real32
+Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
+{
+    real32 Result = ((real32)(End.QuadPart - Start.QuadPart) /
+                     (real32)GlobalPerfCountFrequency);
+    return(Result);
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): CODE LOADING
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 inline u32
 StringLengthW(wchar_t *String)
 {
@@ -96,66 +119,6 @@ Win32BuildEXEPathFileName(win32_state *State, wchar_t *FileName,
                StringLengthW(FileName), FileName,
                DestCount, Dest);
 }
-
-#if EDITOR_INTERNAL
-DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(DEBUGExecuteSystemCommand)
-{
-    debug_executing_process Result = {};
-
-    STARTUPINFO StartupInfo = {};
-    StartupInfo.cb = sizeof(StartupInfo);
-    StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-    StartupInfo.wShowWindow = SW_HIDE;
-
-    PROCESS_INFORMATION ProcessInfo = {};    
-    if(CreateProcess(Command,
-                     CommandLine,
-                     0,
-                     0,
-                     FALSE,
-                     0,
-                     0,
-                     Path,
-                     &StartupInfo,
-                     &ProcessInfo))
-    {
-        Assert(sizeof(Result.OSHandle) >= sizeof(ProcessInfo.hProcess));
-        *(HANDLE *)&Result.OSHandle = ProcessInfo.hProcess;
-    }
-    else
-    {
-        DWORD ErrorCode = GetLastError();
-        *(HANDLE *)&Result.OSHandle = INVALID_HANDLE_VALUE;
-    }
-
-    return(Result);
-}
-
-DEBUG_PLATFORM_GET_PROCESS_STATE(DEBUGGetProcessState)
-{
-    debug_process_state Result = {};
-
-    HANDLE hProcess = *(HANDLE *)&Process.OSHandle;
-    if(hProcess != INVALID_HANDLE_VALUE)
-    {
-        Result.StartedSuccessfully = true;
-
-        if(WaitForSingleObject(hProcess, 0) == WAIT_OBJECT_0)
-        {
-            DWORD ReturnCode = 0;
-            GetExitCodeProcess(hProcess, &ReturnCode);
-            Result.ReturnCode = ReturnCode;
-            CloseHandle(hProcess);
-        }
-        else
-        {
-            Result.IsRunning = true;
-        }
-    }
-
-    return(Result);
-}
-#endif
 
 inline FILETIME
 Win32GetLastWriteTime(wchar_t *Filename)
@@ -233,6 +196,81 @@ Win32UnloadEditorCode(win32_editor_code *EditorCode)
     EditorCode->UpdateAndRender = 0;
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): DEBUG
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+#if EDITOR_INTERNAL
+DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(DEBUGExecuteSystemCommand)
+{
+    debug_executing_process Result = {};
+
+    STARTUPINFO StartupInfo = {};
+    StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow = SW_HIDE;
+
+    PROCESS_INFORMATION ProcessInfo = {};    
+    if(CreateProcess(Command,
+                     CommandLine,
+                     0,
+                     0,
+                     FALSE,
+                     0,
+                     0,
+                     Path,
+                     &StartupInfo,
+                     &ProcessInfo))
+    {
+        Assert(sizeof(Result.OSHandle) >= sizeof(ProcessInfo.hProcess));
+        *(HANDLE *)&Result.OSHandle = ProcessInfo.hProcess;
+    }
+    else
+    {
+        DWORD ErrorCode = GetLastError();
+        *(HANDLE *)&Result.OSHandle = INVALID_HANDLE_VALUE;
+    }
+
+    return(Result);
+}
+
+DEBUG_PLATFORM_GET_PROCESS_STATE(DEBUGGetProcessState)
+{
+    debug_process_state Result = {};
+
+    HANDLE hProcess = *(HANDLE *)&Process.OSHandle;
+    if(hProcess != INVALID_HANDLE_VALUE)
+    {
+        Result.StartedSuccessfully = true;
+
+        if(WaitForSingleObject(hProcess, 0) == WAIT_OBJECT_0)
+        {
+            DWORD ReturnCode = 0;
+            GetExitCodeProcess(hProcess, &ReturnCode);
+            Result.ReturnCode = ReturnCode;
+            CloseHandle(hProcess);
+        }
+        else
+        {
+            Result.IsRunning = true;
+        }
+    }
+
+    return(Result);
+}
+#endif
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): OPENGL INIT
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32SetPixelFormat(HDC WindowDC)
 {
@@ -375,19 +413,14 @@ Win32InitOpenGL(HDC WindowDC)
     return(OpenGLRC);
 }
 
-internal win32_window_dimension
-Win32GetWindowDimension(HWND Window)
-{
-    win32_window_dimension Result;
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    RECT ClientRect;
-    GetClientRect(Window, &ClientRect);
-    Result.Width = ClientRect.right - ClientRect.left;
-    Result.Height = ClientRect.bottom - ClientRect.top;
 
-    return(Result);
-}
-
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WINDOW AND DISPLAY
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32DisplayBufferInWindow(platform_work_queue *RenderQueue, editor_render_commands *Commands,
                            HDC DeviceContext, rectangle2i DrawRegion, u32 WindowWidth, u32 WindowHeight,
@@ -408,6 +441,58 @@ Win32DisplayBufferInWindow(platform_work_queue *RenderQueue, editor_render_comma
     EndTemporaryMemory(TempMem);
 }
 
+internal win32_window_dimension
+Win32GetWindowDimension(HWND Window)
+{
+    win32_window_dimension Result;
+
+    RECT ClientRect;
+    GetClientRect(Window, &ClientRect);
+    Result.Width = ClientRect.right - ClientRect.left;
+    Result.Height = ClientRect.bottom - ClientRect.top;
+
+    return(Result);
+}
+
+internal void
+ToggleFullscreen(HWND Window)
+{
+    // NOTE(casey): This follows Raymond Chen's prescription
+    // for fullscreen toggling, see:
+    // http://blogs.msdn.com/b/oldnewthing/archive/2010/04/12/9994016.aspx
+
+    DWORD Style = GetWindowLong(Window, GWL_STYLE);
+    if(Style & WS_OVERLAPPEDWINDOW)
+    {
+        MONITORINFO MonitorInfo = {sizeof(MonitorInfo)};
+        if(GetWindowPlacement(Window, &GlobalWindowPosition) &&
+           GetMonitorInfo(MonitorFromWindow(Window, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo))
+        {
+            SetWindowLong(Window, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(Window, HWND_TOP,
+                         MonitorInfo.rcMonitor.left, MonitorInfo.rcMonitor.top,
+                         MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left,
+                         MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    }
+    else
+    {
+        SetWindowLong(Window, GWL_STYLE, Style | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(Window, &GlobalWindowPosition);
+        SetWindowPos(Window, 0, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WINDOW CALLBACKS / INPUT PROCESSING
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal LRESULT CALLBACK
 Win32MainWindowCallback(HWND Window,
                         UINT Message,
@@ -507,38 +592,6 @@ Win32MainWindowCallback(HWND Window,
     }
 
     return(Result);
-}
-
-internal void
-ToggleFullscreen(HWND Window)
-{
-    // NOTE(casey): This follows Raymond Chen's prescription
-    // for fullscreen toggling, see:
-    // http://blogs.msdn.com/b/oldnewthing/archive/2010/04/12/9994016.aspx
-
-    DWORD Style = GetWindowLong(Window, GWL_STYLE);
-    if(Style & WS_OVERLAPPEDWINDOW)
-    {
-        MONITORINFO MonitorInfo = {sizeof(MonitorInfo)};
-        if(GetWindowPlacement(Window, &GlobalWindowPosition) &&
-           GetMonitorInfo(MonitorFromWindow(Window, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo))
-        {
-            SetWindowLong(Window, GWL_STYLE, Style & ~WS_OVERLAPPEDWINDOW);
-            SetWindowPos(Window, HWND_TOP,
-                         MonitorInfo.rcMonitor.left, MonitorInfo.rcMonitor.top,
-                         MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left,
-                         MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top,
-                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-        }
-    }
-    else
-    {
-        SetWindowLong(Window, GWL_STYLE, Style | WS_OVERLAPPEDWINDOW);
-        SetWindowPlacement(Window, &GlobalWindowPosition);
-        SetWindowPos(Window, 0, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-    }
 }
 
 internal void
@@ -711,22 +764,14 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
     }
 }
 
-inline LARGE_INTEGER
-Win32GetWallClock(void)
-{    
-    LARGE_INTEGER Result;
-    QueryPerformanceCounter(&Result);
-    return(Result);
-}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-inline real32
-Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
-{
-    real32 Result = ((real32)(End.QuadPart - Start.QuadPart) /
-                     (real32)GlobalPerfCountFrequency);
-    return(Result);
-}
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): MULTITHREADING & QUEUES
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32AddEntry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data)
 {
@@ -833,18 +878,14 @@ Win32MakeQueue(platform_work_queue *Queue, uint32 ThreadCount, win32_thread_star
         CloseHandle(ThreadHandle);
     }
 }
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-struct win32_platform_file_handle
-{
-    HANDLE Win32Handle;
-};
 
-struct win32_platform_file_group
-{
-    HANDLE FindHandle;
-    WIN32_FIND_DATAW FindData;
-};
-
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WIN32 FILE API
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(Win32GetAllFilesOfTypeBegin)
 {
     platform_file_group Result = {};
@@ -962,21 +1003,6 @@ internal PLATFORM_READ_DATA_FROM_FILE(Win32ReadDataFromFile)
         {
             Win32FileError(Source, "Read file failed.");
         }
-    }
-}
-
-PLATFORM_ALLOCATE_MEMORY(Win32AllocateMemory)
-{
-    void *Result = VirtualAlloc(0, Size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-
-    return(Result);
-}
-
-PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
-{
-    if(Memory)
-    {
-        VirtualFree(Memory, 0, MEM_RELEASE);
     }
 }
 
@@ -1211,6 +1237,32 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
     return(Result);
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WIN32 MEMORY
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+PLATFORM_ALLOCATE_MEMORY(Win32AllocateMemory)
+{
+    void *Result = VirtualAlloc(0, Size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
+    return(Result);
+}
+
+PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
+{
+    if(Memory)
+    {
+        VirtualFree(Memory, 0, MEM_RELEASE);
+    }
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
 #if EDITOR_INTERNAL
 global_variable debug_table GlobalDebugTable_;
 debug_table *GlobalDebugTable = &GlobalDebugTable_;
@@ -1309,9 +1361,7 @@ WinMain(HINSTANCE Instance,
             LPVOID BaseAddress = 0;
 #endif
 
-            GenerateCRC64Table();
-
-            editor_memory EditorMemory = {};
+            engine_memory EditorMemory = {};
 
 #if EDITOR_INTERNAL
             EditorMemory.DebugTable = GlobalDebugTable;

@@ -6,22 +6,6 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
-
-inline fp22_10
-F32ToFixed(f32 Value)
-{
-    fp22_10 Result = (fp22_10)((f32)(Value * (1 << 10)) +
-                                   ((Value >= 0.0f) ? 0.5f : -0.5f));
-
-    return(Result);
-}
-
-inline f32
-FixedToF32(fp22_10 Value)
-{
-    f32 Result = (f32)Value / (f32)(1 << 10);
-    return(Result);
-}
     
 inline v2
 V2i(int32 X, int32 Y)

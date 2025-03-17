@@ -829,7 +829,6 @@ enum asset_type_id
 #define SSA_CODE(a, b, c, d) (((uint32)(a) << 0) | ((uint32)(b) << 8) | ((uint32)(c) << 16) | ((uint32)(d) << 24))
 #define SSWM_CODE(a, b, c, d) (((uint32)(a) << 0) | ((uint32)(b) << 8) | ((uint32)(c) << 16) | ((uint32)(d) << 24))
 
-
 #pragma pack(push, 1)
 
 struct sswm_header

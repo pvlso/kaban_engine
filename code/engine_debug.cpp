@@ -117,7 +117,7 @@ DebugIDFromGUID(debug_tree *Tree, char *GUID)
 }
 
 inline debug_state *
-DEBUGGetState(editor_memory *Memory)
+DEBUGGetState(engine_memory *Memory)
 {
     debug_state *DebugState = 0;
     if(Memory)

@@ -45,7 +45,7 @@ EndTaskWithMemory(task_with_memory *Task)
 
 #if EDITOR_INTERNAL
 internal u32
-DEBUGGetMainGenerationID(editor_memory *Memory)
+DEBUGGetMainGenerationID(engine_memory *Memory)
 {
     u32 Result = 0;
     
@@ -59,7 +59,7 @@ DEBUGGetMainGenerationID(editor_memory *Memory)
 }
 
 internal editor_assets *
-DEBUGGetEditorAssets(editor_memory *Memory)
+DEBUGGetEditorAssets(engine_memory *Memory)
 {
     editor_assets *Assets = 0;
     
@@ -127,13 +127,12 @@ CheckForMetaInput(editor_state *EditorState, transient_state *TranState, editor_
 
 #if EDITOR_INTERNAL
 debug_table *GlobalDebugTable;
-editor_memory *DebugGlobalMemory;
+engine_memory *DebugGlobalMemory;
 #endif
 
 platform_api Platform;
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
-    GenerateCRC64Table();
     Platform = Memory->PlatformAPI;    
     
 #if EDITOR_INTERNAL
