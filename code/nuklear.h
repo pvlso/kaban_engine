@@ -7778,7 +7778,7 @@ nk_file_load(const char* path, nk_size* siz, const struct nk_allocator *alloc)
     if (!path || !siz || !alloc)
         return 0;
 
-    fd = fopen(path, "rb");
+    fopen_s(&fd, path, "rb");
     if (!fd) return 0;
     fseek(fd, 0, SEEK_END);
     ret = ftell(fd);
@@ -25472,7 +25472,7 @@ nk_draw_selectable(struct nk_command_buffer *out,
     const char *string, int len, nk_flags align, const struct nk_user_font *font)
 {
     const struct nk_style_item *background;
-    struct nk_text text;
+    struct nk_text text = {};
     text.padding = style->padding;
 
     /* select correct colors/images */
@@ -29942,7 +29942,7 @@ nk_combo_begin_symbol(struct nk_context *ctx, enum nk_symbol_type symbol, struct
     int is_clicked = nk_false;
     enum nk_widget_layout_states s;
     const struct nk_style_item *background;
-    struct nk_color sym_background;
+    struct nk_color sym_background = {};
     struct nk_color symbol_color;
 
     NK_ASSERT(ctx);
@@ -30040,7 +30040,7 @@ nk_combo_begin_symbol_text(struct nk_context *ctx, const char *selected, int len
     enum nk_widget_layout_states s;
     const struct nk_style_item *background;
     struct nk_color symbol_color;
-    struct nk_text text;
+    struct nk_text text = {};
 
     NK_ASSERT(ctx);
     NK_ASSERT(ctx->current);

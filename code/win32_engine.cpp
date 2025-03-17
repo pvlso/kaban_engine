@@ -17,16 +17,14 @@
 
 #include "win32_engine.h"
 
-#if 0
 #define NK_IMPLEMENTATION
+#define NK_PRIVATE
 #define NK_INCLUDE_FIXED_TYPES
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
 #define NK_INCLUDE_FONT_BAKING
-#define NK_ZERO_COMMAND_MEMORY
-
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
 #include "nuklear.h"
-#endif
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): GLOBAL VARIABLES
@@ -1278,6 +1276,11 @@ PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
 global_variable debug_table GlobalDebugTable_;
 debug_table *GlobalDebugTable = &GlobalDebugTable_;
 #endif
+enum {EASY, HARD};
+static int op = EASY;
+static float value = 0.6f;
+static int i =  20;
+struct nk_context ctx;
 
 int CALLBACK
 WinMain(HINSTANCE Instance,
@@ -1438,6 +1441,23 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
+            struct nk_font_atlas atlas = {};
+            nk_font_atlas_init_default(&atlas);
+            nk_font_atlas_begin(&atlas);
+            nk_font *font = nk_font_atlas_add_from_file(&atlas, "D:\\paul\\Spellweaver_Saga_game\\data\\editor\\fonts\\LiberationMono-Regular.ttf", 16, 0);
+//                nk_font *font2 = nk_font_atlas_add_from_file(&atlas, "Path/To/Your/TTF_Font2.ttf", 16, 0);
+
+            int width = 0;
+            int height = 0;
+            const void* img = nk_font_atlas_bake(&atlas, &width, &height, NK_FONT_ATLAS_RGBA32);
+            nk_font_atlas_end(&atlas, nk_handle_id(0), 0);
+ 
+            nk_size UIMemorySize = Megabytes(10);
+            void *UIMemory = Win32AllocateMemory(UIMemorySize);
+                
+            ctx = {};
+            nk_init_fixed(&ctx, UIMemory, UIMemorySize, &font->handle);
+                
             GlobalRunning = true;
             while(GlobalRunning)
             {
@@ -1540,7 +1560,6 @@ WinMain(HINSTANCE Instance,
 // NOTE(paul): Editor Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 BEGIN_BLOCK("Editor Update");
-
                 if(!GlobalPause)
                 {
                     if(Editor.UpdateAndRender)
@@ -1557,6 +1576,47 @@ WinMain(HINSTANCE Instance,
                     }
                 }
 
+                if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
+                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
+                    // fixed widget pixel width
+                    nk_layout_row_static(&ctx, 30, 80, 1);
+                    if (nk_button_label(&ctx, "button")) {
+                        // event handling
+                    }
+ 
+                    // fixed widget window ratio width
+                    nk_layout_row_dynamic(&ctx, 30, 2);
+                    if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
+                    if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+ 
+                    // custom widget pixel width
+                    nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
+                    {
+                        nk_layout_row_push(&ctx, 50);
+                        nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
+                        nk_layout_row_push(&ctx, 110);
+                        nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
+                    }
+                    nk_layout_row_end(&ctx);
+                }
+                nk_end(&ctx);
+
+                const struct nk_command *cmd = 0;
+                nk_foreach(cmd, &ctx)
+                {
+                    switch(cmd->type)
+                    {
+                        case NK_COMMAND_LINE:
+//                            your_draw_line_function(...)
+                            break;
+
+                        case NK_COMMAND_RECT:
+//                            your_draw_rect_function(...)
+                            break;
+                    }
+                }
+                nk_clear(&ctx);
+                
                 END_BLOCK();
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
