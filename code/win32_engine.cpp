@@ -17,6 +17,17 @@
 
 #include "win32_engine.h"
 
+#if 0
+#define NK_IMPLEMENTATION
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_ZERO_COMMAND_MEMORY
+
+#include "nuklear.h"
+#endif
+
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): GLOBAL VARIABLES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1305,11 +1316,11 @@ WinMain(HINSTANCE Instance,
     DEBUGGlobalShowCursor = true;
 #endif
 
-    int ScreenDimX = GetSystemMetrics(SM_CXSCREEN);
-    int ScreenDimY = GetSystemMetrics(SM_CYSCREEN);
-    GlobalFramebufferDim.Width = ScreenDimX;
-    GlobalFramebufferDim.Height = ScreenDimY;
+    // NOTE(paul): Set intitial dimentions 
+    GlobalFramebufferDim.Width = GetSystemMetrics(SM_CXSCREEN);
+    GlobalFramebufferDim.Height = GetSystemMetrics(SM_CYSCREEN);
 
+    // NOTE(paul): Init window class 
     WNDCLASSA WindowClass = {};
     WindowClass.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
     WindowClass.lpfnWndProc = Win32MainWindowCallback;
@@ -1338,10 +1349,12 @@ WinMain(HINSTANCE Instance,
         {
             ToggleFullscreen(Window);
 
+            // NOTE(paul): Init OpenGLRC
             HDC OpenGLDC = GetDC(Window);
             HGLRC OpenGLRC = 0;
             OpenGLRC = Win32InitOpenGL(OpenGLDC);
 
+            // NOTE(paul): Init multithreading queues
             win32_thread_startup HighPriStartups[3] = {};
             platform_work_queue HighPriorityQueue = {};
             Win32MakeQueue(&HighPriorityQueue, ArrayCount(HighPriStartups), HighPriStartups);
@@ -1350,10 +1363,9 @@ WinMain(HINSTANCE Instance,
             platform_work_queue LowPriorityQueue = {};
             Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
 
+            // NOTE(paul): Set fixed refresh rate
             f32 EditorUpdateHz = 60.0f;
             f32 TargetSecondsPerFrame = 1.0f / EditorUpdateHz;
-
-            memory_arena FrameTempArena = {};
 
 #if EDITOR_INTERNAL
             LPVOID BaseAddress = (LPVOID)Terabytes(2);
@@ -1361,6 +1373,7 @@ WinMain(HINSTANCE Instance,
             LPVOID BaseAddress = 0;
 #endif
 
+            // NOTE(paul): Initialize Engine Memory and Platform API
             engine_memory EditorMemory = {};
 
 #if EDITOR_INTERNAL
@@ -1391,6 +1404,7 @@ WinMain(HINSTANCE Instance,
 
             Platform = EditorMemory.PlatformAPI;
 
+            // NOTE(paul): Init render memory
             // TODO(casey): Decide what our pushbuffer size is!
             u32 PushBufferSize = Megabytes(64);
             void *PushBuffer = Win32AllocateMemory(PushBufferSize);
@@ -1406,17 +1420,8 @@ WinMain(HINSTANCE Instance,
                 texture_op *Op = TextureOpQueue->FirstFree + TextureOpIndex;
                 Op->Next = TextureOpQueue->FirstFree + TextureOpIndex + 1;
             }
-            
-            // TODO(casey): Handle various memory footprints (USING
-            // SYSTEM METRICS)
 
-            // TODO(casey): Use MEM_LARGE_PAGES and
-            // call adjust token privileges when not on Windows XP?
-
-            // TODO(casey): TransientStorage needs to be broken up
-            // into editor transient and cache transient, and only the
-            // former need be saved for state playback.
-
+            // NOTE(paul): Init Input
             editor_input Input[2] = {};
             editor_input *NewInput = &Input[0];
             editor_input *OldInput = &Input[1];
@@ -1430,24 +1435,17 @@ WinMain(HINSTANCE Instance,
             DEBUGSetEventRecording(Editor.IsValid);
 
             ShowWindow(Window, SW_SHOW);
+
+            memory_arena FrameTempArena = {};
+
             GlobalRunning = true;
             while(GlobalRunning)
             {
                 {DEBUG_DATA_BLOCK("Platform/Controls");
                     DEBUG_B32(GlobalPause);
                 }
-                //
-                //
-                //
 
-                NewInput->dtForFrame = TargetSecondsPerFrame;
-                        
-                //
-                //
-                //
-
-                BEGIN_BLOCK("Input Processing");
-
+                // NOTE(paul): Init Render Commands and Handle Aspect Ratio
                 editor_render_commands RenderCommands = RenderCommandStruct(
                     PushBufferSize, PushBuffer,
                     (u32)GlobalFramebufferDim.Width,
@@ -1456,8 +1454,14 @@ WinMain(HINSTANCE Instance,
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
                 rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                         Dimension.Width, Dimension.Height);
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): Input Processing
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+                BEGIN_BLOCK("Input Processing");
 
-
+                // NOTE(paul): Set Delta Time
+                NewInput->dtForFrame = TargetSecondsPerFrame;
+                        
                 // TODO(casey): Zeroing macro
                 // TODO(casey): We can't zero everything because the up/down state will
                 // be wrong!!!
@@ -1528,11 +1532,13 @@ WinMain(HINSTANCE Instance,
                 }
 
                 END_BLOCK();
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                //
-                //
-                //
-
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): Editor Update
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 BEGIN_BLOCK("Editor Update");
 
                 if(!GlobalPause)
@@ -1552,10 +1558,14 @@ WinMain(HINSTANCE Instance,
                 }
 
                 END_BLOCK();
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                //
-                //
-                //
+                
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): Debug Collation
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 #if EDITOR_INTERNAL
                 BEGIN_BLOCK("Debug Collation");
                     
@@ -1596,7 +1606,15 @@ WinMain(HINSTANCE Instance,
                     
                 END_BLOCK();
 #endif
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): Frame Display
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+                
                 BEGIN_BLOCK("Frame Display");
 
                 BeginTicketMutex(&TextureOpQueue->Mutex);
@@ -1617,23 +1635,22 @@ WinMain(HINSTANCE Instance,
                     EndTicketMutex(&TextureOpQueue->Mutex);
                 }
                     
-                    
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
                 ReleaseDC(Window, DeviceContext);
 
+                END_BLOCK();
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                // NOTE(paul): Swap Inputs
                 FlipWallClock = Win32GetWallClock();
 
                 editor_input *Temp = NewInput;
                 NewInput = OldInput;
                 OldInput = Temp;
-
-                END_BLOCK();
-
-                //
-                //
-                //
 
 #if 1
                 BEGIN_BLOCK("FramerateWait");
@@ -1677,7 +1694,7 @@ WinMain(HINSTANCE Instance,
 
                 END_BLOCK();
 #endif
-
+                // NOTE(paul): Record frame time
                 LARGE_INTEGER EndCounter = Win32GetWallClock();                    
                 FRAME_MARKER(Win32GetSecondsElapsed(LastCounter, EndCounter));
                 LastCounter = EndCounter;

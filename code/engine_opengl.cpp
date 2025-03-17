@@ -417,11 +417,6 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                     glEnable(GL_TEXTURE_2D);
                 } break;
 
-                case RenderGroupEntryType_render_entry_coordinate_system:
-                {
-                    render_entry_coordinate_system *Entry = (render_entry_coordinate_system *)Data;
-                } break;
-
                 case RenderGroupEntryType_render_entry_blend_render_target:
                 {
                     render_entry_blend_render_target *Entry = (render_entry_blend_render_target *)Data;

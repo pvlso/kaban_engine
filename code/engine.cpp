@@ -11,6 +11,7 @@
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
 
+
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
 {

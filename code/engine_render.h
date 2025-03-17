@@ -7,14 +7,6 @@
    $Notice: $
    ======================================================================== */
 
-struct tile_render_work
-{
-    editor_render_commands *Commands;
-    editor_render_prep *Prep;
-    struct loaded_bitmap *RenderTargets;
-    rectangle2i ClipRect;
-};
-
 struct texture_op_allocate
 {
     u32 Width;
