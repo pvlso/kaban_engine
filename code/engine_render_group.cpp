@@ -25,9 +25,9 @@ GetRenderEntityBasisP(camera_transform CameraTransform, object_transform *Object
     
         real32 DistanceAboveTarget = CameraTransform.DistanceAboveTarget;
 
-        if(Global_Renderer_Camera_UseDebug)
+//        if(Global_Renderer_Camera_UseDebug)
         {
-            DistanceAboveTarget += Global_Renderer_Camera_DebugDistance;
+//            DistanceAboveTarget += Global_Renderer_Camera_DebugDistance;
         }
     
         real32 DistanceToPZ = (DistanceAboveTarget - P.z);
