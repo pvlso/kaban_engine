@@ -261,7 +261,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
 
-#if 1
+#if 0
     if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
                  NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
         // fixed widget pixel width
