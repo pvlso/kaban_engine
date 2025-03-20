@@ -184,7 +184,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(!EditorState)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
-
+#if 0
         struct nk_font_atlas atlas = {};
         nk_font_atlas_init_default(&atlas);
         nk_font_atlas_begin(&atlas);
@@ -202,6 +202,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                 
         ctx = {};
         nk_init_fixed(&ctx, UIMemory, UIMemorySize, &font->handle);
+#endif
     }
 
     // NOTE(casey): Transient initialization

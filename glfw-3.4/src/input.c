@@ -78,7 +78,7 @@ static _GLFWmapping* findMapping(const char* guid)
     }
 
     return NULL;
-}
+} 
 
 // Checks whether a gamepad mapping element is present in the hardware
 //
