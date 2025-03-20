@@ -111,6 +111,8 @@ glfwGetCursorPos(win32_state *State, double *xpos, double *ypos)
 double
 glfwGetTime(void)
 {
+//    return (double) (_glfwPlatformGetTimerValue() - _glfw.timer.offset) /
+//        _glfwPlatformGetTimerFrequency();
     return(0.0);
 }
 
@@ -125,6 +127,7 @@ glfwSetClipboardString(const char *str)
 {
 }
 
+#define _GLFW_STICK 3
 void
 glfwSetInputMode(win32_state *State, int mode, int value)
 {
@@ -158,7 +161,7 @@ glfwSetInputMode(win32_state *State, int mode, int value)
         case GLFW_STICKY_KEYS:
         {
             value = value ? GLFW_TRUE : GLFW_FALSE;
-            if (window->stickyKeys == value)
+            if (State->stickyKeys == value)
                 return;
 
             if (!value)
@@ -168,19 +171,19 @@ glfwSetInputMode(win32_state *State, int mode, int value)
                 // Release all sticky keys
                 for (i = 0;  i <= GLFW_KEY_LAST;  i++)
                 {
-                    if (window->keys[i] == _GLFW_STICK)
-                        window->keys[i] = GLFW_RELEASE;
+                    if (State->keys[i] == _GLFW_STICK)
+                        State->keys[i] = GLFW_RELEASE;
                 }
             }
 
-            window->stickyKeys = value;
+            State->stickyKeys = value;
             return;
         }
 
         case GLFW_STICKY_MOUSE_BUTTONS:
         {
             value = value ? GLFW_TRUE : GLFW_FALSE;
-            if (window->stickyMouseButtons == value)
+            if (State->stickyMouseButtons == value)
                 return;
 
             if (!value)
@@ -190,23 +193,24 @@ glfwSetInputMode(win32_state *State, int mode, int value)
                 // Release all sticky mouse buttons
                 for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (window->mouseButtons[i] == _GLFW_STICK)
-                        window->mouseButtons[i] = GLFW_RELEASE;
+                    if (State->mouseButtons[i] == _GLFW_STICK)
+                        State->mouseButtons[i] = GLFW_RELEASE;
                 }
             }
 
-            window->stickyMouseButtons = value;
+            State->stickyMouseButtons = value;
             return;
         }
 
         case GLFW_LOCK_KEY_MODS:
         {
-            window->lockKeyMods = value ? GLFW_TRUE : GLFW_FALSE;
+            State->lockKeyMods = value ? GLFW_TRUE : GLFW_FALSE;
             return;
         }
 
         case GLFW_RAW_MOUSE_MOTION:
         {
+#if 0
             if (!_glfw.platform.rawMouseMotionSupported())
             {
                 _glfwInputError(GLFW_PLATFORM_ERROR,
@@ -221,27 +225,89 @@ glfwSetInputMode(win32_state *State, int mode, int value)
             window->rawMouseMotion = value;
             _glfw.platform.setRawMouseMotion(window, value);
             return;
-        }
+#endif
+        } break;
     }
 
-    _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
+//    _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
 }
 
 int
-glfwGetKey(int keycode)
+glfwGetKey(win32_state *State, int key)
 {
-    return(0);
+    if (key < GLFW_KEY_SPACE || key > GLFW_KEY_LAST)
+    {
+//        _glfwInputError(GLFW_INVALID_ENUM, "Invalid key %i", key);
+        return GLFW_RELEASE;
+    }
+
+    if (State->keys[key] == _GLFW_STICK)
+    {
+        // Sticky mode: release key now
+        State->keys[key] = GLFW_RELEASE;
+        return GLFW_PRESS;
+    }
+
+    return (int) State->keys[key];
+}
+
+void _glfwSetCursorPosWin32(win32_state *State, double xpos, double ypos)
+{
+    POINT pos = { (int) xpos, (int) ypos };
+
+    // Store the new position so it can be recognized later
+    State->lastCursorPosX = pos.x;
+    State->lastCursorPosY = pos.y;
+
+    ClientToScreen(State->Handle, &pos);
+    SetCursorPos(pos.x, pos.y);
 }
 
 void
-glfwSetCursorPos(double x, double y)
+glfwSetCursorPos(win32_state *State, double xpos, double ypos)
 {
+    if (xpos != xpos || xpos < -DBL_MAX || xpos > DBL_MAX ||
+        ypos != ypos || ypos < -DBL_MAX || ypos > DBL_MAX)
+    {
+//        _glfwInputError(GLFW_INVALID_VALUE,
+//                        "Invalid cursor position %f %f",
+//                        xpos, ypos);
+        return;
+    }
+
+//    if (!_glfw.platform.windowFocused(window))
+//        return;
+
+    if (State->cursorMode == GLFW_CURSOR_DISABLED)
+    {
+        // Only update the accumulated position if the cursor is disabled
+        State->virtualCursorPosX = xpos;
+        State->virtualCursorPosY = ypos;
+    }
+    else
+    {
+        // Update system cursor position
+        _glfwSetCursorPosWin32(State, xpos, ypos);
+    }
 }
 
 int
-glfwGetMouseButton(int buttoncode)
+glfwGetMouseButton(win32_state *State, int button)
 {
-    return(0);
+    if (button < GLFW_MOUSE_BUTTON_1 || button > GLFW_MOUSE_BUTTON_LAST)
+    {
+//        _glfwInputError(GLFW_INVALID_ENUM, "Invalid mouse button %i", button);
+        return GLFW_RELEASE;
+    }
+
+    if (State->mouseButtons[button] == _GLFW_STICK)
+    {
+        // Sticky mode: release mouse button now
+        State->mouseButtons[button] = GLFW_RELEASE;
+        return GLFW_PRESS;
+    }
+
+    return (int) State->mouseButtons[button];
 }
 
 
@@ -1039,7 +1105,7 @@ void _glfwInputMouseClick(win32_state *State, int button, int action, int mods)
 //    else
     State->mouseButtons[button] = (char) action;
 
-    nk_glfw3_mouse_button_callback(button, action);
+    nk_glfw3_mouse_button_callback(State, button, action);
 //    if (window->callbacks.mouseButton)
 //        window->callbacks.mouseButton((GLFWwindow*) window, button, action, mods);
 }
@@ -2210,7 +2276,7 @@ WinMain(HINSTANCE Instance,
                 
                 END_BLOCK();
 
-                nk_glfw3_new_frame(Dimension.Width, Dimension.Height,
+                nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
                                    RenderCommands.Width, RenderCommands.Height,
                                    TargetSecondsPerFrame);
 

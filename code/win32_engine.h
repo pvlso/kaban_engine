@@ -56,6 +56,7 @@ struct win32_state
 
     int                 cursorMode;
     double              virtualCursorPosX, virtualCursorPosY;
+    int                 lastCursorPosX, lastCursorPosY;
 };
 
 struct platform_work_queue_entry
@@ -92,14 +93,14 @@ struct win32_platform_file_group
     WIN32_FIND_DATAW FindData;
 };
 
-void glfwGetCursorPos(double *x, double *y);
+void glfwGetCursorPos(win32_state *State, double *x, double *y);
 double glfwGetTime(void);
 const char * glfwGetClipboardString(void);
 void glfwSetClipboardString(const char *str);
-void glfwSetInputMode(int p0, int p1);
-int glfwGetKey(int keycode);
-void glfwSetCursorPos(double x, double y);
-int glfwGetMouseButton(int buttoncode);
+void glfwSetInputMode(win32_state *State, int p0, int p1);
+int glfwGetKey(win32_state *State, int keycode);
+void glfwSetCursorPos(win32_state *State, double x, double y);
+int glfwGetMouseButton(win32_state *State, int buttoncode);
 
 #define WIN32_EDITOR_H
 #endif
