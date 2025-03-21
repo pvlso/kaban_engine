@@ -128,109 +128,6 @@ glfwSetClipboardString(const char *str)
 }
 
 #define _GLFW_STICK 3
-void
-glfwSetInputMode(win32_state *State, int mode, int value)
-{
-    switch (mode)
-    {
-        case GLFW_CURSOR:
-        {
-            if (value != GLFW_CURSOR_NORMAL &&
-                value != GLFW_CURSOR_HIDDEN &&
-                value != GLFW_CURSOR_DISABLED &&
-                value != GLFW_CURSOR_CAPTURED)
-            {
-//                _glfwInputError(GLFW_INVALID_ENUM,
-//                                "Invalid cursor mode 0x%08X",
-//                                value);
-                return;
-            }
-
-            if (State->cursorMode == value)
-                return;
-
-            State->cursorMode = value;
-
-            glfwGetCursorPos(State,
-                             &State->virtualCursorPosX,
-                             &State->virtualCursorPosY);
-//            _glfw.platform.setCursorMode(window, value);
-            return;
-        }
-
-        case GLFW_STICKY_KEYS:
-        {
-            value = value ? GLFW_TRUE : GLFW_FALSE;
-            if (State->stickyKeys == value)
-                return;
-
-            if (!value)
-            {
-                int i;
-
-                // Release all sticky keys
-                for (i = 0;  i <= GLFW_KEY_LAST;  i++)
-                {
-                    if (State->keys[i] == _GLFW_STICK)
-                        State->keys[i] = GLFW_RELEASE;
-                }
-            }
-
-            State->stickyKeys = value;
-            return;
-        }
-
-        case GLFW_STICKY_MOUSE_BUTTONS:
-        {
-            value = value ? GLFW_TRUE : GLFW_FALSE;
-            if (State->stickyMouseButtons == value)
-                return;
-
-            if (!value)
-            {
-                int i;
-
-                // Release all sticky mouse buttons
-                for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
-                {
-                    if (State->mouseButtons[i] == _GLFW_STICK)
-                        State->mouseButtons[i] = GLFW_RELEASE;
-                }
-            }
-
-            State->stickyMouseButtons = value;
-            return;
-        }
-
-        case GLFW_LOCK_KEY_MODS:
-        {
-            State->lockKeyMods = value ? GLFW_TRUE : GLFW_FALSE;
-            return;
-        }
-
-        case GLFW_RAW_MOUSE_MOTION:
-        {
-#if 0
-            if (!_glfw.platform.rawMouseMotionSupported())
-            {
-                _glfwInputError(GLFW_PLATFORM_ERROR,
-                                "Raw mouse motion is not supported on this system");
-                return;
-            }
-
-            value = value ? GLFW_TRUE : GLFW_FALSE;
-            if (window->rawMouseMotion == value)
-                return;
-
-            window->rawMouseMotion = value;
-            _glfw.platform.setRawMouseMotion(window, value);
-            return;
-#endif
-        } break;
-    }
-
-//    _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
-}
 
 int
 glfwGetKey(win32_state *State, int key)
@@ -1988,6 +1885,7 @@ WinMain(HINSTANCE Instance,
     DEBUGSetEventRecording(true);
 
     win32_state Win32State = {};
+    createKeyTables(&Win32State);
 
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
@@ -2139,10 +2037,11 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            struct nk_context *ctx;
+            struct nk_context *nk;
             struct nk_colorf bg;
-            ctx = nk_glfw3_init(NK_GLFW3_INSTALL_CALLBACKS);
+            nk = nk_glfw3_init(NK_GLFW3_INSTALL_CALLBACKS);
             bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
+            char window_title[64] = "Title";
 
             {struct nk_font_atlas *atlas;
                 nk_glfw3_font_stash_begin(&atlas);
@@ -2276,10 +2175,72 @@ WinMain(HINSTANCE Instance,
                 
                 END_BLOCK();
 
+                struct nk_rect area = nk_rect(0.f, 0.f, (float)Dimension.Width, (float)Dimension.Height);
+                nk_window_set_bounds(nk, "main", area);
+
                 nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
                                    RenderCommands.Width, RenderCommands.Height,
                                    TargetSecondsPerFrame);
 
+                if (nk_begin(nk, "main", area, 0))
+                {
+                    nk_layout_row_dynamic(nk, 30, 4);
+
+                    if (nk_button_label(nk, "Make Windowed"))
+                    {
+                    }
+
+                    if (nk_button_label(nk, "Maximize"))
+                    {
+                    }
+                    if (nk_button_label(nk, "Iconify"))
+                    {
+                    }
+                    if (nk_button_label(nk, "Restore"))
+                    {
+                    }
+
+                    nk_layout_row_dynamic(nk, 30, 2);
+
+                    if (nk_button_label(nk, "Hide (for 3s)"))
+                    {
+                    }
+
+                    if (nk_button_label(nk, "Request Attention (after 3s)"))
+                    {
+                    }
+
+                    nk_layout_row_dynamic(nk, 30, 1);
+
+                    nk_label(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
+
+                    nk_flags events;
+                    const nk_flags flags = NK_EDIT_FIELD |
+                        NK_EDIT_SIG_ENTER |
+                        NK_EDIT_GOTO_END_ON_ACTIVATE;
+
+                    nk_layout_row_begin(nk, NK_DYNAMIC, 30, 2);
+                    nk_layout_row_push(nk, 1.f / 3.f);
+                    nk_label(nk, "Title", NK_TEXT_LEFT);
+                    nk_layout_row_push(nk, 2.f / 3.f);
+                    events = nk_edit_string_zero_terminated(nk, flags, window_title,
+                                                            sizeof(window_title), NULL);
+                    if (events & NK_EDIT_COMMITED)
+                    {
+                    }
+
+                    nk_layout_row_end(nk);
+                    nk_label(nk, "Platform does not support window position", NK_TEXT_LEFT);
+
+                    nk_layout_row_dynamic(nk, 30, 3);
+                    nk_label(nk, "Size", NK_TEXT_LEFT);
+
+                    nk_label(nk, "Framebuffer Size", NK_TEXT_LEFT);
+                    nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands.Width);
+                    nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands.Height);
+                }
+                nk_end(nk);
+#if 0
                 /* GUI */
                 if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
                              NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
@@ -2316,7 +2277,7 @@ WinMain(HINSTANCE Instance,
                     }
                 }
                 nk_end(ctx);
-
+#endif
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
