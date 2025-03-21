@@ -25,6 +25,7 @@
 #define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
+#define NK_INCLUDE_STANDARD_IO
 #define NK_IMPLEMENTATION
 #define NK_GLFW_GL2_IMPLEMENTATION
 #include "nuklear.h"
@@ -1007,6 +1008,62 @@ void _glfwInputMouseClick(win32_state *State, int button, int action, int mods)
 //        window->callbacks.mouseButton((GLFWwindow*) window, button, action, mods);
 }
 
+// Updates key names according to the current keyboard layout
+//
+void _glfwUpdateKeyNamesWin32(win32_state *State)
+{
+    int key;
+    BYTE state[256] = {0};
+
+    memset(State->keynames, 0, sizeof(State->keynames));
+
+    for (key = GLFW_KEY_SPACE;  key <= GLFW_KEY_LAST;  key++)
+    {
+        UINT vk;
+        int scancode, length;
+        WCHAR chars[16];
+
+        scancode = State->scancodes[key];
+        if (scancode == -1)
+            continue;
+
+        if (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_ADD)
+        {
+            const UINT vks[] = {
+                VK_NUMPAD0,  VK_NUMPAD1,  VK_NUMPAD2, VK_NUMPAD3,
+                VK_NUMPAD4,  VK_NUMPAD5,  VK_NUMPAD6, VK_NUMPAD7,
+                VK_NUMPAD8,  VK_NUMPAD9,  VK_DECIMAL, VK_DIVIDE,
+                VK_MULTIPLY, VK_SUBTRACT, VK_ADD
+            };
+
+            vk = vks[key - GLFW_KEY_KP_0];
+        }
+        else
+            vk = MapVirtualKeyW(scancode, MAPVK_VSC_TO_VK);
+
+        length = ToUnicode(vk, scancode, state,
+                           chars, sizeof(chars) / sizeof(WCHAR),
+                           0);
+
+        if (length == -1)
+        {
+            // This is a dead key, so we need a second simulated key press
+            // to make it output its own character (usually a diacritic)
+            length = ToUnicode(vk, scancode, state,
+                               chars, sizeof(chars) / sizeof(WCHAR),
+                               0);
+        }
+
+        if (length < 1)
+            continue;
+
+        WideCharToMultiByte(CP_UTF8, 0, chars, 1,
+                            State->keynames[key],
+                            sizeof(State->keynames[key]),
+                            NULL, NULL);
+    }
+}
+
 internal void
 Win32ProcessPendingMessages(win32_state *State, editor_controller_input *KeyboardController, s16 *MouseRotated)
 {
@@ -1048,7 +1105,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
 
             case WM_INPUTLANGCHANGE:
             {
-//                _glfwUpdateKeyNamesWin32();
+                _glfwUpdateKeyNamesWin32(State);
             } break;
 
             case WM_CHAR:
@@ -1079,19 +1136,6 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                 if (Message.message == WM_SYSCHAR && State->keymenu)
                     break;
 
-            } break;
-
-            case WM_UNICHAR:
-            {
-                if (Message.wParam == UNICODE_NOCHAR)
-                {
-                    // WM_UNICHAR is not sent by Windows, but is sent by some
-                    // third-party input method engine
-                    // Returning TRUE here announces support for this message
-                    break;
-                }
-
-                _glfwInputChar(State, (uint32_t) Message.wParam, getKeyMods(), GLFW_TRUE);
             } break;
 
             case WM_LBUTTONDOWN:
@@ -1131,8 +1175,8 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                         break;
                 }
 
-//                if (i > GLFW_MOUSE_BUTTON_LAST)
-//                    SetCapture(hWnd);
+                if (i > GLFW_MOUSE_BUTTON_LAST)
+                    SetCapture(State->Handle);
 
                 _glfwInputMouseClick(State, button, action, getKeyMods());
 
@@ -1144,10 +1188,6 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
 
                 if (i > GLFW_MOUSE_BUTTON_LAST)
                     ReleaseCapture();
-
-//                if (uMsg == WM_XBUTTONDOWN || uMsg == WM_XBUTTONUP)
-//                    return TRUE;
-
             } break;
             
             case WM_SYSKEYDOWN:
@@ -1243,7 +1283,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                 else
                     _glfwInputKey(State, key, scancode, action, mods);
 
-#if 0
+#if 1
                 uint32 VKCode = (uint32)Message.wParam;
 
                 // NOTE(casey): Since we are comparing WasDown to IsDown,
@@ -1358,12 +1398,14 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                     }
                 }
 #endif
+                TranslateMessage(&Message);
+
             } break;
 
             default:
             {
                 TranslateMessage(&Message);
-                DispatchMessageA(&Message);
+                DispatchMessage(&Message);
             } break;
         }
     }
@@ -2045,15 +2087,15 @@ WinMain(HINSTANCE Instance,
 
             {struct nk_font_atlas *atlas;
                 nk_glfw3_font_stash_begin(&atlas);
-                /*struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "../../../extra_font/DroidSans.ttf", 14, 0);*/
+                struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
                 /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
                 /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
                 /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
                 /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
                 /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
                 nk_glfw3_font_stash_end();
-                /*nk_style_load_all_cursors(ctx, atlas->cursors);*/
-                /*nk_style_set_font(ctx, &droid->handle);*/}
+                nk_style_load_all_cursors(nk, atlas->cursors);
+                nk_style_set_font(nk, &droid->handle);}
                 
             GlobalRunning = true;
             while(GlobalRunning)
@@ -2175,14 +2217,13 @@ WinMain(HINSTANCE Instance,
                 
                 END_BLOCK();
 
-                struct nk_rect area = nk_rect(0.f, 0.f, (float)Dimension.Width, (float)Dimension.Height);
-                nk_window_set_bounds(nk, "main", area);
-
                 nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
                                    RenderCommands.Width, RenderCommands.Height,
                                    TargetSecondsPerFrame);
 
-                if (nk_begin(nk, "main", area, 0))
+                if (nk_begin(nk, "Demo", nk_rect(50, 50, 230, 250),
+                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+                             NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
                 {
                     nk_layout_row_dynamic(nk, 30, 4);
 

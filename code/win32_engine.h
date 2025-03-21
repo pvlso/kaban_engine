@@ -97,7 +97,6 @@ void glfwGetCursorPos(win32_state *State, double *x, double *y);
 double glfwGetTime(void);
 const char * glfwGetClipboardString(void);
 void glfwSetClipboardString(const char *str);
-void glfwSetInputMode(win32_state *State, int p0, int p1);
 int glfwGetKey(win32_state *State, int keycode);
 void glfwSetCursorPos(win32_state *State, double x, double y);
 int glfwGetMouseButton(win32_state *State, int buttoncode);
