@@ -713,6 +713,7 @@ struct platform_texture_op_queue
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
 #define NK_INCLUDE_STANDARD_IO
+#define NK_PRIVATE
 
 /*
  * ==============================================================
@@ -2021,6 +2022,7 @@ enum nk_panel_flags {
 
  */
 NK_API nk_bool nk_begin(struct nk_context *ctx, const char *title, struct nk_rect bounds, nk_flags flags);
+typedef nk_bool platform_nk_begin(struct nk_context *ctx, const char *title, struct nk_rect bounds, nk_flags flags);
 
 /**
  * # # nk_begin_titled
@@ -2060,6 +2062,7 @@ NK_API nk_bool nk_begin_titled(struct nk_context *ctx, const char *name, const c
 
  */
 NK_API void nk_end(struct nk_context *ctx);
+typedef void platform_nk_end(struct nk_context *ctx);
 
 /**
  * # # nk_window_find
@@ -2991,6 +2994,7 @@ NK_API float nk_layout_ratio_from_pixel(const struct nk_context *ctx, float pixe
  * \param[in] columns | Number of widget inside row
  */
 NK_API void nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
+typedef void platform_nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
 
 /**
  * \brief Sets current row layout to fill @cols number of widgets
@@ -3023,6 +3027,7 @@ NK_API void nk_layout_row_static(struct nk_context *ctx, float height, int item_
  * \param[in] columns | Number of widget inside row
  */
 NK_API void nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
+typedef void platform_nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
 
 /**
  * \breif Specifies either window ratio or width of a single column
@@ -3036,6 +3041,7 @@ NK_API void nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fm
  * \param[in] value   | either a window ratio or fixed width depending on @fmt in previous `nk_layout_row_begin` call
  */
 NK_API void nk_layout_row_push(struct nk_context*, float value);
+typedef void platform_nk_layout_row_push(struct nk_context*, float value);
 
 /**
  * \brief Finished previously started row
@@ -3048,6 +3054,7 @@ NK_API void nk_layout_row_push(struct nk_context*, float value);
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  */
 NK_API void nk_layout_row_end(struct nk_context*);
+typedef void platform_nk_layout_row_end(struct nk_context*);
 
 /**
  * \brief Specifies row columns in array as either window ratio or size
@@ -3840,6 +3847,17 @@ NK_API void nk_label_wrap(struct nk_context*, const char*);
 NK_API void nk_label_colored_wrap(struct nk_context*, const char*, struct nk_color);
 NK_API void nk_image(struct nk_context*, struct nk_image);
 NK_API void nk_image_color(struct nk_context*, struct nk_image, struct nk_color);
+
+typedef void platform_nk_text(struct nk_context*, const char*, int, nk_flags);
+typedef void platform_nk_text_colored(struct nk_context*, const char*, int, nk_flags, struct nk_color);
+typedef void platform_nk_text_wrap(struct nk_context*, const char*, int);
+typedef void platform_nk_text_wrap_colored(struct nk_context*, const char*, int, struct nk_color);
+typedef void platform_nk_label(struct nk_context*, const char*, nk_flags align);
+typedef void platform_nk_label_colored(struct nk_context*, const char*, nk_flags align, struct nk_color);
+typedef void platform_nk_label_wrap(struct nk_context*, const char*);
+typedef void platform_nk_label_colored_wrap(struct nk_context*, const char*, struct nk_color);
+typedef void platform_nk_image(struct nk_context*, struct nk_image);
+typedef void platform_nk_image_color(struct nk_context*, struct nk_image, struct nk_color);
 #ifdef NK_INCLUDE_STANDARD_VARARGS
 NK_API void nk_labelf(struct nk_context*, nk_flags, NK_PRINTF_FORMAT_STRING const char*, ...) NK_PRINTF_VARARG_FUNC(3);
 NK_API void nk_labelf_colored(struct nk_context*, nk_flags, struct nk_color, NK_PRINTF_FORMAT_STRING const char*,...) NK_PRINTF_VARARG_FUNC(4);
@@ -3856,6 +3874,22 @@ NK_API void nk_value_float(struct nk_context*, const char *prefix, float);
 NK_API void nk_value_color_byte(struct nk_context*, const char *prefix, struct nk_color);
 NK_API void nk_value_color_float(struct nk_context*, const char *prefix, struct nk_color);
 NK_API void nk_value_color_hex(struct nk_context*, const char *prefix, struct nk_color);
+
+typedef void platform_nk_labelf(struct nk_context*, nk_flags, NK_PRINTF_FORMAT_STRING const char*, ...) NK_PRINTF_VARARG_FUNC(3);
+typedef void platform_nk_labelf_colored(struct nk_context*, nk_flags, struct nk_color, NK_PRINTF_FORMAT_STRING const char*,...) NK_PRINTF_VARARG_FUNC(4);
+typedef void platform_nk_labelf_wrap(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*,...) NK_PRINTF_VARARG_FUNC(2);
+typedef void platform_nk_labelf_colored_wrap(struct nk_context*, struct nk_color, NK_PRINTF_FORMAT_STRING const char*,...) NK_PRINTF_VARARG_FUNC(3);
+typedef void platform_nk_labelfv(struct nk_context*, nk_flags, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(3);
+typedef void platform_nk_labelfv_colored(struct nk_context*, nk_flags, struct nk_color, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(4);
+typedef void platform_nk_labelfv_wrap(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(2);
+typedef void platform_nk_labelfv_colored_wrap(struct nk_context*, struct nk_color, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(3);
+typedef void platform_nk_value_bool(struct nk_context*, const char *prefix, int);
+typedef void platform_nk_value_int(struct nk_context*, const char *prefix, int);
+typedef void platform_nk_value_uint(struct nk_context*, const char *prefix, unsigned int);
+typedef void platform_nk_value_float(struct nk_context*, const char *prefix, float);
+typedef void platform_nk_value_color_byte(struct nk_context*, const char *prefix, struct nk_color);
+typedef void platform_nk_value_color_float(struct nk_context*, const char *prefix, struct nk_color);
+typedef void platform_nk_value_color_hex(struct nk_context*, const char *prefix, struct nk_color);
 #endif
 /* =============================================================================
  *
@@ -3882,6 +3916,27 @@ NK_API nk_bool nk_button_image_text_styled(struct nk_context*,const struct nk_st
 NK_API void nk_button_set_behavior(struct nk_context*, enum nk_button_behavior);
 NK_API nk_bool nk_button_push_behavior(struct nk_context*, enum nk_button_behavior);
 NK_API nk_bool nk_button_pop_behavior(struct nk_context*);
+
+typedef nk_bool platform_nk_button_text(struct nk_context*, const char *title, int len);
+typedef nk_bool platform_nk_button_label(struct nk_context*, const char *title);
+typedef nk_bool platform_nk_button_color(struct nk_context*, struct nk_color);
+typedef nk_bool platform_nk_button_symbol(struct nk_context*, enum nk_symbol_type);
+typedef nk_bool platform_nk_button_image(struct nk_context*, struct nk_image img);
+typedef nk_bool platform_nk_button_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags text_alignment);
+typedef nk_bool platform_nk_button_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
+typedef nk_bool platform_nk_button_image_label(struct nk_context*, struct nk_image img, const char*, nk_flags text_alignment);
+typedef nk_bool platform_nk_button_image_text(struct nk_context*, struct nk_image img, const char*, int, nk_flags alignment);
+typedef nk_bool platform_nk_button_text_styled(struct nk_context*, const struct nk_style_button*, const char *title, int len);
+typedef nk_bool platform_nk_button_label_styled(struct nk_context*, const struct nk_style_button*, const char *title);
+typedef nk_bool platform_nk_button_symbol_styled(struct nk_context*, const struct nk_style_button*, enum nk_symbol_type);
+typedef nk_bool platform_nk_button_image_styled(struct nk_context*, const struct nk_style_button*, struct nk_image img);
+typedef nk_bool platform_nk_button_symbol_text_styled(struct nk_context*,const struct nk_style_button*, enum nk_symbol_type, const char*, int, nk_flags alignment);
+typedef nk_bool platform_nk_button_symbol_label_styled(struct nk_context *ctx, const struct nk_style_button *style, enum nk_symbol_type symbol, const char *title, nk_flags align);
+typedef nk_bool platform_nk_button_image_label_styled(struct nk_context*,const struct nk_style_button*, struct nk_image img, const char*, nk_flags text_alignment);
+typedef nk_bool platform_nk_button_image_text_styled(struct nk_context*,const struct nk_style_button*, struct nk_image img, const char*, int, nk_flags alignment);
+typedef void platform_nk_button_set_behavior(struct nk_context*, enum nk_button_behavior);
+typedef nk_bool platform_nk_button_push_behavior(struct nk_context*, enum nk_button_behavior);
+typedef nk_bool platform_nk_button_pop_behavior(struct nk_context*);
 /* =============================================================================
  *
  *                                  CHECKBOX
@@ -3898,6 +3953,18 @@ NK_API nk_bool nk_checkbox_text(struct nk_context*, const char*, int, nk_bool *a
 NK_API nk_bool nk_checkbox_text_align(struct nk_context *ctx, const char *text, int len, nk_bool *active, nk_flags widget_alignment, nk_flags text_alignment);
 NK_API nk_bool nk_checkbox_flags_label(struct nk_context*, const char*, unsigned int *flags, unsigned int value);
 NK_API nk_bool nk_checkbox_flags_text(struct nk_context*, const char*, int, unsigned int *flags, unsigned int value);
+
+typedef nk_bool platform_nk_check_label(struct nk_context*, const char*, nk_bool active);
+typedef nk_bool platform_nk_check_text(struct nk_context*, const char*, int, nk_bool active);
+typedef nk_bool platform_nk_check_text_align(struct nk_context*, const char*, int, nk_bool active, nk_flags widget_alignment, nk_flags text_alignment);
+typedef unsigned platform_nk_check_flags_label(struct nk_context*, const char*, unsigned int flags, unsigned int value);
+typedef unsigned platform_nk_check_flags_text(struct nk_context*, const char*, int, unsigned int flags, unsigned int value);
+typedef nk_bool platform_nk_checkbox_label(struct nk_context*, const char*, nk_bool *active);
+typedef nk_bool platform_nk_checkbox_label_align(struct nk_context *ctx, const char *label, nk_bool *active, nk_flags widget_alignment, nk_flags text_alignment);
+typedef nk_bool platform_nk_checkbox_text(struct nk_context*, const char*, int, nk_bool *active);
+typedef nk_bool platform_nk_checkbox_text_align(struct nk_context *ctx, const char *text, int len, nk_bool *active, nk_flags widget_alignment, nk_flags text_alignment);
+typedef nk_bool platform_nk_checkbox_flags_label(struct nk_context*, const char*, unsigned int *flags, unsigned int value);
+typedef nk_bool platform_nk_checkbox_flags_text(struct nk_context*, const char*, int, unsigned int *flags, unsigned int value);
 /* =============================================================================
  *
  *                                  RADIO BUTTON
@@ -4215,6 +4282,13 @@ NK_API nk_flags nk_edit_string_zero_terminated(struct nk_context*, nk_flags, cha
 NK_API nk_flags nk_edit_buffer(struct nk_context*, nk_flags, struct nk_text_edit*, nk_plugin_filter);
 NK_API void nk_edit_focus(struct nk_context*, nk_flags flags);
 NK_API void nk_edit_unfocus(struct nk_context*);
+
+typedef nk_flags platform_nk_edit_string(struct nk_context*, nk_flags, char *buffer, int *len, int max, nk_plugin_filter);
+typedef nk_flags platform_nk_edit_string_zero_terminated(struct nk_context*, nk_flags, char *buffer, int max, nk_plugin_filter);
+typedef nk_flags platform_nk_edit_buffer(struct nk_context*, nk_flags, struct nk_text_edit*, nk_plugin_filter);
+typedef void platform_nk_edit_focus(struct nk_context*, nk_flags flags);
+typedef void platform_nk_edit_unfocus(struct nk_context*);
+
 /* =============================================================================
  *
  *                                  CHART
@@ -4510,6 +4584,24 @@ NK_API struct nk_rect nk_rectv(const float *xywh);
 NK_API struct nk_rect nk_rectiv(const int *xywh);
 NK_API struct nk_vec2 nk_rect_pos(struct nk_rect);
 NK_API struct nk_vec2 nk_rect_size(struct nk_rect);
+
+typedef nk_hash platform_nk_murmur_hash(const void *key, int len, nk_hash seed);
+typedef void platform_nk_triangle_from_direction(struct nk_vec2 *result, struct nk_rect r, float pad_x, float pad_y, enum nk_heading);
+
+typedef struct nk_vec2 platform_nk_vec2(float x, float y);
+typedef struct nk_vec2 platform_nk_vec2i(int x, int y);
+typedef struct nk_vec2 platform_nk_vec2v(const float *xy);
+typedef struct nk_vec2 platform_nk_vec2iv(const int *xy);
+
+typedef struct nk_rect platform_nk_get_null_rect(void);
+typedef struct nk_rect platform_nk_rect(float x, float y, float w, float h);
+typedef struct nk_rect platform_nk_recti(int x, int y, int w, int h);
+typedef struct nk_rect platform_nk_recta(struct nk_vec2 pos, struct nk_vec2 size);
+typedef struct nk_rect platform_nk_rectv(const float *xywh);
+typedef struct nk_rect platform_nk_rectiv(const int *xywh);
+typedef struct nk_vec2 platform_nk_rect_pos(struct nk_rect);
+typedef struct nk_vec2 platform_nk_rect_size(struct nk_rect);
+
 /* =============================================================================
  *
  *                                  STRING
@@ -6505,6 +6597,102 @@ struct nk_context {
 #else
 #define NK_OFFSETOF(st,m) ((nk_ptr)&(((st*)0)->m))
 #endif
+
+
+struct nk_ui
+{
+    platform_nk_begin *NkBegin;
+    platform_nk_end *NkEnd;
+
+    platform_nk_layout_row_dynamic *NkLayoutRowDynamic;
+    platform_nk_layout_row_begin *NkLayoutRowBegin;
+    platform_nk_layout_row_push *NkLayoutRowPush;
+    platform_nk_layout_row_end *NkLayoutRowEnd;
+
+    platform_nk_text *NkText;
+    platform_nk_text_colored *NkTextColored;
+    platform_nk_text_wrap *NkTextWrap;
+    platform_nk_text_wrap_colored *NkTextWrapColored;
+    platform_nk_label *NkLabel;
+    platform_nk_label_colored *NkLabelColored;
+    platform_nk_label_wrap *NkLabelWrap;
+    platform_nk_label_colored_wrap *NkLabelColoredWrap;
+    platform_nk_image *NkImage;
+    platform_nk_image_color *NkImageColor;
+
+    platform_nk_labelf *NkLabelf;
+    platform_nk_labelf_colored *NkLabelfColored;
+    platform_nk_labelf_wrap *NkLabelfWrap;
+    platform_nk_labelf_colored_wrap *NkLabelfColoredWrap;
+    platform_nk_labelfv *NkLabelfv;
+    platform_nk_labelfv_colored *NkLabelfvColored;
+    platform_nk_labelfv_wrap *NkLabelfvWrap;
+    platform_nk_labelfv_colored_wrap *NkLabelfvColoredWrap;
+    platform_nk_value_bool *NkValueBool;
+    platform_nk_value_int *NkValueInt;
+    platform_nk_value_uint *NkValueUint;
+    platform_nk_value_float *NkValueFloat;
+    platform_nk_value_color_byte *NkValueColorByte;
+    platform_nk_value_color_float *NkValueColorFloat;
+    platform_nk_value_color_hex *NkValueColorHex;
+
+    platform_nk_button_text *NkButtonText;
+    platform_nk_button_label *NkButtonLabel;
+    platform_nk_button_color *NkButtonColor;
+    platform_nk_button_symbol *NkButtonSymbol;
+    platform_nk_button_image *NkButtonImage;
+    platform_nk_button_symbol_label *NkButtonSymbolLabel;
+    platform_nk_button_symbol_text *NkButtonSymbolText;
+    platform_nk_button_image_label *NkButtonImageLabel;
+    platform_nk_button_image_text *NkButtonImageText;
+    platform_nk_button_text_styled *NkButtonTextStyled;
+    platform_nk_button_label_styled *NkButtonLabelStyled;
+    platform_nk_button_symbol_styled *NkButtonSymbolStyled;
+    platform_nk_button_image_styled *NkButtonImageStyled;
+    platform_nk_button_symbol_text_styled *NkButtonSymbolTextStyled;
+    platform_nk_button_symbol_label_styled *NkButtonSymbolLabelStyled;
+    platform_nk_button_image_label_styled *NkButtonImageLabelStyled;
+    platform_nk_button_image_text_styled *NkButtonImageTextStyled;
+    platform_nk_button_set_behavior *NkButtonSetBehavior;
+    platform_nk_button_push_behavior *NkButtonPushBehavior;
+    platform_nk_button_pop_behavior *NkButtonPopBehavior;
+
+    platform_nk_check_label *NkCheckLabel;
+    platform_nk_check_text *NkCheckText;
+    platform_nk_check_text_align *NkCheckTextAlign;
+    platform_nk_check_flags_label *NkCheckFlagsLabel;
+    platform_nk_check_flags_text *NkCheckFlagsText;
+    platform_nk_checkbox_label *NkCheckboxLabel;
+    platform_nk_checkbox_label_align *NkCheckboxLabelAlign;
+    platform_nk_checkbox_text *NkCheckboxText;
+    platform_nk_checkbox_text_align *NkCheckboxTextAlign;
+    platform_nk_checkbox_flags_label *NkCheckboxFlagsLabel;
+    platform_nk_checkbox_flags_text *NkCheckboxFlagsText;
+
+    platform_nk_edit_string *NkEditString;
+    platform_nk_edit_string_zero_terminated *NkEditStringZeroTerminated;
+    platform_nk_edit_buffer *NkEditBuffer;
+    platform_nk_edit_focus *NkEditFocus;
+    platform_nk_edit_unfocus *NkEditUnfocus;
+
+    platform_nk_murmur_hash *NkMurmurHash;
+    platform_nk_triangle_from_direction *NkTriangleFromDirection;
+
+    platform_nk_vec2 *NkVec2;
+    platform_nk_vec2i *NkVec2i;
+    platform_nk_vec2v *NkVec2v;
+    platform_nk_vec2iv *NkVec2iv;
+
+    platform_nk_get_null_rect *NkGetNullRect;
+    platform_nk_rect *NkRect;
+    platform_nk_recti *NkRecti;
+    platform_nk_recta *NkRecta;
+    platform_nk_rectv *NkRectv;
+    platform_nk_rectiv *NkRectiv;
+    platform_nk_rect_pos *NkRectPos;
+    platform_nk_rect_size *NkRectSize;
+};
+
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -6531,6 +6719,8 @@ typedef struct platform_api
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
 
+    nk_ui UI;
+    
 #if EDITOR_INTERNAL
     debug_platform_execute_system_command *DEBUGExecuteSystemCommand;
     debug_platform_get_process_state *DEBUGGetProcessState;

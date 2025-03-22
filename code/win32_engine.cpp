@@ -16,12 +16,12 @@
 #include "GL/wglew.h"
 
 #include "win32_defines.h"
-#include "win32_engine.h"
 
 #define NK_IMPLEMENTATION
-#define NK_GLFW_GL2_IMPLEMENTATION
 #include "nuklear.h"
 #include "nuklear_glfw_gl2.h"
+
+#include "win32_engine.h"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): GLOBAL VARIABLES
@@ -51,6 +51,9 @@ global_variable GLuint GlobalBlitTextureHandle;
 #include "engine_opengl.cpp"
 #include "engine_render.cpp"
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WIN32 API
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 inline LARGE_INTEGER
 Win32GetWallClock(void)
 {    
@@ -76,30 +79,15 @@ Win32GetTime(void)
     return(Result);
 }
 
-void _glfwGetCursorPosWin32(win32_state *State, double* xpos, double* ypos)
-{
-    POINT pos;
-
-    if (GetCursorPos(&pos))
-    {
-        ScreenToClient(State->WindowHandle, &pos);
-
-        if (xpos)
-            *xpos = pos.x;
-        if (ypos)
-            *ypos = pos.y;
-    }
-}
-
-void
-glfwGetCursorPos(win32_state *State, double *xpos, double *ypos)
+inline void
+Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
 {
     if (xpos)
         *xpos = 0;
     if (ypos)
         *ypos = 0;
 
-    if (State->cursorMode == GLFW_CURSOR_DISABLED)
+    if (State->cursorMode == WIN32_CURSOR_DISABLED)
     {
         if (xpos)
             *xpos = State->virtualCursorPosX;
@@ -107,7 +95,19 @@ glfwGetCursorPos(win32_state *State, double *xpos, double *ypos)
             *ypos = State->virtualCursorPosY;
     }
     else
-        _glfwGetCursorPosWin32(State, xpos, ypos);
+    {
+        POINT pos;
+
+        if (GetCursorPos(&pos))
+        {
+            ScreenToClient(State->WindowHandle, &pos);
+
+            if (xpos)
+                *xpos = pos.x;
+            if (ypos)
+                *ypos = pos.y;
+        }
+    }
 }
 
 const char *
@@ -121,56 +121,39 @@ glfwSetClipboardString(const char *str)
 {
 }
 
-#define _GLFW_STICK 3
-
-s32
+inline s32
 Win32GetKey(win32_state *State, s32 key)
 {
-    if (key < GLFW_KEY_SPACE || key > GLFW_KEY_LAST)
+    if (key < WIN32_KEY_SPACE || key > WIN32_KEY_LAST)
     {
         Assert("Invalid key");
-        return GLFW_RELEASE;
+        return WIN32_RELEASE;
     }
 
-    if (State->keys[key] == _GLFW_STICK)
+    if (State->keys[key] == _WIN32_STICK)
     {
         // Sticky mode: release key now
-        State->keys[key] = GLFW_RELEASE;
-        return GLFW_PRESS;
+        State->keys[key] = WIN32_RELEASE;
+        return WIN32_PRESS;
     }
 
     s32 Result = (s32)State->keys[key];
     return(Result);
 }
 
-void _glfwSetCursorPosWin32(win32_state *State, double xpos, double ypos)
-{
-    POINT pos = { (int) xpos, (int) ypos };
-
-    // Store the new position so it can be recognized later
-    State->lastCursorPosX = pos.x;
-    State->lastCursorPosY = pos.y;
-
-    ClientToScreen(State->WindowHandle, &pos);
-    SetCursorPos(pos.x, pos.y);
-}
-
-void
-glfwSetCursorPos(win32_state *State, double xpos, double ypos)
+inline void
+Win32SetCursorPos(win32_state *State, double xpos, double ypos)
 {
     if (xpos != xpos || xpos < -DBL_MAX || xpos > DBL_MAX ||
         ypos != ypos || ypos < -DBL_MAX || ypos > DBL_MAX)
     {
-//        _glfwInputError(GLFW_INVALID_VALUE,
+//        _glfwInputError(WIN32_INVALID_VALUE,
 //                        "Invalid cursor position %f %f",
 //                        xpos, ypos);
         return;
     }
 
-//    if (!_glfw.platform.windowFocused(window))
-//        return;
-
-    if (State->cursorMode == GLFW_CURSOR_DISABLED)
+    if (State->cursorMode == WIN32_CURSOR_DISABLED)
     {
         // Only update the accumulated position if the cursor is disabled
         State->virtualCursorPosX = xpos;
@@ -179,28 +162,279 @@ glfwSetCursorPos(win32_state *State, double xpos, double ypos)
     else
     {
         // Update system cursor position
-        _glfwSetCursorPosWin32(State, xpos, ypos);
+        POINT pos = { (int) xpos, (int) ypos };
+
+        // Store the new position so it can be recognized later
+        State->lastCursorPosX = pos.x;
+        State->lastCursorPosY = pos.y;
+
+        ClientToScreen(State->WindowHandle, &pos);
+        SetCursorPos(pos.x, pos.y);
     }
 }
 
-int
-glfwGetMouseButton(win32_state *State, int button)
+inline s32
+Win32GetMouseButton(win32_state *State, int button)
 {
-    if (button < GLFW_MOUSE_BUTTON_1 || button > GLFW_MOUSE_BUTTON_LAST)
+    if (button < WIN32_MOUSE_BUTTON_1 || button > WIN32_MOUSE_BUTTON_LAST)
     {
-//        _glfwInputError(GLFW_INVALID_ENUM, "Invalid mouse button %i", button);
-        return GLFW_RELEASE;
+//        _glfwInputError(WIN32_INVALID_ENUM, "Invalid mouse button %i", button);
+        return WIN32_RELEASE;
     }
 
-    if (State->MouseButtons[button] == _GLFW_STICK)
+    if (State->MouseButtons[button] == _WIN32_STICK)
     {
         // Sticky mode: release mouse button now
-        State->MouseButtons[button] = GLFW_RELEASE;
-        return GLFW_PRESS;
+        State->MouseButtons[button] = WIN32_RELEASE;
+        return WIN32_PRESS;
     }
 
-    return (int) State->MouseButtons[button];
+    s32 Result = (s32)State->MouseButtons[button];
+    return(Result);
 }
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): NUKLEAR CALLBACKS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+internal inline void
+Win32NkScrollCallback(nk_win32 *NkWin32, double xoff, double yoff)
+{
+    NkWin32->scroll.x += (float)xoff;
+    NkWin32->scroll.y += (float)yoff;
+}
+
+internal inline void
+Win32NkMouseButtonCallback(nk_win32 *glfw, win32_state *State, int button, int action)
+{
+    double x, y;
+    if (button != WIN32_MOUSE_BUTTON_LEFT) return;
+    Win32GetCursorPos(State, &x, &y);
+    if (action == WIN32_PRESS)  {
+        double dt = Win32GetTime() - glfw->last_button_click;
+        if (dt > NK_WIN32_DOUBLE_CLICK_LO && dt < NK_WIN32_DOUBLE_CLICK_HI) {
+            glfw->is_double_click_down = nk_true;
+            glfw->double_click_pos = nk_vec2((float)x, (float)y);
+        }
+
+        glfw->last_button_click = Win32GetTime();
+    } else glfw->is_double_click_down = nk_false;
+}
+
+internal inline void
+Win32NkCharCallback(nk_win32 *glfw, unsigned int codepoint)
+{
+    if (glfw->text_len < NK_WIN32_TEXT_MAX)
+        glfw->text[glfw->text_len++] = codepoint;
+}
+
+inline void
+Win32NkKeyCallback(nk_win32 *glfw, int key, int scancode, int action, int mods)
+{
+    /*
+     * convert WIN32_REPEAT to down (technically WIN32_RELEASE, WIN32_PRESS, WIN32_REPEAT are
+     * already 0, 1, 2 but just to be clearer)
+     */
+    nk_char a = (nk_char)((action == WIN32_RELEASE) ? nk_false : nk_true);
+
+    NK_UNUSED(scancode);
+    NK_UNUSED(mods);
+
+    switch (key) {
+        case WIN32_KEY_DELETE:    glfw->key_events[NK_KEY_DEL] = a; break;
+        case WIN32_KEY_TAB:       glfw->key_events[NK_KEY_TAB] = a; break;
+        case WIN32_KEY_BACKSPACE: glfw->key_events[NK_KEY_BACKSPACE] = a; break;
+        case WIN32_KEY_UP:        glfw->key_events[NK_KEY_UP] = a; break;
+        case WIN32_KEY_DOWN:      glfw->key_events[NK_KEY_DOWN] = a; break;
+        case WIN32_KEY_LEFT:      glfw->key_events[NK_KEY_LEFT] = a; break;
+        case WIN32_KEY_RIGHT:     glfw->key_events[NK_KEY_RIGHT] = a; break;
+
+        case WIN32_KEY_PAGE_UP:   glfw->key_events[NK_KEY_SCROLL_UP] = a; break;
+        case WIN32_KEY_PAGE_DOWN: glfw->key_events[NK_KEY_SCROLL_DOWN] = a; break;
+
+            /* have to add all keys used for nuklear to get correct repeat behavior
+             * NOTE these are scancodes so your custom layout won't matter unfortunately
+             * Also while including everything will prevent unnecessary input calls,
+             * only the ones with visible effects really matter, ie paste, undo, redo
+             * selecting all, copying or cutting 40 times before you release the keys
+             * doesn't actually cause any visible problems */
+
+        case WIN32_KEY_C:         glfw->key_events[NK_KEY_COPY] = a; break;
+        case WIN32_KEY_V:         glfw->key_events[NK_KEY_PASTE] = a; break;
+        case WIN32_KEY_X:         glfw->key_events[NK_KEY_CUT] = a; break;
+        case WIN32_KEY_Z:         glfw->key_events[NK_KEY_TEXT_UNDO] = a; break;
+        case WIN32_KEY_R:         glfw->key_events[NK_KEY_TEXT_REDO] = a; break;
+        case WIN32_KEY_B:         glfw->key_events[NK_KEY_TEXT_LINE_START] = a; break;
+        case WIN32_KEY_E:         glfw->key_events[NK_KEY_TEXT_LINE_END] = a; break;
+        case WIN32_KEY_A:         glfw->key_events[NK_KEY_TEXT_SELECT_ALL] = a; break;
+
+        case WIN32_KEY_ENTER:
+        case WIN32_KEY_KP_ENTER:
+            glfw->key_events[NK_KEY_ENTER] = a;
+            break;
+        default:
+            ;
+    }
+}
+
+internal void
+nk_win323_clipboard_paste(nk_handle usr, struct nk_text_edit *edit)
+{
+    const char *text = glfwGetClipboardString();
+    if (text) nk_textedit_paste(edit, text, nk_strlen(text));
+    (void)usr;
+}
+
+internal void
+nk_win323_clipboard_copy(nk_handle usr, const char *text, int len)
+{
+    char *str = 0;
+    (void)usr;
+    if (!len) return;
+    str = (char*)malloc((size_t)len+1);
+    if (!str) return;
+    memcpy(str, text, (size_t)len);
+    str[len] = '\0';
+    glfwSetClipboardString(str);
+    free(str);
+}
+
+internal struct nk_context*
+Win32InitNkContext(nk_win32 *glfw)
+{
+    nk_init_default(&glfw->ctx, 0);
+    glfw->ctx.clip.copy = nk_win323_clipboard_copy;
+    glfw->ctx.clip.paste = nk_win323_clipboard_paste;
+    glfw->ctx.clip.userdata = nk_handle_ptr(0);
+    nk_buffer_init_default(&glfw->ogl.cmds);
+
+    glfw->is_double_click_down = nk_false;
+    glfw->double_click_pos = nk_vec2(0, 0);
+
+    glfw->delta_time_seconds_last = Win32GetTime();
+
+    return &glfw->ctx;
+}
+
+internal void
+Win32NkFontStashBegin(nk_win32 *glfw, struct nk_font_atlas **atlas)
+{
+    nk_font_atlas_init_default(&glfw->atlas);
+    nk_font_atlas_begin(&glfw->atlas);
+    *atlas = &glfw->atlas;
+}
+
+internal void
+Win32NkFontStashEnd(nk_win32 *glfw)
+{
+    const void *image; int w, h;
+    image = nk_font_atlas_bake(&glfw->atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
+    NkOpenGLUploadAtlas(&glfw->ogl, image, w, h);
+    nk_font_atlas_end(&glfw->atlas, nk_handle_id((int)glfw->ogl.font_tex), &glfw->ogl.tex_null);
+    if (glfw->atlas.default_font)
+        nk_style_set_font(&glfw->ctx, &glfw->atlas.default_font->handle);
+}
+
+internal void
+Win32NkUpdateInputs(win32_state *State, nk_win32 *glfw, u32 WindowWidth, u32 WindowHeight,
+                    u32 DrawWidth, u32 DrawHeight, f32 dt)
+{
+    int i;
+    double x, y;
+    struct nk_context *ctx = &glfw->ctx;
+    nk_char* k_state = glfw->key_events;
+
+    /* update the timer */
+    float delta_time_now = dt;
+    glfw->delta_time_seconds_last = dt;
+
+    glfw->width = WindowWidth;
+    glfw->height = WindowHeight;
+    glfw->display_width = DrawWidth;
+    glfw->display_height = DrawHeight;
+    glfw->fb_scale.x = (float)glfw->display_width/(float)glfw->width;
+    glfw->fb_scale.y = (float)glfw->display_height/(float)glfw->height;
+
+    nk_input_begin(ctx);
+    for (i = 0; i < glfw->text_len; ++i)
+        nk_input_unicode(ctx, glfw->text[i]);
+
+    if (k_state[NK_KEY_DEL] >= 0) nk_input_key(ctx, NK_KEY_DEL, k_state[NK_KEY_DEL]);
+    if (k_state[NK_KEY_ENTER] >= 0) nk_input_key(ctx, NK_KEY_ENTER, k_state[NK_KEY_ENTER]);
+
+    if (k_state[NK_KEY_TAB] >= 0) nk_input_key(ctx, NK_KEY_TAB, k_state[NK_KEY_TAB]);
+    if (k_state[NK_KEY_BACKSPACE] >= 0) nk_input_key(ctx, NK_KEY_BACKSPACE, k_state[NK_KEY_BACKSPACE]);
+    if (k_state[NK_KEY_UP] >= 0) nk_input_key(ctx, NK_KEY_UP, k_state[NK_KEY_UP]);
+    if (k_state[NK_KEY_DOWN] >= 0) nk_input_key(ctx, NK_KEY_DOWN, k_state[NK_KEY_DOWN]);
+    if (k_state[NK_KEY_SCROLL_UP] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_UP, k_state[NK_KEY_SCROLL_UP]);
+    if (k_state[NK_KEY_SCROLL_DOWN] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_DOWN, k_state[NK_KEY_SCROLL_DOWN]);
+
+    nk_input_key(ctx, NK_KEY_TEXT_START, Win32GetKey(State, WIN32_KEY_HOME) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_END, Win32GetKey(State, WIN32_KEY_END) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_START, Win32GetKey(State, WIN32_KEY_HOME) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_END, Win32GetKey(State, WIN32_KEY_END) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SHIFT, Win32GetKey(State, WIN32_KEY_LEFT_SHIFT) == WIN32_PRESS||
+                 Win32GetKey(State, WIN32_KEY_RIGHT_SHIFT) == WIN32_PRESS);
+
+    if (Win32GetKey(State, WIN32_KEY_LEFT_CONTROL) == WIN32_PRESS ||
+        Win32GetKey(State, WIN32_KEY_RIGHT_CONTROL) == WIN32_PRESS) {
+        /* Note these are physical keys and won't respect any layouts/key mapping */
+        if (k_state[NK_KEY_COPY] >= 0) nk_input_key(ctx, NK_KEY_COPY, k_state[NK_KEY_COPY]);
+        if (k_state[NK_KEY_PASTE] >= 0) nk_input_key(ctx, NK_KEY_PASTE, k_state[NK_KEY_PASTE]);
+        if (k_state[NK_KEY_CUT] >= 0) nk_input_key(ctx, NK_KEY_CUT, k_state[NK_KEY_CUT]);
+        if (k_state[NK_KEY_TEXT_UNDO] >= 0) nk_input_key(ctx, NK_KEY_TEXT_UNDO, k_state[NK_KEY_TEXT_UNDO]);
+        if (k_state[NK_KEY_TEXT_REDO] >= 0) nk_input_key(ctx, NK_KEY_TEXT_REDO, k_state[NK_KEY_TEXT_REDO]);
+        if (k_state[NK_KEY_TEXT_LINE_START] >= 0) nk_input_key(ctx, NK_KEY_TEXT_LINE_START, k_state[NK_KEY_TEXT_LINE_START]);
+        if (k_state[NK_KEY_TEXT_LINE_END] >= 0) nk_input_key(ctx, NK_KEY_TEXT_LINE_END, k_state[NK_KEY_TEXT_LINE_END]);
+        if (k_state[NK_KEY_TEXT_SELECT_ALL] >= 0) nk_input_key(ctx, NK_KEY_TEXT_SELECT_ALL, k_state[NK_KEY_TEXT_SELECT_ALL]);
+        if (k_state[NK_KEY_LEFT] >= 0) nk_input_key(ctx, NK_KEY_TEXT_WORD_LEFT, k_state[NK_KEY_LEFT]);
+        if (k_state[NK_KEY_RIGHT] >= 0) nk_input_key(ctx, NK_KEY_TEXT_WORD_RIGHT, k_state[NK_KEY_RIGHT]);
+    } else {
+        if (k_state[NK_KEY_LEFT] >= 0) nk_input_key(ctx, NK_KEY_LEFT, k_state[NK_KEY_LEFT]);
+        if (k_state[NK_KEY_RIGHT] >= 0) nk_input_key(ctx, NK_KEY_RIGHT, k_state[NK_KEY_RIGHT]);
+        nk_input_key(ctx, NK_KEY_COPY, 0);
+        nk_input_key(ctx, NK_KEY_PASTE, 0);
+        nk_input_key(ctx, NK_KEY_CUT, 0);
+    }
+
+    Win32GetCursorPos(State, &x, &y);
+    nk_input_motion(ctx, (int)x, (int)y);
+    if (ctx->input.mouse.grabbed) {
+        Win32SetCursorPos(State, (double)ctx->input.mouse.prev.x, (double)ctx->input.mouse.prev.y);
+        ctx->input.mouse.pos.x = ctx->input.mouse.prev.x;
+        ctx->input.mouse.pos.y = ctx->input.mouse.prev.y;
+    }
+
+    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_LEFT) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_MIDDLE) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_RIGHT) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_DOUBLE, (int)glfw->double_click_pos.x, (int)glfw->double_click_pos.y, glfw->is_double_click_down);
+    nk_input_scroll(ctx, glfw->scroll);
+    nk_input_end(&glfw->ctx);
+
+    /* clear after nk_input_end (-1 since we're doing up/down boolean) */
+    memset(glfw->key_events, -1, sizeof(glfw->key_events));
+
+    glfw->text_len = 0;
+    glfw->scroll = nk_vec2(0,0);
+}
+
+internal void
+Win32NkShutdown(nk_win32 *glfw)
+{
+    struct nk_opengl *dev = &glfw->ogl;
+    nk_font_atlas_clear(&glfw->atlas);
+    nk_free(&glfw->ctx);
+    glDeleteTextures(1, &dev->font_tex);
+    nk_buffer_free(&dev->cmds);
+    memset(&glfw, 0, sizeof(glfw));
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -635,6 +869,169 @@ ToggleFullscreen(HWND Window)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): WINDOW CALLBACKS / INPUT PROCESSING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+// Retrieves and translates modifier keys
+//
+internal inline s32
+Win32GetKeyMods(void)
+{
+    s32 mods = 0;
+
+    if (GetKeyState(VK_SHIFT) & 0x8000)
+        mods |= WIN32_MOD_SHIFT;
+    if (GetKeyState(VK_CONTROL) & 0x8000)
+        mods |= WIN32_MOD_CONTROL;
+    if (GetKeyState(VK_MENU) & 0x8000)
+        mods |= WIN32_MOD_ALT;
+    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000)
+        mods |= WIN32_MOD_SUPER;
+    if (GetKeyState(VK_CAPITAL) & 1)
+        mods |= WIN32_MOD_CAPS_LOCK;
+    if (GetKeyState(VK_NUMLOCK) & 1)
+        mods |= WIN32_MOD_NUM_LOCK;
+
+    return mods;
+}
+
+// Create key code translation tables
+//
+internal void
+Win32CreateKeyTables(win32_state *State)
+{
+    s16 scancode;
+
+    memset(State->Keycodes, -1, sizeof(State->Keycodes));
+    memset(State->Scancodes, -1, sizeof(State->Scancodes));
+
+    State->Keycodes[0x00B] = WIN32_KEY_0;
+    State->Keycodes[0x002] = WIN32_KEY_1;
+    State->Keycodes[0x003] = WIN32_KEY_2;
+    State->Keycodes[0x004] = WIN32_KEY_3;
+    State->Keycodes[0x005] = WIN32_KEY_4;
+    State->Keycodes[0x006] = WIN32_KEY_5;
+    State->Keycodes[0x007] = WIN32_KEY_6;
+    State->Keycodes[0x008] = WIN32_KEY_7;
+    State->Keycodes[0x009] = WIN32_KEY_8;
+    State->Keycodes[0x00A] = WIN32_KEY_9;
+    State->Keycodes[0x01E] = WIN32_KEY_A;
+    State->Keycodes[0x030] = WIN32_KEY_B;
+    State->Keycodes[0x02E] = WIN32_KEY_C;
+    State->Keycodes[0x020] = WIN32_KEY_D;
+    State->Keycodes[0x012] = WIN32_KEY_E;
+    State->Keycodes[0x021] = WIN32_KEY_F;
+    State->Keycodes[0x022] = WIN32_KEY_G;
+    State->Keycodes[0x023] = WIN32_KEY_H;
+    State->Keycodes[0x017] = WIN32_KEY_I;
+    State->Keycodes[0x024] = WIN32_KEY_J;
+    State->Keycodes[0x025] = WIN32_KEY_K;
+    State->Keycodes[0x026] = WIN32_KEY_L;
+    State->Keycodes[0x032] = WIN32_KEY_M;
+    State->Keycodes[0x031] = WIN32_KEY_N;
+    State->Keycodes[0x018] = WIN32_KEY_O;
+    State->Keycodes[0x019] = WIN32_KEY_P;
+    State->Keycodes[0x010] = WIN32_KEY_Q;
+    State->Keycodes[0x013] = WIN32_KEY_R;
+    State->Keycodes[0x01F] = WIN32_KEY_S;
+    State->Keycodes[0x014] = WIN32_KEY_T;
+    State->Keycodes[0x016] = WIN32_KEY_U;
+    State->Keycodes[0x02F] = WIN32_KEY_V;
+    State->Keycodes[0x011] = WIN32_KEY_W;
+    State->Keycodes[0x02D] = WIN32_KEY_X;
+    State->Keycodes[0x015] = WIN32_KEY_Y;
+    State->Keycodes[0x02C] = WIN32_KEY_Z;
+
+    State->Keycodes[0x028] = WIN32_KEY_APOSTROPHE;
+    State->Keycodes[0x02B] = WIN32_KEY_BACKSLASH;
+    State->Keycodes[0x033] = WIN32_KEY_COMMA;
+    State->Keycodes[0x00D] = WIN32_KEY_EQUAL;
+    State->Keycodes[0x029] = WIN32_KEY_GRAVE_ACCENT;
+    State->Keycodes[0x01A] = WIN32_KEY_LEFT_BRACKET;
+    State->Keycodes[0x00C] = WIN32_KEY_MINUS;
+    State->Keycodes[0x034] = WIN32_KEY_PERIOD;
+    State->Keycodes[0x01B] = WIN32_KEY_RIGHT_BRACKET;
+    State->Keycodes[0x027] = WIN32_KEY_SEMICOLON;
+    State->Keycodes[0x035] = WIN32_KEY_SLASH;
+    State->Keycodes[0x056] = WIN32_KEY_WORLD_2;
+
+    State->Keycodes[0x00E] = WIN32_KEY_BACKSPACE;
+    State->Keycodes[0x153] = WIN32_KEY_DELETE;
+    State->Keycodes[0x14F] = WIN32_KEY_END;
+    State->Keycodes[0x01C] = WIN32_KEY_ENTER;
+    State->Keycodes[0x001] = WIN32_KEY_ESCAPE;
+    State->Keycodes[0x147] = WIN32_KEY_HOME;
+    State->Keycodes[0x152] = WIN32_KEY_INSERT;
+    State->Keycodes[0x15D] = WIN32_KEY_MENU;
+    State->Keycodes[0x151] = WIN32_KEY_PAGE_DOWN;
+    State->Keycodes[0x149] = WIN32_KEY_PAGE_UP;
+    State->Keycodes[0x045] = WIN32_KEY_PAUSE;
+    State->Keycodes[0x039] = WIN32_KEY_SPACE;
+    State->Keycodes[0x00F] = WIN32_KEY_TAB;
+    State->Keycodes[0x03A] = WIN32_KEY_CAPS_LOCK;
+    State->Keycodes[0x145] = WIN32_KEY_NUM_LOCK;
+    State->Keycodes[0x046] = WIN32_KEY_SCROLL_LOCK;
+    State->Keycodes[0x03B] = WIN32_KEY_F1;
+    State->Keycodes[0x03C] = WIN32_KEY_F2;
+    State->Keycodes[0x03D] = WIN32_KEY_F3;
+    State->Keycodes[0x03E] = WIN32_KEY_F4;
+    State->Keycodes[0x03F] = WIN32_KEY_F5;
+    State->Keycodes[0x040] = WIN32_KEY_F6;
+    State->Keycodes[0x041] = WIN32_KEY_F7;
+    State->Keycodes[0x042] = WIN32_KEY_F8;
+    State->Keycodes[0x043] = WIN32_KEY_F9;
+    State->Keycodes[0x044] = WIN32_KEY_F10;
+    State->Keycodes[0x057] = WIN32_KEY_F11;
+    State->Keycodes[0x058] = WIN32_KEY_F12;
+    State->Keycodes[0x064] = WIN32_KEY_F13;
+    State->Keycodes[0x065] = WIN32_KEY_F14;
+    State->Keycodes[0x066] = WIN32_KEY_F15;
+    State->Keycodes[0x067] = WIN32_KEY_F16;
+    State->Keycodes[0x068] = WIN32_KEY_F17;
+    State->Keycodes[0x069] = WIN32_KEY_F18;
+    State->Keycodes[0x06A] = WIN32_KEY_F19;
+    State->Keycodes[0x06B] = WIN32_KEY_F20;
+    State->Keycodes[0x06C] = WIN32_KEY_F21;
+    State->Keycodes[0x06D] = WIN32_KEY_F22;
+    State->Keycodes[0x06E] = WIN32_KEY_F23;
+    State->Keycodes[0x076] = WIN32_KEY_F24;
+    State->Keycodes[0x038] = WIN32_KEY_LEFT_ALT;
+    State->Keycodes[0x01D] = WIN32_KEY_LEFT_CONTROL;
+    State->Keycodes[0x02A] = WIN32_KEY_LEFT_SHIFT;
+    State->Keycodes[0x15B] = WIN32_KEY_LEFT_SUPER;
+    State->Keycodes[0x137] = WIN32_KEY_PRINT_SCREEN;
+    State->Keycodes[0x138] = WIN32_KEY_RIGHT_ALT;
+    State->Keycodes[0x11D] = WIN32_KEY_RIGHT_CONTROL;
+    State->Keycodes[0x036] = WIN32_KEY_RIGHT_SHIFT;
+    State->Keycodes[0x15C] = WIN32_KEY_RIGHT_SUPER;
+    State->Keycodes[0x150] = WIN32_KEY_DOWN;
+    State->Keycodes[0x14B] = WIN32_KEY_LEFT;
+    State->Keycodes[0x14D] = WIN32_KEY_RIGHT;
+    State->Keycodes[0x148] = WIN32_KEY_UP;
+
+    State->Keycodes[0x052] = WIN32_KEY_KP_0;
+    State->Keycodes[0x04F] = WIN32_KEY_KP_1;
+    State->Keycodes[0x050] = WIN32_KEY_KP_2;
+    State->Keycodes[0x051] = WIN32_KEY_KP_3;
+    State->Keycodes[0x04B] = WIN32_KEY_KP_4;
+    State->Keycodes[0x04C] = WIN32_KEY_KP_5;
+    State->Keycodes[0x04D] = WIN32_KEY_KP_6;
+    State->Keycodes[0x047] = WIN32_KEY_KP_7;
+    State->Keycodes[0x048] = WIN32_KEY_KP_8;
+    State->Keycodes[0x049] = WIN32_KEY_KP_9;
+    State->Keycodes[0x04E] = WIN32_KEY_KP_ADD;
+    State->Keycodes[0x053] = WIN32_KEY_KP_DECIMAL;
+    State->Keycodes[0x135] = WIN32_KEY_KP_DIVIDE;
+    State->Keycodes[0x11C] = WIN32_KEY_KP_ENTER;
+    State->Keycodes[0x059] = WIN32_KEY_KP_EQUAL;
+    State->Keycodes[0x037] = WIN32_KEY_KP_MULTIPLY;
+    State->Keycodes[0x04A] = WIN32_KEY_KP_SUBTRACT;
+
+    for (scancode = 0;  scancode < 512;  scancode++)
+    {
+        if (State->Keycodes[scancode] > 0)
+            State->Scancodes[State->Keycodes[scancode]] = scancode;
+    }
+}
+
 internal LRESULT CALLBACK
 Win32MainWindowCallback(HWND Window,
                         UINT Message,
@@ -748,250 +1145,94 @@ Win32ProcessKeyboardMessage(editor_button_state *NewState, bool32 IsDown)
 
 // Notifies shared code of a scroll event
 //
-void _glfwInputScroll(double xoffset, double yoffset)
+internal inline void
+Win32InputScroll(win32_state *State, double xoffset, double yoffset)
 {
     assert(xoffset > -FLT_MAX);
     assert(xoffset < FLT_MAX);
     assert(yoffset > -FLT_MAX);
     assert(yoffset < FLT_MAX);
 
-    nk_gflw3_scroll_callback(xoffset, yoffset);
+    Win32NkScrollCallback(&State->Main, xoffset, yoffset);
+    Win32NkScrollCallback(&State->Debug, xoffset, yoffset);
 }
 
 // Notifies shared code of a Unicode codepoint input event
 // The 'plain' parameter determines whether to emit a regular character event
 //
-void _glfwInputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
+
+internal inline void
+Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
 {
-    assert(mods == (mods & GLFW_MOD_MASK));
+    assert(mods == (mods & WIN32_MOD_MASK));
     assert(plain == 1 || plain == 0);
 
     if (codepoint < 32 || (codepoint > 126 && codepoint < 160))
         return;
 
     if (!State->lockKeyMods)
-        mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
+        mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
     if (plain)
     {
-        nk_glfw3_char_callback(codepoint);
-    }
-}
-
-// Retrieves and translates modifier keys
-//
-static int getKeyMods(void)
-{
-    int mods = 0;
-
-    if (GetKeyState(VK_SHIFT) & 0x8000)
-        mods |= GLFW_MOD_SHIFT;
-    if (GetKeyState(VK_CONTROL) & 0x8000)
-        mods |= GLFW_MOD_CONTROL;
-    if (GetKeyState(VK_MENU) & 0x8000)
-        mods |= GLFW_MOD_ALT;
-    if ((GetKeyState(VK_LWIN) | GetKeyState(VK_RWIN)) & 0x8000)
-        mods |= GLFW_MOD_SUPER;
-    if (GetKeyState(VK_CAPITAL) & 1)
-        mods |= GLFW_MOD_CAPS_LOCK;
-    if (GetKeyState(VK_NUMLOCK) & 1)
-        mods |= GLFW_MOD_NUM_LOCK;
-
-    return mods;
-}
-
-// Create key code translation tables
-//
-static void createKeyTables(win32_state *State)
-{
-    s16 scancode;
-
-    memset(State->Keycodes, -1, sizeof(State->Keycodes));
-    memset(State->Scancodes, -1, sizeof(State->Scancodes));
-
-    State->Keycodes[0x00B] = GLFW_KEY_0;
-    State->Keycodes[0x002] = GLFW_KEY_1;
-    State->Keycodes[0x003] = GLFW_KEY_2;
-    State->Keycodes[0x004] = GLFW_KEY_3;
-    State->Keycodes[0x005] = GLFW_KEY_4;
-    State->Keycodes[0x006] = GLFW_KEY_5;
-    State->Keycodes[0x007] = GLFW_KEY_6;
-    State->Keycodes[0x008] = GLFW_KEY_7;
-    State->Keycodes[0x009] = GLFW_KEY_8;
-    State->Keycodes[0x00A] = GLFW_KEY_9;
-    State->Keycodes[0x01E] = GLFW_KEY_A;
-    State->Keycodes[0x030] = GLFW_KEY_B;
-    State->Keycodes[0x02E] = GLFW_KEY_C;
-    State->Keycodes[0x020] = GLFW_KEY_D;
-    State->Keycodes[0x012] = GLFW_KEY_E;
-    State->Keycodes[0x021] = GLFW_KEY_F;
-    State->Keycodes[0x022] = GLFW_KEY_G;
-    State->Keycodes[0x023] = GLFW_KEY_H;
-    State->Keycodes[0x017] = GLFW_KEY_I;
-    State->Keycodes[0x024] = GLFW_KEY_J;
-    State->Keycodes[0x025] = GLFW_KEY_K;
-    State->Keycodes[0x026] = GLFW_KEY_L;
-    State->Keycodes[0x032] = GLFW_KEY_M;
-    State->Keycodes[0x031] = GLFW_KEY_N;
-    State->Keycodes[0x018] = GLFW_KEY_O;
-    State->Keycodes[0x019] = GLFW_KEY_P;
-    State->Keycodes[0x010] = GLFW_KEY_Q;
-    State->Keycodes[0x013] = GLFW_KEY_R;
-    State->Keycodes[0x01F] = GLFW_KEY_S;
-    State->Keycodes[0x014] = GLFW_KEY_T;
-    State->Keycodes[0x016] = GLFW_KEY_U;
-    State->Keycodes[0x02F] = GLFW_KEY_V;
-    State->Keycodes[0x011] = GLFW_KEY_W;
-    State->Keycodes[0x02D] = GLFW_KEY_X;
-    State->Keycodes[0x015] = GLFW_KEY_Y;
-    State->Keycodes[0x02C] = GLFW_KEY_Z;
-
-    State->Keycodes[0x028] = GLFW_KEY_APOSTROPHE;
-    State->Keycodes[0x02B] = GLFW_KEY_BACKSLASH;
-    State->Keycodes[0x033] = GLFW_KEY_COMMA;
-    State->Keycodes[0x00D] = GLFW_KEY_EQUAL;
-    State->Keycodes[0x029] = GLFW_KEY_GRAVE_ACCENT;
-    State->Keycodes[0x01A] = GLFW_KEY_LEFT_BRACKET;
-    State->Keycodes[0x00C] = GLFW_KEY_MINUS;
-    State->Keycodes[0x034] = GLFW_KEY_PERIOD;
-    State->Keycodes[0x01B] = GLFW_KEY_RIGHT_BRACKET;
-    State->Keycodes[0x027] = GLFW_KEY_SEMICOLON;
-    State->Keycodes[0x035] = GLFW_KEY_SLASH;
-    State->Keycodes[0x056] = GLFW_KEY_WORLD_2;
-
-    State->Keycodes[0x00E] = GLFW_KEY_BACKSPACE;
-    State->Keycodes[0x153] = GLFW_KEY_DELETE;
-    State->Keycodes[0x14F] = GLFW_KEY_END;
-    State->Keycodes[0x01C] = GLFW_KEY_ENTER;
-    State->Keycodes[0x001] = GLFW_KEY_ESCAPE;
-    State->Keycodes[0x147] = GLFW_KEY_HOME;
-    State->Keycodes[0x152] = GLFW_KEY_INSERT;
-    State->Keycodes[0x15D] = GLFW_KEY_MENU;
-    State->Keycodes[0x151] = GLFW_KEY_PAGE_DOWN;
-    State->Keycodes[0x149] = GLFW_KEY_PAGE_UP;
-    State->Keycodes[0x045] = GLFW_KEY_PAUSE;
-    State->Keycodes[0x039] = GLFW_KEY_SPACE;
-    State->Keycodes[0x00F] = GLFW_KEY_TAB;
-    State->Keycodes[0x03A] = GLFW_KEY_CAPS_LOCK;
-    State->Keycodes[0x145] = GLFW_KEY_NUM_LOCK;
-    State->Keycodes[0x046] = GLFW_KEY_SCROLL_LOCK;
-    State->Keycodes[0x03B] = GLFW_KEY_F1;
-    State->Keycodes[0x03C] = GLFW_KEY_F2;
-    State->Keycodes[0x03D] = GLFW_KEY_F3;
-    State->Keycodes[0x03E] = GLFW_KEY_F4;
-    State->Keycodes[0x03F] = GLFW_KEY_F5;
-    State->Keycodes[0x040] = GLFW_KEY_F6;
-    State->Keycodes[0x041] = GLFW_KEY_F7;
-    State->Keycodes[0x042] = GLFW_KEY_F8;
-    State->Keycodes[0x043] = GLFW_KEY_F9;
-    State->Keycodes[0x044] = GLFW_KEY_F10;
-    State->Keycodes[0x057] = GLFW_KEY_F11;
-    State->Keycodes[0x058] = GLFW_KEY_F12;
-    State->Keycodes[0x064] = GLFW_KEY_F13;
-    State->Keycodes[0x065] = GLFW_KEY_F14;
-    State->Keycodes[0x066] = GLFW_KEY_F15;
-    State->Keycodes[0x067] = GLFW_KEY_F16;
-    State->Keycodes[0x068] = GLFW_KEY_F17;
-    State->Keycodes[0x069] = GLFW_KEY_F18;
-    State->Keycodes[0x06A] = GLFW_KEY_F19;
-    State->Keycodes[0x06B] = GLFW_KEY_F20;
-    State->Keycodes[0x06C] = GLFW_KEY_F21;
-    State->Keycodes[0x06D] = GLFW_KEY_F22;
-    State->Keycodes[0x06E] = GLFW_KEY_F23;
-    State->Keycodes[0x076] = GLFW_KEY_F24;
-    State->Keycodes[0x038] = GLFW_KEY_LEFT_ALT;
-    State->Keycodes[0x01D] = GLFW_KEY_LEFT_CONTROL;
-    State->Keycodes[0x02A] = GLFW_KEY_LEFT_SHIFT;
-    State->Keycodes[0x15B] = GLFW_KEY_LEFT_SUPER;
-    State->Keycodes[0x137] = GLFW_KEY_PRINT_SCREEN;
-    State->Keycodes[0x138] = GLFW_KEY_RIGHT_ALT;
-    State->Keycodes[0x11D] = GLFW_KEY_RIGHT_CONTROL;
-    State->Keycodes[0x036] = GLFW_KEY_RIGHT_SHIFT;
-    State->Keycodes[0x15C] = GLFW_KEY_RIGHT_SUPER;
-    State->Keycodes[0x150] = GLFW_KEY_DOWN;
-    State->Keycodes[0x14B] = GLFW_KEY_LEFT;
-    State->Keycodes[0x14D] = GLFW_KEY_RIGHT;
-    State->Keycodes[0x148] = GLFW_KEY_UP;
-
-    State->Keycodes[0x052] = GLFW_KEY_KP_0;
-    State->Keycodes[0x04F] = GLFW_KEY_KP_1;
-    State->Keycodes[0x050] = GLFW_KEY_KP_2;
-    State->Keycodes[0x051] = GLFW_KEY_KP_3;
-    State->Keycodes[0x04B] = GLFW_KEY_KP_4;
-    State->Keycodes[0x04C] = GLFW_KEY_KP_5;
-    State->Keycodes[0x04D] = GLFW_KEY_KP_6;
-    State->Keycodes[0x047] = GLFW_KEY_KP_7;
-    State->Keycodes[0x048] = GLFW_KEY_KP_8;
-    State->Keycodes[0x049] = GLFW_KEY_KP_9;
-    State->Keycodes[0x04E] = GLFW_KEY_KP_ADD;
-    State->Keycodes[0x053] = GLFW_KEY_KP_DECIMAL;
-    State->Keycodes[0x135] = GLFW_KEY_KP_DIVIDE;
-    State->Keycodes[0x11C] = GLFW_KEY_KP_ENTER;
-    State->Keycodes[0x059] = GLFW_KEY_KP_EQUAL;
-    State->Keycodes[0x037] = GLFW_KEY_KP_MULTIPLY;
-    State->Keycodes[0x04A] = GLFW_KEY_KP_SUBTRACT;
-
-    for (scancode = 0;  scancode < 512;  scancode++)
-    {
-        if (State->Keycodes[scancode] > 0)
-            State->Scancodes[State->Keycodes[scancode]] = scancode;
+        Win32NkCharCallback(&State->Main, codepoint);
+        Win32NkCharCallback(&State->Debug, codepoint);
     }
 }
 
 // Notifies shared code of a physical key event
 //
-void _glfwInputKey(win32_state *State, int key, int scancode, int action, int mods)
+internal inline void
+Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
 {
-    assert(key >= 0 || key == GLFW_KEY_UNKNOWN);
-    assert(key <= GLFW_KEY_LAST);
-    assert(action == GLFW_PRESS || action == GLFW_RELEASE);
-    assert(mods == (mods & GLFW_MOD_MASK));
+    assert(key >= 0 || key == WIN32_KEY_UNKNOWN);
+    assert(key <= WIN32_KEY_LAST);
+    assert(action == WIN32_PRESS || action == WIN32_RELEASE);
+    assert(mods == (mods & WIN32_MOD_MASK));
 
-    if (key >= 0 && key <= GLFW_KEY_LAST)
+    if (key >= 0 && key <= WIN32_KEY_LAST)
     {
-        b32 repeated = GLFW_FALSE;
+        b32 repeated = WIN32_FALSE;
 
-        if (action == GLFW_RELEASE && State->keys[key] == GLFW_RELEASE)
+        if (action == WIN32_RELEASE && State->keys[key] == WIN32_RELEASE)
             return;
 
-        if (action == GLFW_PRESS && State->keys[key] == GLFW_PRESS)
-            repeated = GLFW_TRUE;
+        if (action == WIN32_PRESS && State->keys[key] == WIN32_PRESS)
+            repeated = WIN32_TRUE;
 
         State->keys[key] = (char) action;
 
         if (repeated)
-            action = GLFW_REPEAT;
+            action = WIN32_REPEAT;
     }
 
     if (!State->lockKeyMods)
-        mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
+        mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
-    nk_glfw3_key_callback(key, scancode, action, mods);
+    Win32NkKeyCallback(&State->Main, key, scancode, action, mods);
+    Win32NkKeyCallback(&State->Debug, key, scancode, action, mods);
 }
 
 // Notifies shared code of a mouse button click event
 //
-void _glfwInputMouseClick(win32_state *State, int button, int action, int mods)
+internal inline void
+Win32InputMouseClick(win32_state *State, int button, int action, int mods)
 {
     assert(button >= 0);
-    assert(button <= GLFW_MOUSE_BUTTON_LAST);
-    assert(action == GLFW_PRESS || action == GLFW_RELEASE);
-    assert(mods == (mods & GLFW_MOD_MASK));
+    assert(button <= WIN32_MOUSE_BUTTON_LAST);
+    assert(action == WIN32_PRESS || action == WIN32_RELEASE);
+    assert(mods == (mods & WIN32_MOD_MASK));
 
-    if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST)
+    if (button < 0 || button > WIN32_MOUSE_BUTTON_LAST)
         return;
 
     if (!State->lockKeyMods)
-        mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
+        mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
-//    if (action == GLFW_RELEASE && State->stickyMouseButtons)
-//        State->mouseButtons[button] = _GLFW_STICK;
-//    else
     State->MouseButtons[button] = (char) action;
 
-    nk_glfw3_mouse_button_callback(State, button, action);
-//    if (window->callbacks.mouseButton)
-//        window->callbacks.mouseButton((GLFWwindow*) window, button, action, mods);
+    Win32NkMouseButtonCallback(&State->Main, State, button, action);
+    Win32NkMouseButtonCallback(&State->Debug, State, button, action);
 }
 
 internal void
@@ -1022,14 +1263,14 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
             case WM_MOUSEWHEEL:
             {
                 *MouseRotated = (s16)(Message.wParam >> 16);
-                _glfwInputScroll(0.0, (SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA);
+                Win32InputScroll(State, 0.0, (SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA);
             } break;
 
             case WM_MOUSEHWHEEL:
             {
                 // This message is only sent on Windows Vista and later
                 // NOTE: The X-axis is inverted for consistency with macOS and X11
-                _glfwInputScroll(-((SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA), 0.0);
+                Win32InputScroll(State, -((SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA), 0.0);
             } break;
 
             case WM_CHAR:
@@ -1054,7 +1295,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                         codepoint = (WCHAR) Message.wParam;
 
                     State->highSurrogate = 0;
-                    _glfwInputChar(State, codepoint, getKeyMods(), Message.message != WM_SYSCHAR);
+                    Win32InputChar(State, codepoint, Win32GetKeyMods(), Message.message != WM_SYSCHAR);
                 }
 
                 if (Message.message == WM_SYSCHAR && State->keymenu)
@@ -1075,42 +1316,42 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
 
                 UINT uMsg = Message.message;
                 if (uMsg == WM_LBUTTONDOWN || uMsg == WM_LBUTTONUP)
-                    button = GLFW_MOUSE_BUTTON_LEFT;
+                    button = WIN32_MOUSE_BUTTON_LEFT;
                 else if (uMsg == WM_RBUTTONDOWN || uMsg == WM_RBUTTONUP)
-                    button = GLFW_MOUSE_BUTTON_RIGHT;
+                    button = WIN32_MOUSE_BUTTON_RIGHT;
                 else if (uMsg == WM_MBUTTONDOWN || uMsg == WM_MBUTTONUP)
-                    button = GLFW_MOUSE_BUTTON_MIDDLE;
+                    button = WIN32_MOUSE_BUTTON_MIDDLE;
                 else if (GET_XBUTTON_WPARAM(Message.wParam) == XBUTTON1)
-                    button = GLFW_MOUSE_BUTTON_4;
+                    button = WIN32_MOUSE_BUTTON_4;
                 else
-                    button = GLFW_MOUSE_BUTTON_5;
+                    button = WIN32_MOUSE_BUTTON_5;
 
                 if (uMsg == WM_LBUTTONDOWN || uMsg == WM_RBUTTONDOWN ||
                     uMsg == WM_MBUTTONDOWN || uMsg == WM_XBUTTONDOWN)
                 {
-                    action = GLFW_PRESS;
+                    action = WIN32_PRESS;
                 }
                 else
-                    action = GLFW_RELEASE;
+                    action = WIN32_RELEASE;
 
-                for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
+                for (i = 0;  i <= WIN32_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->MouseButtons[i] == GLFW_PRESS)
+                    if (State->MouseButtons[i] == WIN32_PRESS)
                         break;
                 }
 
-                if (i > GLFW_MOUSE_BUTTON_LAST)
+                if (i > WIN32_MOUSE_BUTTON_LAST)
                     SetCapture(State->WindowHandle);
 
-                _glfwInputMouseClick(State, button, action, getKeyMods());
+                Win32InputMouseClick(State, button, action, Win32GetKeyMods());
 
-                for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
+                for (i = 0;  i <= WIN32_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->MouseButtons[i] == GLFW_PRESS)
+                    if (State->MouseButtons[i] == WIN32_PRESS)
                         break;
                 }
 
-                if (i > GLFW_MOUSE_BUTTON_LAST)
+                if (i > WIN32_MOUSE_BUTTON_LAST)
                     ReleaseCapture();
             } break;
             
@@ -1120,8 +1361,8 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
             case WM_KEYUP:
             {
                 int key, scancode;
-                const int action = (HIWORD(Message.lParam) & KF_UP) ? GLFW_RELEASE : GLFW_PRESS;
-                const int mods = getKeyMods();
+                const int action = (HIWORD(Message.lParam) & KF_UP) ? WIN32_RELEASE : WIN32_PRESS;
+                const int mods = Win32GetKeyMods();
 
                 scancode = (HIWORD(Message.lParam) & (KF_EXTENDED | 0xff));
                 if (!scancode)
@@ -1151,7 +1392,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                     if (HIWORD(Message.lParam) & KF_EXTENDED)
                     {
                         // Right side keys have the extended key bit set
-                        key = GLFW_KEY_RIGHT_CONTROL;
+                        key = WIN32_KEY_RIGHT_CONTROL;
                     }
                     else
                     {
@@ -1180,7 +1421,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                         }
 
                         // This is a regular Left Ctrl message
-                        key = GLFW_KEY_LEFT_CONTROL;
+                        key = WIN32_KEY_LEFT_CONTROL;
                     }
                 }
                 else if (Message.wParam == VK_PROCESSKEY)
@@ -1190,22 +1431,22 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                     break;
                 }
 
-                if (action == GLFW_RELEASE && Message.wParam == VK_SHIFT)
+                if (action == WIN32_RELEASE && Message.wParam == VK_SHIFT)
                 {
                     // HACK: Release both Shift keys on Shift up event, as when both
                     //       are pressed the first release does not emit any event
                     // NOTE: The other half of this is in _glfwPollEventsWin32
-                    _glfwInputKey(State, GLFW_KEY_LEFT_SHIFT, scancode, action, mods);
-                    _glfwInputKey(State, GLFW_KEY_RIGHT_SHIFT, scancode, action, mods);
+                    Win32InputKey(State, WIN32_KEY_LEFT_SHIFT, scancode, action, mods);
+                    Win32InputKey(State, WIN32_KEY_RIGHT_SHIFT, scancode, action, mods);
                 }
                 else if (Message.wParam == VK_SNAPSHOT)
                 {
                     // HACK: Key down is not reported for the Print Screen key
-                    _glfwInputKey(State, key, scancode, GLFW_PRESS, mods);
-                    _glfwInputKey(State, key, scancode, GLFW_RELEASE, mods);
+                    Win32InputKey(State, key, scancode, WIN32_PRESS, mods);
+                    Win32InputKey(State, key, scancode, WIN32_RELEASE, mods);
                 }
                 else
-                    _glfwInputKey(State, key, scancode, action, mods);
+                    Win32InputKey(State, key, scancode, action, mods);
 
 #if 1
                 uint32 VKCode = (uint32)Message.wParam;
@@ -1851,7 +2092,7 @@ WinMain(HINSTANCE Instance,
     DEBUGSetEventRecording(true);
 
     win32_state Win32State = {};
-    createKeyTables(&Win32State);
+    Win32CreateKeyTables(&Win32State);
 
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
@@ -1962,6 +2203,97 @@ WinMain(HINSTANCE Instance,
             EditorMemory.PlatformAPI.AllocateMemory = Win32AllocateMemory;
             EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
 
+            EditorMemory.PlatformAPI.UI.NkBegin = nk_begin;
+            EditorMemory.PlatformAPI.UI.NkEnd = nk_end;
+
+            EditorMemory.PlatformAPI.UI.NkLayoutRowDynamic = nk_layout_row_dynamic;
+            EditorMemory.PlatformAPI.UI.NkLayoutRowBegin = nk_layout_row_begin;
+            EditorMemory.PlatformAPI.UI.NkLayoutRowPush = nk_layout_row_push;
+            EditorMemory.PlatformAPI.UI.NkLayoutRowEnd = nk_layout_row_end;
+
+            EditorMemory.PlatformAPI.UI.NkText = nk_text;
+            EditorMemory.PlatformAPI.UI.NkTextColored = nk_text_colored;
+            EditorMemory.PlatformAPI.UI.NkTextWrap = nk_text_wrap;
+            EditorMemory.PlatformAPI.UI.NkTextWrapColored = nk_text_wrap_colored;
+            EditorMemory.PlatformAPI.UI.NkLabel = nk_label;
+            EditorMemory.PlatformAPI.UI.NkLabelColored = nk_label_colored;
+            EditorMemory.PlatformAPI.UI.NkLabelWrap = nk_label_wrap;
+            EditorMemory.PlatformAPI.UI.NkLabelColoredWrap = nk_label_colored_wrap;
+            EditorMemory.PlatformAPI.UI.NkImage = nk_image;
+            EditorMemory.PlatformAPI.UI.NkImageColor = nk_image_color;
+
+            EditorMemory.PlatformAPI.UI.NkLabelf = nk_labelf;
+            EditorMemory.PlatformAPI.UI.NkLabelfColored = nk_labelf_colored;
+            EditorMemory.PlatformAPI.UI.NkLabelfWrap = nk_labelf_wrap;
+            EditorMemory.PlatformAPI.UI.NkLabelfColoredWrap = nk_labelf_colored_wrap;
+            EditorMemory.PlatformAPI.UI.NkLabelfv = nk_labelfv;
+            EditorMemory.PlatformAPI.UI.NkLabelfvColored = nk_labelfv_colored;
+            EditorMemory.PlatformAPI.UI.NkLabelfvWrap = nk_labelfv_wrap;
+            EditorMemory.PlatformAPI.UI.NkLabelfvColoredWrap = nk_labelfv_colored_wrap;
+            EditorMemory.PlatformAPI.UI.NkValueBool = nk_value_bool;
+            EditorMemory.PlatformAPI.UI.NkValueInt = nk_value_int;
+            EditorMemory.PlatformAPI.UI.NkValueUint = nk_value_uint;
+            EditorMemory.PlatformAPI.UI.NkValueFloat = nk_value_float;
+            EditorMemory.PlatformAPI.UI.NkValueColorByte = nk_value_color_byte;
+            EditorMemory.PlatformAPI.UI.NkValueColorFloat = nk_value_color_float;
+            EditorMemory.PlatformAPI.UI.NkValueColorHex = nk_value_color_hex;
+
+            EditorMemory.PlatformAPI.UI.NkButtonText = nk_button_text;
+            EditorMemory.PlatformAPI.UI.NkButtonLabel = nk_button_label;
+            EditorMemory.PlatformAPI.UI.NkButtonColor = nk_button_color;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbol = nk_button_symbol;
+            EditorMemory.PlatformAPI.UI.NkButtonImage = nk_button_image;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbolLabel = nk_button_symbol_label;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbolText = nk_button_symbol_text;
+            EditorMemory.PlatformAPI.UI.NkButtonImageLabel = nk_button_image_label;
+            EditorMemory.PlatformAPI.UI.NkButtonImageText = nk_button_image_text;
+            EditorMemory.PlatformAPI.UI.NkButtonTextStyled = nk_button_text_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonLabelStyled = nk_button_label_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbolStyled = nk_button_symbol_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonImageStyled = nk_button_image_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbolTextStyled = nk_button_symbol_text_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonSymbolLabelStyled = nk_button_symbol_label_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonImageLabelStyled = nk_button_image_label_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonImageTextStyled = nk_button_image_text_styled;
+            EditorMemory.PlatformAPI.UI.NkButtonSetBehavior = nk_button_set_behavior;
+            EditorMemory.PlatformAPI.UI.NkButtonPushBehavior = nk_button_push_behavior;
+            EditorMemory.PlatformAPI.UI.NkButtonPopBehavior = nk_button_pop_behavior;
+
+            EditorMemory.PlatformAPI.UI.NkCheckLabel = nk_check_label;
+            EditorMemory.PlatformAPI.UI.NkCheckText = nk_check_text;
+            EditorMemory.PlatformAPI.UI.NkCheckTextAlign = nk_check_text_align;
+            EditorMemory.PlatformAPI.UI.NkCheckFlagsLabel = nk_check_flags_label;
+            EditorMemory.PlatformAPI.UI.NkCheckFlagsText = nk_check_flags_text;
+            EditorMemory.PlatformAPI.UI.NkCheckboxLabel = nk_checkbox_label;
+            EditorMemory.PlatformAPI.UI.NkCheckboxLabelAlign = nk_checkbox_label_align;
+            EditorMemory.PlatformAPI.UI.NkCheckboxText = nk_checkbox_text;
+            EditorMemory.PlatformAPI.UI.NkCheckboxTextAlign = nk_checkbox_text_align;
+            EditorMemory.PlatformAPI.UI.NkCheckboxFlagsLabel = nk_checkbox_flags_label;
+            EditorMemory.PlatformAPI.UI.NkCheckboxFlagsText = nk_checkbox_flags_text;
+
+            EditorMemory.PlatformAPI.UI.NkEditString = nk_edit_string;
+            EditorMemory.PlatformAPI.UI.NkEditStringZeroTerminated = nk_edit_string_zero_terminated;
+            EditorMemory.PlatformAPI.UI.NkEditBuffer = nk_edit_buffer;
+            EditorMemory.PlatformAPI.UI.NkEditFocus = nk_edit_focus;
+            EditorMemory.PlatformAPI.UI.NkEditUnfocus = nk_edit_unfocus;
+
+            EditorMemory.PlatformAPI.UI.NkMurmurHash = nk_murmur_hash;
+            EditorMemory.PlatformAPI.UI.NkTriangleFromDirection = nk_triangle_from_direction;
+
+            EditorMemory.PlatformAPI.UI.NkVec2 = nk_vec2;
+            EditorMemory.PlatformAPI.UI.NkVec2i = nk_vec2i;
+            EditorMemory.PlatformAPI.UI.NkVec2v = nk_vec2v;
+            EditorMemory.PlatformAPI.UI.NkVec2iv = nk_vec2iv;
+
+            EditorMemory.PlatformAPI.UI.NkGetNullRect = nk_get_null_rect;
+            EditorMemory.PlatformAPI.UI.NkRect = nk_rect;
+            EditorMemory.PlatformAPI.UI.NkRecti = nk_recti;
+            EditorMemory.PlatformAPI.UI.NkRecta = nk_recta;
+            EditorMemory.PlatformAPI.UI.NkRectv = nk_rectv;
+            EditorMemory.PlatformAPI.UI.NkRectiv = nk_rectiv;
+            EditorMemory.PlatformAPI.UI.NkRectPos = nk_rect_pos;
+            EditorMemory.PlatformAPI.UI.NkRectSize = nk_rect_size;
+            
 #if EDITOR_INTERNAL
             EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
             EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
@@ -2005,22 +2337,41 @@ WinMain(HINSTANCE Instance,
 
             struct nk_context *nk;
             struct nk_colorf bg;
-            nk = nk_glfw3_init(NK_GLFW3_INSTALL_CALLBACKS);
+            nk = Win32InitNkContext(&Win32State.Main);
             bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
             char window_title[64] = "Title";
 
-            {struct nk_font_atlas *atlas;
-                nk_glfw3_font_stash_begin(&atlas);
+            {
+                struct nk_font_atlas *atlas;
+                Win32NkFontStashBegin(&Win32State.Main, &atlas);
                 struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
                 /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
                 /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
                 /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
                 /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
                 /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
-                nk_glfw3_font_stash_end();
+                Win32NkFontStashEnd(&Win32State.Main);
                 nk_style_load_all_cursors(nk, atlas->cursors);
-                nk_style_set_font(nk, &droid->handle);}
-                
+                nk_style_set_font(nk, &droid->handle);
+            }
+
+            struct nk_context *debug_nk;
+            debug_nk = Win32InitNkContext(&Win32State.Debug);
+
+            {
+                struct nk_font_atlas *atlas;
+                Win32NkFontStashBegin(&Win32State.Debug, &atlas);
+                struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
+                /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
+                /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
+                /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
+                /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
+                /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
+                Win32NkFontStashEnd(&Win32State.Debug);
+                nk_style_load_all_cursors(debug_nk, atlas->cursors);
+                nk_style_set_font(debug_nk, &droid->handle);
+            }
+            
             GlobalRunning = true;
             while(GlobalRunning)
             {
@@ -2123,9 +2474,13 @@ WinMain(HINSTANCE Instance,
 // NOTE(paul): Editor Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
-                                   RenderCommands.Width, RenderCommands.Height,
-                                   TargetSecondsPerFrame);
+                Win32NkUpdateInputs(&Win32State, &Win32State.Main, Dimension.Width, Dimension.Height,
+                                    RenderCommands.Width, RenderCommands.Height,
+                                    TargetSecondsPerFrame);
+
+                Win32NkUpdateInputs(&Win32State, &Win32State.Debug, Dimension.Width, Dimension.Height,
+                                    RenderCommands.Width, RenderCommands.Height,
+                                    TargetSecondsPerFrame);
 
                 BEGIN_BLOCK("Editor Update");
                 if(!GlobalPause)
@@ -2146,103 +2501,43 @@ WinMain(HINSTANCE Instance,
                 
                 END_BLOCK();
 #if 0
-                if (nk_begin(nk, "Demo", nk_rect(50, 50, 230, 250),
-                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                             NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
-                {
-                    nk_layout_row_dynamic(nk, 30, 4);
-
-                    if (nk_button_label(nk, "Make Windowed"))
-                    {
-                    }
-
-                    if (nk_button_label(nk, "Maximize"))
-                    {
-                    }
-                    if (nk_button_label(nk, "Iconify"))
-                    {
-                    }
-                    if (nk_button_label(nk, "Restore"))
-                    {
-                    }
-
-                    nk_layout_row_dynamic(nk, 30, 2);
-
-                    if (nk_button_label(nk, "Hide (for 3s)"))
-                    {
-                    }
-
-                    if (nk_button_label(nk, "Request Attention (after 3s)"))
-                    {
-                    }
-
-                    nk_layout_row_dynamic(nk, 30, 1);
-
-                    nk_label(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
-
-                    nk_flags events;
-                    const nk_flags flags = NK_EDIT_FIELD |
-                        NK_EDIT_SIG_ENTER |
-                        NK_EDIT_GOTO_END_ON_ACTIVATE;
-
-                    nk_layout_row_begin(nk, NK_DYNAMIC, 30, 2);
-                    nk_layout_row_push(nk, 1.f / 3.f);
-                    nk_label(nk, "Title", NK_TEXT_LEFT);
-                    nk_layout_row_push(nk, 2.f / 3.f);
-                    events = nk_edit_string_zero_terminated(nk, flags, window_title,
-                                                            sizeof(window_title), NULL);
-                    if (events & NK_EDIT_COMMITED)
-                    {
-                    }
-
-                    nk_layout_row_end(nk);
-                    nk_label(nk, "Platform does not support window position", NK_TEXT_LEFT);
-
-                    nk_layout_row_dynamic(nk, 30, 3);
-                    nk_label(nk, "Size", NK_TEXT_LEFT);
-
-                    nk_label(nk, "Framebuffer Size", NK_TEXT_LEFT);
-                    nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands.Width);
-                    nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands.Height);
-                }
-                nk_end(nk);
 
                 /* GUI */
-                if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
+                if (nk_begin(debug_nk, "Demo", nk_rect(200, 200, 230, 250),
                              NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                              NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
                 {
                     enum {EASY, HARD};
                     static int op = EASY;
                     static int property = 20;
-                    nk_layout_row_static(ctx, 30, 80, 1);
-                    if (nk_button_label(ctx, "button"))
+                    nk_layout_row_static(debug_nk, 30, 80, 1);
+                    if (nk_button_label(debug_nk, "button"))
                     {
 //                        fprintf(stdout, "button pressed\n");
                     }
 
-                    nk_layout_row_dynamic(ctx, 30, 2);
-                    if (nk_option_label(ctx, "easy", op == EASY)) op = EASY;
-                    if (nk_option_label(ctx, "hard", op == HARD)) op = HARD;
+                    nk_layout_row_dynamic(debug_nk, 30, 2);
+                    if (nk_option_label(debug_nk, "easy", op == EASY)) op = EASY;
+                    if (nk_option_label(debug_nk, "hard", op == HARD)) op = HARD;
 
-                    nk_layout_row_dynamic(ctx, 25, 1);
-                    nk_property_int(ctx, "Compression:", 0, &property, 100, 10, 1);
+                    nk_layout_row_dynamic(debug_nk, 25, 1);
+                    nk_property_int(debug_nk, "Compression:", 0, &property, 100, 10, 1);
 
-                    nk_layout_row_dynamic(ctx, 20, 1);
-                    nk_label(ctx, "background:", NK_TEXT_LEFT);
-                    nk_layout_row_dynamic(ctx, 25, 1);
-                    if (nk_combo_begin_color(ctx, nk_rgb_cf(bg), nk_vec2(nk_widget_width(ctx),400))) {
-                        nk_layout_row_dynamic(ctx, 120, 1);
-                        bg = nk_color_picker(ctx, bg, NK_RGBA);
-                        nk_layout_row_dynamic(ctx, 25, 1);
-                        bg.r = nk_propertyf(ctx, "#R:", 0, bg.r, 1.0f, 0.01f,0.005f);
-                        bg.g = nk_propertyf(ctx, "#G:", 0, bg.g, 1.0f, 0.01f,0.005f);
-                        bg.b = nk_propertyf(ctx, "#B:", 0, bg.b, 1.0f, 0.01f,0.005f);
-                        bg.a = nk_propertyf(ctx, "#A:", 0, bg.a, 1.0f, 0.01f,0.005f);
-                        nk_combo_end(ctx);
+                    nk_layout_row_dynamic(debug_nk, 20, 1);
+                    nk_label(debug_nk, "background:", NK_TEXT_LEFT);
+                    nk_layout_row_dynamic(debug_nk, 25, 1);
+                    if (nk_combo_begin_color(debug_nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(debug_nk),400))) {
+                        nk_layout_row_dynamic(debug_nk, 120, 1);
+                        bg = nk_color_picker(debug_nk, bg, NK_RGBA);
+                        nk_layout_row_dynamic(debug_nk, 25, 1);
+                        bg.r = nk_propertyf(debug_nk, "#R:", 0, bg.r, 1.0f, 0.01f,0.005f);
+                        bg.g = nk_propertyf(debug_nk, "#G:", 0, bg.g, 1.0f, 0.01f,0.005f);
+                        bg.b = nk_propertyf(debug_nk, "#B:", 0, bg.b, 1.0f, 0.01f,0.005f);
+                        bg.a = nk_propertyf(debug_nk, "#A:", 0, bg.a, 1.0f, 0.01f,0.005f);
+                        nk_combo_end(debug_nk);
                     }
                 }
-                nk_end(ctx);
+                nk_end(debug_nk);
 #endif
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -2324,7 +2619,8 @@ WinMain(HINSTANCE Instance,
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                nk_glfw3_render(NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.Main, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.Debug, NK_ANTI_ALIASING_ON);
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);
 

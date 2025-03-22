@@ -460,3 +460,121 @@ OpenGLManageTextures(texture_op *First)
     }
 }
 
+
+internal void
+NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
+{
+    glGenTextures(1, &Ogl->font_tex);
+    glBindTexture(GL_TEXTURE_2D, Ogl->font_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)width, (GLsizei)height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, image);
+}
+
+internal void
+NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
+{
+    /* setup global state */
+    struct nk_opengl *dev = &NkWin32->ogl;
+    glPushAttrib(GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_TRANSFORM_BIT);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_SCISSOR_TEST);
+    glEnable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    /* setup viewport/project */
+    glViewport(0,0,(GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0.0f, NkWin32->width, NkWin32->height, 0.0f, -1.0f, 1.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    {
+        GLsizei vs = sizeof(struct nk_gl_vertex);
+        size_t vp = offsetof(struct nk_gl_vertex, position);
+        size_t vt = offsetof(struct nk_gl_vertex, uv);
+        size_t vc = offsetof(struct nk_gl_vertex, col);
+
+        /* convert from command queue into draw list and draw to screen */
+        const struct nk_draw_command *cmd;
+        const nk_draw_index *offset = NULL;
+        struct nk_buffer vbuf, ebuf;
+
+        /* fill convert configuration */
+        struct nk_convert_config config;
+        static const struct nk_draw_vertex_layout_element vertex_layout[] = {
+            {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_gl_vertex, position)},
+            {NK_VERTEX_TEXCOORD, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_gl_vertex, uv)},
+            {NK_VERTEX_COLOR, NK_FORMAT_R8G8B8A8, NK_OFFSETOF(struct nk_gl_vertex, col)},
+            {NK_VERTEX_LAYOUT_END}
+        };
+        memset(&config, 0, sizeof(config));
+        config.vertex_layout = vertex_layout;
+        config.vertex_size = sizeof(struct nk_gl_vertex);
+        config.vertex_alignment = NK_ALIGNOF(struct nk_gl_vertex);
+        config.tex_null = dev->tex_null;
+        config.circle_segment_count = 22;
+        config.curve_segment_count = 22;
+        config.arc_segment_count = 22;
+        config.global_alpha = 1.0f;
+        config.shape_AA = AA;
+        config.line_AA = AA;
+
+        /* convert shapes into vertexes */
+        nk_buffer_init_default(&vbuf);
+        nk_buffer_init_default(&ebuf);
+        nk_convert(&NkWin32->ctx, &dev->cmds, &vbuf, &ebuf, &config);
+
+        /* setup vertex buffer pointer */
+        {const void *vertices = nk_buffer_memory_const(&vbuf);
+            glVertexPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vp));
+            glTexCoordPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vt));
+            glColorPointer(4, GL_UNSIGNED_BYTE, vs, (const void*)((const nk_byte*)vertices + vc));}
+
+        /* iterate over and execute each draw command */
+        offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);
+        nk_draw_foreach(cmd, &NkWin32->ctx, &dev->cmds)
+        {
+            if (!cmd->elem_count) continue;
+            glBindTexture(GL_TEXTURE_2D, (GLuint)cmd->texture.id);
+            glScissor(
+                (GLint)(cmd->clip_rect.x * NkWin32->fb_scale.x),
+                (GLint)((NkWin32->height - (GLint)(cmd->clip_rect.y + cmd->clip_rect.h)) * NkWin32->fb_scale.y),
+                (GLint)(cmd->clip_rect.w * NkWin32->fb_scale.x),
+                (GLint)(cmd->clip_rect.h * NkWin32->fb_scale.y));
+            glDrawElements(GL_TRIANGLES, (GLsizei)cmd->elem_count, GL_UNSIGNED_SHORT, offset);
+            offset += cmd->elem_count;
+        }
+        nk_clear(&NkWin32->ctx);
+        nk_buffer_clear(&dev->cmds);
+        nk_buffer_free(&vbuf);
+        nk_buffer_free(&ebuf);
+    }
+
+    /* default OpenGL state */
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
+    glDisable(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glPopAttrib();
+}

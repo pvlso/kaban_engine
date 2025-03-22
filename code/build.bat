@@ -41,6 +41,9 @@ if %BuildDebug% == true (
    del lock.tmp
 
    cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%
+   cl %CommonCompilerFlagsD% -wd4116 -wd4244 ..\code\example\canvas.c -Fmwin32_engine.map /link %CommonLinkerFlags%
+   cl %CommonCompilerFlagsD% -wd4116 -wd4244 -wd4701 ..\code\example\extended.c -Fmwin32_engine.map /link %CommonLinkerFlags%
+   cl %CommonCompilerFlagsD% -wd4116 -wd4244 -wd4701 ..\code\example\skinning.c -Fmwin32_engine.map /link %CommonLinkerFlags%
 REM   cl %CommonCompilerFlagsD% ..\code\win32_engine_glfw.cpp -Fmwin32_engine_glfw.map /link %CommonLinkerFlags% glfw3dll.lib
 
 ) else (

@@ -131,9 +131,12 @@ engine_memory *DebugGlobalMemory;
 #endif
 
 platform_api Platform;
+
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
     Platform = Memory->PlatformAPI;    
+
+    nk_ui UI = Platform.UI;
     
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
@@ -247,66 +250,66 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
-    if (nk_begin(nk, "Demo", nk_rect(50, 50, 230, 250),
-                 NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                 NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+    if (UI.NkBegin(nk, "Demo", UI.NkRect(50, 50, 230, 250),
+                            NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+                            NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
     {
-        nk_layout_row_dynamic(nk, 30, 4);
+        UI.NkLayoutRowDynamic(nk, 30, 4);
 
-        if (nk_button_label(nk, "Make Windowed"))
+        if (UI.NkButtonLabel(nk, "Make Windowed"))
         {
         }
 
-        if (nk_button_label(nk, "Maximize"))
+        if (UI.NkButtonLabel(nk, "Maximize"))
         {
         }
-        if (nk_button_label(nk, "Iconify"))
+        if (UI.NkButtonLabel(nk, "Iconify"))
         {
         }
-        if (nk_button_label(nk, "Restore"))
-        {
-        }
-
-        nk_layout_row_dynamic(nk, 30, 2);
-
-        if (nk_button_label(nk, "Hide (for 3s)"))
+        if (UI.NkButtonLabel(nk, "Restore"))
         {
         }
 
-        if (nk_button_label(nk, "Request Attention (after 3s)"))
+        UI.NkLayoutRowDynamic(nk, 30, 2);
+
+        if (UI.NkButtonLabel(nk, "Hide (for 3s)"))
         {
         }
 
-        nk_layout_row_dynamic(nk, 30, 1);
+        if (UI.NkButtonLabel(nk, "Request Attention (after 3s)"))
+        {
+        }
 
-        nk_label(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
+        UI.NkLayoutRowDynamic(nk, 30, 1);
+
+        UI.NkLabel(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
 
         nk_flags events;
         const nk_flags flags = NK_EDIT_FIELD |
             NK_EDIT_SIG_ENTER |
             NK_EDIT_GOTO_END_ON_ACTIVATE;
 
-        nk_layout_row_begin(nk, NK_DYNAMIC, 30, 2);
-        nk_layout_row_push(nk, 1.f / 3.f);
-        nk_label(nk, "Title", NK_TEXT_LEFT);
-        nk_layout_row_push(nk, 2.f / 3.f);
-        events = nk_edit_string_zero_terminated(nk, flags, EditorState->window_title,
-                                                sizeof(EditorState->window_title), NULL);
+        UI.NkLayoutRowBegin(nk, NK_DYNAMIC, 30, 2);
+        UI.NkLayoutRowPush(nk, 1.f / 3.f);
+        UI.NkLabel(nk, "Title", NK_TEXT_LEFT);
+        UI.NkLayoutRowPush(nk, 2.f / 3.f);
+        events = UI.NkEditStringZeroTerminated(nk, flags, EditorState->window_title,
+                                               sizeof(EditorState->window_title), NULL);
         if (events & NK_EDIT_COMMITED)
         {
         }
 
-        nk_layout_row_end(nk);
-        nk_label(nk, "Platform does not support window position", NK_TEXT_LEFT);
+        UI.NkLayoutRowEnd(nk);
+        UI.NkLabel(nk, "Platform does not support window position", NK_TEXT_LEFT);
 
-        nk_layout_row_dynamic(nk, 30, 3);
-        nk_label(nk, "Size", NK_TEXT_LEFT);
+        UI.NkLayoutRowDynamic(nk, 30, 3);
+        UI.NkLabel(nk, "Size", NK_TEXT_LEFT);
 
-        nk_label(nk, "Framebuffer Size", NK_TEXT_LEFT);
-        nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Width);
-        nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Height);
+        UI.NkLabel(nk, "Framebuffer Size", NK_TEXT_LEFT);
+        UI.NkLabelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Width);
+        UI.NkLabelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Height);
     }
-    nk_end(nk);
+    UI.NkEnd(nk);
 
 #if 0
     if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
