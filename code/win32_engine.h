@@ -38,25 +38,24 @@ struct win32_state
 {
     wchar_t EXEFileName[WIN32_STATE_FILE_NAME_COUNT];
     wchar_t *OnePastLastEXEFileNameSlash;
-
-    HWND Handle;
     
+    HWND WindowHandle;
+
     WCHAR highSurrogate;
     b32 lockKeyMods;
     b32 stickyKeys;
     b32 stickyMouseButtons;
     b32 keymenu;
 
-    short int           keycodes[512];
-    short int           scancodes[GLFW_KEY_LAST + 1];
-    char                keynames[GLFW_KEY_LAST + 1][5];
+    s16 Keycodes[512];
+    s16 Scancodes[GLFW_KEY_LAST + 1];
 
-    char                mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1];
-    char                keys[GLFW_KEY_LAST + 1];
+    char MouseButtons[GLFW_MOUSE_BUTTON_LAST + 1];
+    char keys[GLFW_KEY_LAST + 1];
 
-    int                 cursorMode;
-    double              virtualCursorPosX, virtualCursorPosY;
-    int                 lastCursorPosX, lastCursorPosY;
+    s32 cursorMode;
+    f64 virtualCursorPosX, virtualCursorPosY;
+    s32 lastCursorPosX, lastCursorPosY;
 };
 
 struct platform_work_queue_entry
@@ -94,12 +93,12 @@ struct win32_platform_file_group
 };
 
 void glfwGetCursorPos(win32_state *State, double *x, double *y);
-double glfwGetTime(void);
 const char * glfwGetClipboardString(void);
 void glfwSetClipboardString(const char *str);
-int glfwGetKey(win32_state *State, int keycode);
+int Win32GetKey(win32_state *State, int keycode);
 void glfwSetCursorPos(win32_state *State, double x, double y);
 int glfwGetMouseButton(win32_state *State, int buttoncode);
+f32 Win32GetTime(void);
 
 #define WIN32_EDITOR_H
 #endif

@@ -53,6 +53,7 @@ struct editor_state
     memory_arena ModeArena;
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
 
+    char window_title[64];
     editor_mode EditorMode;
     union
     {

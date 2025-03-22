@@ -11,21 +11,6 @@
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
 
-#define NK_IMPLEMENTATION
-#define NK_PRIVATE
-#define NK_INCLUDE_FIXED_TYPES
-#define NK_INCLUDE_FONT_BAKING
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_STANDARD_IO
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
-#include "nuklear.h"
-
-enum {EASY, HARD};
-static int op = EASY;
-static float value = 0.6f;
-static int i =  20;
-struct nk_context ctx;
-
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
 {
@@ -184,6 +169,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(!EditorState)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
+        char window_title[64] = "Title";
 #if 0
         struct nk_font_atlas atlas = {};
         nk_font_atlas_init_default(&atlas);
@@ -261,6 +247,66 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
+    if (nk_begin(nk, "Demo", nk_rect(50, 50, 230, 250),
+                 NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+                 NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+    {
+        nk_layout_row_dynamic(nk, 30, 4);
+
+        if (nk_button_label(nk, "Make Windowed"))
+        {
+        }
+
+        if (nk_button_label(nk, "Maximize"))
+        {
+        }
+        if (nk_button_label(nk, "Iconify"))
+        {
+        }
+        if (nk_button_label(nk, "Restore"))
+        {
+        }
+
+        nk_layout_row_dynamic(nk, 30, 2);
+
+        if (nk_button_label(nk, "Hide (for 3s)"))
+        {
+        }
+
+        if (nk_button_label(nk, "Request Attention (after 3s)"))
+        {
+        }
+
+        nk_layout_row_dynamic(nk, 30, 1);
+
+        nk_label(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
+
+        nk_flags events;
+        const nk_flags flags = NK_EDIT_FIELD |
+            NK_EDIT_SIG_ENTER |
+            NK_EDIT_GOTO_END_ON_ACTIVATE;
+
+        nk_layout_row_begin(nk, NK_DYNAMIC, 30, 2);
+        nk_layout_row_push(nk, 1.f / 3.f);
+        nk_label(nk, "Title", NK_TEXT_LEFT);
+        nk_layout_row_push(nk, 2.f / 3.f);
+        events = nk_edit_string_zero_terminated(nk, flags, EditorState->window_title,
+                                                sizeof(EditorState->window_title), NULL);
+        if (events & NK_EDIT_COMMITED)
+        {
+        }
+
+        nk_layout_row_end(nk);
+        nk_label(nk, "Platform does not support window position", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(nk, 30, 3);
+        nk_label(nk, "Size", NK_TEXT_LEFT);
+
+        nk_label(nk, "Framebuffer Size", NK_TEXT_LEFT);
+        nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Width);
+        nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Height);
+    }
+    nk_end(nk);
 
 #if 0
     if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),

@@ -30,7 +30,7 @@ NK_API void                 nk_glfw3_shutdown(void);
 NK_API void                 nk_glfw3_char_callback(unsigned int codepoint);
 NK_API void                 nk_glfw3_key_callback(int key, int scancode, int action, int mods);
 NK_API void                 nk_gflw3_scroll_callback(double xoff, double yoff);
-NK_API void                 nk_glfw3_mouse_button_callback(int button, int action, int mods);
+NK_API void                 nk_glfw3_mouse_button_callback(int button, int action, int modsb);
 
 #endif
 
@@ -276,12 +276,13 @@ nk_glfw3_mouse_button_callback(win32_state *State, int button, int action)
     if (button != GLFW_MOUSE_BUTTON_LEFT) return;
     glfwGetCursorPos(State, &x, &y);
     if (action == GLFW_PRESS)  {
-        double dt = glfwGetTime() - glfw.last_button_click;
+        double dt = Win32GetTime() - glfw.last_button_click;
         if (dt > NK_GLFW_DOUBLE_CLICK_LO && dt < NK_GLFW_DOUBLE_CLICK_HI) {
             glfw.is_double_click_down = nk_true;
             glfw.double_click_pos = nk_vec2((float)x, (float)y);
         }
-        glfw.last_button_click = glfwGetTime();
+
+        glfw.last_button_click = Win32GetTime();
     } else glfw.is_double_click_down = nk_false;
 }
 
@@ -320,7 +321,7 @@ nk_glfw3_init(enum nk_glfw_init_state init_state)
     glfw.is_double_click_down = nk_false;
     glfw.double_click_pos = nk_vec2(0, 0);
 
-//    glfw.delta_time_seconds_last = (float)glfwGetTime();
+    glfw.delta_time_seconds_last = Win32GetTime();
 
     return &glfw.ctx;
 }
@@ -378,15 +379,15 @@ nk_glfw3_new_frame(win32_state *State, u32 WindowWidth, u32 WindowHeight,
     if (k_state[NK_KEY_SCROLL_UP] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_UP, k_state[NK_KEY_SCROLL_UP]);
     if (k_state[NK_KEY_SCROLL_DOWN] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_DOWN, k_state[NK_KEY_SCROLL_DOWN]);
 
-    nk_input_key(ctx, NK_KEY_TEXT_START, glfwGetKey(State, GLFW_KEY_HOME) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_TEXT_END, glfwGetKey(State, GLFW_KEY_END) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_START, glfwGetKey(State, GLFW_KEY_HOME) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_END, glfwGetKey(State, GLFW_KEY_END) == GLFW_PRESS);
-    nk_input_key(ctx, NK_KEY_SHIFT, glfwGetKey(State, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
-                                    glfwGetKey(State, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_START, Win32GetKey(State, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_END, Win32GetKey(State, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_START, Win32GetKey(State, GLFW_KEY_HOME) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_END, Win32GetKey(State, GLFW_KEY_END) == GLFW_PRESS);
+    nk_input_key(ctx, NK_KEY_SHIFT, Win32GetKey(State, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS||
+                                    Win32GetKey(State, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
 
-    if (glfwGetKey(State, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-        glfwGetKey(State, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {
+    if (Win32GetKey(State, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+        Win32GetKey(State, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS) {
         /* Note these are physical keys and won't respect any layouts/key mapping */
         if (k_state[NK_KEY_COPY] >= 0) nk_input_key(ctx, NK_KEY_COPY, k_state[NK_KEY_COPY]);
         if (k_state[NK_KEY_PASTE] >= 0) nk_input_key(ctx, NK_KEY_PASTE, k_state[NK_KEY_PASTE]);

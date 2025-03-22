@@ -18,14 +18,6 @@
 #include "win32_defines.h"
 #include "win32_engine.h"
 
-#define NK_INCLUDE_FIXED_TYPES
-//#define NK_INCLUDE_STANDARD_IO
-#define NK_INCLUDE_STANDARD_VARARGS
-#define NK_INCLUDE_DEFAULT_ALLOCATOR
-#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
-#define NK_INCLUDE_FONT_BAKING
-#define NK_INCLUDE_DEFAULT_FONT
-#define NK_INCLUDE_STANDARD_IO
 #define NK_IMPLEMENTATION
 #define NK_GLFW_GL2_IMPLEMENTATION
 #include "nuklear.h"
@@ -75,13 +67,22 @@ Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
     return(Result);
 }
 
+inline f32
+Win32GetTime(void)
+{
+    LARGE_INTEGER WallClock = Win32GetWallClock();
+    f32 Result = (f32)((f64)(WallClock.QuadPart) /
+                       (f64)GlobalPerfCountFrequency);
+    return(Result);
+}
+
 void _glfwGetCursorPosWin32(win32_state *State, double* xpos, double* ypos)
 {
     POINT pos;
 
     if (GetCursorPos(&pos))
     {
-        ScreenToClient(State->Handle, &pos);
+        ScreenToClient(State->WindowHandle, &pos);
 
         if (xpos)
             *xpos = pos.x;
@@ -109,14 +110,6 @@ glfwGetCursorPos(win32_state *State, double *xpos, double *ypos)
         _glfwGetCursorPosWin32(State, xpos, ypos);
 }
 
-double
-glfwGetTime(void)
-{
-//    return (double) (_glfwPlatformGetTimerValue() - _glfw.timer.offset) /
-//        _glfwPlatformGetTimerFrequency();
-    return(0.0);
-}
-
 const char *
 glfwGetClipboardString(void)
 {
@@ -130,12 +123,12 @@ glfwSetClipboardString(const char *str)
 
 #define _GLFW_STICK 3
 
-int
-glfwGetKey(win32_state *State, int key)
+s32
+Win32GetKey(win32_state *State, s32 key)
 {
     if (key < GLFW_KEY_SPACE || key > GLFW_KEY_LAST)
     {
-//        _glfwInputError(GLFW_INVALID_ENUM, "Invalid key %i", key);
+        Assert("Invalid key");
         return GLFW_RELEASE;
     }
 
@@ -146,7 +139,8 @@ glfwGetKey(win32_state *State, int key)
         return GLFW_PRESS;
     }
 
-    return (int) State->keys[key];
+    s32 Result = (s32)State->keys[key];
+    return(Result);
 }
 
 void _glfwSetCursorPosWin32(win32_state *State, double xpos, double ypos)
@@ -157,7 +151,7 @@ void _glfwSetCursorPosWin32(win32_state *State, double xpos, double ypos)
     State->lastCursorPosX = pos.x;
     State->lastCursorPosY = pos.y;
 
-    ClientToScreen(State->Handle, &pos);
+    ClientToScreen(State->WindowHandle, &pos);
     SetCursorPos(pos.x, pos.y);
 }
 
@@ -198,14 +192,14 @@ glfwGetMouseButton(win32_state *State, int button)
         return GLFW_RELEASE;
     }
 
-    if (State->mouseButtons[button] == _GLFW_STICK)
+    if (State->MouseButtons[button] == _GLFW_STICK)
     {
         // Sticky mode: release mouse button now
-        State->mouseButtons[button] = GLFW_RELEASE;
+        State->MouseButtons[button] = GLFW_RELEASE;
         return GLFW_PRESS;
     }
 
-    return (int) State->mouseButtons[button];
+    return (int) State->MouseButtons[button];
 }
 
 
@@ -778,9 +772,6 @@ void _glfwInputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
     if (!State->lockKeyMods)
         mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
 
-//    if (window->callbacks.charmods)
-//        window->callbacks.charmods((GLFWwindow*) window, codepoint, mods);
-
     if (plain)
     {
         nk_glfw3_char_callback(codepoint);
@@ -815,135 +806,135 @@ static void createKeyTables(win32_state *State)
 {
     s16 scancode;
 
-    memset(State->keycodes, -1, sizeof(State->keycodes));
-    memset(State->scancodes, -1, sizeof(State->scancodes));
+    memset(State->Keycodes, -1, sizeof(State->Keycodes));
+    memset(State->Scancodes, -1, sizeof(State->Scancodes));
 
-    State->keycodes[0x00B] = GLFW_KEY_0;
-    State->keycodes[0x002] = GLFW_KEY_1;
-    State->keycodes[0x003] = GLFW_KEY_2;
-    State->keycodes[0x004] = GLFW_KEY_3;
-    State->keycodes[0x005] = GLFW_KEY_4;
-    State->keycodes[0x006] = GLFW_KEY_5;
-    State->keycodes[0x007] = GLFW_KEY_6;
-    State->keycodes[0x008] = GLFW_KEY_7;
-    State->keycodes[0x009] = GLFW_KEY_8;
-    State->keycodes[0x00A] = GLFW_KEY_9;
-    State->keycodes[0x01E] = GLFW_KEY_A;
-    State->keycodes[0x030] = GLFW_KEY_B;
-    State->keycodes[0x02E] = GLFW_KEY_C;
-    State->keycodes[0x020] = GLFW_KEY_D;
-    State->keycodes[0x012] = GLFW_KEY_E;
-    State->keycodes[0x021] = GLFW_KEY_F;
-    State->keycodes[0x022] = GLFW_KEY_G;
-    State->keycodes[0x023] = GLFW_KEY_H;
-    State->keycodes[0x017] = GLFW_KEY_I;
-    State->keycodes[0x024] = GLFW_KEY_J;
-    State->keycodes[0x025] = GLFW_KEY_K;
-    State->keycodes[0x026] = GLFW_KEY_L;
-    State->keycodes[0x032] = GLFW_KEY_M;
-    State->keycodes[0x031] = GLFW_KEY_N;
-    State->keycodes[0x018] = GLFW_KEY_O;
-    State->keycodes[0x019] = GLFW_KEY_P;
-    State->keycodes[0x010] = GLFW_KEY_Q;
-    State->keycodes[0x013] = GLFW_KEY_R;
-    State->keycodes[0x01F] = GLFW_KEY_S;
-    State->keycodes[0x014] = GLFW_KEY_T;
-    State->keycodes[0x016] = GLFW_KEY_U;
-    State->keycodes[0x02F] = GLFW_KEY_V;
-    State->keycodes[0x011] = GLFW_KEY_W;
-    State->keycodes[0x02D] = GLFW_KEY_X;
-    State->keycodes[0x015] = GLFW_KEY_Y;
-    State->keycodes[0x02C] = GLFW_KEY_Z;
+    State->Keycodes[0x00B] = GLFW_KEY_0;
+    State->Keycodes[0x002] = GLFW_KEY_1;
+    State->Keycodes[0x003] = GLFW_KEY_2;
+    State->Keycodes[0x004] = GLFW_KEY_3;
+    State->Keycodes[0x005] = GLFW_KEY_4;
+    State->Keycodes[0x006] = GLFW_KEY_5;
+    State->Keycodes[0x007] = GLFW_KEY_6;
+    State->Keycodes[0x008] = GLFW_KEY_7;
+    State->Keycodes[0x009] = GLFW_KEY_8;
+    State->Keycodes[0x00A] = GLFW_KEY_9;
+    State->Keycodes[0x01E] = GLFW_KEY_A;
+    State->Keycodes[0x030] = GLFW_KEY_B;
+    State->Keycodes[0x02E] = GLFW_KEY_C;
+    State->Keycodes[0x020] = GLFW_KEY_D;
+    State->Keycodes[0x012] = GLFW_KEY_E;
+    State->Keycodes[0x021] = GLFW_KEY_F;
+    State->Keycodes[0x022] = GLFW_KEY_G;
+    State->Keycodes[0x023] = GLFW_KEY_H;
+    State->Keycodes[0x017] = GLFW_KEY_I;
+    State->Keycodes[0x024] = GLFW_KEY_J;
+    State->Keycodes[0x025] = GLFW_KEY_K;
+    State->Keycodes[0x026] = GLFW_KEY_L;
+    State->Keycodes[0x032] = GLFW_KEY_M;
+    State->Keycodes[0x031] = GLFW_KEY_N;
+    State->Keycodes[0x018] = GLFW_KEY_O;
+    State->Keycodes[0x019] = GLFW_KEY_P;
+    State->Keycodes[0x010] = GLFW_KEY_Q;
+    State->Keycodes[0x013] = GLFW_KEY_R;
+    State->Keycodes[0x01F] = GLFW_KEY_S;
+    State->Keycodes[0x014] = GLFW_KEY_T;
+    State->Keycodes[0x016] = GLFW_KEY_U;
+    State->Keycodes[0x02F] = GLFW_KEY_V;
+    State->Keycodes[0x011] = GLFW_KEY_W;
+    State->Keycodes[0x02D] = GLFW_KEY_X;
+    State->Keycodes[0x015] = GLFW_KEY_Y;
+    State->Keycodes[0x02C] = GLFW_KEY_Z;
 
-    State->keycodes[0x028] = GLFW_KEY_APOSTROPHE;
-    State->keycodes[0x02B] = GLFW_KEY_BACKSLASH;
-    State->keycodes[0x033] = GLFW_KEY_COMMA;
-    State->keycodes[0x00D] = GLFW_KEY_EQUAL;
-    State->keycodes[0x029] = GLFW_KEY_GRAVE_ACCENT;
-    State->keycodes[0x01A] = GLFW_KEY_LEFT_BRACKET;
-    State->keycodes[0x00C] = GLFW_KEY_MINUS;
-    State->keycodes[0x034] = GLFW_KEY_PERIOD;
-    State->keycodes[0x01B] = GLFW_KEY_RIGHT_BRACKET;
-    State->keycodes[0x027] = GLFW_KEY_SEMICOLON;
-    State->keycodes[0x035] = GLFW_KEY_SLASH;
-    State->keycodes[0x056] = GLFW_KEY_WORLD_2;
+    State->Keycodes[0x028] = GLFW_KEY_APOSTROPHE;
+    State->Keycodes[0x02B] = GLFW_KEY_BACKSLASH;
+    State->Keycodes[0x033] = GLFW_KEY_COMMA;
+    State->Keycodes[0x00D] = GLFW_KEY_EQUAL;
+    State->Keycodes[0x029] = GLFW_KEY_GRAVE_ACCENT;
+    State->Keycodes[0x01A] = GLFW_KEY_LEFT_BRACKET;
+    State->Keycodes[0x00C] = GLFW_KEY_MINUS;
+    State->Keycodes[0x034] = GLFW_KEY_PERIOD;
+    State->Keycodes[0x01B] = GLFW_KEY_RIGHT_BRACKET;
+    State->Keycodes[0x027] = GLFW_KEY_SEMICOLON;
+    State->Keycodes[0x035] = GLFW_KEY_SLASH;
+    State->Keycodes[0x056] = GLFW_KEY_WORLD_2;
 
-    State->keycodes[0x00E] = GLFW_KEY_BACKSPACE;
-    State->keycodes[0x153] = GLFW_KEY_DELETE;
-    State->keycodes[0x14F] = GLFW_KEY_END;
-    State->keycodes[0x01C] = GLFW_KEY_ENTER;
-    State->keycodes[0x001] = GLFW_KEY_ESCAPE;
-    State->keycodes[0x147] = GLFW_KEY_HOME;
-    State->keycodes[0x152] = GLFW_KEY_INSERT;
-    State->keycodes[0x15D] = GLFW_KEY_MENU;
-    State->keycodes[0x151] = GLFW_KEY_PAGE_DOWN;
-    State->keycodes[0x149] = GLFW_KEY_PAGE_UP;
-    State->keycodes[0x045] = GLFW_KEY_PAUSE;
-    State->keycodes[0x039] = GLFW_KEY_SPACE;
-    State->keycodes[0x00F] = GLFW_KEY_TAB;
-    State->keycodes[0x03A] = GLFW_KEY_CAPS_LOCK;
-    State->keycodes[0x145] = GLFW_KEY_NUM_LOCK;
-    State->keycodes[0x046] = GLFW_KEY_SCROLL_LOCK;
-    State->keycodes[0x03B] = GLFW_KEY_F1;
-    State->keycodes[0x03C] = GLFW_KEY_F2;
-    State->keycodes[0x03D] = GLFW_KEY_F3;
-    State->keycodes[0x03E] = GLFW_KEY_F4;
-    State->keycodes[0x03F] = GLFW_KEY_F5;
-    State->keycodes[0x040] = GLFW_KEY_F6;
-    State->keycodes[0x041] = GLFW_KEY_F7;
-    State->keycodes[0x042] = GLFW_KEY_F8;
-    State->keycodes[0x043] = GLFW_KEY_F9;
-    State->keycodes[0x044] = GLFW_KEY_F10;
-    State->keycodes[0x057] = GLFW_KEY_F11;
-    State->keycodes[0x058] = GLFW_KEY_F12;
-    State->keycodes[0x064] = GLFW_KEY_F13;
-    State->keycodes[0x065] = GLFW_KEY_F14;
-    State->keycodes[0x066] = GLFW_KEY_F15;
-    State->keycodes[0x067] = GLFW_KEY_F16;
-    State->keycodes[0x068] = GLFW_KEY_F17;
-    State->keycodes[0x069] = GLFW_KEY_F18;
-    State->keycodes[0x06A] = GLFW_KEY_F19;
-    State->keycodes[0x06B] = GLFW_KEY_F20;
-    State->keycodes[0x06C] = GLFW_KEY_F21;
-    State->keycodes[0x06D] = GLFW_KEY_F22;
-    State->keycodes[0x06E] = GLFW_KEY_F23;
-    State->keycodes[0x076] = GLFW_KEY_F24;
-    State->keycodes[0x038] = GLFW_KEY_LEFT_ALT;
-    State->keycodes[0x01D] = GLFW_KEY_LEFT_CONTROL;
-    State->keycodes[0x02A] = GLFW_KEY_LEFT_SHIFT;
-    State->keycodes[0x15B] = GLFW_KEY_LEFT_SUPER;
-    State->keycodes[0x137] = GLFW_KEY_PRINT_SCREEN;
-    State->keycodes[0x138] = GLFW_KEY_RIGHT_ALT;
-    State->keycodes[0x11D] = GLFW_KEY_RIGHT_CONTROL;
-    State->keycodes[0x036] = GLFW_KEY_RIGHT_SHIFT;
-    State->keycodes[0x15C] = GLFW_KEY_RIGHT_SUPER;
-    State->keycodes[0x150] = GLFW_KEY_DOWN;
-    State->keycodes[0x14B] = GLFW_KEY_LEFT;
-    State->keycodes[0x14D] = GLFW_KEY_RIGHT;
-    State->keycodes[0x148] = GLFW_KEY_UP;
+    State->Keycodes[0x00E] = GLFW_KEY_BACKSPACE;
+    State->Keycodes[0x153] = GLFW_KEY_DELETE;
+    State->Keycodes[0x14F] = GLFW_KEY_END;
+    State->Keycodes[0x01C] = GLFW_KEY_ENTER;
+    State->Keycodes[0x001] = GLFW_KEY_ESCAPE;
+    State->Keycodes[0x147] = GLFW_KEY_HOME;
+    State->Keycodes[0x152] = GLFW_KEY_INSERT;
+    State->Keycodes[0x15D] = GLFW_KEY_MENU;
+    State->Keycodes[0x151] = GLFW_KEY_PAGE_DOWN;
+    State->Keycodes[0x149] = GLFW_KEY_PAGE_UP;
+    State->Keycodes[0x045] = GLFW_KEY_PAUSE;
+    State->Keycodes[0x039] = GLFW_KEY_SPACE;
+    State->Keycodes[0x00F] = GLFW_KEY_TAB;
+    State->Keycodes[0x03A] = GLFW_KEY_CAPS_LOCK;
+    State->Keycodes[0x145] = GLFW_KEY_NUM_LOCK;
+    State->Keycodes[0x046] = GLFW_KEY_SCROLL_LOCK;
+    State->Keycodes[0x03B] = GLFW_KEY_F1;
+    State->Keycodes[0x03C] = GLFW_KEY_F2;
+    State->Keycodes[0x03D] = GLFW_KEY_F3;
+    State->Keycodes[0x03E] = GLFW_KEY_F4;
+    State->Keycodes[0x03F] = GLFW_KEY_F5;
+    State->Keycodes[0x040] = GLFW_KEY_F6;
+    State->Keycodes[0x041] = GLFW_KEY_F7;
+    State->Keycodes[0x042] = GLFW_KEY_F8;
+    State->Keycodes[0x043] = GLFW_KEY_F9;
+    State->Keycodes[0x044] = GLFW_KEY_F10;
+    State->Keycodes[0x057] = GLFW_KEY_F11;
+    State->Keycodes[0x058] = GLFW_KEY_F12;
+    State->Keycodes[0x064] = GLFW_KEY_F13;
+    State->Keycodes[0x065] = GLFW_KEY_F14;
+    State->Keycodes[0x066] = GLFW_KEY_F15;
+    State->Keycodes[0x067] = GLFW_KEY_F16;
+    State->Keycodes[0x068] = GLFW_KEY_F17;
+    State->Keycodes[0x069] = GLFW_KEY_F18;
+    State->Keycodes[0x06A] = GLFW_KEY_F19;
+    State->Keycodes[0x06B] = GLFW_KEY_F20;
+    State->Keycodes[0x06C] = GLFW_KEY_F21;
+    State->Keycodes[0x06D] = GLFW_KEY_F22;
+    State->Keycodes[0x06E] = GLFW_KEY_F23;
+    State->Keycodes[0x076] = GLFW_KEY_F24;
+    State->Keycodes[0x038] = GLFW_KEY_LEFT_ALT;
+    State->Keycodes[0x01D] = GLFW_KEY_LEFT_CONTROL;
+    State->Keycodes[0x02A] = GLFW_KEY_LEFT_SHIFT;
+    State->Keycodes[0x15B] = GLFW_KEY_LEFT_SUPER;
+    State->Keycodes[0x137] = GLFW_KEY_PRINT_SCREEN;
+    State->Keycodes[0x138] = GLFW_KEY_RIGHT_ALT;
+    State->Keycodes[0x11D] = GLFW_KEY_RIGHT_CONTROL;
+    State->Keycodes[0x036] = GLFW_KEY_RIGHT_SHIFT;
+    State->Keycodes[0x15C] = GLFW_KEY_RIGHT_SUPER;
+    State->Keycodes[0x150] = GLFW_KEY_DOWN;
+    State->Keycodes[0x14B] = GLFW_KEY_LEFT;
+    State->Keycodes[0x14D] = GLFW_KEY_RIGHT;
+    State->Keycodes[0x148] = GLFW_KEY_UP;
 
-    State->keycodes[0x052] = GLFW_KEY_KP_0;
-    State->keycodes[0x04F] = GLFW_KEY_KP_1;
-    State->keycodes[0x050] = GLFW_KEY_KP_2;
-    State->keycodes[0x051] = GLFW_KEY_KP_3;
-    State->keycodes[0x04B] = GLFW_KEY_KP_4;
-    State->keycodes[0x04C] = GLFW_KEY_KP_5;
-    State->keycodes[0x04D] = GLFW_KEY_KP_6;
-    State->keycodes[0x047] = GLFW_KEY_KP_7;
-    State->keycodes[0x048] = GLFW_KEY_KP_8;
-    State->keycodes[0x049] = GLFW_KEY_KP_9;
-    State->keycodes[0x04E] = GLFW_KEY_KP_ADD;
-    State->keycodes[0x053] = GLFW_KEY_KP_DECIMAL;
-    State->keycodes[0x135] = GLFW_KEY_KP_DIVIDE;
-    State->keycodes[0x11C] = GLFW_KEY_KP_ENTER;
-    State->keycodes[0x059] = GLFW_KEY_KP_EQUAL;
-    State->keycodes[0x037] = GLFW_KEY_KP_MULTIPLY;
-    State->keycodes[0x04A] = GLFW_KEY_KP_SUBTRACT;
+    State->Keycodes[0x052] = GLFW_KEY_KP_0;
+    State->Keycodes[0x04F] = GLFW_KEY_KP_1;
+    State->Keycodes[0x050] = GLFW_KEY_KP_2;
+    State->Keycodes[0x051] = GLFW_KEY_KP_3;
+    State->Keycodes[0x04B] = GLFW_KEY_KP_4;
+    State->Keycodes[0x04C] = GLFW_KEY_KP_5;
+    State->Keycodes[0x04D] = GLFW_KEY_KP_6;
+    State->Keycodes[0x047] = GLFW_KEY_KP_7;
+    State->Keycodes[0x048] = GLFW_KEY_KP_8;
+    State->Keycodes[0x049] = GLFW_KEY_KP_9;
+    State->Keycodes[0x04E] = GLFW_KEY_KP_ADD;
+    State->Keycodes[0x053] = GLFW_KEY_KP_DECIMAL;
+    State->Keycodes[0x135] = GLFW_KEY_KP_DIVIDE;
+    State->Keycodes[0x11C] = GLFW_KEY_KP_ENTER;
+    State->Keycodes[0x059] = GLFW_KEY_KP_EQUAL;
+    State->Keycodes[0x037] = GLFW_KEY_KP_MULTIPLY;
+    State->Keycodes[0x04A] = GLFW_KEY_KP_SUBTRACT;
 
     for (scancode = 0;  scancode < 512;  scancode++)
     {
-        if (State->keycodes[scancode] > 0)
-            State->scancodes[State->keycodes[scancode]] = scancode;
+        if (State->Keycodes[scancode] > 0)
+            State->Scancodes[State->Keycodes[scancode]] = scancode;
     }
 }
 
@@ -966,9 +957,6 @@ void _glfwInputKey(win32_state *State, int key, int scancode, int action, int mo
         if (action == GLFW_PRESS && State->keys[key] == GLFW_PRESS)
             repeated = GLFW_TRUE;
 
-//        if (action == GLFW_RELEASE && State->stickyKeys)
-//            State->keys[key] = _GLFW_STICK;
-//        else
         State->keys[key] = (char) action;
 
         if (repeated)
@@ -979,8 +967,6 @@ void _glfwInputKey(win32_state *State, int key, int scancode, int action, int mo
         mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
 
     nk_glfw3_key_callback(key, scancode, action, mods);
-//    if (window->callbacks.key)
-//        window->callbacks.key((GLFWwindow*) window, key, scancode, action, mods);
 }
 
 // Notifies shared code of a mouse button click event
@@ -1001,67 +987,11 @@ void _glfwInputMouseClick(win32_state *State, int button, int action, int mods)
 //    if (action == GLFW_RELEASE && State->stickyMouseButtons)
 //        State->mouseButtons[button] = _GLFW_STICK;
 //    else
-    State->mouseButtons[button] = (char) action;
+    State->MouseButtons[button] = (char) action;
 
     nk_glfw3_mouse_button_callback(State, button, action);
 //    if (window->callbacks.mouseButton)
 //        window->callbacks.mouseButton((GLFWwindow*) window, button, action, mods);
-}
-
-// Updates key names according to the current keyboard layout
-//
-void _glfwUpdateKeyNamesWin32(win32_state *State)
-{
-    int key;
-    BYTE state[256] = {0};
-
-    memset(State->keynames, 0, sizeof(State->keynames));
-
-    for (key = GLFW_KEY_SPACE;  key <= GLFW_KEY_LAST;  key++)
-    {
-        UINT vk;
-        int scancode, length;
-        WCHAR chars[16];
-
-        scancode = State->scancodes[key];
-        if (scancode == -1)
-            continue;
-
-        if (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_ADD)
-        {
-            const UINT vks[] = {
-                VK_NUMPAD0,  VK_NUMPAD1,  VK_NUMPAD2, VK_NUMPAD3,
-                VK_NUMPAD4,  VK_NUMPAD5,  VK_NUMPAD6, VK_NUMPAD7,
-                VK_NUMPAD8,  VK_NUMPAD9,  VK_DECIMAL, VK_DIVIDE,
-                VK_MULTIPLY, VK_SUBTRACT, VK_ADD
-            };
-
-            vk = vks[key - GLFW_KEY_KP_0];
-        }
-        else
-            vk = MapVirtualKeyW(scancode, MAPVK_VSC_TO_VK);
-
-        length = ToUnicode(vk, scancode, state,
-                           chars, sizeof(chars) / sizeof(WCHAR),
-                           0);
-
-        if (length == -1)
-        {
-            // This is a dead key, so we need a second simulated key press
-            // to make it output its own character (usually a diacritic)
-            length = ToUnicode(vk, scancode, state,
-                               chars, sizeof(chars) / sizeof(WCHAR),
-                               0);
-        }
-
-        if (length < 1)
-            continue;
-
-        WideCharToMultiByte(CP_UTF8, 0, chars, 1,
-                            State->keynames[key],
-                            sizeof(State->keynames[key]),
-                            NULL, NULL);
-    }
 }
 
 internal void
@@ -1100,12 +1030,6 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                 // This message is only sent on Windows Vista and later
                 // NOTE: The X-axis is inverted for consistency with macOS and X11
                 _glfwInputScroll(-((SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA), 0.0);
-            } break;
-
-
-            case WM_INPUTLANGCHANGE:
-            {
-                _glfwUpdateKeyNamesWin32(State);
             } break;
 
             case WM_CHAR:
@@ -1171,18 +1095,18 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
 
                 for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->mouseButtons[i] == GLFW_PRESS)
+                    if (State->MouseButtons[i] == GLFW_PRESS)
                         break;
                 }
 
                 if (i > GLFW_MOUSE_BUTTON_LAST)
-                    SetCapture(State->Handle);
+                    SetCapture(State->WindowHandle);
 
                 _glfwInputMouseClick(State, button, action, getKeyMods());
 
                 for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->mouseButtons[i] == GLFW_PRESS)
+                    if (State->MouseButtons[i] == GLFW_PRESS)
                         break;
                 }
 
@@ -1219,7 +1143,7 @@ Win32ProcessPendingMessages(win32_state *State, editor_controller_input *Keyboar
                 if (scancode == 0x136)
                     scancode = 0x36;
 
-                key = State->keycodes[scancode];
+                key = State->Keycodes[scancode];
 
                 // The Ctrl keys require special handling
                 if (Message.wParam == VK_CONTROL)
@@ -1987,7 +1911,7 @@ WinMain(HINSTANCE Instance,
                 0);
         if(Window)
         {
-            Win32State.Handle = Window;
+            Win32State.WindowHandle = Window;
             ToggleFullscreen(Window);
 
             // NOTE(paul): Init OpenGLRC
@@ -2198,12 +2122,17 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): Editor Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
+                                   RenderCommands.Width, RenderCommands.Height,
+                                   TargetSecondsPerFrame);
+
                 BEGIN_BLOCK("Editor Update");
                 if(!GlobalPause)
                 {
                     if(Editor.UpdateAndRender)
                     {
-                        Editor.UpdateAndRender(&EditorMemory, NewInput, &RenderCommands);
+                        Editor.UpdateAndRender(nk, &EditorMemory, NewInput, &RenderCommands);
                         if(NewInput->QuitRequested)
                         {
                             GlobalRunning = false;
@@ -2216,11 +2145,7 @@ WinMain(HINSTANCE Instance,
                 }
                 
                 END_BLOCK();
-
-                nk_glfw3_new_frame(&Win32State, Dimension.Width, Dimension.Height,
-                                   RenderCommands.Width, RenderCommands.Height,
-                                   TargetSecondsPerFrame);
-
+#if 0
                 if (nk_begin(nk, "Demo", nk_rect(50, 50, 230, 250),
                              NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                              NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
@@ -2281,7 +2206,7 @@ WinMain(HINSTANCE Instance,
                     nk_labelf(nk, NK_TEXT_LEFT, "%i", RenderCommands.Height);
                 }
                 nk_end(nk);
-#if 0
+
                 /* GUI */
                 if (nk_begin(ctx, "Demo", nk_rect(50, 50, 230, 250),
                              NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
