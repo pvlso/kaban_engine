@@ -6607,8 +6607,6 @@ struct nk_context {
 #define NK_OFFSETOF(st,m) ((nk_ptr)&(((st*)0)->m))
 #endif
 
-#define NkTreePush(ctx, type, title, state) platform_nk_tree_push_hashed(ctx, type, title, state, NK_FILE_LINE, platform_nk_strlen(NK_FILE_LINE),__LINE__)
-
 struct nk_ui
 {
     platform_nk_begin *NkBegin;
@@ -6702,6 +6700,7 @@ struct nk_ui
     platform_nk_rect_pos *NkRectPos;
     platform_nk_rect_size *NkRectSize;
 
+    platform_nk_tree_push_hashed *NkTreePushHashed;
     platform_nk_tree_pop *NkTreePop;
 
     platform_nk_strlen *NkStrlen;
@@ -6710,6 +6709,8 @@ struct nk_ui
     platform_nk_strtoi *NkStrtoi;
     platform_nk_strtof *NkStrtof;
 };
+
+#define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................

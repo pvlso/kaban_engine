@@ -464,6 +464,12 @@ OpenGLManageTextures(texture_op *First)
 internal void
 NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     glGenTextures(1, &Ogl->font_tex);
     glBindTexture(GL_TEXTURE_2D, Ogl->font_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -475,6 +481,12 @@ NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
 internal void
 NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     /* setup global state */
     struct nk_opengl *dev = &NkWin32->ogl;
     glPushAttrib(GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_TRANSFORM_BIT);

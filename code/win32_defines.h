@@ -391,18 +391,22 @@
 #define WIN32_GAMEPAD_AXIS_LAST          WIN32_GAMEPAD_AXIS_RIGHT_TRIGGER
 /*! @} */
 
-#define WIN32_CURSOR                 0x00033001
-#define WIN32_STICKY_KEYS            0x00033002
-#define WIN32_STICKY_MOUSE_BUTTONS   0x00033003
-#define WIN32_LOCK_KEY_MODS          0x00033004
-#define WIN32_RAW_MOUSE_MOTION       0x00033005
+#define WIN32_MOD_MASK (WIN32_MOD_SHIFT |       \
+                        WIN32_MOD_CONTROL |     \
+                        WIN32_MOD_ALT |         \
+                        WIN32_MOD_SUPER |       \
+                        WIN32_MOD_CAPS_LOCK |   \
+                        WIN32_MOD_NUM_LOCK)
 
-#define WIN32_CURSOR_NORMAL          0x00034001
-#define WIN32_CURSOR_HIDDEN          0x00034002
-#define WIN32_CURSOR_DISABLED        0x00034003
-#define WIN32_CURSOR_CAPTURED        0x00034004
-
-#define _WIN32_STICK 3
+#ifndef NK_WIN32_TEXT_MAX
+#define NK_WIN32_TEXT_MAX 256
+#endif
+#ifndef NK_WIN32_DOUBLE_CLICK_LO
+#define NK_WIN32_DOUBLE_CLICK_LO 0.02
+#endif
+#ifndef NK_WIN32_DOUBLE_CLICK_HI
+#define NK_WIN32_DOUBLE_CLICK_HI 0.2
+#endif
 
 #define WIN32_DEFINES_H
 #endif

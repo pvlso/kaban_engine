@@ -231,21 +231,37 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 
-    if (NkTreePush(nk, NK_TREE_TAB, "Tree", NK_MINIMIZED)) {
-        UI.NkLayoutRowDynamic(nk, 30, 4);
-
-        if (UI.NkButtonLabel(nk, "Make Windowed"))
-        {
-        }
-
-        UI.NkTreePop(nk);
-    }
+#if 1
+#endif
     
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
     if (UI.NkBegin(nk, "Demo", UI.NkRect(50, 50, 230, 250),
-                            NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                            NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+                   NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+                   NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
     {
+        if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
+        {
+            if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
+            {
+                if (UI.NkButtonLabel(nk, "Make Windowed"))
+                {
+                }
+
+                UI.NkTreePop(nk);
+            }
+
+            if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
+            {
+                if (UI.NkButtonLabel(nk, "Make Windowed"))
+                {
+                }
+
+                UI.NkTreePop(nk);
+            }
+            
+            UI.NkTreePop(nk);
+        }
+
         UI.NkLayoutRowDynamic(nk, 30, 4);
 
         if (UI.NkButtonLabel(nk, "Make Windowed"))

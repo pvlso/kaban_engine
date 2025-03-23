@@ -103,37 +103,37 @@ Win32GetTime(void)
 inline void
 Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
 {
+    /*
+       NOTE(paul): The implementation of this function is based on
+       implementation in GLFW library
+    */
+
     if (xpos)
         *xpos = 0;
     if (ypos)
         *ypos = 0;
 
-    if (State->cursorMode == WIN32_CURSOR_DISABLED)
+    POINT pos;
+
+    if (GetCursorPos(&pos))
     {
+        ScreenToClient(State->WindowHandle, &pos);
+
         if (xpos)
-            *xpos = State->virtualCursorPosX;
+            *xpos = pos.x;
         if (ypos)
-            *ypos = State->virtualCursorPosY;
-    }
-    else
-    {
-        POINT pos;
-
-        if (GetCursorPos(&pos))
-        {
-            ScreenToClient(State->WindowHandle, &pos);
-
-            if (xpos)
-                *xpos = pos.x;
-            if (ypos)
-                *ypos = pos.y;
-        }
+            *ypos = pos.y;
     }
 }
 
 internal void
 Win32SetClipboardString(win32_state *State, const char* string)
 {
+    /*
+       NOTE(paul): The implementation of this function is based on
+       implementation in GLFW library
+    */
+
     int characterCount, tries = 0;
     HANDLE object;
     WCHAR* buffer;
@@ -182,8 +182,14 @@ Win32SetClipboardString(win32_state *State, const char* string)
 
 // Returns a UTF-8 string version of the specified wide string
 //
-char* _glfwCreateUTF8FromWideStringWin32(const WCHAR* source)
+internal char *
+Win32CreateUTF8FromWideString(const WCHAR* source)
 {
+    /*
+       NOTE(paul): The implementation of this function is based on
+       implementation in GLFW library
+    */
+
     char* target;
     int size;
 
@@ -210,6 +216,11 @@ char* _glfwCreateUTF8FromWideStringWin32(const WCHAR* source)
 internal const char*
 Win32ClipboardGetString(win32_state *State)
 {
+    /*
+       NOTE(paul): The implementation of this function is based on
+       implementation in GLFW library
+    */
+
     HANDLE object;
     WCHAR* buffer;
     int tries = 0;
@@ -245,7 +256,7 @@ Win32ClipboardGetString(win32_state *State)
     }
 
     Win32DeallocateMemory(State->clipboardString);
-    State->clipboardString = _glfwCreateUTF8FromWideStringWin32(buffer);
+    State->clipboardString = Win32CreateUTF8FromWideString(buffer);
 
     GlobalUnlock(object);
     CloseClipboard();
@@ -256,17 +267,15 @@ Win32ClipboardGetString(win32_state *State)
 inline s32
 Win32GetKey(win32_state *State, s32 key)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
     if (key < WIN32_KEY_SPACE || key > WIN32_KEY_LAST)
     {
         Assert("Invalid key");
         return WIN32_RELEASE;
-    }
-
-    if (State->keys[key] == _WIN32_STICK)
-    {
-        // Sticky mode: release key now
-        State->keys[key] = WIN32_RELEASE;
-        return WIN32_PRESS;
     }
 
     s32 Result = (s32)State->keys[key];
@@ -276,6 +285,11 @@ Win32GetKey(win32_state *State, s32 key)
 inline void
 Win32SetCursorPos(win32_state *State, double xpos, double ypos)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
     if (xpos != xpos || xpos < -DBL_MAX || xpos > DBL_MAX ||
         ypos != ypos || ypos < -DBL_MAX || ypos > DBL_MAX)
     {
@@ -283,40 +297,29 @@ Win32SetCursorPos(win32_state *State, double xpos, double ypos)
         return;
     }
 
-    if (State->cursorMode == WIN32_CURSOR_DISABLED)
-    {
-        // Only update the accumulated position if the cursor is disabled
-        State->virtualCursorPosX = xpos;
-        State->virtualCursorPosY = ypos;
-    }
-    else
-    {
-        // Update system cursor position
-        POINT pos = { (int) xpos, (int) ypos };
+    // Update system cursor position
+    POINT pos = { (int) xpos, (int) ypos };
 
-        // Store the new position so it can be recognized later
-        State->lastCursorPosX = pos.x;
-        State->lastCursorPosY = pos.y;
+    // Store the new position so it can be recognized later
+    State->lastCursorPosX = pos.x;
+    State->lastCursorPosY = pos.y;
 
-        ClientToScreen(State->WindowHandle, &pos);
-        SetCursorPos(pos.x, pos.y);
-    }
+    ClientToScreen(State->WindowHandle, &pos);
+    SetCursorPos(pos.x, pos.y);
 }
 
 inline s32
 Win32GetMouseButton(win32_state *State, int button)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
     if (button < WIN32_MOUSE_BUTTON_1 || button > WIN32_MOUSE_BUTTON_LAST)
     {
         Assert(!"Invalid mouse button %i");
         return WIN32_RELEASE;
-    }
-
-    if (State->MouseButtons[button] == _WIN32_STICK)
-    {
-        // Sticky mode: release mouse button now
-        State->MouseButtons[button] = WIN32_RELEASE;
-        return WIN32_PRESS;
     }
 
     s32 Result = (s32)State->MouseButtons[button];
@@ -338,32 +341,50 @@ Win32NkScrollCallback(nk_win32 *NkWin32, double xoff, double yoff)
 }
 
 internal inline void
-Win32NkMouseButtonCallback(nk_win32 *glfw, win32_state *State, int button, int action)
+Win32NkMouseButtonCallback(nk_win32 *NkWin32, win32_state *State, int button, int action)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     double x, y;
-    if (button != WIN32_MOUSE_BUTTON_LEFT) return;
+    if(button != WIN32_MOUSE_BUTTON_LEFT)
+        return;
+
     Win32GetCursorPos(State, &x, &y);
-    if (action == WIN32_PRESS)  {
-        double dt = Win32GetTime() - glfw->last_button_click;
-        if (dt > NK_WIN32_DOUBLE_CLICK_LO && dt < NK_WIN32_DOUBLE_CLICK_HI) {
-            glfw->is_double_click_down = nk_true;
-            glfw->double_click_pos = nk_vec2((float)x, (float)y);
+    if(action == WIN32_PRESS)
+    {
+        double dt = Win32GetTime() - NkWin32->last_button_click;
+        if((dt > NK_WIN32_DOUBLE_CLICK_LO) && (dt < NK_WIN32_DOUBLE_CLICK_HI))
+        {
+            NkWin32->is_double_click_down = nk_true;
+            NkWin32->double_click_pos = nk_vec2((float)x, (float)y);
         }
 
-        glfw->last_button_click = Win32GetTime();
-    } else glfw->is_double_click_down = nk_false;
+        NkWin32->last_button_click = Win32GetTime();
+    }
+    else
+        NkWin32->is_double_click_down = nk_false;
 }
 
 internal inline void
-Win32NkCharCallback(nk_win32 *glfw, unsigned int codepoint)
+Win32NkCharCallback(nk_win32 *NkWin32, unsigned int codepoint)
 {
-    if (glfw->text_len < NK_WIN32_TEXT_MAX)
-        glfw->text[glfw->text_len++] = codepoint;
+    if (NkWin32->text_len < NK_WIN32_TEXT_MAX)
+        NkWin32->text[NkWin32->text_len++] = codepoint;
 }
 
 inline void
 Win32NkKeyCallback(nk_win32 *NkWin32, int key, int scancode, int action, int mods)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     /*
      * convert WIN32_REPEAT to down (technically WIN32_RELEASE, WIN32_PRESS, WIN32_REPEAT are
      * already 0, 1, 2 but just to be clearer)
@@ -413,6 +434,12 @@ Win32NkKeyCallback(nk_win32 *NkWin32, int key, int scancode, int action, int mod
 internal void
 Win32NkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     win32_state *State = (win32_state *)usr.ptr;
     const char *text = Win32ClipboardGetString(State);
     if (text)
@@ -423,6 +450,12 @@ Win32NkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 internal void
 Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     win32_state *State = (win32_state *)usr.ptr;
 
     char *str = 0;
@@ -439,6 +472,12 @@ Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
 internal struct nk_context*
 Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     nk_init_default(&NkWin32->ctx, 0);
 
     NkWin32->ctx.clip.userdata.ptr = (void *)State;
@@ -457,6 +496,12 @@ Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
 internal void
 Win32NkFontStashBegin(nk_win32 *NkWin32, struct nk_font_atlas **atlas)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     nk_font_atlas_init_default(&NkWin32->atlas);
     nk_font_atlas_begin(&NkWin32->atlas);
     *atlas = &NkWin32->atlas;
@@ -465,6 +510,12 @@ Win32NkFontStashBegin(nk_win32 *NkWin32, struct nk_font_atlas **atlas)
 internal void
 Win32NkFontStashEnd(nk_win32 *NkWin32)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     const void *image; int w, h;
     image = nk_font_atlas_bake(&NkWin32->atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
     NkOpenGLUploadAtlas(&NkWin32->ogl, image, w, h);
@@ -477,6 +528,12 @@ internal void
 Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 WindowHeight,
                     u32 DrawWidth, u32 DrawHeight, f32 dt)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     int i;
     double x, y;
     struct nk_context *ctx = &NkWin32->ctx;
@@ -486,10 +543,10 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     float delta_time_now = dt;
     NkWin32->delta_time_seconds_last = dt;
 
-    NkWin32->width = WindowWidth;
-    NkWin32->height = WindowHeight;
-    NkWin32->display_width = DrawWidth;
-    NkWin32->display_height = DrawHeight;
+    NkWin32->width = DrawWidth;
+    NkWin32->height = DrawHeight;
+    NkWin32->display_width = WindowWidth;
+    NkWin32->display_height = WindowHeight;
     NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
     NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
 
@@ -560,6 +617,12 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
 internal void
 Win32NkShutdown(nk_win32 *NkWin32)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      nuklear implementation for GLFW library provided with nuklear
+      repo
+    */
+
     struct nk_opengl *dev = &NkWin32->ogl;
     nk_font_atlas_clear(&NkWin32->atlas);
     nk_free(&NkWin32->ctx);
@@ -683,6 +746,15 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkRectiv = nk_rectiv;
     UI->NkRectPos = nk_rect_pos;
     UI->NkRectSize = nk_rect_size;
+
+    UI->NkTreePushHashed = nk_tree_push_hashed;
+    UI->NkTreePop = nk_tree_pop;
+
+    UI->NkStrlen = nk_strlen;
+    UI->NkStricmp = nk_stricmp;
+    UI->NkStricmpn = nk_stricmpn;
+    UI->NkStrtoi = nk_strtoi;
+    UI->NkStrtof = nk_strtof;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1128,6 +1200,11 @@ ToggleFullscreen(HWND Window)
 internal inline s32
 Win32GetKeyMods(void)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
     s32 mods = 0;
 
     if (GetKeyState(VK_SHIFT) & 0x8000)
@@ -1151,6 +1228,11 @@ Win32GetKeyMods(void)
 internal void
 Win32CreateKeyTables(win32_state *State)
 {
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
     s16 scancode;
 
     memset(State->Keycodes, -1, sizeof(State->Keycodes));
@@ -1401,10 +1483,15 @@ Win32ProcessKeyboardMessage(engine_button_state *NewState, bool32 IsDown)
 internal inline void
 Win32InputScroll(win32_state *State, double xoffset, double yoffset)
 {
-    assert(xoffset > -FLT_MAX);
-    assert(xoffset < FLT_MAX);
-    assert(yoffset > -FLT_MAX);
-    assert(yoffset < FLT_MAX);
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
+    Assert(xoffset > -FLT_MAX);
+    Assert(xoffset < FLT_MAX);
+    Assert(yoffset > -FLT_MAX);
+    Assert(yoffset < FLT_MAX);
 
     Win32NkScrollCallback(&State->Main, xoffset, yoffset);
     Win32NkScrollCallback(&State->Debug, xoffset, yoffset);
@@ -1417,8 +1504,13 @@ Win32InputScroll(win32_state *State, double xoffset, double yoffset)
 internal inline void
 Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
 {
-    assert(mods == (mods & WIN32_MOD_MASK));
-    assert(plain == 1 || plain == 0);
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
+    Assert(mods == (mods & WIN32_MOD_MASK));
+    Assert(plain == 1 || plain == 0);
 
     if (codepoint < 32 || (codepoint > 126 && codepoint < 160))
         return;
@@ -1438,10 +1530,15 @@ Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
 internal inline void
 Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
 {
-    assert(key >= 0 || key == WIN32_KEY_UNKNOWN);
-    assert(key <= WIN32_KEY_LAST);
-    assert(action == WIN32_PRESS || action == WIN32_RELEASE);
-    assert(mods == (mods & WIN32_MOD_MASK));
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
+    Assert(key >= 0 || key == WIN32_KEY_UNKNOWN);
+    Assert(key <= WIN32_KEY_LAST);
+    Assert(action == WIN32_PRESS || action == WIN32_RELEASE);
+    Assert(mods == (mods & WIN32_MOD_MASK));
 
     if (key >= 0 && key <= WIN32_KEY_LAST)
     {
@@ -1471,10 +1568,15 @@ Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
 internal inline void
 Win32InputMouseClick(win32_state *State, int button, int action, int mods)
 {
-    assert(button >= 0);
-    assert(button <= WIN32_MOUSE_BUTTON_LAST);
-    assert(action == WIN32_PRESS || action == WIN32_RELEASE);
-    assert(mods == (mods & WIN32_MOD_MASK));
+    /*
+      NOTE(paul): The implementation of this function is based on
+      implementation in GLFW library
+    */
+
+    Assert(button >= 0);
+    Assert(button <= WIN32_MOUSE_BUTTON_LAST);
+    Assert(action == WIN32_PRESS || action == WIN32_RELEASE);
+    Assert(mods == (mods & WIN32_MOD_MASK));
 
     if (button < 0 || button > WIN32_MOUSE_BUTTON_LAST)
         return;
@@ -1550,9 +1652,6 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     State->highSurrogate = 0;
                     Win32InputChar(State, codepoint, Win32GetKeyMods(), Message.message != WM_SYSCHAR);
                 }
-
-                if (Message.message == WM_SYSCHAR && State->keymenu)
-                    break;
 
             } break;
 
@@ -2377,7 +2476,7 @@ WinMain(HINSTANCE Instance,
     bool32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
     
 #if EDITOR_INTERNAL
-    DEBUGGlobalShowCursor = true;
+    DEBUGGlobalShowCursor = false;
 #endif
 
     // NOTE(paul): Set intitial dimentions 
@@ -2583,12 +2682,13 @@ WinMain(HINSTANCE Instance,
 // NOTE(paul): Editor Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                Win32NkUpdateInputs(&Win32State, &Win32State.Main, Dimension.Width, Dimension.Height,
-                                    RenderCommands.Width, RenderCommands.Height,
+                Win32NkUpdateInputs(&Win32State, &Win32State.Main,
+                                    Dimension.Width, Dimension.Height,
+                                    GetWidth(DrawRegion), GetHeight(DrawRegion),
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
                 Win32NkUpdateInputs(&Win32State, &Win32State.Debug, Dimension.Width, Dimension.Height,
-                                    RenderCommands.Width, RenderCommands.Height,
+                                    GetWidth(DrawRegion), GetHeight(DrawRegion),
                                     TargetSecondsPerFrame);
 #endif
                 BEGIN_BLOCK("Editor Update");
