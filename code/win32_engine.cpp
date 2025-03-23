@@ -19,7 +19,6 @@
 
 #define NK_IMPLEMENTATION
 #include "nuklear.h"
-#include "nuklear_glfw_gl2.h"
 
 #include "win32_engine.h"
 
@@ -50,6 +49,28 @@ global_variable GLuint GlobalBlitTextureHandle;
 #include "engine_render.h"
 #include "engine_opengl.cpp"
 #include "engine_render.cpp"
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WIN32 MEMORY
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+PLATFORM_ALLOCATE_MEMORY(Win32AllocateMemory)
+{
+    void *Result = VirtualAlloc(0, Size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
+    return(Result);
+}
+
+PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
+{
+    if(Memory)
+    {
+        VirtualFree(Memory, 0, MEM_RELEASE);
+    }
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): WIN32 API
@@ -110,15 +131,126 @@ Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
     }
 }
 
-const char *
-glfwGetClipboardString(void)
+internal void
+Win32SetClipboardString(win32_state *State, const char* string)
 {
-    return(0);
+    int characterCount, tries = 0;
+    HANDLE object;
+    WCHAR* buffer;
+
+    characterCount = MultiByteToWideChar(CP_UTF8, 0, string, -1, NULL, 0);
+    if (!characterCount)
+        return;
+
+    object = GlobalAlloc(GMEM_MOVEABLE, characterCount * sizeof(WCHAR));
+    if (!object)
+    {
+        Assert(!"Win32: Failed to allocate global handle for clipboard");
+        return;
+    }
+
+    buffer = (WCHAR *)GlobalLock(object);
+    if (!buffer)
+    {
+        Assert(!"Win32: Failed to lock global handle");
+        GlobalFree(object);
+        return;
+    }
+
+    MultiByteToWideChar(CP_UTF8, 0, string, -1, buffer, characterCount);
+    GlobalUnlock(object);
+
+    // NOTE: Retry clipboard opening a few times as some other application may have it
+    //       open and also the Windows Clipboard History reads it after each update
+    while (!OpenClipboard(State->WindowHandle))
+    {
+        Sleep(1);
+        tries++;
+
+        if (tries == 3)
+        {
+            Assert(!"Win32: Failed to open clipboard");
+            GlobalFree(object);
+            return;
+        }
+    }
+
+    EmptyClipboard();
+    SetClipboardData(CF_UNICODETEXT, object);
+    CloseClipboard();
 }
 
-void
-glfwSetClipboardString(const char *str)
+// Returns a UTF-8 string version of the specified wide string
+//
+char* _glfwCreateUTF8FromWideStringWin32(const WCHAR* source)
 {
+    char* target;
+    int size;
+
+    size = WideCharToMultiByte(CP_UTF8, 0, source, -1, NULL, 0, NULL, NULL);
+    if (!size)
+    {
+        Assert(!"Win32: Failed to convert string to UTF-8");
+        return NULL;
+    }
+
+    target = (char *)Win32AllocateMemory(size);
+    ZeroSize(size, target);
+    
+    if (!WideCharToMultiByte(CP_UTF8, 0, source, -1, target, size, NULL, NULL))
+    {
+        Assert(!"Win32: Failed to convert string to UTF-8");
+        Win32DeallocateMemory(target);
+        return NULL;
+    }
+
+    return target;
+}
+
+internal const char*
+Win32ClipboardGetString(win32_state *State)
+{
+    HANDLE object;
+    WCHAR* buffer;
+    int tries = 0;
+
+    // NOTE: Retry clipboard opening a few times as some other application may have it
+    //       open and also the Windows Clipboard History reads it after each update
+    while (!OpenClipboard(0))
+    {
+        Sleep(1);
+        tries++;
+
+        if (tries == 3)
+        {
+            Assert(!"Win32: Failed to open clipboard");
+            return NULL;
+        }
+    }
+
+    object = GetClipboardData(CF_UNICODETEXT);
+    if (!object)
+    {
+        Assert(!"Win32: Failed to convert clipboard to string");
+        CloseClipboard();
+        return NULL;
+    }
+
+    buffer = (WCHAR *)GlobalLock(object);
+    if (!buffer)
+    {
+        Assert(!"Win32: Failed to lock global handle");
+        CloseClipboard();
+        return NULL;
+    }
+
+    Win32DeallocateMemory(State->clipboardString);
+    State->clipboardString = _glfwCreateUTF8FromWideStringWin32(buffer);
+
+    GlobalUnlock(object);
+    CloseClipboard();
+
+    return State->clipboardString;
 }
 
 inline s32
@@ -147,9 +279,7 @@ Win32SetCursorPos(win32_state *State, double xpos, double ypos)
     if (xpos != xpos || xpos < -DBL_MAX || xpos > DBL_MAX ||
         ypos != ypos || ypos < -DBL_MAX || ypos > DBL_MAX)
     {
-//        _glfwInputError(WIN32_INVALID_VALUE,
-//                        "Invalid cursor position %f %f",
-//                        xpos, ypos);
+        Assert(!"Invalid cursor position %f %f");
         return;
     }
 
@@ -178,7 +308,7 @@ Win32GetMouseButton(win32_state *State, int button)
 {
     if (button < WIN32_MOUSE_BUTTON_1 || button > WIN32_MOUSE_BUTTON_LAST)
     {
-//        _glfwInputError(WIN32_INVALID_ENUM, "Invalid mouse button %i", button);
+        Assert(!"Invalid mouse button %i");
         return WIN32_RELEASE;
     }
 
@@ -198,7 +328,7 @@ Win32GetMouseButton(win32_state *State, int button)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): NUKLEAR CALLBACKS
+// NOTE(paul): NUKLEAR CALLBACKS & Setup
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal inline void
 Win32NkScrollCallback(nk_win32 *NkWin32, double xoff, double yoff)
@@ -232,7 +362,7 @@ Win32NkCharCallback(nk_win32 *glfw, unsigned int codepoint)
 }
 
 inline void
-Win32NkKeyCallback(nk_win32 *glfw, int key, int scancode, int action, int mods)
+Win32NkKeyCallback(nk_win32 *NkWin32, int key, int scancode, int action, int mods)
 {
     /*
      * convert WIN32_REPEAT to down (technically WIN32_RELEASE, WIN32_PRESS, WIN32_REPEAT are
@@ -244,16 +374,16 @@ Win32NkKeyCallback(nk_win32 *glfw, int key, int scancode, int action, int mods)
     NK_UNUSED(mods);
 
     switch (key) {
-        case WIN32_KEY_DELETE:    glfw->key_events[NK_KEY_DEL] = a; break;
-        case WIN32_KEY_TAB:       glfw->key_events[NK_KEY_TAB] = a; break;
-        case WIN32_KEY_BACKSPACE: glfw->key_events[NK_KEY_BACKSPACE] = a; break;
-        case WIN32_KEY_UP:        glfw->key_events[NK_KEY_UP] = a; break;
-        case WIN32_KEY_DOWN:      glfw->key_events[NK_KEY_DOWN] = a; break;
-        case WIN32_KEY_LEFT:      glfw->key_events[NK_KEY_LEFT] = a; break;
-        case WIN32_KEY_RIGHT:     glfw->key_events[NK_KEY_RIGHT] = a; break;
+        case WIN32_KEY_DELETE:    NkWin32->key_events[NK_KEY_DEL] = a; break;
+        case WIN32_KEY_TAB:       NkWin32->key_events[NK_KEY_TAB] = a; break;
+        case WIN32_KEY_BACKSPACE: NkWin32->key_events[NK_KEY_BACKSPACE] = a; break;
+        case WIN32_KEY_UP:        NkWin32->key_events[NK_KEY_UP] = a; break;
+        case WIN32_KEY_DOWN:      NkWin32->key_events[NK_KEY_DOWN] = a; break;
+        case WIN32_KEY_LEFT:      NkWin32->key_events[NK_KEY_LEFT] = a; break;
+        case WIN32_KEY_RIGHT:     NkWin32->key_events[NK_KEY_RIGHT] = a; break;
 
-        case WIN32_KEY_PAGE_UP:   glfw->key_events[NK_KEY_SCROLL_UP] = a; break;
-        case WIN32_KEY_PAGE_DOWN: glfw->key_events[NK_KEY_SCROLL_DOWN] = a; break;
+        case WIN32_KEY_PAGE_UP:   NkWin32->key_events[NK_KEY_SCROLL_UP] = a; break;
+        case WIN32_KEY_PAGE_DOWN: NkWin32->key_events[NK_KEY_SCROLL_DOWN] = a; break;
 
             /* have to add all keys used for nuklear to get correct repeat behavior
              * NOTE these are scancodes so your custom layout won't matter unfortunately
@@ -262,18 +392,18 @@ Win32NkKeyCallback(nk_win32 *glfw, int key, int scancode, int action, int mods)
              * selecting all, copying or cutting 40 times before you release the keys
              * doesn't actually cause any visible problems */
 
-        case WIN32_KEY_C:         glfw->key_events[NK_KEY_COPY] = a; break;
-        case WIN32_KEY_V:         glfw->key_events[NK_KEY_PASTE] = a; break;
-        case WIN32_KEY_X:         glfw->key_events[NK_KEY_CUT] = a; break;
-        case WIN32_KEY_Z:         glfw->key_events[NK_KEY_TEXT_UNDO] = a; break;
-        case WIN32_KEY_R:         glfw->key_events[NK_KEY_TEXT_REDO] = a; break;
-        case WIN32_KEY_B:         glfw->key_events[NK_KEY_TEXT_LINE_START] = a; break;
-        case WIN32_KEY_E:         glfw->key_events[NK_KEY_TEXT_LINE_END] = a; break;
-        case WIN32_KEY_A:         glfw->key_events[NK_KEY_TEXT_SELECT_ALL] = a; break;
+        case WIN32_KEY_C:         NkWin32->key_events[NK_KEY_COPY] = a; break;
+        case WIN32_KEY_V:         NkWin32->key_events[NK_KEY_PASTE] = a; break;
+        case WIN32_KEY_X:         NkWin32->key_events[NK_KEY_CUT] = a; break;
+        case WIN32_KEY_Z:         NkWin32->key_events[NK_KEY_TEXT_UNDO] = a; break;
+        case WIN32_KEY_R:         NkWin32->key_events[NK_KEY_TEXT_REDO] = a; break;
+        case WIN32_KEY_B:         NkWin32->key_events[NK_KEY_TEXT_LINE_START] = a; break;
+        case WIN32_KEY_E:         NkWin32->key_events[NK_KEY_TEXT_LINE_END] = a; break;
+        case WIN32_KEY_A:         NkWin32->key_events[NK_KEY_TEXT_SELECT_ALL] = a; break;
 
         case WIN32_KEY_ENTER:
         case WIN32_KEY_KP_ENTER:
-            glfw->key_events[NK_KEY_ENTER] = a;
+            NkWin32->key_events[NK_KEY_ENTER] = a;
             break;
         default:
             ;
@@ -281,86 +411,91 @@ Win32NkKeyCallback(nk_win32 *glfw, int key, int scancode, int action, int mods)
 }
 
 internal void
-nk_win323_clipboard_paste(nk_handle usr, struct nk_text_edit *edit)
+Win32NkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 {
-    const char *text = glfwGetClipboardString();
-    if (text) nk_textedit_paste(edit, text, nk_strlen(text));
+    win32_state *State = (win32_state *)usr.ptr;
+    const char *text = Win32ClipboardGetString(State);
+    if (text)
+        nk_textedit_paste(edit, text, nk_strlen(text));
     (void)usr;
 }
 
 internal void
-nk_win323_clipboard_copy(nk_handle usr, const char *text, int len)
+Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
 {
+    win32_state *State = (win32_state *)usr.ptr;
+
     char *str = 0;
     (void)usr;
     if (!len) return;
-    str = (char*)malloc((size_t)len+1);
+    str = (char*)Win32AllocateMemory((size_t)len+1);
     if (!str) return;
-    memcpy(str, text, (size_t)len);
+    Copy(len, (void *)text, (void *)str);
     str[len] = '\0';
-    glfwSetClipboardString(str);
-    free(str);
+    Win32SetClipboardString(State, str);
+    Win32DeallocateMemory(str);
 }
 
 internal struct nk_context*
-Win32InitNkContext(nk_win32 *glfw)
+Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
 {
-    nk_init_default(&glfw->ctx, 0);
-    glfw->ctx.clip.copy = nk_win323_clipboard_copy;
-    glfw->ctx.clip.paste = nk_win323_clipboard_paste;
-    glfw->ctx.clip.userdata = nk_handle_ptr(0);
-    nk_buffer_init_default(&glfw->ogl.cmds);
+    nk_init_default(&NkWin32->ctx, 0);
 
-    glfw->is_double_click_down = nk_false;
-    glfw->double_click_pos = nk_vec2(0, 0);
+    NkWin32->ctx.clip.userdata.ptr = (void *)State;
+    NkWin32->ctx.clip.copy = Win32NkClipboardCopy;
+    NkWin32->ctx.clip.paste = Win32NkClipboardPaste;
+    nk_buffer_init_default(&NkWin32->ogl.cmds);
 
-    glfw->delta_time_seconds_last = Win32GetTime();
+    NkWin32->is_double_click_down = nk_false;
+    NkWin32->double_click_pos = nk_vec2(0, 0);
 
-    return &glfw->ctx;
+    NkWin32->delta_time_seconds_last = Win32GetTime();
+
+    return &NkWin32->ctx;
 }
 
 internal void
-Win32NkFontStashBegin(nk_win32 *glfw, struct nk_font_atlas **atlas)
+Win32NkFontStashBegin(nk_win32 *NkWin32, struct nk_font_atlas **atlas)
 {
-    nk_font_atlas_init_default(&glfw->atlas);
-    nk_font_atlas_begin(&glfw->atlas);
-    *atlas = &glfw->atlas;
+    nk_font_atlas_init_default(&NkWin32->atlas);
+    nk_font_atlas_begin(&NkWin32->atlas);
+    *atlas = &NkWin32->atlas;
 }
 
 internal void
-Win32NkFontStashEnd(nk_win32 *glfw)
+Win32NkFontStashEnd(nk_win32 *NkWin32)
 {
     const void *image; int w, h;
-    image = nk_font_atlas_bake(&glfw->atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
-    NkOpenGLUploadAtlas(&glfw->ogl, image, w, h);
-    nk_font_atlas_end(&glfw->atlas, nk_handle_id((int)glfw->ogl.font_tex), &glfw->ogl.tex_null);
-    if (glfw->atlas.default_font)
-        nk_style_set_font(&glfw->ctx, &glfw->atlas.default_font->handle);
+    image = nk_font_atlas_bake(&NkWin32->atlas, &w, &h, NK_FONT_ATLAS_RGBA32);
+    NkOpenGLUploadAtlas(&NkWin32->ogl, image, w, h);
+    nk_font_atlas_end(&NkWin32->atlas, nk_handle_id((int)NkWin32->ogl.font_tex), &NkWin32->ogl.tex_null);
+    if (NkWin32->atlas.default_font)
+        nk_style_set_font(&NkWin32->ctx, &NkWin32->atlas.default_font->handle);
 }
 
 internal void
-Win32NkUpdateInputs(win32_state *State, nk_win32 *glfw, u32 WindowWidth, u32 WindowHeight,
+Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 WindowHeight,
                     u32 DrawWidth, u32 DrawHeight, f32 dt)
 {
     int i;
     double x, y;
-    struct nk_context *ctx = &glfw->ctx;
-    nk_char* k_state = glfw->key_events;
+    struct nk_context *ctx = &NkWin32->ctx;
+    nk_char* k_state = NkWin32->key_events;
 
     /* update the timer */
     float delta_time_now = dt;
-    glfw->delta_time_seconds_last = dt;
+    NkWin32->delta_time_seconds_last = dt;
 
-    glfw->width = WindowWidth;
-    glfw->height = WindowHeight;
-    glfw->display_width = DrawWidth;
-    glfw->display_height = DrawHeight;
-    glfw->fb_scale.x = (float)glfw->display_width/(float)glfw->width;
-    glfw->fb_scale.y = (float)glfw->display_height/(float)glfw->height;
+    NkWin32->width = WindowWidth;
+    NkWin32->height = WindowHeight;
+    NkWin32->display_width = DrawWidth;
+    NkWin32->display_height = DrawHeight;
+    NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
+    NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
 
     nk_input_begin(ctx);
-    for (i = 0; i < glfw->text_len; ++i)
-        nk_input_unicode(ctx, glfw->text[i]);
+    for (i = 0; i < NkWin32->text_len; ++i)
+        nk_input_unicode(ctx, NkWin32->text[i]);
 
     if (k_state[NK_KEY_DEL] >= 0) nk_input_key(ctx, NK_KEY_DEL, k_state[NK_KEY_DEL]);
     if (k_state[NK_KEY_ENTER] >= 0) nk_input_key(ctx, NK_KEY_ENTER, k_state[NK_KEY_ENTER]);
@@ -411,27 +546,145 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *glfw, u32 WindowWidth, u32 Win
     nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_LEFT) == WIN32_PRESS);
     nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_MIDDLE) == WIN32_PRESS);
     nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_RIGHT) == WIN32_PRESS);
-    nk_input_button(ctx, NK_BUTTON_DOUBLE, (int)glfw->double_click_pos.x, (int)glfw->double_click_pos.y, glfw->is_double_click_down);
-    nk_input_scroll(ctx, glfw->scroll);
-    nk_input_end(&glfw->ctx);
+    nk_input_button(ctx, NK_BUTTON_DOUBLE, (int)NkWin32->double_click_pos.x, (int)NkWin32->double_click_pos.y, NkWin32->is_double_click_down);
+    nk_input_scroll(ctx, NkWin32->scroll);
+    nk_input_end(&NkWin32->ctx);
 
     /* clear after nk_input_end (-1 since we're doing up/down boolean) */
-    memset(glfw->key_events, -1, sizeof(glfw->key_events));
+    memset(NkWin32->key_events, -1, sizeof(NkWin32->key_events));
 
-    glfw->text_len = 0;
-    glfw->scroll = nk_vec2(0,0);
+    NkWin32->text_len = 0;
+    NkWin32->scroll = nk_vec2(0,0);
 }
 
 internal void
-Win32NkShutdown(nk_win32 *glfw)
+Win32NkShutdown(nk_win32 *NkWin32)
 {
-    struct nk_opengl *dev = &glfw->ogl;
-    nk_font_atlas_clear(&glfw->atlas);
-    nk_free(&glfw->ctx);
+    struct nk_opengl *dev = &NkWin32->ogl;
+    nk_font_atlas_clear(&NkWin32->atlas);
+    nk_free(&NkWin32->ctx);
     glDeleteTextures(1, &dev->font_tex);
     nk_buffer_free(&dev->cmds);
-    memset(&glfw, 0, sizeof(glfw));
+    memset(&NkWin32, 0, sizeof(NkWin32));
 }
+
+inline nk_context *
+Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32)
+{
+    struct nk_context *Result = 0;
+    Result = Win32InitNkContext(State, NkWin32);
+    {
+        struct nk_font_atlas *atlas;
+        Win32NkFontStashBegin(NkWin32, &atlas);
+        struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
+        /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
+        /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
+        /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
+        /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
+        /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
+        Win32NkFontStashEnd(NkWin32);
+        nk_style_load_all_cursors(Result, atlas->cursors);
+        nk_style_set_font(Result, &droid->handle);
+    }
+
+    return(Result);
+}
+
+internal inline void
+Win32SetUIPointers(nk_ui *UI)
+{
+    UI->NkBegin = nk_begin;
+    UI->NkEnd = nk_end;
+
+    UI->NkLayoutRowDynamic = nk_layout_row_dynamic;
+    UI->NkLayoutRowBegin = nk_layout_row_begin;
+    UI->NkLayoutRowPush = nk_layout_row_push;
+    UI->NkLayoutRowEnd = nk_layout_row_end;
+
+    UI->NkText = nk_text;
+    UI->NkTextColored = nk_text_colored;
+    UI->NkTextWrap = nk_text_wrap;
+    UI->NkTextWrapColored = nk_text_wrap_colored;
+    UI->NkLabel = nk_label;
+    UI->NkLabelColored = nk_label_colored;
+    UI->NkLabelWrap = nk_label_wrap;
+    UI->NkLabelColoredWrap = nk_label_colored_wrap;
+    UI->NkImage = nk_image;
+    UI->NkImageColor = nk_image_color;
+
+    UI->NkLabelf = nk_labelf;
+    UI->NkLabelfColored = nk_labelf_colored;
+    UI->NkLabelfWrap = nk_labelf_wrap;
+    UI->NkLabelfColoredWrap = nk_labelf_colored_wrap;
+    UI->NkLabelfv = nk_labelfv;
+    UI->NkLabelfvColored = nk_labelfv_colored;
+    UI->NkLabelfvWrap = nk_labelfv_wrap;
+    UI->NkLabelfvColoredWrap = nk_labelfv_colored_wrap;
+    UI->NkValueBool = nk_value_bool;
+    UI->NkValueInt = nk_value_int;
+    UI->NkValueUint = nk_value_uint;
+    UI->NkValueFloat = nk_value_float;
+    UI->NkValueColorByte = nk_value_color_byte;
+    UI->NkValueColorFloat = nk_value_color_float;
+    UI->NkValueColorHex = nk_value_color_hex;
+
+    UI->NkButtonText = nk_button_text;
+    UI->NkButtonLabel = nk_button_label;
+    UI->NkButtonColor = nk_button_color;
+    UI->NkButtonSymbol = nk_button_symbol;
+    UI->NkButtonImage = nk_button_image;
+    UI->NkButtonSymbolLabel = nk_button_symbol_label;
+    UI->NkButtonSymbolText = nk_button_symbol_text;
+    UI->NkButtonImageLabel = nk_button_image_label;
+    UI->NkButtonImageText = nk_button_image_text;
+    UI->NkButtonTextStyled = nk_button_text_styled;
+    UI->NkButtonLabelStyled = nk_button_label_styled;
+    UI->NkButtonSymbolStyled = nk_button_symbol_styled;
+    UI->NkButtonImageStyled = nk_button_image_styled;
+    UI->NkButtonSymbolTextStyled = nk_button_symbol_text_styled;
+    UI->NkButtonSymbolLabelStyled = nk_button_symbol_label_styled;
+    UI->NkButtonImageLabelStyled = nk_button_image_label_styled;
+    UI->NkButtonImageTextStyled = nk_button_image_text_styled;
+    UI->NkButtonSetBehavior = nk_button_set_behavior;
+    UI->NkButtonPushBehavior = nk_button_push_behavior;
+    UI->NkButtonPopBehavior = nk_button_pop_behavior;
+
+    UI->NkCheckLabel = nk_check_label;
+    UI->NkCheckText = nk_check_text;
+    UI->NkCheckTextAlign = nk_check_text_align;
+    UI->NkCheckFlagsLabel = nk_check_flags_label;
+    UI->NkCheckFlagsText = nk_check_flags_text;
+    UI->NkCheckboxLabel = nk_checkbox_label;
+    UI->NkCheckboxLabelAlign = nk_checkbox_label_align;
+    UI->NkCheckboxText = nk_checkbox_text;
+    UI->NkCheckboxTextAlign = nk_checkbox_text_align;
+    UI->NkCheckboxFlagsLabel = nk_checkbox_flags_label;
+    UI->NkCheckboxFlagsText = nk_checkbox_flags_text;
+
+    UI->NkEditString = nk_edit_string;
+    UI->NkEditStringZeroTerminated = nk_edit_string_zero_terminated;
+    UI->NkEditBuffer = nk_edit_buffer;
+    UI->NkEditFocus = nk_edit_focus;
+    UI->NkEditUnfocus = nk_edit_unfocus;
+
+    UI->NkMurmurHash = nk_murmur_hash;
+    UI->NkTriangleFromDirection = nk_triangle_from_direction;
+
+    UI->NkVec2 = nk_vec2;
+    UI->NkVec2i = nk_vec2i;
+    UI->NkVec2v = nk_vec2v;
+    UI->NkVec2iv = nk_vec2iv;
+
+    UI->NkGetNullRect = nk_get_null_rect;
+    UI->NkRect = nk_rect;
+    UI->NkRecti = nk_recti;
+    UI->NkRecta = nk_recta;
+    UI->NkRectv = nk_rectv;
+    UI->NkRectiv = nk_rectiv;
+    UI->NkRectPos = nk_rect_pos;
+    UI->NkRectSize = nk_rect_size;
+}
+
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1134,7 +1387,7 @@ Win32MainWindowCallback(HWND Window,
 }
 
 internal void
-Win32ProcessKeyboardMessage(editor_button_state *NewState, bool32 IsDown)
+Win32ProcessKeyboardMessage(engine_button_state *NewState, bool32 IsDown)
 {
     if(NewState->EndedDown != IsDown)
     {
@@ -1236,7 +1489,7 @@ Win32InputMouseClick(win32_state *State, int button, int action, int mods)
 }
 
 internal void
-Win32ProcessPendingMessages(win32_state *State, editor_controller_input *KeyboardController, s16 *MouseRotated)
+Win32ProcessPendingMessages(win32_state *State, engine_controller_input *KeyboardController, s16 *MouseRotated)
 {
     MSG Message;
     for(;;)
@@ -2053,35 +2306,41 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WIN32 MEMORY
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-PLATFORM_ALLOCATE_MEMORY(Win32AllocateMemory)
+internal inline void
+Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
+                     platform_work_queue *LowPQ)
 {
-    void *Result = VirtualAlloc(0, Size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+    Memory->HighPriorityQueue = HighPQ;
+    Memory->LowPriorityQueue = LowPQ;
+    Memory->PlatformAPI.AddEntry = Win32AddEntry;
+    Memory->PlatformAPI.CompleteAllWork = Win32CompleteAllWork;
 
-    return(Result);
-}
+    Memory->PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
+    Memory->PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
+    Memory->PlatformAPI.OpenNextFile = Win32OpenNextFile;
+    Memory->PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
+    Memory->PlatformAPI.FileError = Win32FileError;
+    Memory->PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
 
-PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
-{
-    if(Memory)
-    {
-        VirtualFree(Memory, 0, MEM_RELEASE);
-    }
+    Memory->PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
+    Memory->PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
+
+    Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
+    Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
+            
+#if EDITOR_INTERNAL
+    Memory->DebugTable = GlobalDebugTable;
+    Memory->PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
+    Memory->PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
+#endif
+
+    Win32SetUIPointers(&Memory->PlatformAPI.UI);
 }
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// ...........................................................................................................................................................
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #if EDITOR_INTERNAL
 global_variable debug_table GlobalDebugTable_;
 debug_table *GlobalDebugTable = &GlobalDebugTable_;
 #endif
-
-#define MAX_VERTEX_BUFFER 512 * 1024
-#define MAX_ELEMENT_BUFFER 128 * 1024
 
 int CALLBACK
 WinMain(HINSTANCE Instance,
@@ -2181,124 +2440,7 @@ WinMain(HINSTANCE Instance,
 
             // NOTE(paul): Initialize Engine Memory and Platform API
             engine_memory EditorMemory = {};
-
-#if EDITOR_INTERNAL
-            EditorMemory.DebugTable = GlobalDebugTable;
-#endif
-            EditorMemory.HighPriorityQueue = &HighPriorityQueue;
-            EditorMemory.LowPriorityQueue = &LowPriorityQueue;
-            EditorMemory.PlatformAPI.AddEntry = Win32AddEntry;
-            EditorMemory.PlatformAPI.CompleteAllWork = Win32CompleteAllWork;
-
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
-            EditorMemory.PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
-            EditorMemory.PlatformAPI.OpenNextFile = Win32OpenNextFile;
-            EditorMemory.PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
-            EditorMemory.PlatformAPI.FileError = Win32FileError;
-            EditorMemory.PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
-
-            EditorMemory.PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
-            EditorMemory.PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
-
-            EditorMemory.PlatformAPI.AllocateMemory = Win32AllocateMemory;
-            EditorMemory.PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
-
-            EditorMemory.PlatformAPI.UI.NkBegin = nk_begin;
-            EditorMemory.PlatformAPI.UI.NkEnd = nk_end;
-
-            EditorMemory.PlatformAPI.UI.NkLayoutRowDynamic = nk_layout_row_dynamic;
-            EditorMemory.PlatformAPI.UI.NkLayoutRowBegin = nk_layout_row_begin;
-            EditorMemory.PlatformAPI.UI.NkLayoutRowPush = nk_layout_row_push;
-            EditorMemory.PlatformAPI.UI.NkLayoutRowEnd = nk_layout_row_end;
-
-            EditorMemory.PlatformAPI.UI.NkText = nk_text;
-            EditorMemory.PlatformAPI.UI.NkTextColored = nk_text_colored;
-            EditorMemory.PlatformAPI.UI.NkTextWrap = nk_text_wrap;
-            EditorMemory.PlatformAPI.UI.NkTextWrapColored = nk_text_wrap_colored;
-            EditorMemory.PlatformAPI.UI.NkLabel = nk_label;
-            EditorMemory.PlatformAPI.UI.NkLabelColored = nk_label_colored;
-            EditorMemory.PlatformAPI.UI.NkLabelWrap = nk_label_wrap;
-            EditorMemory.PlatformAPI.UI.NkLabelColoredWrap = nk_label_colored_wrap;
-            EditorMemory.PlatformAPI.UI.NkImage = nk_image;
-            EditorMemory.PlatformAPI.UI.NkImageColor = nk_image_color;
-
-            EditorMemory.PlatformAPI.UI.NkLabelf = nk_labelf;
-            EditorMemory.PlatformAPI.UI.NkLabelfColored = nk_labelf_colored;
-            EditorMemory.PlatformAPI.UI.NkLabelfWrap = nk_labelf_wrap;
-            EditorMemory.PlatformAPI.UI.NkLabelfColoredWrap = nk_labelf_colored_wrap;
-            EditorMemory.PlatformAPI.UI.NkLabelfv = nk_labelfv;
-            EditorMemory.PlatformAPI.UI.NkLabelfvColored = nk_labelfv_colored;
-            EditorMemory.PlatformAPI.UI.NkLabelfvWrap = nk_labelfv_wrap;
-            EditorMemory.PlatformAPI.UI.NkLabelfvColoredWrap = nk_labelfv_colored_wrap;
-            EditorMemory.PlatformAPI.UI.NkValueBool = nk_value_bool;
-            EditorMemory.PlatformAPI.UI.NkValueInt = nk_value_int;
-            EditorMemory.PlatformAPI.UI.NkValueUint = nk_value_uint;
-            EditorMemory.PlatformAPI.UI.NkValueFloat = nk_value_float;
-            EditorMemory.PlatformAPI.UI.NkValueColorByte = nk_value_color_byte;
-            EditorMemory.PlatformAPI.UI.NkValueColorFloat = nk_value_color_float;
-            EditorMemory.PlatformAPI.UI.NkValueColorHex = nk_value_color_hex;
-
-            EditorMemory.PlatformAPI.UI.NkButtonText = nk_button_text;
-            EditorMemory.PlatformAPI.UI.NkButtonLabel = nk_button_label;
-            EditorMemory.PlatformAPI.UI.NkButtonColor = nk_button_color;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbol = nk_button_symbol;
-            EditorMemory.PlatformAPI.UI.NkButtonImage = nk_button_image;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbolLabel = nk_button_symbol_label;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbolText = nk_button_symbol_text;
-            EditorMemory.PlatformAPI.UI.NkButtonImageLabel = nk_button_image_label;
-            EditorMemory.PlatformAPI.UI.NkButtonImageText = nk_button_image_text;
-            EditorMemory.PlatformAPI.UI.NkButtonTextStyled = nk_button_text_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonLabelStyled = nk_button_label_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbolStyled = nk_button_symbol_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonImageStyled = nk_button_image_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbolTextStyled = nk_button_symbol_text_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonSymbolLabelStyled = nk_button_symbol_label_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonImageLabelStyled = nk_button_image_label_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonImageTextStyled = nk_button_image_text_styled;
-            EditorMemory.PlatformAPI.UI.NkButtonSetBehavior = nk_button_set_behavior;
-            EditorMemory.PlatformAPI.UI.NkButtonPushBehavior = nk_button_push_behavior;
-            EditorMemory.PlatformAPI.UI.NkButtonPopBehavior = nk_button_pop_behavior;
-
-            EditorMemory.PlatformAPI.UI.NkCheckLabel = nk_check_label;
-            EditorMemory.PlatformAPI.UI.NkCheckText = nk_check_text;
-            EditorMemory.PlatformAPI.UI.NkCheckTextAlign = nk_check_text_align;
-            EditorMemory.PlatformAPI.UI.NkCheckFlagsLabel = nk_check_flags_label;
-            EditorMemory.PlatformAPI.UI.NkCheckFlagsText = nk_check_flags_text;
-            EditorMemory.PlatformAPI.UI.NkCheckboxLabel = nk_checkbox_label;
-            EditorMemory.PlatformAPI.UI.NkCheckboxLabelAlign = nk_checkbox_label_align;
-            EditorMemory.PlatformAPI.UI.NkCheckboxText = nk_checkbox_text;
-            EditorMemory.PlatformAPI.UI.NkCheckboxTextAlign = nk_checkbox_text_align;
-            EditorMemory.PlatformAPI.UI.NkCheckboxFlagsLabel = nk_checkbox_flags_label;
-            EditorMemory.PlatformAPI.UI.NkCheckboxFlagsText = nk_checkbox_flags_text;
-
-            EditorMemory.PlatformAPI.UI.NkEditString = nk_edit_string;
-            EditorMemory.PlatformAPI.UI.NkEditStringZeroTerminated = nk_edit_string_zero_terminated;
-            EditorMemory.PlatformAPI.UI.NkEditBuffer = nk_edit_buffer;
-            EditorMemory.PlatformAPI.UI.NkEditFocus = nk_edit_focus;
-            EditorMemory.PlatformAPI.UI.NkEditUnfocus = nk_edit_unfocus;
-
-            EditorMemory.PlatformAPI.UI.NkMurmurHash = nk_murmur_hash;
-            EditorMemory.PlatformAPI.UI.NkTriangleFromDirection = nk_triangle_from_direction;
-
-            EditorMemory.PlatformAPI.UI.NkVec2 = nk_vec2;
-            EditorMemory.PlatformAPI.UI.NkVec2i = nk_vec2i;
-            EditorMemory.PlatformAPI.UI.NkVec2v = nk_vec2v;
-            EditorMemory.PlatformAPI.UI.NkVec2iv = nk_vec2iv;
-
-            EditorMemory.PlatformAPI.UI.NkGetNullRect = nk_get_null_rect;
-            EditorMemory.PlatformAPI.UI.NkRect = nk_rect;
-            EditorMemory.PlatformAPI.UI.NkRecti = nk_recti;
-            EditorMemory.PlatformAPI.UI.NkRecta = nk_recta;
-            EditorMemory.PlatformAPI.UI.NkRectv = nk_rectv;
-            EditorMemory.PlatformAPI.UI.NkRectiv = nk_rectiv;
-            EditorMemory.PlatformAPI.UI.NkRectPos = nk_rect_pos;
-            EditorMemory.PlatformAPI.UI.NkRectSize = nk_rect_size;
-            
-#if EDITOR_INTERNAL
-            EditorMemory.PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
-            EditorMemory.PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
-#endif
-
+            Win32InitPlatformAPI(&EditorMemory, &HighPriorityQueue, &LowPriorityQueue);
             Platform = EditorMemory.PlatformAPI;
 
             // NOTE(paul): Init render memory
@@ -2319,9 +2461,9 @@ WinMain(HINSTANCE Instance,
             }
 
             // NOTE(paul): Init Input
-            editor_input Input[2] = {};
-            editor_input *NewInput = &Input[0];
-            editor_input *OldInput = &Input[1];
+            engine_input Input[2] = {};
+            engine_input *NewInput = &Input[0];
+            engine_input *OldInput = &Input[1];
 
             LARGE_INTEGER LastCounter = Win32GetWallClock();
             LARGE_INTEGER FlipWallClock = Win32GetWallClock();
@@ -2335,42 +2477,9 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            struct nk_context *nk;
-            struct nk_colorf bg;
-            nk = Win32InitNkContext(&Win32State.Main);
-            bg.r = 0.10f, bg.g = 0.18f, bg.b = 0.24f, bg.a = 1.0f;
-            char window_title[64] = "Title";
-
-            {
-                struct nk_font_atlas *atlas;
-                Win32NkFontStashBegin(&Win32State.Main, &atlas);
-                struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
-                /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
-                /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
-                /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
-                /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
-                /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
-                Win32NkFontStashEnd(&Win32State.Main);
-                nk_style_load_all_cursors(nk, atlas->cursors);
-                nk_style_set_font(nk, &droid->handle);
-            }
-
-            struct nk_context *debug_nk;
-            debug_nk = Win32InitNkContext(&Win32State.Debug);
-
-            {
-                struct nk_font_atlas *atlas;
-                Win32NkFontStashBegin(&Win32State.Debug, &atlas);
-                struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
-                /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
-                /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
-                /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
-                /*struct nk_font *tiny = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyTiny.ttf", 10, 0);*/
-                /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
-                Win32NkFontStashEnd(&Win32State.Debug);
-                nk_style_load_all_cursors(debug_nk, atlas->cursors);
-                nk_style_set_font(debug_nk, &droid->handle);
-            }
+            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main);
+            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug);
+            nk_colorf bg = {};
             
             GlobalRunning = true;
             while(GlobalRunning)
@@ -2399,8 +2508,8 @@ WinMain(HINSTANCE Instance,
                 // TODO(casey): Zeroing macro
                 // TODO(casey): We can't zero everything because the up/down state will
                 // be wrong!!!
-                editor_controller_input *OldKeyboardController = GetController(OldInput, 0);
-                editor_controller_input *NewKeyboardController = GetController(NewInput, 0);
+                engine_controller_input *OldKeyboardController = GetController(OldInput, 0);
+                engine_controller_input *NewKeyboardController = GetController(NewInput, 0);
                 *NewKeyboardController = {};
                 NewKeyboardController->IsConnected = true;
 
@@ -2477,11 +2586,11 @@ WinMain(HINSTANCE Instance,
                 Win32NkUpdateInputs(&Win32State, &Win32State.Main, Dimension.Width, Dimension.Height,
                                     RenderCommands.Width, RenderCommands.Height,
                                     TargetSecondsPerFrame);
-
+#if EDITOR_INTERNAL
                 Win32NkUpdateInputs(&Win32State, &Win32State.Debug, Dimension.Width, Dimension.Height,
                                     RenderCommands.Width, RenderCommands.Height,
                                     TargetSecondsPerFrame);
-
+#endif
                 BEGIN_BLOCK("Editor Update");
                 if(!GlobalPause)
                 {
@@ -2500,45 +2609,6 @@ WinMain(HINSTANCE Instance,
                 }
                 
                 END_BLOCK();
-#if 0
-
-                /* GUI */
-                if (nk_begin(debug_nk, "Demo", nk_rect(200, 200, 230, 250),
-                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                             NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
-                {
-                    enum {EASY, HARD};
-                    static int op = EASY;
-                    static int property = 20;
-                    nk_layout_row_static(debug_nk, 30, 80, 1);
-                    if (nk_button_label(debug_nk, "button"))
-                    {
-//                        fprintf(stdout, "button pressed\n");
-                    }
-
-                    nk_layout_row_dynamic(debug_nk, 30, 2);
-                    if (nk_option_label(debug_nk, "easy", op == EASY)) op = EASY;
-                    if (nk_option_label(debug_nk, "hard", op == HARD)) op = HARD;
-
-                    nk_layout_row_dynamic(debug_nk, 25, 1);
-                    nk_property_int(debug_nk, "Compression:", 0, &property, 100, 10, 1);
-
-                    nk_layout_row_dynamic(debug_nk, 20, 1);
-                    nk_label(debug_nk, "background:", NK_TEXT_LEFT);
-                    nk_layout_row_dynamic(debug_nk, 25, 1);
-                    if (nk_combo_begin_color(debug_nk, nk_rgb_cf(bg), nk_vec2(nk_widget_width(debug_nk),400))) {
-                        nk_layout_row_dynamic(debug_nk, 120, 1);
-                        bg = nk_color_picker(debug_nk, bg, NK_RGBA);
-                        nk_layout_row_dynamic(debug_nk, 25, 1);
-                        bg.r = nk_propertyf(debug_nk, "#R:", 0, bg.r, 1.0f, 0.01f,0.005f);
-                        bg.g = nk_propertyf(debug_nk, "#G:", 0, bg.g, 1.0f, 0.01f,0.005f);
-                        bg.b = nk_propertyf(debug_nk, "#B:", 0, bg.b, 1.0f, 0.01f,0.005f);
-                        bg.a = nk_propertyf(debug_nk, "#A:", 0, bg.a, 1.0f, 0.01f,0.005f);
-                        nk_combo_end(debug_nk);
-                    }
-                }
-                nk_end(debug_nk);
-#endif
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2620,7 +2690,9 @@ WinMain(HINSTANCE Instance,
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
                 NKOpenGLRenderCommands(&Win32State.Main, NK_ANTI_ALIASING_ON);
+#if EDITOR_INTERNAL
                 NKOpenGLRenderCommands(&Win32State.Debug, NK_ANTI_ALIASING_ON);
+#endif
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);
 
@@ -2633,7 +2705,7 @@ WinMain(HINSTANCE Instance,
                 // NOTE(paul): Swap Inputs
                 FlipWallClock = Win32GetWallClock();
 
-                editor_input *Temp = NewInput;
+                engine_input *Temp = NewInput;
                 NewInput = OldInput;
                 OldInput = Temp;
 

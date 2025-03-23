@@ -93,14 +93,14 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
 }
 
 internal b32
-CheckForMetaInput(editor_state *EditorState, transient_state *TranState, editor_input *Input)
+CheckForMetaInput(editor_state *EditorState, transient_state *TranState, engine_input *Input)
 {
     b32 Result = false;
     for(u32 ControllerIndex = 0;
         ControllerIndex < ArrayCount(Input->Controllers);
         ++ControllerIndex)
     {
-        editor_controller_input *Controller = GetController(Input, ControllerIndex);
+        engine_controller_input *Controller = GetController(Input, ControllerIndex);
         if(Controller->IsConnected)
         {
             if(WasPressed(Controller->Back))
@@ -173,25 +173,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         char window_title[64] = "Title";
-#if 0
-        struct nk_font_atlas atlas = {};
-        nk_font_atlas_init_default(&atlas);
-        nk_font_atlas_begin(&atlas);
-        nk_font *font = nk_font_atlas_add_from_file(&atlas, "C:\\Paul\\Spellweaver_Saga_game\\data\\editor\\fonts\\LiberationMono-Regular.ttf", 16, 0);
-//        nk_font *font = nk_font_atlas_add_from_file(&atlas, "D:\\paul\\Spellweaver_Saga_game\\data\\editor\\fonts\\LiberationMono-Regular.ttf", 16, 0);
-//                nk_font *font2 = nk_font_atlas_add_from_file(&atlas, "Path/To/Your/TTF_Font2.ttf", 16, 0);
-
-        int width = 0;
-        int height = 0;
-        const void* img = nk_font_atlas_bake(&atlas, &width, &height, NK_FONT_ATLAS_RGBA32);
-        nk_font_atlas_end(&atlas, nk_handle_id(0), 0);
- 
-        nk_size UIMemorySize = Megabytes(10);
-        void *UIMemory = Platform.AllocateMemory(UIMemorySize);
-                
-        ctx = {};
-        nk_init_fixed(&ctx, UIMemory, UIMemorySize, &font->handle);
-#endif
     }
 
     // NOTE(casey): Transient initialization
@@ -249,6 +230,17 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
+
+    if (NkTreePush(nk, NK_TREE_TAB, "Tree", NK_MINIMIZED)) {
+        UI.NkLayoutRowDynamic(nk, 30, 4);
+
+        if (UI.NkButtonLabel(nk, "Make Windowed"))
+        {
+        }
+
+        UI.NkTreePop(nk);
+    }
+    
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
     if (UI.NkBegin(nk, "Demo", UI.NkRect(50, 50, 230, 250),
                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
@@ -310,157 +302,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         UI.NkLabelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Height);
     }
     UI.NkEnd(nk);
-
-#if 0
-    if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
-                 NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
-        // fixed widget pixel width
-        nk_layout_row_static(&ctx, 30, 80, 1);
-        if (nk_button_label(&ctx, "button")) {
-            // event handling
-        }
- 
-        // fixed widget window ratio width
-        nk_layout_row_dynamic(&ctx, 30, 2);
-        if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
-        if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
- 
-        // custom widget pixel width
-        nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
-        {
-            nk_layout_row_push(&ctx, 50);
-            nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
-            nk_layout_row_push(&ctx, 110);
-            nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
-        }
-        nk_layout_row_end(&ctx);
-    }
-    nk_end(&ctx);
-
-    const struct nk_command *cmd = 0;
-    static s32 Counts[NK_COMMAND_CUSTOM] = {};
-    f32 Z = 0.0f;
-    u32 I = 0;
-    nk_foreach(cmd, &ctx)
-    {
-        Z += 1.0f;
-        I += 1;
-        ++Counts[cmd->type];
-        switch(cmd->type)
-        {
-            case NK_COMMAND_NOP:
-            {
-            } break;
-            
-            case NK_COMMAND_SCISSOR:
-            {
-                nk_command_scissor *S = (nk_command_scissor *)cmd;
-                PushClipRect(RenderGroup, &Default,
-                             V3((f32)S->x + 0.5f*(f32)S->w, -(f32)S->y - 0.5f*(f32)S->h, Z),
-                             V2(S->w, S->h), 0);
-            } break;
-            
-            case NK_COMMAND_LINE:
-            {
-                nk_command_line *L = (nk_command_line *)cmd;
-            } break;
-            
-            case NK_COMMAND_CURVE:
-            {
-                nk_command_curve *C = (nk_command_curve *)cmd;
-            } break;
-            
-            case NK_COMMAND_RECT:
-            {
-                nk_command_rect *R = (nk_command_rect *)cmd;
-                PushRectOutline(RenderGroup, &Default,
-                                V3((f32)R->x + 0.5f*(f32)R->w, -(f32)R->y - 0.5f*(f32)R->h, Z),
-                                V2(R->w, R->h), V4(DebugColorTable[I], 1),
-                                (f32)R->line_thickness);
-            } break;
-            
-            case NK_COMMAND_RECT_FILLED:
-            {
-                nk_command_rect_filled *RF = (nk_command_rect_filled *)cmd;
-                PushRect(RenderGroup, &Default,
-                         V3((f32)RF->x + 0.5f*(f32)RF->w, -(f32)RF->y - 0.5f*(f32)RF->h, Z),
-                         V2(RF->w, RF->h), V4(DebugColorTable[I], 1));
-
-//                PushRect(RenderGroup, &Default, V3((f32)RF->x, -(f32)RF->y, Z),
-//                         V2(RF->w, RF->h));
-            } break;
-            
-            case NK_COMMAND_RECT_MULTI_COLOR:
-            {
-                nk_command_rect_multi_color *RM = (nk_command_rect_multi_color *)cmd;
-            } break;
-            
-            case NK_COMMAND_CIRCLE:
-            {
-                nk_command_circle *C = (nk_command_circle *)cmd;
-            } break;
-            
-            case NK_COMMAND_CIRCLE_FILLED:
-            {
-                nk_command_circle_filled *CF = (nk_command_circle_filled *)cmd;
-            } break;
-            
-            case NK_COMMAND_ARC:
-            {
-                nk_command_arc *A = (nk_command_arc *)cmd;
-            } break;
-            
-            case NK_COMMAND_ARC_FILLED:
-            {
-                nk_command_arc_filled *AF = (nk_command_arc_filled *)cmd;
-            } break;
-            
-            case NK_COMMAND_TRIANGLE:
-            {
-                nk_command_triangle *T = (nk_command_triangle *)cmd;
-            } break;
-            
-            case NK_COMMAND_TRIANGLE_FILLED:
-            {
-                nk_command_triangle_filled *TF = (nk_command_triangle_filled *)cmd;
-            } break;
-            
-            case NK_COMMAND_POLYGON:
-            {
-                nk_command_polygon *P = (nk_command_polygon *)cmd;
-            } break;
-            
-            case NK_COMMAND_POLYGON_FILLED:
-            {
-                nk_command_polygon_filled *PF = (nk_command_polygon_filled *)cmd;
-            } break;
-            
-            case NK_COMMAND_POLYLINE:
-            {
-                nk_command_polyline *PL = (nk_command_polyline *)cmd;
-            } break;
-            
-            case NK_COMMAND_TEXT:
-            {
-                nk_command_text *T = (nk_command_text *)cmd;
-            } break;
-            
-            case NK_COMMAND_IMAGE:
-            {
-                nk_command_image *I = (nk_command_image *)cmd;
-            } break;
-            
-            case NK_COMMAND_CUSTOM:
-            {
-            } break;
-
-            default:
-            {
-            } break;
-        }
-    }
-    nk_clear(&ctx);
-#endif
     
     b32 Rerun = false;
     do

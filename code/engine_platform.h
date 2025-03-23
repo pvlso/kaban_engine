@@ -467,13 +467,13 @@ typedef struct editor_render_prep
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): INPUT
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-typedef struct editor_button_state
+typedef struct engine_button_state
 {
     int HalfTransitionCount;
     bool32 EndedDown;
-} editor_button_state;
+} engine_button_state;
 
-typedef struct editor_controller_input
+typedef struct engine_controller_input
 {
     bool32 IsConnected;
     bool32 IsAnalog;    
@@ -482,45 +482,45 @@ typedef struct editor_controller_input
     
     union
     {
-        editor_button_state Buttons[20];
+        engine_button_state Buttons[20];
         struct
         {
-            editor_button_state MoveUp;
-            editor_button_state MoveDown;
-            editor_button_state MoveLeft;
-            editor_button_state MoveRight;
+            engine_button_state MoveUp;
+            engine_button_state MoveDown;
+            engine_button_state MoveLeft;
+            engine_button_state MoveRight;
             
-            editor_button_state ActionUp;
-            editor_button_state ActionDown;
-            editor_button_state ActionLeft;
-            editor_button_state ActionRight;
+            engine_button_state ActionUp;
+            engine_button_state ActionDown;
+            engine_button_state ActionLeft;
+            engine_button_state ActionRight;
 
-            editor_button_state FirstMode;
-            editor_button_state SecondMode;
-            editor_button_state ThirdMode;
-            editor_button_state Fill;
+            engine_button_state FirstMode;
+            engine_button_state SecondMode;
+            engine_button_state ThirdMode;
+            engine_button_state Fill;
             
-            editor_button_state LeftShoulder;
-            editor_button_state RightShoulder;
+            engine_button_state LeftShoulder;
+            engine_button_state RightShoulder;
 
-            editor_button_state Back;
-            editor_button_state Start;
+            engine_button_state Back;
+            engine_button_state Start;
 
-            editor_button_state PlayMusic;
-            editor_button_state TerminateSound;
+            engine_button_state PlayMusic;
+            engine_button_state TerminateSound;
 
-            editor_button_state Undo;
-            editor_button_state UIEnable;
+            engine_button_state Undo;
+            engine_button_state UIEnable;
 
             // NOTE(casey): All buttons must be added above this line
             
-            editor_button_state Terminator;
+            engine_button_state Terminator;
         };
     };
 
-} editor_controller_input;
+} engine_controller_input;
 
-enum editor_input_mouse_button
+enum engine_input_mouse_button
 {
     PlatformMouseButton_Left,
     PlatformMouseButton_Middle,
@@ -531,34 +531,34 @@ enum editor_input_mouse_button
     PlatformMouseButton_Count,
 };
 
-typedef struct editor_input
+typedef struct engine_input
 {
     r32 dtForFrame;
 
-    editor_controller_input Controllers[2];
+    engine_controller_input Controllers[2];
 
     // NOTE(casey): Signals back to the platform layer
     b32 QuitRequested;
 
     // NOTE(casey): For debugging only
-    editor_button_state MouseButtons[PlatformMouseButton_Count];
+    engine_button_state MouseButtons[PlatformMouseButton_Count];
     r32 MouseX, MouseY;
     s16 MouseZ;
     
     b32 ShiftDown, AltDown, ControlDown;
-} editor_input;
+} engine_input;
 
-inline editor_controller_input *
-GetController(editor_input *Input, int unsigned ControllerIndex)
+inline engine_controller_input *
+GetController(engine_input *Input, int unsigned ControllerIndex)
 {
     Assert(ControllerIndex < ArrayCount(Input->Controllers));
     
-    editor_controller_input *Result = &Input->Controllers[ControllerIndex];
+    engine_controller_input *Result = &Input->Controllers[ControllerIndex];
     return(Result);
 }
 
 inline b32
-WasPressed(editor_button_state State)
+WasPressed(engine_button_state State)
 {
     b32 Result = ((State.HalfTransitionCount > 1) ||
                   ((State.HalfTransitionCount == 1) && (State.EndedDown)));
@@ -3630,6 +3630,7 @@ NK_API void nk_group_set_scroll(struct nk_context*, const char *id, nk_uint x_of
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
 NK_API nk_bool nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
+typedef nk_bool platform_nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
 
 /**
  * # # nk_tree_image_push
@@ -3712,6 +3713,7 @@ NK_API nk_bool nk_tree_image_push_hashed(struct nk_context*, enum nk_tree_type, 
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after calling `nk_tree_xxx_push_xxx`
  */
 NK_API void nk_tree_pop(struct nk_context*);
+typedef void platform_nk_tree_pop(struct nk_context*);
 
 /**
  * # # nk_tree_state_push
@@ -4612,6 +4614,13 @@ NK_API int nk_stricmp(const char *s1, const char *s2);
 NK_API int nk_stricmpn(const char *s1, const char *s2, int n);
 NK_API int nk_strtoi(const char *str, char **endptr);
 NK_API float nk_strtof(const char *str, char **endptr);
+
+typedef int platform_nk_strlen(const char *str);
+typedef int platform_nk_stricmp(const char *s1, const char *s2);
+typedef int platform_nk_stricmpn(const char *s1, const char *s2, int n);
+typedef int platform_nk_strtoi(const char *str, char **endptr);
+typedef float platform_nk_strtof(const char *str, char **endptr);
+
 #ifndef NK_STRTOD
 #define NK_STRTOD nk_strtod
 NK_API double nk_strtod(const char *str, char **endptr);
@@ -6598,6 +6607,7 @@ struct nk_context {
 #define NK_OFFSETOF(st,m) ((nk_ptr)&(((st*)0)->m))
 #endif
 
+#define NkTreePush(ctx, type, title, state) platform_nk_tree_push_hashed(ctx, type, title, state, NK_FILE_LINE, platform_nk_strlen(NK_FILE_LINE),__LINE__)
 
 struct nk_ui
 {
@@ -6691,6 +6701,14 @@ struct nk_ui
     platform_nk_rectiv *NkRectiv;
     platform_nk_rect_pos *NkRectPos;
     platform_nk_rect_size *NkRectSize;
+
+    platform_nk_tree_pop *NkTreePop;
+
+    platform_nk_strlen *NkStrlen;
+    platform_nk_stricmp *NkStricmp;
+    platform_nk_stricmpn *NkStricmpn;
+    platform_nk_strtoi *NkStrtoi;
+    platform_nk_strtof *NkStrtof;
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -6756,7 +6774,7 @@ typedef struct engine_memory
     platform_api PlatformAPI;
 } engine_memory;
 
-#define ENGINE_UPDATE_AND_RENDER(name) void name(struct nk_context *nk, engine_memory *Memory, editor_input *Input, editor_render_commands *RenderCommands)
+#define ENGINE_UPDATE_AND_RENDER(name) void name(struct nk_context *nk, engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
 typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -6768,7 +6786,7 @@ typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 struct debug_table;
-#define DEBUG_EDITOR_FRAME_END(name) void name(engine_memory *Memory, editor_input *Input, editor_render_commands *RenderCommands)
+#define DEBUG_EDITOR_FRAME_END(name) void name(engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
 typedef DEBUG_EDITOR_FRAME_END(debug_editor_frame_end);
 
 struct debug_id

@@ -1134,7 +1134,7 @@ DrawTrees(debug_state *DebugState, v2 MouseP)
 }
 
 internal void
-DEBUGBeginInteract(debug_state *DebugState, editor_input *Input, v2 MouseP)
+DEBUGBeginInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
 {
     u32 FrameOrdinal = DebugState->MostRecentFrameOrdinal;
     if(DebugState->HotInteraction.Type)
@@ -1203,7 +1203,7 @@ DEBUGMarkEditedEvent(debug_state *DebugState, debug_event *Event)
 }
 
 internal void
-DEBUGEndInteract(debug_state *DebugState, editor_input *Input, v2 MouseP)
+DEBUGEndInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
 {
     u32 FrameOrdinal = DebugState->MostRecentFrameOrdinal;
     switch(DebugState->Interaction.Type)
@@ -1245,7 +1245,7 @@ DEBUGEndInteract(debug_state *DebugState, editor_input *Input, v2 MouseP)
 }
 
 internal void
-DEBUGInteract(debug_state *DebugState, editor_input *Input, v2 MouseP)
+DEBUGInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
 {
     v2 dMouseP = MouseP - DebugState->LastMouseP;
     if(DebugState->Interaction.Type)
@@ -1918,29 +1918,13 @@ DEBUGStart(debug_state *DebugState, editor_render_commands *Commands, editor_ass
 }
 
 internal void
-DEBUGEnd(debug_state *DebugState, editor_input *Input)
+DEBUGEnd(debug_state *DebugState, engine_input *Input)
 {
     TIMED_FUNCTION();
 
     render_group *RenderGroup = &DebugState->RenderGroup;
 
     debug_event *HotEvent = 0;
-
-    PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, V3(0, 0.5f*DebugState->GlobalHeight, 0),
-             V2(DebugState->GlobalWidth, 50.0f),
-             V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
-
-    PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, V3(0, 0.5f*DebugState->GlobalHeight, 1.0f),
-             V2(DebugState->GlobalWidth, 50.0f) - V2(0.0f, 4.0f),
-             V4(0.725490196078f, 0.478431372549f, 0.341176470588f, 1));
-
-    PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, V3(0, 0.5f*DebugState->GlobalHeight, 2.0f),
-             V2(DebugState->GlobalWidth, 50.0f) - V2(0.0f, 8.0f),
-             V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
-
-    PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, V3(0, 0.5f*DebugState->GlobalHeight, 3.0f),
-             V2(DebugState->GlobalWidth, 50.0f) - V2(0.0f, 12.0f),
-             V4(0.6f, 0.850980392157f, 0.917647058824f, 1));
     
     debug_frame *MostRecentFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
     FormatString(DebugState->RootInfoSize, DebugState->RootInfo, "%.02fms %de %dp %dd",

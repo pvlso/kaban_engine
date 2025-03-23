@@ -99,6 +99,7 @@ struct win32_state
     s32 cursorMode;
     f64 virtualCursorPosX, virtualCursorPosY;
     s32 lastCursorPosX, lastCursorPosY;
+    char*               clipboardString;
 
     nk_win32 Main;
 #if EDITOR_INTERNAL
