@@ -295,6 +295,8 @@ struct debug_state
     
     u32 RootInfoSize;
     char *RootInfo;
+
+    nk_context *nk;
 };
 
 struct debug_statistic

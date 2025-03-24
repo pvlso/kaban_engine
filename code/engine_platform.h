@@ -4024,6 +4024,8 @@ NK_API nk_bool nk_knob_int(struct nk_context*, int min, int *val, int max, int s
  * ============================================================================= */
 NK_API nk_bool nk_progress(struct nk_context*, nk_size *cur, nk_size max, nk_bool modifyable);
 NK_API nk_size nk_prog(struct nk_context*, nk_size cur, nk_size max, nk_bool modifyable);
+typedef nk_bool platform_nk_progress(struct nk_context*, nk_size *cur, nk_size max, nk_bool modifyable);
+typedef nk_size platform_nk_prog(struct nk_context*, nk_size cur, nk_size max, nk_bool modifyable);
 
 /* =============================================================================
  *
@@ -6708,9 +6710,13 @@ struct nk_ui
     platform_nk_stricmpn *NkStricmpn;
     platform_nk_strtoi *NkStrtoi;
     platform_nk_strtof *NkStrtof;
+
+    platform_nk_progress *NkProgress;
+    platform_nk_prog *NkProg;
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)
+#define NkTreePushId(ui, ctx, type, title, state, id) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),id)
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -6787,7 +6793,7 @@ typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 struct debug_table;
-#define DEBUG_EDITOR_FRAME_END(name) void name(engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
+#define DEBUG_EDITOR_FRAME_END(name) void name(struct nk_context *nk, engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
 typedef DEBUG_EDITOR_FRAME_END(debug_editor_frame_end);
 
 struct debug_id

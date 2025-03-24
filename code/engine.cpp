@@ -193,6 +193,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
         TranState->Assets = AllocateEditorAssets(&TranState->TranArena, Megabytes(512), TranState,
                                                  &Memory->TextureOpQueue);
+
     }
 
     {DEBUG_DATA_BLOCK("Memory");
@@ -233,11 +234,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
 #if 1
 #endif
-    
 //    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
-    if (UI.NkBegin(nk, "Demo", UI.NkRect(50, 50, 230, 250),
+    if (UI.NkBegin(nk, "Profiler", UI.NkRect(400, 0, 230, 250),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                   NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE))
+                   NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
         if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
         {
@@ -261,61 +261,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             
             UI.NkTreePop(nk);
         }
-
-        UI.NkLayoutRowDynamic(nk, 30, 4);
-
-        if (UI.NkButtonLabel(nk, "Make Windowed"))
-        {
-        }
-
-        if (UI.NkButtonLabel(nk, "Maximize"))
-        {
-        }
-        if (UI.NkButtonLabel(nk, "Iconify"))
-        {
-        }
-        if (UI.NkButtonLabel(nk, "Restore"))
-        {
-        }
-
-        UI.NkLayoutRowDynamic(nk, 30, 2);
-
-        if (UI.NkButtonLabel(nk, "Hide (for 3s)"))
-        {
-        }
-
-        if (UI.NkButtonLabel(nk, "Request Attention (after 3s)"))
-        {
-        }
-
-        UI.NkLayoutRowDynamic(nk, 30, 1);
-
-        UI.NkLabel(nk, "Press Enter in a text field to set value", NK_TEXT_CENTERED);
-
-        nk_flags events;
-        const nk_flags flags = NK_EDIT_FIELD |
-            NK_EDIT_SIG_ENTER |
-            NK_EDIT_GOTO_END_ON_ACTIVATE;
-
-        UI.NkLayoutRowBegin(nk, NK_DYNAMIC, 30, 2);
-        UI.NkLayoutRowPush(nk, 1.f / 3.f);
-        UI.NkLabel(nk, "Title", NK_TEXT_LEFT);
-        UI.NkLayoutRowPush(nk, 2.f / 3.f);
-        events = UI.NkEditStringZeroTerminated(nk, flags, EditorState->window_title,
-                                               sizeof(EditorState->window_title), NULL);
-        if (events & NK_EDIT_COMMITED)
-        {
-        }
-
-        UI.NkLayoutRowEnd(nk);
-        UI.NkLabel(nk, "Platform does not support window position", NK_TEXT_LEFT);
-
-        UI.NkLayoutRowDynamic(nk, 30, 3);
-        UI.NkLabel(nk, "Size", NK_TEXT_LEFT);
-
-        UI.NkLabel(nk, "Framebuffer Size", NK_TEXT_LEFT);
-        UI.NkLabelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Width);
-        UI.NkLabelf(nk, NK_TEXT_LEFT, "%i", RenderCommands->Height);
     }
     UI.NkEnd(nk);
     

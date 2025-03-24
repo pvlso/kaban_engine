@@ -545,14 +545,15 @@ DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRe
     if(Event)
     {
         memory_arena *Arena = Event->Event.Value_memory_arena_p;
-        
+
         r32 t = (r32)(((r64)Arena->Used) / ((r64)Arena->Size));
         r32 SplitPoint = Lerp(FrameRect.Min.x, t, FrameRect.Max.x);
         rectangle2 UsedRect = RectMinMax(V2(FrameRect.Min.x, FrameRect.Min.y),
                                            V2(SplitPoint, FrameRect.Max.y));
         rectangle2 UnusedRect = RectMinMax(V2(SplitPoint, FrameRect.Min.y),
                                            V2(FrameRect.Max.x, FrameRect.Max.y));
-
+        
+#if 0
         PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
             0.0f, V4(1,0.5f,0, 1));
         PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
@@ -562,6 +563,7 @@ DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRe
             0.0f, V4(0,1,0, 1));
         PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
             1.0f, V4(0,0,0, 1), 2.0f);
+#endif
     }
 }
 
@@ -875,42 +877,22 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
         case DebugType_memory_arena_p:
         case DebugType_ArenaOccupancy:
         {
-            debug_view_arena_graph *Graph = &View->ArenaGraph;
-            
-            BeginRow(Layout);
-            Label(Layout, GetName(Element));
-            BooleanButton(Layout, "Occupancy", (Element->Type == DebugType_ArenaOccupancy),
-                SetUInt32Interaction(DebugID, (u32 *)&Element->Type, DebugType_ArenaOccupancy));
-            EndRow(Layout);
-
-            layout_element LayEl = BeginElementRectangle(Layout, &Graph->Block.Dim);
-            if((Graph->Block.Dim.x == 0) && (Graph->Block.Dim.y == 0))
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 2);
             {
-                Graph->Block.Dim.x = 1400;
-                Graph->Block.Dim.y = 280;
-            }
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 80);
+                Platform.UI.NkLabel(DebugState->nk, GetName(Element), NK_TEXT_LEFT);
 
-            MakeElementSizable(&LayEl);
-            //                DefaultInteraction(&LayEl, ItemInteraction);
-            EndElement(&LayEl);
-
-            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform,
-                LayEl.Bounds, 0.0f, V4(0, 0, 0, 0.75f));
-            
-            u32 OldClipRect = RenderGroup->CurrentClipRectIndex;
-            RenderGroup->CurrentClipRectIndex = 
-                PushClipRect(RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f,
-                             DebugState->RenderTarget);
-                
-            switch(Element->Type)
-            {
-                case DebugType_ArenaOccupancy:
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 200);
+                debug_element_frame *RootFrame = Element->Frames + DebugState->ViewingFrameOrdinal;
+                debug_stored_event *Event = RootFrame->OldestEvent;
+                if(Event)
                 {
-                    DrawArenaOccupancy(DebugState, DebugID, LayEl.Bounds, Layout->MouseP, Element);
-                } break;
+                    memory_arena *Arena = Event->Event.Value_memory_arena_p;
+                    Platform.UI.NkProg(DebugState->nk, Arena->Used, Arena->Size, nk_false);
+                }
             }
-            
-            RenderGroup->CurrentClipRectIndex = OldClipRect;
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+
         } break;
 
         case DebugType_ThreadIntervalGraph:
@@ -1062,33 +1044,17 @@ DrawTreeLink(debug_state *DebugState, layout *Layout, debug_tree *Tree, debug_va
         }
 
         char *Text = Link->Name;
-
-        rectangle2 TextBounds = GetTextSize(DebugState, Text);
-        v2 Dim = {GetDim(TextBounds).x, Layout->LineAdvance};
-
-        layout_element Element = BeginElementRectangle(Layout, &Dim);
-        DefaultInteraction(&Element, ItemInteraction);
-        EndElement(&Element);
-
-        b32 IsHot = InteractionIsHot(DebugState, ItemInteraction);
-        v4 ItemColor = IsHot ? V4(1, 1, 0, 1) : V4(1, 1, 1, 1);
-
-        TextOutAt(DebugState, V2(GetMinCorner(Element.Bounds).x,
-                GetMaxCorner(Element.Bounds).y - DebugState->FontScale*GetStartingBaselineY(DebugState->DebugFontInfo)),
-            Text, ItemColor);
-
-        if(View->Collapsible.ExpandedAlways)
+        int id = *(int *)ID.Value[1];
+        if(NkTreePushId(Platform.UI, DebugState->nk, NK_TREE_NODE, Text, NK_MINIMIZED, id))
         {
-            ++Layout->Depth;
-            
             for(debug_variable_link *SubLink = Link->FirstChild;
                 SubLink != GetSentinel(Link);
                 SubLink = SubLink->Next)
             {
                 DrawTreeLink(DebugState, Layout, Tree, SubLink);
             }
-            
-            --Layout->Depth;
+
+            Platform.UI.NkTreePop(DebugState->nk);
         }
     }
     else
@@ -1115,7 +1081,7 @@ DrawTrees(debug_state *DebugState, v2 MouseP)
         {
             DrawTreeLink(DebugState, &Layout, Tree, Group);
         }
-        
+#if 0        
         debug_interaction MoveInteraction = {};
         MoveInteraction.Type = DebugInteraction_Move;
         MoveInteraction.P = &Tree->UIP;
@@ -1128,7 +1094,7 @@ DrawTrees(debug_state *DebugState, v2 MouseP)
         {
             DebugState->NextHotInteraction = MoveInteraction;
         }
-        
+#endif        
         EndLayout(&Layout);
     }
 }
@@ -1936,7 +1902,17 @@ DEBUGEnd(debug_state *DebugState, engine_input *Input)
     object_transform Flat = DefaultFlatTransform();
     v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
     DebugState->MouseTextLayout = BeginLayout(DebugState, MouseP, MouseP);
-    DrawTrees(DebugState, MouseP);
+
+    nk_ui UI = Platform.UI;
+    nk_context *nk = DebugState->nk;
+    if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 230, 250),
+                   NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
+                   NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
+    {
+        DrawTrees(DebugState, MouseP);
+    }
+    UI.NkEnd(nk);
+
     EndLayout(&DebugState->MouseTextLayout);
 
     DEBUGInteract(DebugState, Input, MouseP);
@@ -1962,6 +1938,7 @@ extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
     if(!Memory->DebugState)
     {
         Memory->DebugState = DEBUGInit(RenderCommands->Width, RenderCommands->Height);
+        Memory->DebugState->nk = nk;
     }
 
     debug_state *DebugState = Memory->DebugState;

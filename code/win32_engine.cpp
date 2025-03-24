@@ -755,6 +755,9 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkStricmpn = nk_stricmpn;
     UI->NkStrtoi = nk_strtoi;
     UI->NkStrtof = nk_strtof;
+
+    UI->NkProgress = nk_progress;
+    UI->NkProg = nk_prog;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2734,7 +2737,7 @@ WinMain(HINSTANCE Instance,
                     
                 if(Editor.DEBUGFrameEnd)
                 {
-                    Editor.DEBUGFrameEnd(&EditorMemory, NewInput, &RenderCommands);
+                    Editor.DEBUGFrameEnd(debug_nk, &EditorMemory, NewInput, &RenderCommands);
                 }
                     
                 if(ExecutableNeedsToBeReloaded)
