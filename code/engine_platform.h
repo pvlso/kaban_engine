@@ -4307,6 +4307,16 @@ NK_API nk_flags nk_chart_push_slot(struct nk_context*, float, int);
 NK_API void nk_chart_end(struct nk_context*);
 NK_API void nk_plot(struct nk_context*, enum nk_chart_type, const float *values, int count, int offset);
 NK_API void nk_plot_function(struct nk_context*, enum nk_chart_type, void *userdata, float(*value_getter)(void* user, int index), int count, int offset);
+
+typedef nk_bool platform_nk_chart_begin(struct nk_context*, enum nk_chart_type, int num, float min, float max);
+typedef nk_bool platform_nk_chart_begin_colored(struct nk_context*, enum nk_chart_type, struct nk_color, struct nk_color active, int num, float min, float max);
+typedef void platform_nk_chart_add_slot(struct nk_context *ctx, const enum nk_chart_type, int count, float min_value, float max_value);
+typedef void platform_nk_chart_add_slot_colored(struct nk_context *ctx, const enum nk_chart_type, struct nk_color, struct nk_color active, int count, float min_value, float max_value);
+typedef nk_flags platform_nk_chart_push(struct nk_context*, float);
+typedef nk_flags platform_nk_chart_push_slot(struct nk_context*, float, int);
+typedef void platform_nk_chart_end(struct nk_context*);
+typedef void platform_nk_plot(struct nk_context*, enum nk_chart_type, const float *values, int count, int offset);
+typedef void platform_nk_plot_function(struct nk_context*, enum nk_chart_type, void *userdata, float(*value_getter)(void* user, int index), int count, int offset);
 /* =============================================================================
  *
  *                                  POPUP
@@ -6713,6 +6723,16 @@ struct nk_ui
 
     platform_nk_progress *NkProgress;
     platform_nk_prog *NkProg;
+
+    platform_nk_chart_begin *NkChartBegin;
+    platform_nk_chart_begin_colored *NkChartBeginColored;
+    platform_nk_chart_add_slot *NkChartAddSlot;
+    platform_nk_chart_add_slot_colored *NkChartAddSlotColored;
+    platform_nk_chart_push *NkChartPush;
+    platform_nk_chart_push_slot *NkChartPushSlot;
+    platform_nk_chart_end *NkChartEnd;
+    platform_nk_plot *NkPlot;
+    platform_nk_plot_function *NkPlotFunction;
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)

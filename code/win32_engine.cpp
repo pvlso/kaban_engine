@@ -758,6 +758,16 @@ Win32SetUIPointers(nk_ui *UI)
 
     UI->NkProgress = nk_progress;
     UI->NkProg = nk_prog;
+
+    UI->NkChartBegin = nk_chart_begin;
+    UI->NkChartBeginColored = nk_chart_begin_colored;
+    UI->NkChartAddSlot = nk_chart_add_slot;
+    UI->NkChartAddSlotColored = nk_chart_add_slot_colored;
+    UI->NkChartPush = nk_chart_push;
+    UI->NkChartPushSlot = nk_chart_push_slot;
+    UI->NkChartEnd = nk_chart_end;
+    UI->NkPlot = nk_plot;
+    UI->NkPlotFunction = nk_plot_function;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

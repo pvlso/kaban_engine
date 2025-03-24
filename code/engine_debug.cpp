@@ -877,7 +877,7 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
         case DebugType_memory_arena_p:
         case DebugType_ArenaOccupancy:
         {
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 2);
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
             {
                 Platform.UI.NkLayoutRowPush(DebugState->nk, 80);
                 Platform.UI.NkLabel(DebugState->nk, GetName(Element), NK_TEXT_LEFT);
@@ -901,16 +901,31 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
         {
             debug_view_profile_graph *Graph = &View->ProfileGraph;
 
-            BeginRow(Layout);
-            ActionButton(Layout, "Root", SetPointerInteraction(DebugID, (void **)&Graph->GUID, 0));
-            BooleanButton(Layout, "Threads", (Element->Type == DebugType_ThreadIntervalGraph),
-                SetUInt32Interaction(DebugID, (u32 *)&Element->Type, DebugType_ThreadIntervalGraph));
-            BooleanButton(Layout, "Frames", (Element->Type == DebugType_FrameBarGraph),
-                SetUInt32Interaction(DebugID, (u32 *)&Element->Type, DebugType_FrameBarGraph));
-            BooleanButton(Layout, "Clocks", (Element->Type == DebugType_TopClocksList),
-                SetUInt32Interaction(DebugID, (u32 *)&Element->Type, DebugType_TopClocksList));
-            EndRow(Layout);
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 4);
+            {
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 80);
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Root"))
+                {
+                    Graph->GUID = 0;
+                }
 
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Threads"))
+                {
+                    Element->Type = DebugType_ThreadIntervalGraph;
+                }
+
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Frames"))
+                {
+                    Element->Type = DebugType_FrameBarGraph;
+                }
+
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Clocks"))
+                {
+                    Element->Type = DebugType_TopClocksList;
+                }
+            }
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+#if 1
             layout_element LayEl = BeginElementRectangle(Layout, &Graph->Block.Dim);
             if((Graph->Block.Dim.x == 0) && (Graph->Block.Dim.y == 0))
             {
@@ -931,7 +946,8 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                              DebugState->RenderTarget);
                 
             debug_stored_event *RootNode = 0;
-
+#endif
+            
             u32 ViewingFrameOrdinal = DebugState->ViewingFrameOrdinal;
             debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
             if(!ViewingElement)

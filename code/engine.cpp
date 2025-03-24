@@ -232,35 +232,21 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 
-#if 1
-#endif
-//    PushRect(RenderGroup, &Default, V3(0, 0, 0.0f), V2(100.0f, 100.0f), V4(1, 0, 1, 1));
+    static float values[] = {1.0f, 2.5f, 1.8f, 3.2f, 2.0f};
+    static int value_count = sizeof(values) / sizeof(values[0]);
     if (UI.NkBegin(nk, "Profiler", UI.NkRect(400, 0, 230, 250),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
-        if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
+        UI.NkLayoutRowDynamic(nk, 200, 1);
+        if (UI.NkChartBegin(nk, NK_CHART_COLUMN, value_count, 0.0f, 10.0f))
         {
-            if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
-            {
-                if (UI.NkButtonLabel(nk, "Make Windowed"))
-                {
-                }
-
-                UI.NkTreePop(nk);
+            for (int i = 0; i < value_count; i++) {
+                UI.NkChartPush(nk, values[i]);
             }
 
-            if (NkTreePush(UI, nk, NK_TREE_TAB, "Tree", NK_MINIMIZED))
-            {
-                if (UI.NkButtonLabel(nk, "Make Windowed"))
-                {
-                }
-
-                UI.NkTreePop(nk);
-            }
-            
-            UI.NkTreePop(nk);
-        }
+            UI.NkChartEnd(nk);
+        }        
     }
     UI.NkEnd(nk);
     
