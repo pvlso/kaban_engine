@@ -479,6 +479,37 @@ GetTotalClocks(debug_element_frame *Frame)
 }
 
 internal void
+DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRect, v2 MouseP,
+    debug_element *RootElement)
+{
+    debug_element_frame *RootFrame = RootElement->Frames + DebugState->ViewingFrameOrdinal;
+    debug_stored_event *Event = RootFrame->OldestEvent;
+    if(Event)
+    {
+        memory_arena *Arena = Event->Event.Value_memory_arena_p;
+
+        r32 t = (r32)(((r64)Arena->Used) / ((r64)Arena->Size));
+        r32 SplitPoint = Lerp(FrameRect.Min.x, t, FrameRect.Max.x);
+        rectangle2 UsedRect = RectMinMax(V2(FrameRect.Min.x, FrameRect.Min.y),
+                                           V2(SplitPoint, FrameRect.Max.y));
+        rectangle2 UnusedRect = RectMinMax(V2(SplitPoint, FrameRect.Min.y),
+                                           V2(FrameRect.Max.x, FrameRect.Max.y));
+        
+#if 0
+        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
+            0.0f, V4(1,0.5f,0, 1));
+        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
+            1.0f, V4(0,0,0, 1), 2.0f);
+        
+        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
+            0.0f, V4(0,1,0, 1));
+        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
+            1.0f, V4(0,0,0, 1), 2.0f);
+#endif
+    }
+}
+
+internal void
 DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
                 debug_profile_node *RootNode, r32 LaneStride, r32 LaneHeight, u32 DepthRemaining)
 {
@@ -537,37 +568,6 @@ DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRec
 }
 
 internal void
-DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRect, v2 MouseP,
-    debug_element *RootElement)
-{
-    debug_element_frame *RootFrame = RootElement->Frames + DebugState->ViewingFrameOrdinal;
-    debug_stored_event *Event = RootFrame->OldestEvent;
-    if(Event)
-    {
-        memory_arena *Arena = Event->Event.Value_memory_arena_p;
-
-        r32 t = (r32)(((r64)Arena->Used) / ((r64)Arena->Size));
-        r32 SplitPoint = Lerp(FrameRect.Min.x, t, FrameRect.Max.x);
-        rectangle2 UsedRect = RectMinMax(V2(FrameRect.Min.x, FrameRect.Min.y),
-                                           V2(SplitPoint, FrameRect.Max.y));
-        rectangle2 UnusedRect = RectMinMax(V2(SplitPoint, FrameRect.Min.y),
-                                           V2(FrameRect.Max.x, FrameRect.Max.y));
-        
-#if 0
-        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
-            0.0f, V4(1,0.5f,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
-            1.0f, V4(0,0,0, 1), 2.0f);
-        
-        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
-            0.0f, V4(0,1,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
-            1.0f, V4(0,0,0, 1), 2.0f);
-#endif
-    }
-}
-
-internal void
 DrawProfileIn(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
     debug_element *RootElement)
 {
@@ -601,6 +601,12 @@ DrawProfileIn(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
     }
 }
 
+struct nk_color Colors[] = {
+    {255, 100, 100, 255}, // Reddish
+    {100, 255, 100, 255}, // Reddish
+    {100, 100, 255, 255}, // Reddish
+};
+
 internal void
 DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
               debug_element *RootElement)
@@ -612,6 +618,16 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
 
         r32 BarWidth = (GetDim(ProfileRect).x / (r32)FrameCount);
         r32 AtX = ProfileRect.Min.x;
+        Platform.UI.NkLayoutRowDynamic(DebugState->nk, 400, 1);
+        struct nk_rect chart_bounds = Platform.UI.NkWidgetBounds(DebugState->nk);
+
+        // Chart dimensions
+        float chart_width = chart_bounds.w;
+        float chart_height = chart_bounds.h;
+        float bar_width = chart_width / (f32)FrameCount;
+        float scale = chart_height / 3; // Pixels per unit
+
+        struct nk_command_buffer* canvas = Platform.UI.NkWindowGetCanvas(DebugState->nk);
         for(u32 FrameIndex = 0;
             FrameIndex < FrameCount;
             ++FrameIndex)
@@ -630,6 +646,9 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                 
                 b32 Highlight = (FrameIndex == DebugState->ViewingFrameOrdinal);
                 r32 HighDim = Highlight ? 1.0f : 0.5f;
+
+                float x = chart_bounds.x + FrameIndex * bar_width;
+                float y_base = chart_bounds.y + chart_height; // Start from bottom
                 
                 for(debug_stored_event *StoredEvent = RootNode->FirstChild;
                     StoredEvent;
@@ -649,6 +668,12 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                         0.0f, V4(HighDim*Color, 1));
                     PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                         1.0f, V4(0, 0, 0, 1), 2.0f);
+
+                    v3 color = Color*255.0f*HighDim;
+                    float height = ThisMaxY * scale;
+                    struct nk_rect bar = Platform.UI.NkRect(x, y_base - height, bar_width - 2, height); // -2 for spacing
+                    Platform.UI.NkFillRect(canvas, bar, 0, {(u8)color.r, (u8)color.g, (u8)color.b, 255});
+                    y_base -= height; // Move up for next stack
 
                     if(IsInRectangle(RegionRect, MouseP))
                     {

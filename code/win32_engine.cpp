@@ -768,6 +768,29 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkChartEnd = nk_chart_end;
     UI->NkPlot = nk_plot;
     UI->NkPlotFunction = nk_plot_function;
+
+    UI->NkWindowGetCanvas = nk_window_get_canvas;
+
+    UI->NkWidget = nk_widget;
+    UI->NkWidgetFitting = nk_widget_fitting;
+    UI->NkWidgetBounds = nk_widget_bounds;
+    UI->NkWidgetPosition = nk_widget_position;
+    UI->NkWidgetSize = nk_widget_size;
+    UI->NkWidgetWidth = nk_widget_width;
+    UI->NkWidgetHeight = nk_widget_height;
+    UI->NkWidgetIsHovered = nk_widget_is_hovered;
+    UI->NkWidgetIsMouseClicked = nk_widget_is_mouse_clicked;
+    UI->NkWidgetHasMouseClickDowm = nk_widget_has_mouse_click_down;
+    UI->NkSpacing = nk_spacing;
+    UI->NkWidgetDisableBegin = nk_widget_disable_begin;
+    UI->NkWidgetDisableEnd = nk_widget_disable_end;
+
+    UI->NkFillRect = nk_fill_rect;
+    UI->NkFillRectMultiColor = nk_fill_rect_multi_color;
+    UI->NkFillCircle = nk_fill_circle;
+    UI->NkFillArc = nk_fill_arc;
+    UI->NkFillTriangle = nk_fill_triangle;
+    UI->NkFillPolygon = nk_fill_polygon;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

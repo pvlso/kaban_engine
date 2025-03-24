@@ -132,6 +132,21 @@ engine_memory *DebugGlobalMemory;
 
 platform_api Platform;
 
+struct nk_color colors[] = {
+    {255, 100, 100, 255}, // Reddish
+    {100, 255, 100, 255}, // Reddish
+    {100, 100, 255, 255}, // Reddish
+};
+
+static float data[3][5] = {
+    {10.0f, 15.0f, 20.0f, 25.0f, 30.0f}, // Dataset 1
+    {5.0f, 10.0f, 15.0f, 10.0f, 5.0f},   // Dataset 2
+    {8.0f, 5.0f, 10.0f, 15.0f, 20.0f}    // Dataset 3
+};
+const int dataset_count = 3;
+const int point_count = 5;
+const float max_value = 60.0f; // Max cumulative value for scaling
+
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
     Platform = Memory->PlatformAPI;    
@@ -232,24 +247,67 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform Default = DefaultFlatTransform();
     Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 
+#if 0
     static float values[] = {1.0f, 2.5f, 1.8f, 3.2f, 2.0f};
+    static float values0[] = {4.8f, 4.0f, 4.5f, 4.2f, 4.0f};
     static int value_count = sizeof(values) / sizeof(values[0]);
     if (UI.NkBegin(nk, "Profiler", UI.NkRect(400, 0, 230, 250),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
         UI.NkLayoutRowDynamic(nk, 200, 1);
-        if (UI.NkChartBegin(nk, NK_CHART_COLUMN, value_count, 0.0f, 10.0f))
+        if (UI.NkChartBeginColored(nk, NK_CHART_COLUMN, {0, 0, 255, 255}, {255, 0, 0, 255}, value_count, 0.0f, 5.0f))
         {
             for (int i = 0; i < value_count; i++) {
                 UI.NkChartPush(nk, values[i]);
+            }
+
+            UI.NkChartAddSlotColored(nk, NK_CHART_COLUMN, {0, 255, 0, 255}, {255, 0, 255, 255}, value_count, 0.0f, 5.0f);
+            for (int i = 0; i < value_count; i++) {
+                UI.NkChartPushSlot(nk, values0[i], 1);
             }
 
             UI.NkChartEnd(nk);
         }        
     }
     UI.NkEnd(nk);
-    
+#endif
+
+    // Begin Nuklear window
+    if(UI.NkBegin(nk, "Stacked Chart Demo", UI.NkRect(50, 50, 700, 500),
+                 NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_TITLE)) {
+        // Reserve space for the chart
+        UI.NkLayoutRowDynamic(nk, 400, 1); // 400px height
+        struct nk_rect chart_bounds = UI.NkWidgetBounds(nk);
+
+        // Chart dimensions
+        float chart_width = chart_bounds.w;
+        float chart_height = chart_bounds.h;
+        float bar_width = chart_width / point_count;
+        float scale = chart_height / max_value; // Pixels per unit
+
+        // Draw stacked bars
+        struct nk_command_buffer* canvas = UI.NkWindowGetCanvas(nk);
+        for (int i = 0; i < point_count; i++) {
+
+            float x = chart_bounds.x + i * bar_width;
+            float y_base = chart_bounds.y + chart_height; // Start from bottom
+
+            // Stack each dataset
+            for (int j = 0; j < dataset_count; j++) {
+                float height = data[j][i] * scale;
+                struct nk_rect bar = UI.NkRect(x, y_base - height, bar_width - 2, height); // -2 for spacing
+                UI.NkFillRect(canvas, bar, 0, colors[j]);
+                y_base -= height; // Move up for next stack
+            }
+        }
+
+        // Optional: Add labels or legend (simple text for now)
+        UI.NkLayoutRowDynamic(nk, 20, 1);
+        UI.NkLabel(nk, "Stacked Bar Chart (3 Datasets)", NK_TEXT_CENTERED);
+    }
+    UI.NkEnd(nk);
+
     b32 Rerun = false;
     do
     {

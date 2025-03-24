@@ -2304,6 +2304,7 @@ NK_API struct nk_vec2 nk_window_get_content_region_size(const struct nk_context 
  * drawing canvas. Can be used to do custom drawing.
  */
 NK_API struct nk_command_buffer* nk_window_get_canvas(const struct nk_context* ctx);
+typedef struct nk_command_buffer* platform_nk_window_get_canvas(const struct nk_context* ctx);
 
 /**
  * # # nk_window_get_scroll
@@ -3808,6 +3809,7 @@ enum nk_widget_states {
     NK_WIDGET_STATE_HOVERED     = NK_WIDGET_STATE_HOVER|NK_WIDGET_STATE_MODIFIED, /**!< widget is being hovered */
     NK_WIDGET_STATE_ACTIVE      = NK_WIDGET_STATE_ACTIVED|NK_WIDGET_STATE_MODIFIED /**!< widget is currently activated */
 };
+
 NK_API enum nk_widget_layout_states nk_widget(struct nk_rect*, const struct nk_context*);
 NK_API enum nk_widget_layout_states nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
 NK_API struct nk_rect nk_widget_bounds(const struct nk_context*);
@@ -3821,6 +3823,21 @@ NK_API nk_bool nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_
 NK_API void nk_spacing(struct nk_context*, int cols);
 NK_API void nk_widget_disable_begin(struct nk_context* ctx);
 NK_API void nk_widget_disable_end(struct nk_context* ctx);
+
+typedef enum nk_widget_layout_states platform_nk_widget(struct nk_rect*, const struct nk_context*);
+typedef enum nk_widget_layout_states platform_nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
+typedef struct nk_rect platform_nk_widget_bounds(const struct nk_context*);
+typedef struct nk_vec2 platform_nk_widget_position(const struct nk_context*);
+typedef struct nk_vec2 platform_nk_widget_size(const struct nk_context*);
+typedef float platform_nk_widget_width(const struct nk_context*);
+typedef float platform_nk_widget_height(const struct nk_context*);
+typedef nk_bool platform_nk_widget_is_hovered(const struct nk_context*);
+typedef nk_bool platform_nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
+typedef nk_bool platform_nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
+typedef void platform_nk_spacing(struct nk_context*, int cols);
+typedef void platform_nk_widget_disable_begin(struct nk_context* ctx);
+typedef void platform_nk_widget_disable_end(struct nk_context* ctx);
+
 /* =============================================================================
  *
  *                                  TEXT
@@ -5473,6 +5490,13 @@ NK_API void nk_fill_arc(struct nk_command_buffer*, float cx, float cy, float rad
 NK_API void nk_fill_triangle(struct nk_command_buffer*, float x0, float y0, float x1, float y1, float x2, float y2, struct nk_color);
 NK_API void nk_fill_polygon(struct nk_command_buffer*, const float *points, int point_count, struct nk_color);
 
+typedef void platform_nk_fill_rect(struct nk_command_buffer*, struct nk_rect, float rounding, struct nk_color);
+typedef void platform_nk_fill_rect_multi_color(struct nk_command_buffer*, struct nk_rect, struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom);
+typedef void platform_nk_fill_circle(struct nk_command_buffer*, struct nk_rect, struct nk_color);
+typedef void platform_nk_fill_arc(struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, struct nk_color);
+typedef void platform_nk_fill_triangle(struct nk_command_buffer*, float x0, float y0, float x1, float y1, float x2, float y2, struct nk_color);
+typedef void platform_nk_fill_polygon(struct nk_command_buffer*, const float *points, int point_count, struct nk_color);
+
 /** misc */
 NK_API void nk_draw_image(struct nk_command_buffer*, struct nk_rect, const struct nk_image*, struct nk_color);
 NK_API void nk_draw_nine_slice(struct nk_command_buffer*, struct nk_rect, const struct nk_nine_slice*, struct nk_color);
@@ -6733,6 +6757,30 @@ struct nk_ui
     platform_nk_chart_end *NkChartEnd;
     platform_nk_plot *NkPlot;
     platform_nk_plot_function *NkPlotFunction;
+
+    platform_nk_window_get_canvas *NkWindowGetCanvas;
+
+    platform_nk_widget *NkWidget;
+    platform_nk_widget_fitting *NkWidgetFitting;
+    platform_nk_widget_bounds *NkWidgetBounds;
+    platform_nk_widget_position *NkWidgetPosition;
+    platform_nk_widget_size *NkWidgetSize;
+    platform_nk_widget_width *NkWidgetWidth;
+    platform_nk_widget_height *NkWidgetHeight;
+    platform_nk_widget_is_hovered *NkWidgetIsHovered;
+    platform_nk_widget_is_mouse_clicked *NkWidgetIsMouseClicked;
+    platform_nk_widget_has_mouse_click_down *NkWidgetHasMouseClickDowm;
+    platform_nk_spacing *NkSpacing;
+    platform_nk_widget_disable_begin *NkWidgetDisableBegin;
+    platform_nk_widget_disable_end *NkWidgetDisableEnd;
+
+    platform_nk_fill_rect *NkFillRect;
+    platform_nk_fill_rect_multi_color *NkFillRectMultiColor;
+    platform_nk_fill_circle *NkFillCircle;
+    platform_nk_fill_arc *NkFillArc;
+    platform_nk_fill_triangle *NkFillTriangle;
+    platform_nk_fill_polygon *NkFillPolygon;
+
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)
