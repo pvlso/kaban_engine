@@ -481,6 +481,7 @@ NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
 internal void
 NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
 {
+    TIMED_FUNCTION();
     /*
       NOTE(paul): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear

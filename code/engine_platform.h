@@ -5482,6 +5482,15 @@ NK_API void nk_stroke_triangle(struct nk_command_buffer*, float, float, float, f
 NK_API void nk_stroke_polyline(struct nk_command_buffer*, const float *points, int point_count, float line_thickness, struct nk_color col);
 NK_API void nk_stroke_polygon(struct nk_command_buffer*, const float *points, int point_count, float line_thickness, struct nk_color);
 
+typedef void platform_nk_stroke_line(struct nk_command_buffer *b, float x0, float y0, float x1, float y1, float line_thickness, struct nk_color);
+typedef void platform_nk_stroke_curve(struct nk_command_buffer*, float, float, float, float, float, float, float, float, float line_thickness, struct nk_color);
+typedef void platform_nk_stroke_rect(struct nk_command_buffer*, struct nk_rect, float rounding, float line_thickness, struct nk_color);
+typedef void platform_nk_stroke_circle(struct nk_command_buffer*, struct nk_rect, float line_thickness, struct nk_color);
+typedef void platform_nk_stroke_arc(struct nk_command_buffer*, float cx, float cy, float radius, float a_min, float a_max, float line_thickness, struct nk_color);
+typedef void platform_nk_stroke_triangle(struct nk_command_buffer*, float, float, float, float, float, float, float line_thichness, struct nk_color);
+typedef void platform_nk_stroke_polyline(struct nk_command_buffer*, const float *points, int point_count, float line_thickness, struct nk_color col);
+typedef void platform_nk_stroke_polygon(struct nk_command_buffer*, const float *points, int point_count, float line_thickness, struct nk_color);
+
 /** filled shades */
 NK_API void nk_fill_rect(struct nk_command_buffer*, struct nk_rect, float rounding, struct nk_color);
 NK_API void nk_fill_rect_multi_color(struct nk_command_buffer*, struct nk_rect, struct nk_color left, struct nk_color top, struct nk_color right, struct nk_color bottom);
@@ -6735,6 +6744,15 @@ struct nk_ui
     platform_nk_rectiv *NkRectiv;
     platform_nk_rect_pos *NkRectPos;
     platform_nk_rect_size *NkRectSize;
+
+    platform_nk_stroke_line *NkStrokeLine;
+    platform_nk_stroke_curve *NkStrokeCurve;
+    platform_nk_stroke_rect *NkStrokeRect;
+    platform_nk_stroke_circle *NkStrokeCircle;
+    platform_nk_stroke_arc *NkStrokeArc;
+    platform_nk_stroke_triangle *NkStrokeTriangle;
+    platform_nk_stroke_polyline *NkStrokePolyLine;
+    platform_nk_stroke_polygon *NkStrokePolygon;
 
     platform_nk_tree_push_hashed *NkTreePushHashed;
     platform_nk_tree_pop *NkTreePop;

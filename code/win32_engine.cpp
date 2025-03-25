@@ -747,6 +747,15 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkRectPos = nk_rect_pos;
     UI->NkRectSize = nk_rect_size;
 
+    UI->NkStrokeLine = nk_stroke_line;
+    UI->NkStrokeCurve = nk_stroke_curve;
+    UI->NkStrokeRect = nk_stroke_rect;
+    UI->NkStrokeCircle = nk_stroke_circle;
+    UI->NkStrokeArc = nk_stroke_arc;
+    UI->NkStrokeTriangle = nk_stroke_triangle;
+    UI->NkStrokePolyLine = nk_stroke_polyline;
+    UI->NkStrokePolygon = nk_stroke_polygon;
+
     UI->NkTreePushHashed = nk_tree_push_hashed;
     UI->NkTreePop = nk_tree_pop;
 

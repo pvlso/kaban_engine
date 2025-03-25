@@ -611,23 +611,22 @@ internal void
 DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
               debug_element *RootElement)
 {
+    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 200, 1);
+    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
+                                      DebugState->nk->current->layout->at_y,
+                                      DebugState->nk->current->layout->max_x, 200);
+//    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+//                           Rect, 0.0f, {255, 0, 0, 255});
+
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
         object_transform NoTransform = DefaultFlatTransform();
 
-        r32 BarWidth = (GetDim(ProfileRect).x / (r32)FrameCount);
-        r32 AtX = ProfileRect.Min.x;
-        Platform.UI.NkLayoutRowDynamic(DebugState->nk, 400, 1);
-        struct nk_rect chart_bounds = Platform.UI.NkWidgetBounds(DebugState->nk);
+//        r32 BarWidth = (GetDim(ProfileRect).x / (r32)FrameCount);
+        r32 BarWidth = (Rect.w / (r32)FrameCount);
+        r32 AtX = Rect.x;
 
-        // Chart dimensions
-        float chart_width = chart_bounds.w;
-        float chart_height = chart_bounds.h;
-        float bar_width = chart_width / (f32)FrameCount;
-        float scale = chart_height / 3; // Pixels per unit
-
-        struct nk_command_buffer* canvas = Platform.UI.NkWindowGetCanvas(DebugState->nk);
         for(u32 FrameIndex = 0;
             FrameIndex < FrameCount;
             ++FrameIndex)
@@ -637,7 +636,7 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
             {
                 debug_profile_node *RootNode = &RootEvent->ProfileNode;
                 r32 FrameSpan = (r32)(RootNode->Duration);
-                r32 PixelSpan = GetDim(ProfileRect).y;
+                r32 PixelSpan = Rect.h;
                 r32 Scale = 0.0f;
                 if(FrameSpan > 0)
                 {
@@ -646,9 +645,6 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                 
                 b32 Highlight = (FrameIndex == DebugState->ViewingFrameOrdinal);
                 r32 HighDim = Highlight ? 1.0f : 0.5f;
-
-                float x = chart_bounds.x + FrameIndex * bar_width;
-                float y_base = chart_bounds.y + chart_height; // Start from bottom
                 
                 for(debug_stored_event *StoredEvent = RootNode->FirstChild;
                     StoredEvent;
@@ -659,23 +655,40 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                     Assert(Element);
 
                     v3 Color = DebugColorTable[U32FromPointer(Element->GUID)%ArrayCount(DebugColorTable)];
-                    r32 ThisMinY = ProfileRect.Min.y + Scale*(r32)(Node->ParentRelativeClock);
-                    r32 ThisMaxY = ThisMinY + Scale*(r32)(Node->Duration);
-                    
+                    r32 ThisMinY = Rect.y + Scale*(r32)(Node->ParentRelativeClock);
+                    r32 ThisMaxY = Scale*(r32)(Node->Duration);
                     rectangle2 RegionRect = RectMinMax(V2(AtX, ThisMinY), V2(AtX + BarWidth, ThisMaxY));
+                    struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX, ThisMinY, BarWidth, ThisMaxY);
 
                     PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                         0.0f, V4(HighDim*Color, 1));
                     PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                         1.0f, V4(0, 0, 0, 1), 2.0f);
 
-                    v3 color = Color*255.0f*HighDim;
-                    float height = ThisMaxY * scale;
-                    struct nk_rect bar = Platform.UI.NkRect(x, y_base - height, bar_width - 2, height); // -2 for spacing
-                    Platform.UI.NkFillRect(canvas, bar, 0, {(u8)color.r, (u8)color.g, (u8)color.b, 255});
-                    y_base -= height; // Move up for next stack
+                    nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
+                    nk_flags ret = 0;
+                    const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
+                    if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+                        NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h)) {
+                        ret = NK_CHART_HOVERING;
+                        ret |= (!in->mouse.buttons[NK_BUTTON_LEFT].down &&
+                                in->mouse.buttons[NK_BUTTON_LEFT].clicked) ? NK_CHART_CLICKED: 0;
+                        C = {255, 0, 0, 255};
+                    }
+                    
+                    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                                           RegionRectnk, 0.0f, C);
+                    Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+                                             RegionRectnk, 0.0f, 0.15f, {0, 0, 0, 255});
 
-                    if(IsInRectangle(RegionRect, MouseP))
+                    if(ret & NK_CHART_CLICKED)
+                    {
+                        debug_view *View = GetOrCreateDebugViewFor(DebugState, GraphID);
+                        View->ProfileGraph.GUID = Element->GUID;
+                    }
+                    
+//                    if(IsInRectangle(RegionRect, MouseP))
+                    if(0)
                     {
                         char TextBuffer[256];
                         FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
@@ -754,7 +767,7 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileR
         PC = 100.0f / TotalTime;
     }
     
-    v2 At = V2(ProfileRect.Min.x, ProfileRect.Max.y - GetBaseline(DebugState));
+    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 20, 1);
     for(Index = 0;
         (Index < LinkCount);
         ++Index)
@@ -766,15 +779,10 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileR
         char TextBuffer[256];
         FormatString(sizeof(TextBuffer), TextBuffer, "%10ucy %05.02f%% %4d %s", (u32)Stats->Sum,
                      (PC*Stats->Sum), Stats->Count, Element->GUID + Element->NameStartsAt);
-        TextOutAt(DebugState, At, TextBuffer);
-        
-        if(At.y < ProfileRect.Min.y)
+
+        if(Stats->Sum > 0)
         {
-            break;
-        }
-        else
-        {
-            At.y -= GetLineAdvance(DebugState);    
+            Platform.UI.NkLabel(DebugState->nk, TextBuffer, NK_TEXT_LEFT);
         }
     }
     
