@@ -800,6 +800,14 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkFillArc = nk_fill_arc;
     UI->NkFillTriangle = nk_fill_triangle;
     UI->NkFillPolygon = nk_fill_polygon;
+
+    UI->NkTooltip = nk_tooltip;
+#ifdef NK_INCLUDE_STANDARD_VARARGS
+    UI->NkTooltipf = nk_tooltipf;
+    UI->NkTooltipfv = nk_tooltipfv;
+#endif
+    UI->NkTooltipBegin = nk_tooltip_begin;
+    UI->NkTooltipEnd = nk_tooltip_end;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

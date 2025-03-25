@@ -7,7 +7,6 @@
    ======================================================================== */
 
 #include "engine_debug.h"
-#include "engine_debug_ui.cpp"
 
 struct debug_parsed_name
 {
@@ -141,7 +140,6 @@ AddTree(debug_state *DebugState, debug_variable_link *Group, v2 AtP)
 {
     debug_tree *Tree = PushStruct(&DebugState->DebugArena, debug_tree);
 
-    Tree->UIP = AtP;
     Tree->Group = Group;
 
     DLIST_INSERT(&DebugState->TreeSentinel, Tree);
@@ -350,37 +348,6 @@ GetOrCreateDebugViewFor(debug_state *DebugState, debug_id ID)
     return(Result);
 }
 
-inline debug_interaction
-ElementInteraction(debug_state *DebugState, debug_id DebugID, debug_interaction_type Type, debug_element *Element)
-{    
-    debug_interaction ItemInteraction = {};
-    ItemInteraction.ID = DebugID;    
-    ItemInteraction.Type = Type;
-    ItemInteraction.Element = Element;
-
-    return(ItemInteraction);
-}
-
-inline debug_interaction
-DebugIDInteraction(debug_interaction_type Type, debug_id ID)
-{
-    debug_interaction ItemInteraction = {};
-    ItemInteraction.ID = ID;
-    ItemInteraction.Type = Type;
-
-    return(ItemInteraction);
-}
-
-inline debug_interaction
-DebugLinkInteraction(debug_interaction_type Type, debug_variable_link *Link)
-{
-    debug_interaction ItemInteraction = {};
-    ItemInteraction.Link = Link;
-    ItemInteraction.Type = Type;
-
-    return(ItemInteraction);
-}
-
 internal b32
 IsSelected(debug_state *DebugState, debug_id ID)
 {
@@ -422,7 +389,7 @@ DEBUG_HIT(debug_id ID, r32 ZValue)
     debug_state *DebugState = DEBUGGetState();
     if(DebugState)
     {
-        DebugState->NextHotInteraction = DebugIDInteraction(DebugInteraction_Select, ID);
+//        DebugState->NextHotInteraction = DebugIDInteraction(DebugInteraction_Select, ID);
     }
 }
 
@@ -440,7 +407,7 @@ DEBUG_HIGHLIGHTED(debug_id ID, v4 *Color)
             Result = true;
         }
 
-        if(DebugIDsAreEqual(DebugState->HotInteraction.ID, ID))
+//        if(DebugIDsAreEqual(DebugState->HotInteraction.ID, ID))
         {
             *Color = V4(1, 1, 0, 1);
             Result = true;
@@ -458,8 +425,8 @@ DEBUG_REQUESTED(debug_id ID)
     debug_state *DebugState = DEBUGGetState();
     if(DebugState)
     {
-        Result = IsSelected(DebugState, ID)
-            || DebugIDsAreEqual(DebugState->HotInteraction.ID, ID);
+//        Result = IsSelected(DebugState, ID)
+//            || DebugIDsAreEqual(DebugState->HotInteraction.ID, ID);
     }
 
     return(Result);
@@ -479,44 +446,11 @@ GetTotalClocks(debug_element_frame *Frame)
 }
 
 internal void
-DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRect, v2 MouseP,
-    debug_element *RootElement)
-{
-    debug_element_frame *RootFrame = RootElement->Frames + DebugState->ViewingFrameOrdinal;
-    debug_stored_event *Event = RootFrame->OldestEvent;
-    if(Event)
-    {
-        memory_arena *Arena = Event->Event.Value_memory_arena_p;
-
-        r32 t = (r32)(((r64)Arena->Used) / ((r64)Arena->Size));
-        r32 SplitPoint = Lerp(FrameRect.Min.x, t, FrameRect.Max.x);
-        rectangle2 UsedRect = RectMinMax(V2(FrameRect.Min.x, FrameRect.Min.y),
-                                           V2(SplitPoint, FrameRect.Max.y));
-        rectangle2 UnusedRect = RectMinMax(V2(SplitPoint, FrameRect.Min.y),
-                                           V2(FrameRect.Max.x, FrameRect.Max.y));
-        
-#if 0
-        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
-            0.0f, V4(1,0.5f,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
-            1.0f, V4(0,0,0, 1), 2.0f);
-        
-        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
-            0.0f, V4(0,1,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
-            1.0f, V4(0,0,0, 1), 2.0f);
-#endif
-    }
-}
-
-internal void
-DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
-                debug_profile_node *RootNode, r32 LaneStride, r32 LaneHeight, u32 DepthRemaining)
+DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect ProfileRect,
+                  debug_profile_node *RootNode, r32 LaneStride, r32 LaneHeight, u32 DepthRemaining)
 {
     r32 FrameSpan = (r32)(RootNode->Duration);
-    r32 PixelSpan = GetDim(ProfileRect).x;
-
-    r32 BaseZ = 100.0f - 10.0f*(r32)DepthRemaining;
+    r32 PixelSpan = ProfileRect.w;
     
     r32 Scale = 0.0f;
     if(FrameSpan > 0)
@@ -524,6 +458,7 @@ DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRec
         Scale = PixelSpan / FrameSpan;
     }
 
+    const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
     for(debug_stored_event *StoredEvent = RootNode->FirstChild;
         StoredEvent;
         StoredEvent = StoredEvent->ProfileNode.NextSameParent)
@@ -533,55 +468,88 @@ DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRec
         Assert(Element);
 
         v3 Color = DebugColorTable[U32FromPointer(Element->GUID)%ArrayCount(DebugColorTable)];
-        r32 ThisMinX = ProfileRect.Min.x + Scale*(r32)(Node->ParentRelativeClock);
-        r32 ThisMaxX = ThisMinX + Scale*(r32)(Node->Duration);
+        r32 ThisMinX = ProfileRect.x + Scale*(r32)(Node->ParentRelativeClock);
+        r32 ThisMaxX = Scale*(r32)(Node->Duration);
 
         u32 LaneIndex = Node->ThreadOrdinal;
-        r32 LaneY = ProfileRect.Max.y - LaneStride*LaneIndex;
-        rectangle2 RegionRect = RectMinMax(V2(ThisMinX, LaneY - LaneHeight),
-                                           V2(ThisMaxX, LaneY));
+        r32 LaneY = ProfileRect.y - LaneStride*LaneIndex;
+        struct nk_rect RegionRect = Platform.UI.NkRect(ThisMinX, LaneY, ThisMaxX, LaneHeight);
 
-        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-            BaseZ, V4(Color, 1));
-        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-            BaseZ+1.0f, V4(0,0,0, 1), 2.0f);
+        nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
 
-        // TODO(casey): Pull this out so all profilers share it.
-        if(IsInRectangle(RegionRect, MouseP))
+        nk_flags ret = 0;
+
+        if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+            NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRect.x,RegionRect.y,RegionRect.w,RegionRect.h))
         {
+            ret = NK_CHART_HOVERING;
+            ret |= (!in->mouse.buttons[NK_BUTTON_LEFT].down &&
+                    in->mouse.buttons[NK_BUTTON_LEFT].clicked) ? NK_CHART_CLICKED: 0;
+
+            C = {255, 0, 0, 120};
+
             char TextBuffer[256];
             FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
-            AddTooltip(DebugState, TextBuffer);
-            
-            // TODO(casey): It would be better to generate a graph+element debug ID here!
+            char *At = TextBuffer;
+            char *OnePastLastBackSlash = 0;
+            while(true)
+            {
+                if(*At == '\0')
+                {
+                    break;
+                }
+
+                if(*At == '\\')
+                {
+                    OnePastLastBackSlash = At;
+                    *OnePastLastBackSlash++;
+                }
+
+                *At++;
+            }
+
+            Platform.UI.NkTooltip(DebugState->nk, OnePastLastBackSlash);
+        }
+                    
+
+        Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                               RegionRect, 0.0f, C);
+        Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+                                 RegionRect, 0.0f, 0.15f, {0, 0, 0, 255});
+
+        if(ret & NK_CHART_CLICKED)
+        {
             debug_view *View = GetOrCreateDebugViewFor(DebugState, GraphID);
-            DebugState->NextHotInteraction = 
-                SetPointerInteraction(GraphID, (void **)&View->ProfileGraph.GUID, Element->GUID);
+            View->ProfileGraph.GUID = Element->GUID;
         }
 
         if(DepthRemaining > 0)
         {
-            DrawProfileBars(DebugState, GraphID, RegionRect, MouseP, Node, 0, LaneHeight/2,
+            DrawProfileBarsnk(DebugState, GraphID, RegionRect, Node, 0, LaneHeight/2,
                 DepthRemaining - 1);
         }
     }
 }
 
 internal void
-DrawProfileIn(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
-    debug_element *RootElement)
+DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
-    object_transform NoTransform = DefaultFlatTransform();
+    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 300, 1);
+    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
+                                             DebugState->nk->current->layout->at_y,
+                                             DebugState->nk->current->layout->max_x - 4.0f, 300);
+    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                           Rect, 0.0f, {255, 0, 0, 100});
 
     u32 LaneCount = DebugState->FrameBarLaneCount;
     r32 LaneHeight = 0.0f;
     if(LaneCount > 0)
     {
-        LaneHeight = GetDim(ProfileRect).y / (r32)LaneCount;
+        LaneHeight = Rect.h / (r32)LaneCount;
     }            
 
     debug_element_frame *RootFrame = RootElement->Frames + DebugState->ViewingFrameOrdinal;
-    r32 NextX = ProfileRect.Min.x;
+    r32 NextX = Rect.x;
     u64 TotalClock = GetTotalClocks(RootFrame);
     u64 RelativeClock = 0;
     for(debug_stored_event *Event = RootFrame->OldestEvent;
@@ -589,44 +557,33 @@ DrawProfileIn(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
         Event = Event->Next)
     {
         debug_profile_node *Node = &Event->ProfileNode;
-        rectangle2 EventRect = ProfileRect;
+        struct nk_rect EventRect = Rect;
 
         RelativeClock += Node->Duration;
         r32 t = (r32)((r64)RelativeClock / (r64)TotalClock);
-        EventRect.Min.x = NextX;
-        EventRect.Max.x = (1.0f - t)*ProfileRect.Min.x + t*ProfileRect.Max.x;
-        NextX = EventRect.Max.x;
+        EventRect.x = NextX;
+        EventRect.w = (1.0f - t)*Rect.x + t*Rect.w;
+        NextX = EventRect.w;
 
-        DrawProfileBars(DebugState, GraphID, EventRect, MouseP, Node, LaneHeight, LaneHeight, 1);
+        DrawProfileBarsnk(DebugState, GraphID, EventRect, Node, LaneHeight, LaneHeight, 1);
     }
 }
 
-struct nk_color Colors[] = {
-    {255, 100, 100, 255}, // Reddish
-    {100, 255, 100, 255}, // Reddish
-    {100, 100, 255, 255}, // Reddish
-};
-
 internal void
-DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
-              debug_element *RootElement)
+DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
-    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 200, 1);
+    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 300, 1);
     struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
-                                      DebugState->nk->current->layout->at_y,
-                                      DebugState->nk->current->layout->max_x, 200);
-//    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
-//                           Rect, 0.0f, {255, 0, 0, 255});
+                                             DebugState->nk->current->layout->at_y,
+                                             DebugState->nk->current->layout->max_x - 4.0f, 300);
 
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
-        object_transform NoTransform = DefaultFlatTransform();
-
-//        r32 BarWidth = (GetDim(ProfileRect).x / (r32)FrameCount);
         r32 BarWidth = (Rect.w / (r32)FrameCount);
         r32 AtX = Rect.x;
 
+        const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
         for(u32 FrameIndex = 0;
             FrameIndex < FrameCount;
             ++FrameIndex)
@@ -643,9 +600,6 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                     Scale = PixelSpan / FrameSpan;
                 }
                 
-                b32 Highlight = (FrameIndex == DebugState->ViewingFrameOrdinal);
-                r32 HighDim = Highlight ? 1.0f : 0.5f;
-                
                 for(debug_stored_event *StoredEvent = RootNode->FirstChild;
                     StoredEvent;
                     StoredEvent = StoredEvent->ProfileNode.NextSameParent)
@@ -657,23 +611,42 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                     v3 Color = DebugColorTable[U32FromPointer(Element->GUID)%ArrayCount(DebugColorTable)];
                     r32 ThisMinY = Rect.y + Scale*(r32)(Node->ParentRelativeClock);
                     r32 ThisMaxY = Scale*(r32)(Node->Duration);
-                    rectangle2 RegionRect = RectMinMax(V2(AtX, ThisMinY), V2(AtX + BarWidth, ThisMaxY));
-                    struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX, ThisMinY, BarWidth, ThisMaxY);
 
-                    PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-                        0.0f, V4(HighDim*Color, 1));
-                    PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-                        1.0f, V4(0, 0, 0, 1), 2.0f);
+                    struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX, ThisMinY, BarWidth, ThisMaxY);
 
                     nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
                     nk_flags ret = 0;
-                    const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
+
                     if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
-                        NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h)) {
+                        NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h))
+                    {
                         ret = NK_CHART_HOVERING;
                         ret |= (!in->mouse.buttons[NK_BUTTON_LEFT].down &&
                                 in->mouse.buttons[NK_BUTTON_LEFT].clicked) ? NK_CHART_CLICKED: 0;
-                        C = {255, 0, 0, 255};
+
+                        C = {255, 0, 0, 120};
+
+                        char TextBuffer[256];
+                        FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
+                        char *At = TextBuffer;
+                        char *OnePastLastBackSlash = 0;
+                        while(true)
+                        {
+                            if(*At == '\0')
+                            {
+                                break;
+                            }
+
+                            if(*At == '\\')
+                            {
+                                OnePastLastBackSlash = At;
+                                *OnePastLastBackSlash++;
+                            }
+
+                            *At++;
+                        }
+
+                        Platform.UI.NkTooltip(DebugState->nk, OnePastLastBackSlash);
                     }
                     
                     Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
@@ -685,18 +658,6 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                     {
                         debug_view *View = GetOrCreateDebugViewFor(DebugState, GraphID);
                         View->ProfileGraph.GUID = Element->GUID;
-                    }
-                    
-//                    if(IsInRectangle(RegionRect, MouseP))
-                    if(0)
-                    {
-                        char TextBuffer[256];
-                        FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
-                        AddTooltip(DebugState, TextBuffer);
-                        
-                        debug_view *View = GetOrCreateDebugViewFor(DebugState, GraphID);
-                        DebugState->NextHotInteraction = 
-                            SetPointerInteraction(GraphID, (void **)&View->ProfileGraph.GUID, Element->GUID);
                     }
                 }
 
@@ -711,9 +672,9 @@ struct debug_clock_entry
     debug_element *Element;
     debug_statistic Stats;
 };
+
 internal void
-DrawTopClocksList(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
-    debug_element *RootElement)
+DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
     temporary_memory Temp = BeginTemporaryMemory(&DebugState->DebugArena);
 
@@ -790,67 +751,86 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileR
 }
 
 internal void
-DrawFrameSlider(debug_state *DebugState, debug_id SliderID, rectangle2 TotalRect, v2 MouseP,
-                debug_element *RootElement)
+DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootElement)
 {
+    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 50, 1);
+    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
+                                             DebugState->nk->current->layout->at_y,
+                                             DebugState->nk->current->layout->max_x, 50);
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
-        object_transform NoTransform = DefaultFlatTransform();
-        PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, TotalRect, 0.0f, V4(0, 0, 0, 0.25f));
+        const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
+        Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                               Rect, 0.0f, {0, 0, 0, 64});
 
-        r32 BarWidth = (GetDim(TotalRect).x / (r32)FrameCount);
-        r32 AtX = TotalRect.Min.x;
-        r32 ThisMinY = TotalRect.Min.y;
-        r32 ThisMaxY = TotalRect.Max.y;
+        r32 BarWidth = (Rect.w / (r32)FrameCount);
+        r32 AtX = Rect.x;
+        r32 ThisMinY = Rect.y;
+        r32 ThisMaxY = Rect.h;
         for(u32 FrameIndex = 0;
             FrameIndex < FrameCount;
             ++FrameIndex)
         {
             rectangle2 RegionRect = RectMinMax(V2(AtX, ThisMinY), V2(AtX + BarWidth, ThisMaxY));
-
-            v4 HiColor = V4(1, 1, 1, 1);
+            struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX - BarWidth, ThisMinY, BarWidth, ThisMaxY);
+            
+            nk_color C = {};
+            nk_color OC = {128, 128, 128, 255};
             b32 Highlight = false;
             if(FrameIndex == DebugState->ViewingFrameOrdinal)
             {
-                HiColor = V4(1, 1, 0, 1);
+                C = {255, 255, 0, 255};
                 Highlight = true;
             }
 
             if(FrameIndex == DebugState->MostRecentFrameOrdinal)
             {
-                HiColor = V4(0, 1, 0, 1);
+                C = {0, 255, 0, 255};
                 Highlight = true;
             }
 
             if(FrameIndex == DebugState->CollationFrameOrdinal)
             {
-                HiColor = V4(1, 0, 0, 1);
+                C = {255, 0, 0, 255};
                 Highlight = true;
             }
 
             if(FrameIndex == DebugState->OldestFrameOrdinal)
             {
-                HiColor = V4(0, 0.5f, 0, 1);
+                C = {0, 128, 0, 255};
                 Highlight = true;
+            }
+
+            nk_flags ret = 0;
+
+            if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+                NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h))
+            {
+                ret = NK_CHART_HOVERING;
+                ret |= (!in->mouse.buttons[NK_BUTTON_LEFT].down &&
+                        in->mouse.buttons[NK_BUTTON_LEFT].clicked) ? NK_CHART_CLICKED: 0;
+
+                OC = {255, 0, 0, 120};
+
+                char TextBuffer[256];
+                FormatString(sizeof(TextBuffer), TextBuffer, "%u", FrameIndex);
+
+                Platform.UI.NkTooltip(DebugState->nk, TextBuffer);
             }
 
             if(Highlight)
             {
-                PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-                    0.0f, HiColor);
+                Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                                       RegionRectnk, 0.0f, C);
             }
-            PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
-                1.0f, V4(0.5f,0.5f,0.5f, 1), 2.0f);
 
-            if(IsInRectangle(RegionRect, MouseP))
+            Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+                                     RegionRectnk, 0.0f, 0.15f, OC);
+
+            if(ret & NK_CHART_CLICKED)
             {
-                char TextBuffer[256];
-                FormatString(sizeof(TextBuffer), TextBuffer, "%u", FrameIndex);
-                AddTooltip(DebugState, TextBuffer);
-                
-                DebugState->NextHotInteraction = 
-                    SetUInt32Interaction(SliderID, &DebugState->ViewingFrameOrdinal, FrameIndex);
+                DebugState->ViewingFrameOrdinal = FrameIndex;
             }
 
             AtX += BarWidth;
@@ -859,20 +839,9 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, rectangle2 TotalRect
 }
 
 internal void
-DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug_id DebugID,
+DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Element, debug_id DebugID,
                  u32 FrameOrdinal)
 {
-    object_transform NoTransform = DefaultFlatTransform();
-
-    debug_state *DebugState = Layout->DebugState;
-    render_group *RenderGroup = &DebugState->RenderGroup;
-
-    debug_interaction ItemInteraction =
-        ElementInteraction(DebugState, DebugID, DebugInteraction_AutoModifyVariable, Element);
-
-    b32 IsHot = InteractionIsHot(DebugState, ItemInteraction);
-    v4 ItemColor = IsHot ? V4(1, 1, 0, 1) : V4(1, 1, 1, 1);
-
     debug_stored_event *OldestStoredEvent = 
         Element->Frames[DebugState->ViewingFrameOrdinal].OldestEvent;
 
@@ -881,6 +850,7 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
     {
         case DebugType_bitmap_id:
         {
+#if 0
             debug_event *Event = OldestStoredEvent ? &OldestStoredEvent->Event : 0;
             loaded_bitmap *Bitmap = 0;
             r32 BitmapScale = View->InlineBlock.Dim.y;
@@ -905,6 +875,7 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                 PushBitmap(&DebugState->RenderGroup, &DebugState->BackingTransform, Event->Value_bitmap_id, BitmapScale,
                     V3(GetMinCorner(LayEl.Bounds), 1.0f), V4(1, 1, 1, 1), 0.0f);
             }
+#endif
         } break;
 
         case DebugType_memory_arena_p:
@@ -958,28 +929,6 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                 }
             }
             Platform.UI.NkLayoutRowEnd(DebugState->nk);
-#if 1
-            layout_element LayEl = BeginElementRectangle(Layout, &Graph->Block.Dim);
-            if((Graph->Block.Dim.x == 0) && (Graph->Block.Dim.y == 0))
-            {
-                Graph->Block.Dim.x = 1400;
-                Graph->Block.Dim.y = 280;
-            }
-
-            MakeElementSizable(&LayEl);
-            //                DefaultInteraction(&LayEl, ItemInteraction);
-            EndElement(&LayEl);
-
-            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform,
-                LayEl.Bounds, 0.0f, V4(0, 0, 0, 0.75f));
-            
-            u32 OldClipRect = RenderGroup->CurrentClipRectIndex;
-            RenderGroup->CurrentClipRectIndex = 
-                PushClipRect(RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f,
-                             DebugState->RenderTarget);
-                
-            debug_stored_event *RootNode = 0;
-#endif
             
             u32 ViewingFrameOrdinal = DebugState->ViewingFrameOrdinal;
             debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
@@ -992,48 +941,44 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             {
                 case DebugType_ThreadIntervalGraph:
                 {
-                    DrawProfileIn(DebugState, DebugID, LayEl.Bounds, Layout->MouseP, ViewingElement);
+                    DrawProfileIn(DebugState, DebugID, ViewingElement);
                 } break;
 
                 case DebugType_FrameBarGraph:
                 {
-                    DrawFrameBars(DebugState, DebugID, LayEl.Bounds, Layout->MouseP, ViewingElement);
+                    DrawFrameBars(DebugState, DebugID, ViewingElement);
                 } break;
                 
                 case DebugType_TopClocksList:
                 {
-                    DrawTopClocksList(DebugState, DebugID, LayEl.Bounds, Layout->MouseP, ViewingElement);
+                    DrawTopClocksList(DebugState, DebugID, ViewingElement);
                 } break;
             }
-            
-            RenderGroup->CurrentClipRectIndex = OldClipRect;
         } break;
 
         case DebugType_FrameSlider:
         {
-            v2 *Dim = &View->InlineBlock.Dim;
-            if((Dim->x == 0) && (Dim->y == 0))
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 3);
             {
-                Dim->x = 1400;
-                Dim->y = 32;
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 108);
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Pause"))
+                {
+                    DebugState->Paused = !DebugState->Paused;
+                }
+
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Oldest"))
+                {
+                    DebugState->ViewingFrameOrdinal = DebugState->OldestFrameOrdinal;
+                }
+
+                if(Platform.UI.NkButtonLabel(DebugState->nk, "Most Recent"))
+                {
+                    DebugState->ViewingFrameOrdinal = DebugState->MostRecentFrameOrdinal;
+                }
             }
-            
-            layout_element LayEl = BeginElementRectangle(Layout, Dim);
-            MakeElementSizable(&LayEl);
-            EndElement(&LayEl);
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
 
-            BeginRow(Layout);
-            BooleanButton(Layout, "Pause", DebugState->Paused,
-                SetUInt32Interaction(DebugID, (u32 *)&DebugState->Paused, !DebugState->Paused));
-            ActionButton(Layout, "Oldest", 
-                SetUInt32Interaction(DebugID, &DebugState->ViewingFrameOrdinal,
-                    DebugState->OldestFrameOrdinal));
-            ActionButton(Layout, "Most Recent", 
-                SetUInt32Interaction(DebugID, &DebugState->ViewingFrameOrdinal,
-                    DebugState->MostRecentFrameOrdinal));
-            EndRow(Layout);
-
-            DrawFrameSlider(DebugState, DebugID, LayEl.Bounds, Layout->MouseP, Element);
+            DrawFrameSlider(DebugState, DebugID, Element);
         } break;
 
         case DebugType_LastFrameInfo:
@@ -1045,7 +990,12 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                          MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
                          MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
-            BasicTextElement(Layout, Text, ItemInteraction);
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            {
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
+                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+            }
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
         } break;
 
         case DebugType_DebugMemoryInfo:
@@ -1053,8 +1003,12 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             char Text[256];
             FormatString(sizeof(Text), Text, "Per-frame arena space remaining: %ukb",
                          (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
-
-            BasicTextElement(Layout, Text, ItemInteraction);
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            {
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
+                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+            }
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
         } break;
 
         default:
@@ -1072,25 +1026,24 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                     DEBUGVarToText_Colon|
                     DEBUGVarToText_PrettyBools);
 
-            BasicTextElement(Layout, Text, ItemInteraction);
+            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            {
+                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
+                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+            }
+            Platform.UI.NkLayoutRowEnd(DebugState->nk);
         } break;
     }
 }
 
 internal void
-DrawTreeLink(debug_state *DebugState, layout *Layout, debug_tree *Tree, debug_variable_link *Link)
+DrawTreeLink(debug_state *DebugState, debug_tree *Tree, debug_variable_link *Link)
 {
     u32 FrameOrdinal = DebugState->ViewingFrameOrdinal;
     
     if(HasChildren(Link))
     {
         debug_id ID = DebugIDFromLink(Tree, Link);
-        debug_view *View = GetOrCreateDebugViewFor(DebugState, ID);
-        debug_interaction ItemInteraction = DebugIDInteraction(DebugInteraction_ToggleExpansion, ID);
-        if(DebugState->AltUI)
-        {
-            ItemInteraction = DebugLinkInteraction(DebugInteraction_TearValue, Link);
-        }
 
         char *Text = Link->Name;
         int id = *(int *)ID.Value[1];
@@ -1100,7 +1053,7 @@ DrawTreeLink(debug_state *DebugState, layout *Layout, debug_tree *Tree, debug_va
                 SubLink != GetSentinel(Link);
                 SubLink = SubLink->Next)
             {
-                DrawTreeLink(DebugState, Layout, Tree, SubLink);
+                DrawTreeLink(DebugState, Tree, SubLink);
             }
 
             Platform.UI.NkTreePop(DebugState->nk);
@@ -1109,97 +1062,24 @@ DrawTreeLink(debug_state *DebugState, layout *Layout, debug_tree *Tree, debug_va
     else
     {
         debug_id DebugID = DebugIDFromLink(Tree, Link);
-        DEBUGDrawElement(Layout, Tree, Link->Element, DebugID, FrameOrdinal);
+        DEBUGDrawElement(DebugState, Tree, Link->Element, DebugID, FrameOrdinal);
     }
 }
 
 internal void
-DrawTrees(debug_state *DebugState, v2 MouseP)
+DrawTrees(debug_state *DebugState)
 {
-    object_transform NoTransform = DefaultFlatTransform();
-    render_group *RenderGroup = &DebugState->RenderGroup;
     u32 FrameOrdinal = DebugState->ViewingFrameOrdinal;
 
     for(debug_tree *Tree = DebugState->TreeSentinel.Next;
         Tree != &DebugState->TreeSentinel;
         Tree = Tree->Next)
     {
-        layout Layout = BeginLayout(DebugState, MouseP, Tree->UIP);
         debug_variable_link *Group = Tree->Group;
         if(Group)
         {
-            DrawTreeLink(DebugState, &Layout, Tree, Group);
+            DrawTreeLink(DebugState, Tree, Group);
         }
-#if 0        
-        debug_interaction MoveInteraction = {};
-        MoveInteraction.Type = DebugInteraction_Move;
-        MoveInteraction.P = &Tree->UIP;
-        
-        rectangle2 MoveBox = RectCenterHalfDim(Tree->UIP - V2(4.0f, 4.0f), V2(4.0f, 4.0f));
-        PushRect(RenderGroup, &NoTransform, MoveBox, 0.0f,
-            InteractionIsHot(DebugState, MoveInteraction) ? V4(1, 1, 0, 1) : V4(1, 1, 1, 1));
-        
-        if(IsInRectangle(MoveBox, MouseP))
-        {
-            DebugState->NextHotInteraction = MoveInteraction;
-        }
-#endif        
-        EndLayout(&Layout);
-    }
-}
-
-internal void
-DEBUGBeginInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
-{
-    u32 FrameOrdinal = DebugState->MostRecentFrameOrdinal;
-    if(DebugState->HotInteraction.Type)
-    {
-        if(DebugState->HotInteraction.Type == DebugInteraction_AutoModifyVariable)
-        {
-            switch(DebugState->HotInteraction.Element->Frames[FrameOrdinal].MostRecentEvent->Event.Type)
-            {
-                case DebugType_b32:
-                {
-                    DebugState->HotInteraction.Type = DebugInteraction_ToggleValue;
-                } break;
-
-                case DebugType_r32:
-                {
-                    DebugState->HotInteraction.Type = DebugInteraction_DragValue;
-                } break;
-
-                case DebugType_OpenDataBlock:
-                {
-                    DebugState->HotInteraction.Type = DebugInteraction_ToggleValue;
-                } break;
-            }
-        }
-
-        switch(DebugState->HotInteraction.Type)
-        {
-            case DebugInteraction_TearValue:
-            {
-                debug_variable_link *RootGroup = CloneVariableLink(DebugState, DebugState->HotInteraction.Link);
-                debug_tree *Tree = AddTree(DebugState, RootGroup, MouseP);
-                DebugState->HotInteraction.Type = DebugInteraction_Move;
-                DebugState->HotInteraction.P = &Tree->UIP;
-            } break;
-
-            case DebugInteraction_Select:
-            {
-                if(!Input->ShiftDown)
-                {
-                    ClearSelection(DebugState);
-                }
-                AddToSelection(DebugState, DebugState->HotInteraction.ID);
-            } break;                
-        }
-
-        DebugState->Interaction = DebugState->HotInteraction;
-    }
-    else
-    {
-        DebugState->Interaction.Type = DebugInteraction_NOP;
     }
 }
 
@@ -1215,123 +1095,6 @@ DEBUGMarkEditedEvent(debug_state *DebugState, debug_event *Event)
         GlobalDebugTable->EditEvent.GUID = 
             GetElementFromEvent(DebugState, Event, 0, DebugElement_AddToGroup|DebugElement_CreateHierarchy)->OriginalGUID;
     }
-}
-
-internal void
-DEBUGEndInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
-{
-    u32 FrameOrdinal = DebugState->MostRecentFrameOrdinal;
-    switch(DebugState->Interaction.Type)
-    {
-        case DebugInteraction_ToggleExpansion:
-        {
-            debug_view *View = GetOrCreateDebugViewFor(DebugState, DebugState->Interaction.ID);
-            View->Collapsible.ExpandedAlways = !View->Collapsible.ExpandedAlways;
-        } break;
-        
-        case DebugInteraction_SetUInt32:
-        {
-            *(u32 *)DebugState->Interaction.Target = DebugState->Interaction.UInt32;
-        } break;
-        
-        case DebugInteraction_SetPointer:
-        {
-            *(void **)DebugState->Interaction.Target = DebugState->Interaction.Pointer;
-        } break;
-
-        case DebugInteraction_ToggleValue:
-        {
-            debug_event *Event = &DebugState->Interaction.Element->Frames[FrameOrdinal].
-                MostRecentEvent->Event;
-            Assert(Event);
-            switch(Event->Type)
-            {
-                case DebugType_b32:
-                {
-                    Event->Value_b32 = !Event->Value_b32;
-                } break;
-            }
-            DEBUGMarkEditedEvent(DebugState, Event);
-        } break;
-    }
-
-    DebugState->Interaction.Type = DebugInteraction_None;
-    DebugState->Interaction.Generic = 0;
-}
-
-internal void
-DEBUGInteract(debug_state *DebugState, engine_input *Input, v2 MouseP)
-{
-    v2 dMouseP = MouseP - DebugState->LastMouseP;
-    if(DebugState->Interaction.Type)
-    {
-        u32 FrameOrdinal = DebugState->MostRecentFrameOrdinal;
-        debug_tree *Tree = DebugState->Interaction.Tree;
-        v2 *P = DebugState->Interaction.P;
-
-        // NOTE(casey): Mouse move interaction
-        switch(DebugState->Interaction.Type)
-        {
-            case DebugInteraction_DragValue:
-            {
-                debug_event *Event = DebugState->Interaction.Element ? 
-                    &DebugState->Interaction.Element->Frames[FrameOrdinal].MostRecentEvent->Event : 0;
-                switch(Event->Type)
-                {
-                    case DebugType_r32:
-                    {
-                        Event->Value_r32 += 0.1f*dMouseP.y;
-                    } break;
-                }
-                DEBUGMarkEditedEvent(DebugState, Event);
-            } break;
-
-            case DebugInteraction_Resize:
-            {
-                *P += V2(dMouseP.x, -dMouseP.y);
-                P->x = Maximum(P->x, 10.0f);
-                P->y = Maximum(P->y, 10.0f);
-            } break;
-
-            case DebugInteraction_Move:
-            {
-                *P += V2(dMouseP.x, dMouseP.y);
-            } break;
-        }
-
-        // NOTE(casey): Click interaction
-        for(u32 TransitionIndex = Input->MouseButtons[PlatformMouseButton_Left].HalfTransitionCount;
-            TransitionIndex > 1;
-            --TransitionIndex)
-        {
-            DEBUGEndInteract(DebugState, Input, MouseP);
-            DEBUGBeginInteract(DebugState, Input, MouseP);
-        }
-
-        if(!Input->MouseButtons[PlatformMouseButton_Left].EndedDown)
-        {
-            DEBUGEndInteract(DebugState, Input, MouseP);
-        }
-    }
-    else
-    {
-        DebugState->HotInteraction = DebugState->NextHotInteraction;
-
-        for(u32 TransitionIndex = Input->MouseButtons[PlatformMouseButton_Left].HalfTransitionCount;
-            TransitionIndex > 1;
-            --TransitionIndex)
-        {
-            DEBUGBeginInteract(DebugState, Input, MouseP);
-            DEBUGEndInteract(DebugState, Input, MouseP);
-        }
-
-        if(Input->MouseButtons[PlatformMouseButton_Left].EndedDown)
-        {
-            DEBUGBeginInteract(DebugState, Input, MouseP);
-        }
-    }
-
-    DebugState->LastMouseP = MouseP;
 }
 
 inline u32
@@ -1889,42 +1652,9 @@ DEBUGInit(u32 Width, u32 Height)
 
 
 internal void
-DEBUGStart(debug_state *DebugState, editor_render_commands *Commands, editor_assets *Assets,
-           u32 MainGenerationID, u32 Width, u32 Height)
+DEBUGStart(debug_state *DebugState)
 {
     TIMED_FUNCTION();
-
-    DebugState->RenderGroup = BeginRenderGroup(Assets, Commands, MainGenerationID, false,
-                                               Width, Height);
-
-    DebugState->DebugFont = PushFont(&DebugState->RenderGroup, DebugState->FontID);
-    DebugState->DebugFontInfo = GetFontInfo(DebugState->RenderGroup.Assets, DebugState->FontID);
-
-    DebugState->GlobalWidth = (r32)Width;
-    DebugState->GlobalHeight = (r32)Height;
-
-    asset_vector MatchVector = {};
-    asset_vector WeightVector = {};
-    MatchVector.E[Tag_FontType] = FontType_Default;
-    WeightVector.E[Tag_FontType] = 1;
-    DebugState->FontID = GetBestMatchFontFrom(Assets, Asset_Font, &MatchVector, &WeightVector);
-
-    DebugState->FontScale = 1.0f;
-    Orthographic(&DebugState->RenderGroup, 1.0f);
-    DebugState->LeftEdge = -0.5f*Width;
-    DebugState->RightEdge = 0.5f*Width;
-
-    DebugState->TextTransform = DefaultFlatTransform();
-    DebugState->ShadowTransform = DefaultFlatTransform();
-    DebugState->UITransform = DefaultFlatTransform();
-    DebugState->BackingTransform = DefaultFlatTransform();
-
-    DebugState->BackingTransform.ChunkZ = 200000;
-    DebugState->ShadowTransform.ChunkZ = 300000;
-    DebugState->UITransform.ChunkZ = 400000;
-    DebugState->TextTransform.ChunkZ = 500000;
-
-    DebugState->DefaultClipRect = DebugState->RenderGroup.CurrentClipRectIndex;
     
     if(!DebugState->Paused)
     {
@@ -1933,11 +1663,9 @@ DEBUGStart(debug_state *DebugState, editor_render_commands *Commands, editor_ass
 }
 
 internal void
-DEBUGEnd(debug_state *DebugState, engine_input *Input)
+DEBUGEnd(debug_state *DebugState)
 {
     TIMED_FUNCTION();
-
-    render_group *RenderGroup = &DebugState->RenderGroup;
 
     debug_event *HotEvent = 0;
     
@@ -1946,30 +1674,15 @@ DEBUGEnd(debug_state *DebugState, engine_input *Input)
                  MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
                  MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
-    DebugState->AltUI = Input->MouseButtons[PlatformMouseButton_Right].EndedDown;
-
-    object_transform Flat = DefaultFlatTransform();
-    v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
-    DebugState->MouseTextLayout = BeginLayout(DebugState, MouseP, MouseP);
-
     nk_ui UI = Platform.UI;
     nk_context *nk = DebugState->nk;
     if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 230, 250),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
-        DrawTrees(DebugState, MouseP);
+        DrawTrees(DebugState);
     }
     UI.NkEnd(nk);
-
-    EndLayout(&DebugState->MouseTextLayout);
-
-    DEBUGInteract(DebugState, Input, MouseP);
-    
-    EndRenderGroup(&DebugState->RenderGroup);
-
-    // NOTE(casey): Clear the UI state for the next frame
-    ZeroStruct(DebugState->NextHotInteraction);
 }
 
 extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
@@ -1993,11 +1706,8 @@ extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
     debug_state *DebugState = Memory->DebugState;
     if(DebugState)
     {
-        editor_assets *Assets = DEBUGGetEditorAssets(Memory);
-
-        DEBUGStart(DebugState, RenderCommands, Assets, DEBUGGetMainGenerationID(Memory),
-                   RenderCommands->Width, RenderCommands->Height);
+        DEBUGStart(DebugState);
         CollateDebugRecords(DebugState, EventCount, GlobalDebugTable->Events[EventArrayIndex]);
-        DEBUGEnd(DebugState, Input);
+        DEBUGEnd(DebugState);
     }
 }

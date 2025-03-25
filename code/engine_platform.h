@@ -4405,6 +4405,15 @@ NK_API void nk_tooltipfv(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*
 #endif
 NK_API nk_bool nk_tooltip_begin(struct nk_context*, float width);
 NK_API void nk_tooltip_end(struct nk_context*);
+
+typedef void platform_nk_tooltip(struct nk_context*, const char*);
+#ifdef NK_INCLUDE_STANDARD_VARARGS
+typedef void platform_nk_tooltipf(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*, ...) NK_PRINTF_VARARG_FUNC(2);
+typedef void platform_nk_tooltipfv(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(2);
+#endif
+typedef nk_bool platform_nk_tooltip_begin(struct nk_context*, float width);
+typedef void platform_nk_tooltip_end(struct nk_context*);
+
 /* =============================================================================
  *
  *                                  MENU
@@ -6799,6 +6808,13 @@ struct nk_ui
     platform_nk_fill_triangle *NkFillTriangle;
     platform_nk_fill_polygon *NkFillPolygon;
 
+    platform_nk_tooltip *NkTooltip;
+#ifdef NK_INCLUDE_STANDARD_VARARGS
+    platform_nk_tooltipf *NkTooltipf;
+    platform_nk_tooltipfv *NkTooltipfv;
+#endif
+    platform_nk_tooltip_begin *NkTooltipBegin;
+    platform_nk_tooltip_end *NkTooltipEnd;
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)

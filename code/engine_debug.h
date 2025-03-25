@@ -24,36 +24,14 @@ enum debug_variable_to_text_flag
 };
 
 struct debug_tree;
-
-struct debug_view_inline_block
-{
-    v2 Dim;
-};
-
 struct debug_view_profile_graph
 {
-    debug_view_inline_block Block;
     char *GUID;
-};
-
-struct debug_view_arena_graph
-{
-    debug_view_inline_block Block;
-};
-
-struct debug_view_collapsible
-{
-    b32 ExpandedAlways;
-    b32 ExpandedAltView;
 };
 
 enum debug_view_type
 {
     DebugViewType_Unknown,
-
-    DebugViewType_Basic,
-    DebugViewType_InlineBlock,
-    DebugViewType_Collapsible,
 };
 
 struct debug_view
@@ -64,10 +42,7 @@ struct debug_view
     debug_view_type Type;
     union
     {
-        debug_view_inline_block InlineBlock;
         debug_view_profile_graph ProfileGraph;
-        debug_view_collapsible Collapsible;
-        debug_view_arena_graph ArenaGraph;
     };
 };
 
@@ -136,11 +111,13 @@ struct debug_variable_link
     char *Name;
     debug_element *Element;
 };
+
 inline debug_variable_link *GetSentinel(debug_variable_link *From)
 {
     debug_variable_link *Result = (debug_variable_link *)(&From->FirstChild);
     return(Result);
 }
+
 inline b32 HasChildren(debug_variable_link *Link)
 {
     b32 Result = (Link->FirstChild != GetSentinel(Link));
@@ -149,18 +126,11 @@ inline b32 HasChildren(debug_variable_link *Link)
 
 struct debug_tree
 {
-    v2 UIP;
     debug_variable_link *Group;
 
     debug_tree *Next;
     debug_tree *Prev;
 };
-
-struct render_group;
-struct editor_assets;
-struct loaded_bitmap;
-struct loaded_font;
-struct ssa_font;
 
 struct debug_counter_snapshot
 {
@@ -225,8 +195,6 @@ struct debug_thread
     open_debug_block *FirstOpenDataBlock;
 };
 
-#include "engine_debug_ui.h"
-
 struct debug_state
 {
     b32 Initialized;
@@ -235,17 +203,6 @@ struct debug_state
     memory_arena PerFrameArena;
 
     u32 DefaultClipRect;
-    render_group RenderGroup;
-    loaded_font *DebugFont;
-    ssa_font *DebugFontInfo;
-
-    object_transform TextTransform;
-    object_transform ShadowTransform;
-    object_transform UITransform;
-    object_transform BackingTransform;
-
-    v2 MenuP;
-    b32 MenuActive;
 
     u32 SelectedIDCount;
     debug_id SelectedID[64];
@@ -256,21 +213,7 @@ struct debug_state
     debug_variable_link *ProfileGroup;
     debug_tree TreeSentinel;
 
-    v2 LastMouseP;
-    b32 AltUI;
-    debug_interaction Interaction;
-    debug_interaction HotInteraction;
-    debug_interaction NextHotInteraction;
     b32 Paused;
-
-    r32 LeftEdge;
-    r32 RightEdge;
-    r32 FontScale;
-    font_id FontID;
-    r32 GlobalWidth;
-    r32 GlobalHeight;
-
-    layout MouseTextLayout;
     
     u32 TotalFrameCount;
 
@@ -290,8 +233,6 @@ struct debug_state
 
     // NOTE(casey): Per-frame storage management
     debug_stored_event *FirstFreeStoredEvent;
-
-    u32 RenderTarget;
     
     u32 RootInfoSize;
     char *RootInfo;
