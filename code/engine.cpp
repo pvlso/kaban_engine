@@ -43,36 +43,6 @@ EndTaskWithMemory(task_with_memory *Task)
     Task->BeingUsed = false;
 }
 
-#if EDITOR_INTERNAL
-internal u32
-DEBUGGetMainGenerationID(engine_memory *Memory)
-{
-    u32 Result = 0;
-    
-    transient_state *TranState = Memory->TransientState;
-    if(TranState)
-    {
-        Result = TranState->MainGenerationID;
-    }
-
-    return(Result);
-}
-
-internal editor_assets *
-DEBUGGetEditorAssets(engine_memory *Memory)
-{
-    editor_assets *Assets = 0;
-    
-    transient_state *TranState = Memory->TransientState;
-    if(TranState)
-    {
-        Assets = TranState->Assets;
-    }
-
-    return(Assets);
-}
-#endif
-
 internal void
 SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode EditorMode)
 {
@@ -92,60 +62,12 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     EditorState->EditorMode = EditorMode;
 }
 
-internal b32
-CheckForMetaInput(editor_state *EditorState, transient_state *TranState, engine_input *Input)
-{
-    b32 Result = false;
-    for(u32 ControllerIndex = 0;
-        ControllerIndex < ArrayCount(Input->Controllers);
-        ++ControllerIndex)
-    {
-        engine_controller_input *Controller = GetController(Input, ControllerIndex);
-        if(Controller->IsConnected)
-        {
-            if(WasPressed(Controller->Back))
-            {
-                switch(EditorState->EditorMode)
-                {
-                    case EditorMode_TitleScreen:
-                    {
-                        Input->QuitRequested = true;
-                        break;
-                    } break;
-                }
-            }
-        }
-    }
-
-    if(WasPressed(Input->MouseButtons[PlatformMouseButton_Middle]))
-    {
-//        EditorState->UIEnable = !EditorState->UIEnable;
-    }
-
-    return(Result);
-}
-
 #if EDITOR_INTERNAL
 debug_table *GlobalDebugTable;
 engine_memory *DebugGlobalMemory;
 #endif
 
 platform_api Platform;
-
-struct nk_color colors[] = {
-    {255, 100, 100, 255}, // Reddish
-    {100, 255, 100, 255}, // Reddish
-    {100, 100, 255, 255}, // Reddish
-};
-
-static float data[3][5] = {
-    {10.0f, 15.0f, 20.0f, 25.0f, 30.0f}, // Dataset 1
-    {5.0f, 10.0f, 15.0f, 10.0f, 5.0f},   // Dataset 2
-    {8.0f, 5.0f, 10.0f, 15.0f, 20.0f}    // Dataset 3
-};
-const int dataset_count = 3;
-const int point_count = 5;
-const float max_value = 60.0f; // Max cumulative value for scaling
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -156,18 +78,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
     DebugGlobalMemory = Memory;
-    
-    {DEBUG_DATA_BLOCK("Renderer");
-        {DEBUG_DATA_BLOCK("Camera");
-            DEBUG_B32(Global_Renderer_Camera_UseDebug);
-            DEBUG_VALUE(Global_Renderer_Camera_DebugDistance);
-        }
-    }
-
-    {DEBUG_DATA_BLOCK("EditorGameMode");
-        DEBUG_B32(Global_EditorGameMode_ShowCoords);
-        DEBUG_B32(Global_EditorGameMode_ShowGrid);
-    }
     
     {DEBUG_DATA_BLOCK("Profile");
         DEBUG_UI_ELEMENT(DebugType_FrameSlider, FrameSlider);
@@ -187,7 +97,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(!EditorState)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
-        char window_title[64] = "Title";
     }
 
     // NOTE(casey): Transient initialization
@@ -241,11 +150,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
-
-    Orthographic(RenderGroup, 2.0f);
-
-    object_transform Default = DefaultFlatTransform();
-    Default.OffsetP = V3(-100.0f, 100.0f, 0.0f);
 
     b32 Rerun = false;
     do

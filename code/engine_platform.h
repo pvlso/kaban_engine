@@ -3013,6 +3013,7 @@ typedef void platform_nk_layout_row_dynamic(struct nk_context *ctx, float height
  * \param[in] columns | Number of widget inside row
  */
 NK_API void nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
+typedef void platform_nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
 
 /**
  * \brief Starts a new dynamic or fixed row with given height and columns.
@@ -3276,6 +3277,7 @@ NK_API struct nk_rect nk_layout_space_rect_to_local(const struct nk_context *ctx
  *
  */
 NK_API void nk_spacer(struct nk_context *ctx);
+typedef void platform_nk_spacer(struct nk_context *ctx);
 
 
 /** =============================================================================
@@ -6665,11 +6667,13 @@ struct nk_ui
 {
     platform_nk_begin *NkBegin;
     platform_nk_end *NkEnd;
+    platform_nk_spacer *NkSpacer;
 
     platform_nk_layout_row_dynamic *NkLayoutRowDynamic;
     platform_nk_layout_row_begin *NkLayoutRowBegin;
     platform_nk_layout_row_push *NkLayoutRowPush;
     platform_nk_layout_row_end *NkLayoutRowEnd;
+    platform_nk_layout_row_static *NkLayoutRowStatic;
 
     platform_nk_text *NkText;
     platform_nk_text_colored *NkTextColored;

@@ -658,11 +658,13 @@ Win32SetUIPointers(nk_ui *UI)
 {
     UI->NkBegin = nk_begin;
     UI->NkEnd = nk_end;
+    UI->NkSpacer = nk_spacer;
 
     UI->NkLayoutRowDynamic = nk_layout_row_dynamic;
     UI->NkLayoutRowBegin = nk_layout_row_begin;
     UI->NkLayoutRowPush = nk_layout_row_push;
     UI->NkLayoutRowEnd = nk_layout_row_end;
+    UI->NkLayoutRowStatic = nk_layout_row_static;
 
     UI->NkText = nk_text;
     UI->NkTextColored = nk_text_colored;
@@ -2636,10 +2638,6 @@ WinMain(HINSTANCE Instance,
             GlobalRunning = true;
             while(GlobalRunning)
             {
-                {DEBUG_DATA_BLOCK("Platform/Controls");
-                    DEBUG_B32(GlobalPause);
-                }
-
                 // NOTE(paul): Init Render Commands and Handle Aspect Ratio
                 editor_render_commands RenderCommands = RenderCommandStruct(
                     PushBufferSize, PushBuffer,

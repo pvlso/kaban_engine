@@ -348,90 +348,6 @@ GetOrCreateDebugViewFor(debug_state *DebugState, debug_id ID)
     return(Result);
 }
 
-internal b32
-IsSelected(debug_state *DebugState, debug_id ID)
-{
-    b32 Result = false;
-
-    for(u32 Index = 0;
-        Index < DebugState->SelectedIDCount;
-        ++Index)
-    {
-        if(DebugIDsAreEqual(ID, DebugState->SelectedID[Index]))
-        {
-            Result = true;
-            break;
-        }
-    }
-
-    return(Result);
-}
-
-internal void
-ClearSelection(debug_state *DebugState)
-{
-    DebugState->SelectedIDCount = 0;
-}
-
-internal void
-AddToSelection(debug_state *DebugState, debug_id ID)
-{
-    if((DebugState->SelectedIDCount < ArrayCount(DebugState->SelectedID)) &&
-       !IsSelected(DebugState, ID))
-    {
-        DebugState->SelectedID[DebugState->SelectedIDCount++] = ID;
-    }
-}
-
-internal void
-DEBUG_HIT(debug_id ID, r32 ZValue)
-{
-    debug_state *DebugState = DEBUGGetState();
-    if(DebugState)
-    {
-//        DebugState->NextHotInteraction = DebugIDInteraction(DebugInteraction_Select, ID);
-    }
-}
-
-internal b32
-DEBUG_HIGHLIGHTED(debug_id ID, v4 *Color)
-{
-    b32 Result = false;
-
-    debug_state *DebugState = DEBUGGetState();
-    if(DebugState)
-    {
-        if(IsSelected(DebugState, ID))
-        {
-            *Color = V4(0, 1, 1, 1);
-            Result = true;
-        }
-
-//        if(DebugIDsAreEqual(DebugState->HotInteraction.ID, ID))
-        {
-            *Color = V4(1, 1, 0, 1);
-            Result = true;
-        }
-    }
-
-    return(Result);
-}
-
-internal b32
-DEBUG_REQUESTED(debug_id ID)
-{
-    b32 Result = false;
-
-    debug_state *DebugState = DEBUGGetState();
-    if(DebugState)
-    {
-//        Result = IsSelected(DebugState, ID)
-//            || DebugIDsAreEqual(DebugState->HotInteraction.ID, ID);
-    }
-
-    return(Result);
-}
-
 internal u64
 GetTotalClocks(debug_element_frame *Frame)
 {
@@ -449,6 +365,7 @@ internal void
 DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect ProfileRect,
                   debug_profile_node *RootNode, r32 LaneStride, r32 LaneHeight, u32 DepthRemaining)
 {
+    nk_context *nk = DebugState->nk;
     r32 FrameSpan = (r32)(RootNode->Duration);
     r32 PixelSpan = ProfileRect.w;
     
@@ -458,7 +375,7 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
         Scale = PixelSpan / FrameSpan;
     }
 
-    const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
+    const struct nk_input *in = nk->current->widgets_disabled ? 0 : &nk->input;
     for(debug_stored_event *StoredEvent = RootNode->FirstChild;
         StoredEvent;
         StoredEvent = StoredEvent->ProfileNode.NextSameParent)
@@ -479,7 +396,7 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
 
         nk_flags ret = 0;
 
-        if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+        if (!(nk->current->layout->flags & NK_WINDOW_ROM) && in &&
             NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRect.x,RegionRect.y,RegionRect.w,RegionRect.h))
         {
             ret = NK_CHART_HOVERING;
@@ -508,13 +425,13 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
                 *At++;
             }
 
-            Platform.UI.NkTooltip(DebugState->nk, OnePastLastBackSlash);
+            Platform.UI.NkTooltip(nk, OnePastLastBackSlash);
         }
                     
 
-        Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+        Platform.UI.NkFillRect(&nk->current->buffer,
                                RegionRect, 0.0f, C);
-        Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+        Platform.UI.NkStrokeRect(&nk->current->buffer,
                                  RegionRect, 0.0f, 0.15f, {0, 0, 0, 255});
 
         if(ret & NK_CHART_CLICKED)
@@ -534,11 +451,15 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
 internal void
 DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
-    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 300, 1);
-    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
-                                             DebugState->nk->current->layout->at_y,
-                                             DebugState->nk->current->layout->max_x - 4.0f, 300);
-    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+    nk_context *nk = DebugState->nk;
+    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
+    Platform.UI.NkSpacer(nk);
+    Platform.UI.NkLayoutRowDynamic(nk, 310, 1);
+
+    struct nk_rect Rect = {};
+    Platform.UI.NkWidget(&Rect, nk);
+
+    Platform.UI.NkFillRect(&nk->current->buffer,
                            Rect, 0.0f, {255, 0, 0, 100});
 
     u32 LaneCount = DebugState->FrameBarLaneCount;
@@ -572,18 +493,21 @@ DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
 internal void
 DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
-    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 300, 1);
-    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
-                                             DebugState->nk->current->layout->at_y,
-                                             DebugState->nk->current->layout->max_x - 4.0f, 300);
+    nk_context *nk = DebugState->nk;
+    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
+    Platform.UI.NkSpacer(nk);
+    Platform.UI.NkLayoutRowDynamic(nk, 310, 1);
 
+    struct nk_rect Rect = {};
+    Platform.UI.NkWidget(&Rect, nk);
+    
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
         r32 BarWidth = (Rect.w / (r32)FrameCount);
         r32 AtX = Rect.x;
 
-        const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
+        const struct nk_input *in = nk->current->widgets_disabled ? 0 : &nk->input;
         for(u32 FrameIndex = 0;
             FrameIndex < FrameCount;
             ++FrameIndex)
@@ -617,7 +541,7 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
                     nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
                     nk_flags ret = 0;
 
-                    if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+                    if (!(nk->current->layout->flags & NK_WINDOW_ROM) && in &&
                         NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h))
                     {
                         ret = NK_CHART_HOVERING;
@@ -646,12 +570,12 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
                             *At++;
                         }
 
-                        Platform.UI.NkTooltip(DebugState->nk, OnePastLastBackSlash);
+                        Platform.UI.NkTooltip(nk, OnePastLastBackSlash);
                     }
                     
-                    Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                    Platform.UI.NkFillRect(&nk->current->buffer,
                                            RegionRectnk, 0.0f, C);
-                    Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+                    Platform.UI.NkStrokeRect(&nk->current->buffer,
                                              RegionRectnk, 0.0f, 0.15f, {0, 0, 0, 255});
 
                     if(ret & NK_CHART_CLICKED)
@@ -727,8 +651,9 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *Root
     {
         PC = 100.0f / TotalTime;
     }
-    
-    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 20, 1);
+
+    nk_context *nk = DebugState->nk;
+    Platform.UI.NkLayoutRowDynamic(nk, 20, 1);
     for(Index = 0;
         (Index < LinkCount);
         ++Index)
@@ -743,7 +668,7 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *Root
 
         if(Stats->Sum > 0)
         {
-            Platform.UI.NkLabel(DebugState->nk, TextBuffer, NK_TEXT_LEFT);
+            Platform.UI.NkLabel(nk, TextBuffer, NK_TEXT_LEFT);
         }
     }
     
@@ -753,15 +678,19 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *Root
 internal void
 DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootElement)
 {
-    Platform.UI.NkLayoutRowDynamic(DebugState->nk, 50, 1);
-    struct nk_rect Rect = Platform.UI.NkRect(DebugState->nk->current->layout->at_x,
-                                             DebugState->nk->current->layout->at_y,
-                                             DebugState->nk->current->layout->max_x, 50);
+    nk_context *nk = DebugState->nk;
+    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
+    Platform.UI.NkSpacer(nk);
+    Platform.UI.NkLayoutRowDynamic(nk, 60, 1);
+
+    struct nk_rect Rect = {};
+    Platform.UI.NkWidget(&Rect, nk);
+
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
-        const struct nk_input *in = DebugState->nk->current->widgets_disabled ? 0 : &DebugState->nk->input;
-        Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+        const struct nk_input *in = nk->current->widgets_disabled ? 0 : &nk->input;
+        Platform.UI.NkFillRect(&nk->current->buffer,
                                Rect, 0.0f, {0, 0, 0, 64});
 
         r32 BarWidth = (Rect.w / (r32)FrameCount);
@@ -804,7 +733,7 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
 
             nk_flags ret = 0;
 
-            if (!(DebugState->nk->current->layout->flags & NK_WINDOW_ROM) && in &&
+            if (!(nk->current->layout->flags & NK_WINDOW_ROM) && in &&
                 NK_INBOX(in->mouse.pos.x,in->mouse.pos.y,RegionRectnk.x,RegionRectnk.y,RegionRectnk.w,RegionRectnk.h))
             {
                 ret = NK_CHART_HOVERING;
@@ -816,16 +745,16 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
                 char TextBuffer[256];
                 FormatString(sizeof(TextBuffer), TextBuffer, "%u", FrameIndex);
 
-                Platform.UI.NkTooltip(DebugState->nk, TextBuffer);
+                Platform.UI.NkTooltip(nk, TextBuffer);
             }
 
             if(Highlight)
             {
-                Platform.UI.NkFillRect(&DebugState->nk->current->buffer,
+                Platform.UI.NkFillRect(&nk->current->buffer,
                                        RegionRectnk, 0.0f, C);
             }
 
-            Platform.UI.NkStrokeRect(&DebugState->nk->current->buffer,
+            Platform.UI.NkStrokeRect(&nk->current->buffer,
                                      RegionRectnk, 0.0f, 0.15f, OC);
 
             if(ret & NK_CHART_CLICKED)
@@ -842,6 +771,7 @@ internal void
 DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Element, debug_id DebugID,
                  u32 FrameOrdinal)
 {
+    nk_context *nk = DebugState->nk;
     debug_stored_event *OldestStoredEvent = 
         Element->Frames[DebugState->ViewingFrameOrdinal].OldestEvent;
 
@@ -881,21 +811,21 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
         case DebugType_memory_arena_p:
         case DebugType_ArenaOccupancy:
         {
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 80);
-                Platform.UI.NkLabel(DebugState->nk, GetName(Element), NK_TEXT_LEFT);
+                Platform.UI.NkLayoutRowPush(nk, 80);
+                Platform.UI.NkLabel(nk, GetName(Element), NK_TEXT_LEFT);
 
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 200);
+                Platform.UI.NkLayoutRowPush(nk, 200);
                 debug_element_frame *RootFrame = Element->Frames + DebugState->ViewingFrameOrdinal;
                 debug_stored_event *Event = RootFrame->OldestEvent;
                 if(Event)
                 {
                     memory_arena *Arena = Event->Event.Value_memory_arena_p;
-                    Platform.UI.NkProg(DebugState->nk, Arena->Used, Arena->Size, nk_false);
+                    Platform.UI.NkProg(nk, Arena->Used, Arena->Size, nk_false);
                 }
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
 
         } break;
 
@@ -905,30 +835,30 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
         {
             debug_view_profile_graph *Graph = &View->ProfileGraph;
 
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 4);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 4);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 80);
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Root"))
+                Platform.UI.NkLayoutRowPush(nk, 80);
+                if(Platform.UI.NkButtonLabel(nk, "Root"))
                 {
                     Graph->GUID = 0;
                 }
 
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Threads"))
+                if(Platform.UI.NkButtonLabel(nk, "Threads"))
                 {
                     Element->Type = DebugType_ThreadIntervalGraph;
                 }
 
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Frames"))
+                if(Platform.UI.NkButtonLabel(nk, "Frames"))
                 {
                     Element->Type = DebugType_FrameBarGraph;
                 }
 
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Clocks"))
+                if(Platform.UI.NkButtonLabel(nk, "Clocks"))
                 {
                     Element->Type = DebugType_TopClocksList;
                 }
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
             
             u32 ViewingFrameOrdinal = DebugState->ViewingFrameOrdinal;
             debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
@@ -958,25 +888,25 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
 
         case DebugType_FrameSlider:
         {
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 3);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 3);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 108);
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Pause"))
+                Platform.UI.NkLayoutRowPush(nk, 108);
+                if(Platform.UI.NkButtonLabel(nk, "Pause"))
                 {
                     DebugState->Paused = !DebugState->Paused;
                 }
 
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Oldest"))
+                if(Platform.UI.NkButtonLabel(nk, "Oldest"))
                 {
                     DebugState->ViewingFrameOrdinal = DebugState->OldestFrameOrdinal;
                 }
 
-                if(Platform.UI.NkButtonLabel(DebugState->nk, "Most Recent"))
+                if(Platform.UI.NkButtonLabel(nk, "Most Recent"))
                 {
                     DebugState->ViewingFrameOrdinal = DebugState->MostRecentFrameOrdinal;
                 }
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
 
             DrawFrameSlider(DebugState, DebugID, Element);
         } break;
@@ -990,12 +920,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                          MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
                          MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
-                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+                Platform.UI.NkLayoutRowPush(nk, 400);
+                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
         } break;
 
         case DebugType_DebugMemoryInfo:
@@ -1003,12 +933,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
             char Text[256];
             FormatString(sizeof(Text), Text, "Per-frame arena space remaining: %ukb",
                          (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
-                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+                Platform.UI.NkLayoutRowPush(nk, 400);
+                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
         } break;
 
         default:
@@ -1026,12 +956,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                     DEBUGVarToText_Colon|
                     DEBUGVarToText_PrettyBools);
 
-            Platform.UI.NkLayoutRowBegin(DebugState->nk, NK_STATIC, 30, 1);
+            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(DebugState->nk, 400);
-                Platform.UI.NkLabel(DebugState->nk, Text, NK_TEXT_LEFT);
+                Platform.UI.NkLayoutRowPush(nk, 400);
+                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(DebugState->nk);
+            Platform.UI.NkLayoutRowEnd(nk);
         } break;
     }
 }
@@ -1676,7 +1606,7 @@ DEBUGEnd(debug_state *DebugState)
 
     nk_ui UI = Platform.UI;
     nk_context *nk = DebugState->nk;
-    if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 230, 250),
+    if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 200, 70),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
