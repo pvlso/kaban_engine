@@ -10,6 +10,7 @@
 #include "engine_sort.cpp"
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
+#include "editor_audio.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
@@ -97,6 +98,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(!EditorState)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
+        InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
     }
 
     // NOTE(casey): Transient initialization
@@ -150,7 +152,25 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
+    
+    if(!EditorState->Play)
+    {
+        random_series Series = RandomSeed(4124512);
+        sound_id SoundID = GetRandomSoundFrom(TranState->Assets, Asset_Music, &Series);
+        loaded_sound *Sound = GetSound(TranState->Assets, SoundID, TranState->MainGenerationID);
+        if(Sound)
+        {
+            EditorState->Sound = PlaySound(&EditorState->AudioState, SoundID, Sound);
+            EditorState->Play = true;
+        }
+        else
+        {
+            LoadSound(TranState->Assets, SoundID, true);
+        }
+    }
 
+    ChangeVolume(&EditorState->AudioState, EditorState->Sound, 1.0f, V2(0, 0));
+    
     b32 Rerun = false;
     do
     {
@@ -182,6 +202,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     
     CheckArena(&EditorState->ModeArena);
     CheckArena(&TranState->TranArena);
+}
+
+extern "C" ENGINE_GET_SOUND_SAMPLES(EngineGetSoundSamples)
+{
+    editor_state *EditorState = Memory->EditorState;
+    transient_state *TranState = Memory->TransientState;
+
+    OutputPlayingSounds(&EditorState->AudioState, SoundBuffer, TranState->Assets, &TranState->TranArena);
 }
 
 #if EDITOR_INTERNAL

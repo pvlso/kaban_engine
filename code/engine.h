@@ -38,6 +38,7 @@
 #include "engine_render.h"
 #include "engine_render_group.h"
 #include "engine_asset.h"
+#include "editor_audio.h"
 
 enum editor_mode
 {
@@ -52,7 +53,11 @@ struct editor_state
     memory_arena TotalArena;
     memory_arena ModeArena;
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
+    audio_state AudioState;
 
+    b32 Play;
+    playing_sound *Sound;
+    
     char window_title[64];
     editor_mode EditorMode;
     union

@@ -6895,6 +6895,29 @@ typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): AUDIO
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+typedef struct engine_sound_output_buffer
+{
+    int SamplesPerSecond;
+    int SampleCount;
+
+    // IMPORTANT(casey): Samples must be padded to a multiple of 4 samples!
+    int16 *Samples;
+} engine_sound_output_buffer;
+
+// NOTE(casey): At the moment, this has to be a very fast function, it cannot be
+// more than a millisecond or so.
+// TODO(casey): Reduce the pressure on this function's performance by measuring it
+// or asking about it, etc.
+#define ENGINE_GET_SOUND_SAMPLES(name) void name(engine_memory *Memory, engine_sound_output_buffer *SoundBuffer)
+typedef ENGINE_GET_SOUND_SAMPLES(engine_get_sound_samples);
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): DEBUG INTERFACE
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@
 
 #include <windows.h>
 #include <malloc.h>
+#include <dsound.h>
 
 #include "GL/glew.h"
 #include "GL/wglew.h"
@@ -33,6 +34,7 @@ global_variable b32 GlobalAppIsActive;
 global_variable s64 GlobalPerfCountFrequency;
 
 global_variable win32_window_dimension GlobalFramebufferDim;
+global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 global_variable WINDOWPLACEMENT GlobalWindowPosition = {sizeof(GlobalWindowPosition)};
 
 global_variable b32 DEBUGGlobalShowCursor;
@@ -897,10 +899,10 @@ Win32TimeIsValid(FILETIME Time)
     return(Result);
 }
 
-internal win32_editor_code
-Win32LoadEditorCode(wchar_t *SourceDLLName, wchar_t *TempDLLName, wchar_t *LockFileName)
+internal win32_engine_code
+Win32LoadEngineCode(wchar_t *SourceDLLName, wchar_t *TempDLLName, wchar_t *LockFileName)
 {
-    win32_editor_code Result = {};
+    win32_engine_code Result = {};
 
     WIN32_FILE_ATTRIBUTE_DATA Ignored;
     if(!GetFileAttributesExW(LockFileName, GetFileExInfoStandard, &Ignored))
@@ -918,10 +920,15 @@ Win32LoadEditorCode(wchar_t *SourceDLLName, wchar_t *TempDLLName, wchar_t *LockF
             Result.UpdateAndRender = (engine_update_and_render *)
                 GetProcAddress(Result.EditorCodeDLL, "EngineUpdateAndRender");
 
+            Result.GetSoundSamples = (engine_get_sound_samples *)
+                GetProcAddress(Result.EditorCodeDLL, "EngineGetSoundSamples");
+
             Result.DEBUGFrameEnd = (debug_editor_frame_end *)
                 GetProcAddress(Result.EditorCodeDLL, "DEBUGEditorFrameEnd");
 
+
             Result.IsValid = (Result.UpdateAndRender &&
+                              Result.GetSoundSamples &&
                               Result.DEBUGFrameEnd);
         }
     }
@@ -933,6 +940,7 @@ Win32LoadEditorCode(wchar_t *SourceDLLName, wchar_t *TempDLLName, wchar_t *LockF
     if(!Result.IsValid)
     {
         Result.UpdateAndRender = 0;
+        Result.GetSoundSamples = 0;
         Result.DEBUGFrameEnd = 0;
     }
 
@@ -940,7 +948,7 @@ Win32LoadEditorCode(wchar_t *SourceDLLName, wchar_t *TempDLLName, wchar_t *LockF
 }
 
 internal void
-Win32UnloadEditorCode(win32_editor_code *EditorCode)
+Win32UnloadEngineCode(win32_engine_code *EditorCode)
 {    
     if(EditorCode->EditorCodeDLL)
     {
@@ -950,12 +958,181 @@ Win32UnloadEditorCode(win32_editor_code *EditorCode)
 
     EditorCode->IsValid = false;
     EditorCode->UpdateAndRender = 0;
+    EditorCode->GetSoundSamples = 0;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): SOUND
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+#define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
+
+internal void
+Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize)
+{
+    // NOTE(casey): Load the library
+    HMODULE DSoundLibrary = LoadLibraryA("dsound.dll");
+    if(DSoundLibrary)
+    {
+        // NOTE(casey): Get a DirectSound object! - cooperative
+        direct_sound_create *DirectSoundCreate = (direct_sound_create *)
+            GetProcAddress(DSoundLibrary, "DirectSoundCreate");
+
+        LPDIRECTSOUND DirectSound;
+        if(DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &DirectSound, 0)))
+        {
+            WAVEFORMATEX WaveFormat = {};
+            WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+            WaveFormat.nChannels = 2;
+            WaveFormat.nSamplesPerSec = SamplesPerSecond;
+            WaveFormat.wBitsPerSample = 16;
+            WaveFormat.nBlockAlign = (WaveFormat.nChannels*WaveFormat.wBitsPerSample) / 8;
+            WaveFormat.nAvgBytesPerSec = WaveFormat.nSamplesPerSec*WaveFormat.nBlockAlign;
+            WaveFormat.cbSize = 0;
+
+            if(SUCCEEDED(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
+            {
+                DSBUFFERDESC BufferDescription = {};
+                BufferDescription.dwSize = sizeof(BufferDescription);
+                BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+                // NOTE(casey): "Create" a primary buffer
+                LPDIRECTSOUNDBUFFER PrimaryBuffer;
+                if(SUCCEEDED(DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0)))
+                {
+                    HRESULT Error = PrimaryBuffer->SetFormat(&WaveFormat);
+                    if(SUCCEEDED(Error))
+                    {
+                        // NOTE(casey): We have finally set the format!
+                        OutputDebugStringA("Primary buffer format was set.\n");
+                    }
+                    else
+                    {
+                        // TODO(casey): Diagnostic
+                    }
+                }
+                else
+                {
+                    // TODO(casey): Diagnostic
+                }
+            }
+            else
+            {
+                // TODO(casey): Diagnostic
+            }
+
+            DSBUFFERDESC BufferDescription = {};
+            BufferDescription.dwSize = sizeof(BufferDescription);
+            BufferDescription.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
+
+#if EDITOR_INTERNAL
+            BufferDescription.dwFlags |= DSBCAPS_GLOBALFOCUS;
+#endif
+            BufferDescription.dwBufferBytes = BufferSize;
+            BufferDescription.lpwfxFormat = &WaveFormat;
+            HRESULT Error = DirectSound->CreateSoundBuffer(&BufferDescription, &GlobalSecondaryBuffer, 0);
+            if(SUCCEEDED(Error))
+            {
+                OutputDebugStringA("Secondary buffer created successfully.\n");
+            }
+        }
+        else
+        {
+            // TODO(casey): Diagnostic
+        }
+    }
+    else
+    {
+        // TODO(casey): Diagnostic
+    }
+}
+
+
+internal void
+Win32ClearSoundBuffer(win32_sound_output *SoundOutput)
+{
+    VOID *Region1;
+    DWORD Region1Size;
+    VOID *Region2;
+    DWORD Region2Size;
+    if(SUCCEEDED(GlobalSecondaryBuffer->Lock(0, SoundOutput->SecondaryBufferSize,
+                                             &Region1, &Region1Size,
+                                             &Region2, &Region2Size,
+                                             0)))
+    {
+        // TODO(casey): assert that Region1Size/Region2Size is valid
+        uint8 *DestSample = (uint8 *)Region1;
+        for(DWORD ByteIndex = 0;
+            ByteIndex < Region1Size;
+            ++ByteIndex)
+        {
+            *DestSample++ = 0;
+        }
+
+        DestSample = (uint8 *)Region2;
+        for(DWORD ByteIndex = 0;
+            ByteIndex < Region2Size;
+            ++ByteIndex)
+        {
+            *DestSample++ = 0;
+        }
+
+        GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
+    }
+}
+
+internal void
+Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock, DWORD BytesToWrite,
+                     engine_sound_output_buffer *SourceBuffer)
+{
+    // TODO(casey): More strenuous test!
+    VOID *Region1;
+    DWORD Region1Size;
+    VOID *Region2;
+    DWORD Region2Size;
+    if(SUCCEEDED(GlobalSecondaryBuffer->Lock(ByteToLock, BytesToWrite,
+                                             &Region1, &Region1Size,
+                                             &Region2, &Region2Size,
+                                             0)))
+    {
+        // TODO(casey): assert that Region1Size/Region2Size is valid
+
+        // TODO(casey): Collapse these two loops
+        DWORD Region1SampleCount = Region1Size/SoundOutput->BytesPerSample;
+        int16 *DestSample = (int16 *)Region1;
+        int16 *SourceSample = SourceBuffer->Samples;
+        for(DWORD SampleIndex = 0;
+            SampleIndex < Region1SampleCount;
+            ++SampleIndex)
+        {
+            *DestSample++ = *SourceSample++;
+            *DestSample++ = *SourceSample++;
+            ++SoundOutput->RunningSampleIndex;
+        }
+
+        DWORD Region2SampleCount = Region2Size/SoundOutput->BytesPerSample;
+        DestSample = (int16 *)Region2;
+        for(DWORD SampleIndex = 0;
+            SampleIndex < Region2SampleCount;
+            ++SampleIndex)
+        {
+            *DestSample++ = *SourceSample++;
+            *DestSample++ = *SourceSample++;
+            ++SoundOutput->RunningSampleIndex;
+        }
+
+        GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
+    }
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): DEBUG
@@ -2586,6 +2763,22 @@ WinMain(HINSTANCE Instance,
             f32 EditorUpdateHz = 60.0f;
             f32 TargetSecondsPerFrame = 1.0f / EditorUpdateHz;
 
+            win32_sound_output SoundOutput = {};
+            // TODO(casey): Make this like sixty seconds?
+            SoundOutput.SamplesPerSecond = 48000;
+            SoundOutput.BytesPerSample = sizeof(int16)*2;
+            SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample;
+            // TODO(casey): Actually compute this variance and see
+            // what the lowest reasonable value is.
+            SoundOutput.SafetyBytes = (int)(((real32)SoundOutput.SamplesPerSecond*(real32)SoundOutput.BytesPerSample / EditorUpdateHz)/3.0f);
+            Win32InitDSound(Window, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
+            Win32ClearSoundBuffer(&SoundOutput);
+            GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
+
+            u32 MaxPossibleOverrun = 2*8*sizeof(u16);
+            int16 *Samples = (int16 *)VirtualAlloc(0, SoundOutput.SecondaryBufferSize + MaxPossibleOverrun,
+                                                   MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
 #if EDITOR_INTERNAL
             LPVOID BaseAddress = (LPVOID)Terabytes(2);
 #else
@@ -2622,10 +2815,17 @@ WinMain(HINSTANCE Instance,
             LARGE_INTEGER LastCounter = Win32GetWallClock();
             LARGE_INTEGER FlipWallClock = Win32GetWallClock();
 
-            win32_editor_code Editor = Win32LoadEditorCode(SourceEditorCodeDLLFullPath,
+            int DebugTimeMarkerIndex = 0;
+            win32_debug_time_marker DebugTimeMarkers[30] = {0};
+
+            DWORD AudioLatencyBytes = 0;
+            real32 AudioLatencySeconds = 0;
+            bool32 SoundIsValid = false;
+
+            win32_engine_code Engine = Win32LoadEngineCode(SourceEditorCodeDLLFullPath,
                                                            TempEditorCodeDLLFullPath,
                                                            EditorCodeLockFullPath);
-            DEBUGSetEventRecording(Editor.IsValid);
+            DEBUGSetEventRecording(Engine.IsValid);
 
             ShowWindow(Window, SW_SHOW);
 
@@ -2730,7 +2930,7 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Editor Update
+// NOTE(paul): Engine Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
                 Win32NkUpdateInputs(&Win32State, &Win32State.Main,
@@ -2742,12 +2942,12 @@ WinMain(HINSTANCE Instance,
                                     GetWidth(DrawRegion), GetHeight(DrawRegion),
                                     TargetSecondsPerFrame);
 #endif
-                BEGIN_BLOCK("Editor Update");
+                BEGIN_BLOCK("Engine Update");
                 if(!GlobalPause)
                 {
-                    if(Editor.UpdateAndRender)
+                    if(Engine.UpdateAndRender)
                     {
-                        Editor.UpdateAndRender(nk, &EditorMemory, NewInput, &RenderCommands);
+                        Engine.UpdateAndRender(nk, &EditorMemory, NewInput, &RenderCommands);
                         if(NewInput->QuitRequested)
                         {
                             GlobalRunning = false;
@@ -2764,6 +2964,115 @@ WinMain(HINSTANCE Instance,
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): Audio Update
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+                BEGIN_BLOCK("Audio Update");
+
+                LARGE_INTEGER AudioWallClock = Win32GetWallClock();
+                real32 FromBeginToAudioSeconds = Win32GetSecondsElapsed(FlipWallClock, AudioWallClock);
+
+                DWORD PlayCursor;
+                DWORD WriteCursor;
+                if(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor) == DS_OK)
+                {
+                    /* NOTE(casey):
+
+                       Here is how sound output computation works.
+
+                       We define a safety value that is the number
+                       of samples we think our editor update loop
+                       may vary by (let's say up to 2ms)
+
+                       When we wake up to write audio, we will look
+                       and see what the play cursor position is and we
+                       will forecast ahead where we think the play
+                       cursor will be on the next frame boundary.
+
+                       We will then look to see if the write cursor is
+                       before that by at least our safety value.  If
+                       it is, the target fill position is that frame
+                       boundary plus one frame.  This gives us perfect
+                       audio sync in the case of a card that has low
+                       enough latency.
+
+                       If the write cursor is _after_ that safety
+                       margin, then we assume we can never sync the
+                       audio perfectly, so we will write one frame's
+                       worth of audio plus the safety margin's worth
+                       of guard samples.
+                    */
+                    if(!SoundIsValid)
+                    {
+                        SoundOutput.RunningSampleIndex = WriteCursor / SoundOutput.BytesPerSample;
+                        SoundIsValid = true;
+                    }
+
+                    DWORD ByteToLock = ((SoundOutput.RunningSampleIndex*SoundOutput.BytesPerSample) %
+                                        SoundOutput.SecondaryBufferSize);
+
+                    DWORD ExpectedSoundBytesPerFrame =
+                        (int)((real32)(SoundOutput.SamplesPerSecond*SoundOutput.BytesPerSample) /
+                              EditorUpdateHz);
+                    real32 SecondsLeftUntilFlip = (TargetSecondsPerFrame - FromBeginToAudioSeconds);
+                    DWORD ExpectedBytesUntilFlip = (DWORD)((SecondsLeftUntilFlip/TargetSecondsPerFrame)*(real32)ExpectedSoundBytesPerFrame);
+
+                    DWORD ExpectedFrameBoundaryByte = PlayCursor + ExpectedBytesUntilFlip;
+
+                    DWORD SafeWriteCursor = WriteCursor;
+                    if(SafeWriteCursor < PlayCursor)
+                    {
+                        SafeWriteCursor += SoundOutput.SecondaryBufferSize;
+                    }
+                    Assert(SafeWriteCursor >= PlayCursor);
+                    SafeWriteCursor += SoundOutput.SafetyBytes;
+
+                    bool32 AudioCardIsLowLatency = (SafeWriteCursor < ExpectedFrameBoundaryByte);                        
+
+                    DWORD TargetCursor = 0;
+                    if(AudioCardIsLowLatency)
+                    {
+                        TargetCursor = (ExpectedFrameBoundaryByte + ExpectedSoundBytesPerFrame);
+                    }
+                    else
+                    {
+                        TargetCursor = (WriteCursor + ExpectedSoundBytesPerFrame +
+                                        SoundOutput.SafetyBytes);
+                    }
+                    TargetCursor = (TargetCursor % SoundOutput.SecondaryBufferSize);
+
+                    DWORD BytesToWrite = 0;
+                    if(ByteToLock > TargetCursor)
+                    {
+                        BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
+                        BytesToWrite += TargetCursor;
+                    }
+                    else
+                    {
+                        BytesToWrite = TargetCursor - ByteToLock;
+                    }
+
+                    engine_sound_output_buffer SoundBuffer = {};
+                    SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
+                    SoundBuffer.SampleCount = Align8(BytesToWrite / SoundOutput.BytesPerSample);
+                    BytesToWrite = SoundBuffer.SampleCount*SoundOutput.BytesPerSample;
+                    SoundBuffer.Samples = Samples;
+                    if(Engine.GetSoundSamples)
+                    {
+                        Engine.GetSoundSamples(&EditorMemory, &SoundBuffer);
+                    }
+
+                    Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite, &SoundBuffer);
+                }
+                else
+                {
+                    SoundIsValid = false;
+                }
+
+                END_BLOCK();
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): Debug Collation
@@ -2773,7 +3082,7 @@ WinMain(HINSTANCE Instance,
                     
                 FILETIME NewDLLWriteTime = Win32GetLastWriteTime(SourceEditorCodeDLLFullPath);
                 b32 ExecutableNeedsToBeReloaded = 
-                    (CompareFileTime(&NewDLLWriteTime, &Editor.DLLLastWriteTime) != 0);
+                    (CompareFileTime(&NewDLLWriteTime, &Engine.DLLLastWriteTime) != 0);
 
                 EditorMemory.ExecutableReloaded = false;
                 if(ExecutableNeedsToBeReloaded)
@@ -2783,26 +3092,26 @@ WinMain(HINSTANCE Instance,
                     DEBUGSetEventRecording(false);
                 }
                     
-                if(Editor.DEBUGFrameEnd)
+                if(Engine.DEBUGFrameEnd)
                 {
-                    Editor.DEBUGFrameEnd(debug_nk, &EditorMemory, NewInput, &RenderCommands);
+                    Engine.DEBUGFrameEnd(debug_nk, &EditorMemory, NewInput, &RenderCommands);
                 }
                     
                 if(ExecutableNeedsToBeReloaded)
                 {
-                    Win32UnloadEditorCode(&Editor);
+                    Win32UnloadEngineCode(&Engine);
                     for(u32 LoadTryIndex = 0;
-                        !Editor.IsValid && (LoadTryIndex < 100);
+                        !Engine.IsValid && (LoadTryIndex < 100);
                         ++LoadTryIndex)
                     {
-                        Editor = Win32LoadEditorCode(SourceEditorCodeDLLFullPath,
+                        Engine = Win32LoadEngineCode(SourceEditorCodeDLLFullPath,
                                                      TempEditorCodeDLLFullPath,
                                                      EditorCodeLockFullPath);
                         Sleep(100);
                     }
                         
                     EditorMemory.ExecutableReloaded = true;
-                    DEBUGSetEventRecording(Editor.IsValid);
+                    DEBUGSetEventRecording(Engine.IsValid);
                 }
 
                     

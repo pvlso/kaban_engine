@@ -37,7 +37,7 @@ if %BuildDebug% == true (
    echo Building Engine Debug
    del *.pdb > NUL 2> NUL
    echo WAITING FOR PDB > lock.tmp
-   cl %CommonCompilerFlagsD% ..\code\engine.cpp -Fmengine.map -LD /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EngineUpdateAndRender -EXPORT:DEBUGEditorFrameEnd
+   cl %CommonCompilerFlagsD% ..\code\engine.cpp -Fmengine.map -LD /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EngineUpdateAndRender -EXPORT:EngineGetSoundSamples -EXPORT:DEBUGEditorFrameEnd
    del lock.tmp
 
    cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map /link %CommonLinkerFlags%

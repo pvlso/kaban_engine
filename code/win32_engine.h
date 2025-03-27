@@ -13,7 +13,7 @@ struct win32_window_dimension
     s32 Height;
 };
 
-struct win32_editor_code
+struct win32_engine_code
 {
     HMODULE EditorCodeDLL;
     FILETIME DLLLastWriteTime;
@@ -21,9 +21,34 @@ struct win32_editor_code
     // IMPORTANT(casey): Either of the callbacks can be 0!  You must
     // check before calling.
     engine_update_and_render *UpdateAndRender;
+    engine_get_sound_samples *GetSoundSamples;
     debug_editor_frame_end *DEBUGFrameEnd;
 
     bool32 IsValid;
+};
+
+struct win32_sound_output
+{
+    int SamplesPerSecond;
+    uint32 RunningSampleIndex;
+    int BytesPerSample;
+    DWORD SecondaryBufferSize;
+    DWORD SafetyBytes;
+
+    // TODO(casey): Should running sample index be in bytes as well
+    // TODO(casey): Math gets simpler if we add a "bytes per second" field?
+};
+
+struct win32_debug_time_marker
+{
+    DWORD OutputPlayCursor;
+    DWORD OutputWriteCursor;
+    DWORD OutputLocation;
+    DWORD OutputByteCount;
+    DWORD ExpectedFlipPlayCursor;
+
+    DWORD FlipPlayCursor;
+    DWORD FlipWriteCursor;
 };
 
 struct nk_opengl
