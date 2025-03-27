@@ -139,6 +139,7 @@ enum asset_memory_block_flags
 {
     AssetMemory_Used = 0x1,
 };
+
 struct asset_memory_block
 {
     asset_memory_block *Prev;
@@ -413,28 +414,56 @@ IsValid(spritesheet_id ID)
     return(Result);
 }
 
-internal void LoadBitmap(editor_assets *Assets, bitmap_id ID, b32 Immediate);
+internal void LoadAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate);
+inline void PrefetchAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate = false) {LoadAsset(Assets, HType, ID, Immediate);}
+
+inline void LoadBitmap(editor_assets *Assets, bitmap_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_Bitmap, ID.Value, Immediate);
+}
+
+inline void LoadSound(editor_assets *Assets, sound_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_Sound, ID.Value, Immediate);
+}
+
+inline void LoadFont(editor_assets *Assets, font_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_Font, ID.Value, Immediate);
+}
+
+inline void LoadTileset(editor_assets *Assets, tileset_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_Tileset, ID.Value, Immediate);
+}
+
+inline void LoadSpriteSheet(editor_assets *Assets, spritesheet_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_SpriteSheet, ID.Value, Immediate);
+}
+
+inline void LoadText(editor_assets *Assets, text_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_Text, ID.Value, Immediate);
+}
+
+inline void LoadBinaryFile(editor_assets *Assets, file_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_BinaryFile, ID.Value, Immediate);
+}
+
+inline void LoadSSWM(editor_assets *Assets, sswm_id ID, b32 Immediate)
+{
+    LoadAsset(Assets, AssetType_SSWM, ID.Value, Immediate);
+}
+
 inline void PrefetchBitmap(editor_assets *Assets, bitmap_id ID, b32 Immediate = false) {LoadBitmap(Assets, ID, Immediate);}
-
-internal void LoadSound(editor_assets *Assets, sound_id ID);
-inline void PrefetchSound(editor_assets *Assets, sound_id ID) {LoadSound(Assets, ID);}
-
-internal void LoadFont(editor_assets *Assets, font_id ID, b32 Immediate);
+inline void PrefetchSound(editor_assets *Assets, sound_id ID) {LoadSound(Assets, ID, false);}
 inline void PrefetchFont(editor_assets *Assets, font_id ID) {LoadFont(Assets, ID, false);}
-
-internal void LoadTileset(editor_assets *Assets, tileset_id ID, b32 Immediate);
 inline void PrefetchTileset(editor_assets *Assets, tileset_id ID) {LoadTileset(Assets, ID, false);}
-
-internal void LoadSpriteSheet(editor_assets *Assets, spritesheet_id ID, b32 Immediate);
 inline void PrefetchSpriteSheet(editor_assets *Assets, spritesheet_id ID) {LoadSpriteSheet(Assets, ID, false);}
-
-internal void LoadText(editor_assets *Assets, text_id ID, b32 Immediate);
 inline void PrefetchText(editor_assets *Assets, text_id ID) {LoadText(Assets, ID, false);}
-
-internal void LoadBinaryFile(editor_assets *Assets, file_id ID, b32 Immediate);
 inline void PrefetchBinaryFile(editor_assets *Assets, file_id ID) {LoadBinaryFile(Assets, ID, false);}
-
-internal void LoadSSWM(editor_assets *Assets, sswm_id ID, b32 Immediate);
 inline void PrefetchSSWM(editor_assets *Assets, sswm_id ID) {LoadSSWM(Assets, ID, false);}
 
 inline sound_id GetNextSoundInChain(editor_assets *Assets, sound_id ID)

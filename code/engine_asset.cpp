@@ -56,8 +56,6 @@ AddOp(platform_texture_op_queue *Queue, texture_op *Source)
 internal void
 LoadAssetWorkDirectly(load_asset_work *Work)
 {
-//    TIMED_FUNCTION();
-
     Platform.ReadDataFromFile(Work->Handle, Work->Offset, Work->Size, Work->Destination);
     if(PlatformNoFileErrors(Work->Handle))
     {
@@ -227,8 +225,6 @@ GenerationHasCompleted(editor_assets *Assets, u32 CheckID)
 internal asset_memory_header *
 AcquireAssetMemory(editor_assets *Assets, u32 Size, u32 AssetIndex, asset_header_type AssetType)
 {
-//    TIMED_FUNCTION();
-
     asset_memory_header *Result = 0;
 
     BeginAssetLock(Assets);
@@ -315,430 +311,136 @@ struct asset_memory_size
     u32 Section;
 };
 
-internal void
-LoadBitmap(editor_assets *Assets, bitmap_id ID, b32 Immediate)
+struct preloaded_asset
 {
-//    TIMED_FUNCTION();
+    asset_memory_size Size;
 
-    asset *Asset = Assets->Assets + ID.Value;        
-    if(ID.Value)
+    void *LoadDest;
+    u32 FinalizeOp;
+    u32 FinalState;
+    b32 TextureOpNeeded;
+};
+
+inline asset_memory_size
+GetAssetMemorySize(asset *Asset, asset_header_type HType)
+{
+    asset_memory_size Size = {};
+    switch(HType)
     {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
+        case AssetType_None: {} break;
+
+        case AssetType_Bitmap:
         {
-            task_with_memory *Task = 0;
+            ssa_bitmap *Info = &Asset->SSA.Bitmap;
+            u32 Width = Info->Dim[0];
+            u32 Height = Info->Dim[1];
+            Size.Section = 4*Width;
+            Size.Data = Height*Size.Section;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
 
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-
-            if(Immediate || Task)        
-            {
-                ssa_bitmap *Info = &Asset->SSA.Bitmap;
-
-                asset_memory_size Size = {};
-                u32 Width = Info->Dim[0];
-                u32 Height = Info->Dim[1];
-                Size.Section = 4*Width;
-                Size.Data = Height*Size.Section;
-                Size.Total = Size.Data + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, Size.Total, ID.Value, AssetType_Bitmap);
-
-                loaded_bitmap *Bitmap = &Asset->Header->Bitmap;            
-                Bitmap->AlignPercentage = V2(Info->AlignPercentage[0], Info->AlignPercentage[1]);
-                Bitmap->WidthOverHeight = (r32)Info->Dim[0] / (r32)Info->Dim[1];
-                Bitmap->Width = Info->Dim[0];
-                Bitmap->Height = Info->Dim[1];
-                Bitmap->Pitch = Size.Section;
-                Bitmap->TextureHandle = 0;
-                Bitmap->Memory = (Asset->Header + 1);
-
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = Size.Data;
-                Work.Destination = Bitmap->Memory;
-                Work.FinalizeOperation = FinalizeAsset_Bitmap;
-                Work.FinalState = AssetState_Loaded;            
-                Work.TextureOpQueue = Assets->TextureOpQueue;
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work, NoClear());
-                    *TaskWork = Work;
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }    
-}
-
-internal void
-LoadBinaryFile(editor_assets *Assets, file_id ID, b32 Immediate)
-{
-//    TIMED_FUNCTION();
-
-    asset *Asset = Assets->Assets + ID.Value;        
-    if(ID.Value)
-    {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
-        {
-            task_with_memory *Task = 0;
-
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-
-            if(Immediate || Task)        
-            {
-                ssa_binary_file *Info = &Asset->SSA.BinaryFile;
-
-                asset_memory_size Size = {};
-                Size.Data = Info->Size;
-                Size.Total = Size.Data + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, Size.Total, ID.Value, AssetType_BinaryFile);
-
-                loaded_file *BinaryFile = &Asset->Header->BinaryFile;            
-                BinaryFile->Size = Info->Size;
-                BinaryFile->Data = (Asset->Header + 1);
-
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = Size.Data;
-                Work.Destination = BinaryFile->Data;
-                Work.FinalizeOperation = FinalizeAsset_None;
-                Work.FinalState = AssetState_Loaded;            
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work, NoClear());
-                    *TaskWork = Work;
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }    
-}
-
-internal void
-LoadSSWM(editor_assets *Assets, sswm_id ID, b32 Immediate)
-{
-//    TIMED_FUNCTION();
-
-    asset *Asset = Assets->Assets + ID.Value;        
-    if(ID.Value)
-    {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
-        {
-            task_with_memory *Task = 0;
-
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-
-            if(Immediate || Task)        
-            {
-                ssa_sswm_file *Info = &Asset->SSA.SSWMFile;
-
-                asset_memory_size Size = {};
-                Size.Data = Info->Size;
-                Size.Total = Size.Data + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, Size.Total, ID.Value, AssetType_SSWM);
-
-                loaded_world_map *SSWM = &Asset->Header->SSWM;            
-                SSWM->Header = (sswm_header *)(Asset->Header + 1);
-
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = Size.Data;
-                Work.Destination = SSWM->Header;
-                Work.FinalizeOperation = FinalizeAsset_SSWM;
-                Work.FinalState = AssetState_Loaded;            
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work, NoClear());
-                    *TaskWork = Work;
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }    
-}
-
-internal void
-LoadTileset(editor_assets *Assets, tileset_id ID, b32 Immediate)
-{
-    asset *Asset = Assets->Assets + ID.Value;
-    if(ID.Value)
-    {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
-        {
-            task_with_memory *Task = 0;
-
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-        
-            if(Immediate || Task)
-            {
-                ssa_tileset *Info = &Asset->SSA.Tileset;
-
-                u32 TilesSize = sizeof(ssa_tile)*Info->TileCount;
-                u32 SizeData = TilesSize;
-                u32 SizeTotal = SizeData + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, SizeTotal, ID.Value, AssetType_Tileset);
-
-                loaded_tileset *Tileset = &Asset->Header->Tileset;
-                Tileset->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Tile];
-                Tileset->Tiles = (ssa_tile *)(Asset->Header + 1);
-                
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = SizeData;
-                Work.Destination = Tileset->Tiles;
-                Work.FinalizeOperation = FinalizeAsset_None;
-                Work.FinalState = AssetState_Loaded;
-
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work);
-                    *TaskWork = Work;
-                
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }
-}
-
-internal void
-LoadSpriteSheet(editor_assets *Assets, spritesheet_id ID, b32 Immediate)
-{
-    asset *Asset = Assets->Assets + ID.Value;
-    if(ID.Value)
-    {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
-        {
-            task_with_memory *Task = 0;
-
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-        
-            if(Immediate || Task)
-            {
-                ssa_spritesheet *Info = &Asset->SSA.SpriteSheet;
-
-                u32 TilesSize = sizeof(bitmap_id)*Info->SpriteCount;
-                u32 SizeData = TilesSize;
-                u32 SizeTotal = SizeData + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, SizeTotal, ID.Value, AssetType_SpriteSheet);
-
-                loaded_spritesheet *SpriteSheet = &Asset->Header->SpriteSheet;
-                SpriteSheet->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Sprite];
-                SpriteSheet->SpriteIDs = (bitmap_id *)(Asset->Header + 1);
-                
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = SizeData;
-                Work.Destination = SpriteSheet->SpriteIDs;
-                Work.FinalizeOperation = FinalizeAsset_None;
-                Work.FinalState = AssetState_Loaded;
-
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work);
-                    *TaskWork = Work;
-                
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }
-}
-
-internal void
-LoadText(editor_assets *Assets, text_id ID, b32 Immediate)
-{
-    asset *Asset = Assets->Assets + ID.Value;
-    if(ID.Value)
-    {
-        if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-           AssetState_Unloaded)
-        {
-            task_with_memory *Task = 0;
-
-            if(!Immediate)
-            {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
-            }
-        
-            if(Immediate || Task)
-            {
-                ssa_text *Info = &Asset->SSA.Text;
-
-                u32 StringSize = Info->Length;
-                u32 SizeData = StringSize;
-                u32 SizeTotal = SizeData + sizeof(asset_memory_header);
-
-                Asset->Header = AcquireAssetMemory(Assets, SizeTotal, ID.Value, AssetType_Text);
-
-                loaded_text *Text = &Asset->Header->Text;
-                Text->String = (char *)(Asset->Header + 1);
-                
-                load_asset_work Work;
-                Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = SizeData;
-                Work.Destination = Text->String;
-                Work.FinalizeOperation = FinalizeAsset_None;
-                Work.FinalState = AssetState_Loaded;
-
-                if(Task)
-                {
-                    load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work);
-                    *TaskWork = Work;
-                
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
-                }
-                else
-                {
-                    LoadAssetWorkDirectly(&Work);
-                }
-            }
-            else
-            {
-                Asset->State = AssetState_Unloaded;
-            }
-        }
-        else if(Immediate)
-        {
-            asset_state volatile *State = (asset_state volatile *)&Asset->State;
-            while(*State == AssetState_Queued) {}
-        }
-    }
-}
-
-internal void
-LoadSound(editor_assets *Assets, sound_id ID)
-{
-//    TIMED_FUNCTION();
-
-    asset *Asset = Assets->Assets + ID.Value;        
-    if(ID.Value &&
-       (AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
-        AssetState_Unloaded))
-    {    
-        task_with_memory *Task = BeginTaskWithMemory(Assets->TranState, false);
-        if(Task)        
+        case AssetType_Sound:
         {
             ssa_sound *Info = &Asset->SSA.Sound;
-
-            asset_memory_size Size = {};
             Size.Section = Info->SampleCount*sizeof(int16);
             Size.Data = Info->ChannelCount*Size.Section;
             Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
 
-            Asset->Header = (asset_memory_header *)AcquireAssetMemory(Assets, Size.Total, ID.Value, AssetType_Sound);
+        case AssetType_Font:
+        {
+            ssa_font *Info = &Asset->SSA.Font;
+            u32 HorizontalAdvanceSize = sizeof(r32)*Info->GlyphCount*Info->GlyphCount;
+            u32 GlyphsSize = Info->GlyphCount*sizeof(ssa_font_glyph);
+            u32 UnicodeMapSize = sizeof(u16)*Info->OnePastHighestCodePoint;
+            Size.Data = GlyphsSize + HorizontalAdvanceSize;
+            Size.Total = Size.Data + sizeof(asset_memory_header) + UnicodeMapSize;
+        } break;
+
+        case AssetType_Tileset:
+        {
+            ssa_tileset *Info = &Asset->SSA.Tileset;
+            u32 TilesSize = sizeof(ssa_tile)*Info->TileCount;
+            Size.Data = TilesSize;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
+        case AssetType_SpriteSheet:
+        {
+            ssa_spritesheet *Info = &Asset->SSA.SpriteSheet;
+            u32 TilesSize = sizeof(bitmap_id)*Info->SpriteCount;
+            Size.Data = TilesSize;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
+        case AssetType_Text:
+        {
+            ssa_text *Info = &Asset->SSA.Text;
+            u32 StringSize = Info->Length;
+            Size.Data = StringSize;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
+        case AssetType_BinaryFile:
+        {
+            ssa_binary_file *Info = &Asset->SSA.BinaryFile;
+            Size.Data = Info->Size;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
+        case AssetType_SSWM:
+        {
+            ssa_sswm_file *Info = &Asset->SSA.SSWMFile;
+            Size.Data = Info->Size;
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
+        InvalidDefaultCase;
+    }
+
+    return(Size);
+}
+
+inline preloaded_asset
+PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
+                       asset_header_type HType, u32 ID)
+{
+    preloaded_asset Result = {};
+    Result.Size = GetAssetMemorySize(Asset, HType);
+    Asset->Header = AcquireAssetMemory(Assets, Result.Size.Total, ID, HType);
+
+    switch(HType)
+    {
+        case AssetType_None: {} break;
+
+        case AssetType_Bitmap:
+        {
+            ssa_bitmap *Info = &Asset->SSA.Bitmap;
+
+            loaded_bitmap *Bitmap = &Asset->Header->Bitmap;            
+            Bitmap->AlignPercentage = V2(Info->AlignPercentage[0], Info->AlignPercentage[1]);
+            Bitmap->WidthOverHeight = (r32)Info->Dim[0] / (r32)Info->Dim[1];
+            Bitmap->Width = Info->Dim[0];
+            Bitmap->Height = Info->Dim[1];
+            Bitmap->Pitch = Result.Size.Section;
+            Bitmap->TextureHandle = 0;
+            Bitmap->Memory = (Asset->Header + 1);
+
+            Result.LoadDest = Bitmap->Memory;
+            Result.FinalizeOp = FinalizeAsset_Bitmap;
+            Result.FinalState = AssetState_Loaded;
+            Result.TextureOpNeeded = true;
+        } break;
+
+        case AssetType_Sound:
+        {
+            ssa_sound *Info = &Asset->SSA.Sound;
+
             loaded_sound *Sound = &Asset->Header->Sound;
-
             Sound->SampleCount = Info->SampleCount;
             Sound->ChannelCount = Info->ChannelCount;
-            u32 ChannelSize = Size.Section;
 
+            u32 ChannelSize = Result.Size.Section;
             void *Memory = (Asset->Header + 1);
             int16 *SoundAt = (int16 *)Memory;
             for(u32 ChannelIndex = 0;
@@ -749,33 +451,97 @@ LoadSound(editor_assets *Assets, sound_id ID)
                 SoundAt += ChannelSize;
             }
 
-            load_asset_work *Work = PushStruct(&Task->Arena, load_asset_work);
-            Work->Task = Task;
-            Work->Asset = Assets->Assets + ID.Value;
-            Work->Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-            Work->Offset = Asset->SSA.DataOffset;
-            Work->Size = Size.Data;
-            Work->Destination = Memory;
-            Work->FinalizeOperation = FinalizeAsset_None;
-            Work->FinalState = (AssetState_Loaded);
 
-            Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, Work);
-        }
-        else
+            Result.LoadDest = Memory;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_Font:
         {
-            Assets->Assets[ID.Value].State = AssetState_Unloaded;
-        }
+            ssa_font *Info = &Asset->SSA.Font;
+            u32 HorizontalAdvanceSize = sizeof(r32)*Info->GlyphCount*Info->GlyphCount;
+            u32 GlyphsSize = Info->GlyphCount*sizeof(ssa_font_glyph);
+            u32 UnicodeMapSize = sizeof(u16)*Info->OnePastHighestCodePoint;
+
+            loaded_font *Font = &Asset->Header->Font;
+            Font->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_FontGlyph];
+            Font->Glyphs = (ssa_font_glyph *)(Asset->Header + 1);
+            Font->HorizontalAdvance = (r32 *)((u8 *)Font->Glyphs + GlyphsSize);
+            Font->UnicodeMap = (u16 *)((u8 *)Font->HorizontalAdvance + HorizontalAdvanceSize);
+
+            ZeroSize(UnicodeMapSize, Font->UnicodeMap);
+
+            Result.LoadDest = Font->Glyphs;
+            Result.FinalizeOp = FinalizeAsset_Font;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_Tileset:
+        {
+            loaded_tileset *Tileset = &Asset->Header->Tileset;
+            Tileset->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Tile];
+            Tileset->Tiles = (ssa_tile *)(Asset->Header + 1);
+                
+            Result.LoadDest = Tileset->Tiles;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_SpriteSheet:
+        {
+            loaded_spritesheet *SpriteSheet = &Asset->Header->SpriteSheet;
+            SpriteSheet->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Sprite];
+            SpriteSheet->SpriteIDs = (bitmap_id *)(Asset->Header + 1);
+                
+            Result.LoadDest = SpriteSheet->SpriteIDs;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_Text:
+        {
+            loaded_text *Text = &Asset->Header->Text;
+            Text->String = (char *)(Asset->Header + 1);
+
+            Result.LoadDest = Text->String;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_BinaryFile:
+        {
+            ssa_binary_file *Info = &Asset->SSA.BinaryFile;
+            loaded_file *BinaryFile = &Asset->Header->BinaryFile;            
+            BinaryFile->Size = Info->Size;
+            BinaryFile->Data = (Asset->Header + 1);
+
+            Result.LoadDest = BinaryFile->Data;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_SSWM:
+        {
+            loaded_world_map *SSWM = &Asset->Header->SSWM;            
+            SSWM->Header = (sswm_header *)(Asset->Header + 1);
+
+            Result.LoadDest = SSWM->Header;
+            Result.FinalizeOp = FinalizeAsset_SSWM;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        InvalidDefaultCase;
     }
+
+    return(Result);
 }
 
 internal void
-LoadFont(editor_assets *Assets, font_id ID, b32 Immediate)
+LoadAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate)
 {
-//    TIMED_FUNCTION();
-
-    // TODO(casey): Merge all this boilerplate!!!!  Same between LoadBitmap, LoadSound, and LoadFont
-    asset *Asset = Assets->Assets + ID.Value;        
-    if(ID.Value)
+    asset *Asset = Assets->Assets + ID;        
+    if(ID)
     {
         if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
            AssetState_Unloaded)
@@ -789,33 +555,22 @@ LoadFont(editor_assets *Assets, font_id ID, b32 Immediate)
 
             if(Immediate || Task)        
             {
-                ssa_font *Info = &Asset->SSA.Font;
-
-                u32 HorizontalAdvanceSize = sizeof(r32)*Info->GlyphCount*Info->GlyphCount;
-                u32 GlyphsSize = Info->GlyphCount*sizeof(ssa_font_glyph);
-                u32 UnicodeMapSize = sizeof(u16)*Info->OnePastHighestCodePoint;
-                u32 SizeData = GlyphsSize + HorizontalAdvanceSize;
-                u32 SizeTotal = SizeData + sizeof(asset_memory_header) + UnicodeMapSize;
-
-                Asset->Header = AcquireAssetMemory(Assets, SizeTotal, ID.Value, AssetType_Font);
-
-                loaded_font *Font = &Asset->Header->Font;
-                Font->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_FontGlyph];
-                Font->Glyphs = (ssa_font_glyph *)(Asset->Header + 1);
-                Font->HorizontalAdvance = (r32 *)((u8 *)Font->Glyphs + GlyphsSize);
-                Font->UnicodeMap = (u16 *)((u8 *)Font->HorizontalAdvance + HorizontalAdvanceSize);
-
-                ZeroSize(UnicodeMapSize, Font->UnicodeMap);
+                preloaded_asset PreAsset =
+                    PrepareAssetForLoading(Assets, Asset, HType, ID);
 
                 load_asset_work Work;
                 Work.Task = Task;
-                Work.Asset = Assets->Assets + ID.Value;
+                Work.Asset = Assets->Assets + ID;
                 Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
                 Work.Offset = Asset->SSA.DataOffset;
-                Work.Size = SizeData;
-                Work.Destination = Font->Glyphs;
-                Work.FinalizeOperation = FinalizeAsset_Font;
-                Work.FinalState = AssetState_Loaded;            
+                Work.Size = PreAsset.Size.Data;
+
+                Work.Destination = PreAsset.LoadDest;
+                Work.FinalizeOperation = (finalize_asset_operation)PreAsset.FinalizeOp;
+                Work.FinalState = PreAsset.FinalState;            
+                Work.TextureOpQueue =
+                    (PreAsset.TextureOpNeeded ? Assets->TextureOpQueue : 0);
+
                 if(Task)
                 {
                     load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work, NoClear());

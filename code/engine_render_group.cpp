@@ -136,7 +136,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     loaded_bitmap *Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
     if(Group->RendersInBackground && !Bitmap)
     {
-        LoadBitmap(Group->Assets, ID, true);
+        LoadAsset(Group->Assets, AssetType_Bitmap, ID.Value, true);
         Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
     }
     
@@ -147,7 +147,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     else
     {
         Assert(!Group->RendersInBackground);
-        LoadBitmap(Group->Assets, ID, false);
+        LoadAsset(Group->Assets, AssetType_Bitmap, ID.Value, false);
         ++Group->MissingResourceCount;
     }
 }
@@ -163,7 +163,7 @@ PushFont(render_group *Group, font_id ID)
     else
     {
         Assert(!Group->RendersInBackground);
-        LoadFont(Group->Assets, ID, false);
+        LoadAsset(Group->Assets, AssetType_Font, ID.Value, false);
         ++Group->MissingResourceCount;
     }
 
