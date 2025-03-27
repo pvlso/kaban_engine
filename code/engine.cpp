@@ -11,6 +11,7 @@
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
 #include "editor_audio.cpp"
+//#include "editor_json_parser.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
@@ -69,6 +70,10 @@ engine_memory *DebugGlobalMemory;
 #endif
 
 platform_api Platform;
+
+#include "editor_title_mode.cpp"
+//#include "editor_assets_mode.cpp"
+//#include "editor_game_mode.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -139,6 +144,11 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     }
 
     TranState->MainGenerationID = BeginGeneration(TranState->Assets);
+
+    if(EditorState->EditorMode == EditorMode_None)
+    {
+        PlayTitleScreen(EditorState, TranState);
+    }
     
     //
     // NOTE(casey): Render
@@ -148,53 +158,62 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     render_group RenderGroup_ = BeginRenderGroup(TranState->Assets, RenderCommands, TranState->MainGenerationID,
                                                  false, RenderCommands->Width, RenderCommands->Height);
     render_group *RenderGroup = &RenderGroup_;
-    Clear(RenderGroup, V4(0.45f, 0, 0.45f, 1.0f));
+//    Clear(RenderGroup, V4(0.45f, 0, 0.45f, 1.0f));
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
     
-    if(!EditorState->Play)
+    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)RenderWidth, (f32)RenderHeight), 0))
     {
-        random_series Series = RandomSeed(4124512);
-        sound_id SoundID = GetRandomSoundFrom(TranState->Assets, Asset_Music, &Series);
-        loaded_sound *Sound = GetSound(TranState->Assets, SoundID, TranState->MainGenerationID);
-        if(Sound)
+        b32 Rerun = false;
+        do
         {
-            EditorState->Sound = PlaySound(&EditorState->AudioState, SoundID, Sound);
-            EditorState->Play = true;
-        }
-        else
-        {
-            LoadSound(TranState->Assets, SoundID, true);
-        }
-    }
-
-    ChangeVolume(&EditorState->AudioState, EditorState->Sound, 1.0f, V2(0, 0));
-    
-    b32 Rerun = false;
-    do
-    {
-        switch(EditorState->EditorMode)
-        {
-            case EditorMode_None:
+            switch(EditorState->EditorMode)
             {
-            } break;
+                case EditorMode_None:
+                {
+                } break;
 
-            case EditorMode_TitleScreen:
-            {
-            } break;
+                case EditorMode_TitleScreen:
+                {
+
+                    Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 4);
+                    {
+                        Platform.UI.NkLayoutRowPush(nk, 80);
+                        if(Platform.UI.NkButtonLabel(nk, "Root"))
+                        {
+                        }
+
+                        if(Platform.UI.NkButtonLabel(nk, "Threads"))
+                        {
+                        }
+
+                        if(Platform.UI.NkButtonLabel(nk, "Frames"))
+                        {
+                        }
+
+                        if(Platform.UI.NkButtonLabel(nk, "Clocks"))
+                        {
+                        }
+                    }
+                    Platform.UI.NkLayoutRowEnd(nk);
+                    Rerun = UpdateAndRenderTitleScreen(EditorState, TranState, RenderGroup, Input,
+                                                       RenderWidth, RenderHeight, EditorState->TitleScreen);
+                } break;
             
-            case EditorMode_AssetsMode:
-            {
-            } break;
+                case EditorMode_AssetsMode:
+                {
+                } break;
 
-            case EditorMode_GameMode:
-            {
-            } break;
+                case EditorMode_GameMode:
+                {
+                } break;
 
-            InvalidDefaultCase;
-        }
-    } while(Rerun);
+                InvalidDefaultCase;
+            }
+        } while(Rerun);
+    }
+    UI.NkEnd(nk);
 
     EndRenderGroup(RenderGroup);
 

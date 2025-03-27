@@ -39,6 +39,12 @@
 #include "engine_render_group.h"
 #include "engine_asset.h"
 #include "editor_audio.h"
+//#include "editor_json_parser.h"
+
+#include "editor_title_mode.h"
+//#include "editor_assets_mode.h"
+//#include "editor_game_mode.h"
+//#include "editor_ssa_file_builder.h"
 
 enum editor_mode
 {
@@ -46,6 +52,25 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_GameMode,
+};
+
+struct working_version
+{
+    u8 MajorHigh;
+    u8 MajorLow;
+    u8 MinorHigh;
+    u8 MinorLow;
+};
+
+struct world_map_startup
+{
+    b32 NewMap;
+    u32 MapID;
+    u32 MapWidth;
+    u32 MapHeight;
+
+    working_version MapVersion;
+    sswm_id ID;
 };
 
 struct editor_state
@@ -57,12 +82,17 @@ struct editor_state
 
     b32 Play;
     playing_sound *Sound;
+
+    working_version Version;
+    world_map_startup MapStartup;
     
     char window_title[64];
     editor_mode EditorMode;
     union
     {
-        s64 PlaceHolder;
+        editor_mode_title_screen *TitleScreen;
+//        editor_mode_assets *AssetsMode;
+//        editor_mode_game *GameMode;
     };
 };
 
