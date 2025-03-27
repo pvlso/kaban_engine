@@ -176,29 +176,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_TitleScreen:
                 {
-
-                    Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 4);
-                    {
-                        Platform.UI.NkLayoutRowPush(nk, 80);
-                        if(Platform.UI.NkButtonLabel(nk, "Root"))
-                        {
-                        }
-
-                        if(Platform.UI.NkButtonLabel(nk, "Threads"))
-                        {
-                        }
-
-                        if(Platform.UI.NkButtonLabel(nk, "Frames"))
-                        {
-                        }
-
-                        if(Platform.UI.NkButtonLabel(nk, "Clocks"))
-                        {
-                        }
-                    }
-                    Platform.UI.NkLayoutRowEnd(nk);
-                    Rerun = UpdateAndRenderTitleScreen(EditorState, TranState, RenderGroup, Input,
-                                                       RenderWidth, RenderHeight, EditorState->TitleScreen);
+                    Rerun = UpdateAndRenderTitleScreen(EditorState, TranState, nk, &UI, EditorState->TitleScreen);
                 } break;
             
                 case EditorMode_AssetsMode:

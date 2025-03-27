@@ -812,6 +812,9 @@ Win32SetUIPointers(nk_ui *UI)
 #endif
     UI->NkTooltipBegin = nk_tooltip_begin;
     UI->NkTooltipEnd = nk_tooltip_end;
+
+    UI->NkPropertyInt = nk_property_int;
+
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

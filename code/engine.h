@@ -56,18 +56,18 @@ enum editor_mode
 
 struct working_version
 {
-    u8 MajorHigh;
-    u8 MajorLow;
-    u8 MinorHigh;
-    u8 MinorLow;
+    u32 MajorHigh;
+    u32 MajorLow;
+    u32 MinorHigh;
+    u32 MinorLow;
 };
 
 struct world_map_startup
 {
     b32 NewMap;
     u32 MapID;
-    u32 MapWidth;
-    u32 MapHeight;
+    s32 MapWidth;
+    s32 MapHeight;
 
     working_version MapVersion;
     sswm_id ID;
