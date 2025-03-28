@@ -256,10 +256,15 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     render_group RenderGroup_ = BeginRenderGroup(TranState->Assets, RenderCommands, TranState->MainGenerationID,
                                                  false, RenderCommands->Width, RenderCommands->Height);
     render_group *RenderGroup = &RenderGroup_;
-//    Clear(RenderGroup, V4(0.45f, 0, 0.45f, 1.0f));
+    Clear(RenderGroup, V4(0.45f, 0, 0.45f, 1.0f));
+    Orthographic(RenderGroup, 1.0f);
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
+
+
+    object_transform T = DefaultFlatTransform();
+    PushRect(RenderGroup, &T, V3(0, 0, 0), V2((r32)RenderWidth, (r32)RenderHeight));
     
     if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)RenderWidth, (f32)RenderHeight), 0))
     {

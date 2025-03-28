@@ -479,7 +479,7 @@ NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
 }
 
 internal void
-NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
+NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_aliasing AA)
 {
     TIMED_FUNCTION();
     /*
@@ -499,7 +499,9 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* setup viewport/project */
-    glViewport(0,0,(GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+//    glViewport(0,0,(GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+    glViewport(DrawRegion.MinX, DrawRegion.MinY, (GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
@@ -530,6 +532,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, enum nk_anti_aliasing AA)
             {NK_VERTEX_COLOR, NK_FORMAT_R8G8B8A8, NK_OFFSETOF(struct nk_gl_vertex, col)},
             {NK_VERTEX_LAYOUT_END}
         };
+
         memset(&config, 0, sizeof(config));
         config.vertex_layout = vertex_layout;
         config.vertex_size = sizeof(struct nk_gl_vertex);

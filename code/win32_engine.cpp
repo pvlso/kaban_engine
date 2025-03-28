@@ -545,10 +545,10 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     float delta_time_now = dt;
     NkWin32->delta_time_seconds_last = dt;
 
-    NkWin32->width = DrawWidth;
-    NkWin32->height = DrawHeight;
-    NkWin32->display_width = WindowWidth;
-    NkWin32->display_height = WindowHeight;
+    NkWin32->width = WindowWidth;
+    NkWin32->height = WindowHeight;
+    NkWin32->display_width = DrawWidth;
+    NkWin32->display_height = DrawHeight;
     NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
     NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
 
@@ -1620,7 +1620,7 @@ Win32MainWindowCallback(HWND Window,
 
         case WM_WINDOWPOSCHANGING:
         {
-            if(GetKeyState(VK_SHIFT) & 0x8000)
+//            if(GetKeyState(VK_SHIFT) & 0x8000)
             {
                 WINDOWPOS *NewPos = (WINDOWPOS *)LParam;
 
@@ -2841,6 +2841,14 @@ WinMain(HINSTANCE Instance,
             GlobalRunning = true;
             while(GlobalRunning)
             {
+                HMONITOR Monitor = MonitorFromWindow(Window, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO MInfo = {};
+                MInfo.cbSize = sizeof(MONITORINFO);
+                GetMonitorInfo(Monitor, &MInfo);
+
+                GlobalFramebufferDim.Width = MInfo.rcWork.right - MInfo.rcWork.left;
+                GlobalFramebufferDim.Height = MInfo.rcWork.bottom - MInfo.rcWork.top;
+                
                 // NOTE(paul): Init Render Commands and Handle Aspect Ratio
                 editor_render_commands RenderCommands = RenderCommandStruct(
                     PushBufferSize, PushBuffer,
@@ -2941,7 +2949,8 @@ WinMain(HINSTANCE Instance,
                                     GetWidth(DrawRegion), GetHeight(DrawRegion),
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
-                Win32NkUpdateInputs(&Win32State, &Win32State.Debug, Dimension.Width, Dimension.Height,
+                Win32NkUpdateInputs(&Win32State, &Win32State.Debug,
+                                    Dimension.Width, Dimension.Height,
                                     GetWidth(DrawRegion), GetHeight(DrawRegion),
                                     TargetSecondsPerFrame);
 #endif
@@ -3152,9 +3161,9 @@ WinMain(HINSTANCE Instance,
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                NKOpenGLRenderCommands(&Win32State.Main, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.Main, DrawRegion, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.Debug, DrawRegion, NK_ANTI_ALIASING_ON);
 #if EDITOR_INTERNAL
-                NKOpenGLRenderCommands(&Win32State.Debug, NK_ANTI_ALIASING_ON);
 #endif
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);
