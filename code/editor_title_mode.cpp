@@ -32,6 +32,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkLayoutRowPush(Nk, 100);
             if(UI->NkButtonLabel(Nk, "Assets Mode"))
             {
+                PlayAssetsMode(EditorState, TranState);
+                Result = true;
+                return(Result);
             }
 
             if(UI->NkButtonLabel(Nk, "Game Mode"))
@@ -79,10 +82,18 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkLayoutRowPush(Nk, 240);
             if(!EditorState->MapStartup.NewMap)
             {
-                UI->NkPropertyInt(Nk, "#Map Major High Version: ", 0, (int *)&EditorState->MapStartup.MapVersion.MajorHigh, 255, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Major Low Version: ", 0, (int *)&EditorState->MapStartup.MapVersion.MajorLow, 255, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Minor High Version: ", 0, (int *)&EditorState->MapStartup.MapVersion.MinorHigh, 255, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Minor Low Version: ", 0, (int *)&EditorState->MapStartup.MapVersion.MinorLow, 255, 1, 0.1f);
+                UI->NkPropertyInt(Nk, "#Map Major High Version: ", 0,
+                                  (int *)&EditorState->MapStartup.MapVersion.MajorHigh,
+                                  EditorState->Version.MajorHigh, 1, 0.1f);
+                UI->NkPropertyInt(Nk, "#Map Major Low Version: ", 0,
+                                  (int *)&EditorState->MapStartup.MapVersion.MajorLow,
+                                  EditorState->Version.MajorLow, 1, 0.1f);
+                UI->NkPropertyInt(Nk, "#Map Minor High Version: ", 0,
+                                  (int *)&EditorState->MapStartup.MapVersion.MinorHigh,
+                                  EditorState->Version.MinorHigh, 1, 0.1f);
+                UI->NkPropertyInt(Nk, "#Map Minor Low Version: ", 0,
+                                  (int *)&EditorState->MapStartup.MapVersion.MinorLow,
+                                  EditorState->Version.MinorLow, 1, 0.1f);
             }
 
             UI->NkPropertyInt(Nk, "#Map Width: ", 16, &EditorState->MapStartup.MapWidth, 512, 1, 0.1f);
@@ -100,8 +111,6 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             case EditorMode_AssetsMode:
             {
-//                PlayAssetsMode(EditorState, TranState);
-//                Result = true;
             } break;
 
             case EditorMode_GameMode:

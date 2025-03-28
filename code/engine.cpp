@@ -5,7 +5,7 @@
    $Creator: BabyKaban $
    $Notice:  $
    ======================================================================== */
-
+#include <stdio.h>
 #include "engine.h"
 #include "engine_sort.cpp"
 #include "engine_render_group.cpp"
@@ -64,6 +64,79 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     EditorState->EditorMode = EditorMode;
 }
 
+inline working_version 
+UpdateVersion(u32 Version)
+{
+    u8 MajorHigh = (Version >> 24) & 0xFF;
+    u8 MajorLow = (Version >> 16) & 0xFF;
+    u8 MinorHigh = (Version >> 8) & 0xFF;
+    u8 MinorLow = Version & 0xFF;
+
+    if((MinorLow + 1) == 255)
+    {
+        MinorLow = 0;
+        if((MinorHigh + 1) == 255)
+        {
+            MinorHigh = 0;
+            if((MajorLow + 1) == 255)
+            {
+                MajorLow = 0;
+                if((MajorHigh + 1) == 255)
+                {
+                    MajorHigh = 0;
+                }
+                else
+                {
+                    MajorHigh += 1;
+                }
+            }
+            else
+            {
+                MajorLow += 1;
+            }
+        }
+        else
+        {
+            MinorHigh += 1;
+        }
+    }
+    else
+    {
+        MinorLow += 1;
+    }
+
+    working_version Result = {MajorHigh, MajorLow, MinorHigh, MinorLow};//(u32)((MajorHigh << 24) | (MajorLow << 16) | (MinorHigh << 8) | MinorLow); 
+
+    return(Result);
+}
+
+internal u32
+UpdateEditorVersionFile(editor_state *EditorState)
+{
+    u32 Result = 0;
+    
+    FILE *VersionFile;
+    fopen_s(&VersionFile, "editor_version_file.ssev", "rb");
+    fread(&EditorState->Version, sizeof(working_version), 1, VersionFile);
+    fclose(VersionFile);
+
+    EditorState->Version = UpdateVersion((u32)((EditorState->Version.MajorHigh << 24) |
+                                               (EditorState->Version.MajorLow << 16) |
+                                               (EditorState->Version.MinorHigh << 8) |
+                                               EditorState->Version.MinorLow));
+
+    Result = (u32)((EditorState->Version.MajorHigh << 24) |
+                   (EditorState->Version.MajorLow << 16) |
+                   (EditorState->Version.MinorHigh << 8) |
+                   EditorState->Version.MinorLow);
+        
+    fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
+    fwrite(&EditorState->Version, sizeof(working_version), 1, VersionFile);
+    fclose(VersionFile);
+
+    return(Result);
+}
+
 #if EDITOR_INTERNAL
 debug_table *GlobalDebugTable;
 engine_memory *DebugGlobalMemory;
@@ -72,14 +145,15 @@ engine_memory *DebugGlobalMemory;
 platform_api Platform;
 
 #include "editor_title_mode.cpp"
-//#include "editor_assets_mode.cpp"
+#include "editor_assets_mode.cpp"
 //#include "editor_game_mode.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
     Platform = Memory->PlatformAPI;    
-
     nk_ui UI = Platform.UI;
+
+    GenerateCRC64Table();
     
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
@@ -104,6 +178,30 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
+
+        FILE *VersionFile;
+        fopen_s(&VersionFile, "editor_version_file.ssev", "rb");
+        if(VersionFile)
+        {
+            fread(&EditorState->Version, 4, 1, VersionFile);
+            fclose(VersionFile);
+
+            EditorState->Version.MinorLow = EditorState->Version.MajorHigh >> 24;
+            EditorState->Version.MinorHigh = (EditorState->Version.MajorHigh >> 16) & 0xff;
+            EditorState->Version.MajorLow = (EditorState->Version.MajorHigh >> 8) & 0xff;
+            EditorState->Version.MajorHigh = EditorState->Version.MajorHigh & 0xff;
+        }
+        else
+        {
+            fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
+            fwrite(&EditorState->Version, sizeof(working_version), 1, VersionFile);
+            fclose(VersionFile);
+        }
+
+        EditorState->MapStartup.MapVersion = EditorState->Version;
+        EditorState->MapStartup.MapWidth = 48;
+        EditorState->MapStartup.MapHeight = 48;
+        EditorState->MapStartup.NewMap = true;
     }
 
     // NOTE(casey): Transient initialization
@@ -181,6 +279,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             
                 case EditorMode_AssetsMode:
                 {
+                    Rerun = UpdateAndRenderAssetsMode(EditorState, TranState, nk, RenderGroup, Input, RenderWidth, RenderHeight,
+                                                      EditorState->AssetsMode);
                 } break;
 
                 case EditorMode_GameMode:

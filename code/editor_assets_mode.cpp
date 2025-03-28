@@ -428,6 +428,7 @@ internal void
 ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset_type Type,
                      audio_state *AudioState = 0)
 {
+//    Assert(Type != StoredAssetType_Font);
     switch(Type)
     {
         case StoredAssetType_None:
@@ -478,6 +479,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
 
         case StoredAssetType_Font:
         {
+#if 0
             // NOTE(paul): Clear Font Mode Data
             font_mode *FontMode = &AssetsMode->FontMode;
             for(u32 GlyphIndex = 1;
@@ -494,6 +496,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             Platform.DeallocateMemory(FontMode->Font.UnicodeCodePoints);
             Platform.DeallocateMemory(FontMode->Font.HorizontalAdvance);
             Platform.DeallocateMemory(FontMode->Font.UnicodeMap);
+#endif
         } break;
         
         case StoredAssetType_File:
@@ -575,7 +578,8 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
     {
         AssetsMode->EditMode = AssetsEditModeFromStoredType(StoredAsset->Type);
     }
-    
+
+//    Assert(StoredAsset->Type != StoredAssetType_Font);
     switch(StoredAsset->Type)
     {
         case StoredAssetType_None:
@@ -640,6 +644,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 
         case StoredAssetType_Font:
         {
+#if 0
             font_mode *FontMode = &AssetsMode->FontMode;
             stored_asset_font *StoredFont = &StoredAsset->Font;
             u32 StandardFontSize = 24;
@@ -652,6 +657,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
                 loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
                 AllocateBitmap(Assets, Bitmap);
             }
+#endif
         } break;
 
         case StoredAssetType_File:
@@ -681,6 +687,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 internal void
 LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
 {
+//    Assert(Asset->Type != StoredAssetType_Font);
     switch(Asset->Type)
     {
         case StoredAssetType_None:
@@ -735,6 +742,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
 
         case StoredAssetType_Font:
         {
+#if 0
             char *FileName = AssetsMode->FontFiles[AssetsMode->FileIndex];
             StringCopy(FileName, Asset->Font.SourceFileName);
 
@@ -744,6 +752,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             Asset->Font.FirstCodePoint = FontMode->Font.UnicodeCodePoints[1];
             Asset->Font.LastCodePoint = FontMode->Font.UnicodeCodePoints[FontMode->Font.GlyphCount - 1];
             Asset->Font.FontSizeInPixels = 24;
+#endif
         } break;
 
         case StoredAssetType_File:
@@ -772,7 +781,7 @@ InitAssetsMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_ass
 }
 
 inline void
-UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, editor_input *Input,
+UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, engine_input *Input,
                       v2 MouseP, rectangle2 CanvasRect, rectangle2 BitmapRect,
                       u32 BitmapPixelWidth, u32 BitmapPixelHeight, r32 Scale, v2 *Result)
 {
@@ -794,7 +803,7 @@ UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, editor_
 }
 
 internal void
-UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, editor_input *Input, editor_assets *Assets,
+UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                               render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                               rectangle2 CanvasRect, r32 TileDim, stored_asset *Asset)
 {
@@ -851,7 +860,7 @@ DrawSpriteOutlines(render_group *RenderGroup, object_transform *Flat, r32 Scale,
 }
 
 internal void
-UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, editor_input *Input, editor_assets *Assets,
+UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                                    rectangle2 CanvasRect, r32 TileDim, stored_asset *CurrentAsset)
 {
@@ -960,7 +969,7 @@ DrawTileOutlines(render_group *RenderGroup, object_transform *Flat, r32 TilesetB
 }
 
 internal void
-UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, editor_input *Input, editor_assets *Assets,
+UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                                    rectangle2 CanvasRect, r32 TileDim, stored_asset *Asset)
 {
@@ -1265,12 +1274,13 @@ RemoveStoredAsset(editor_mode_assets *AssetsMode)
 }
 
 internal b32
-UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
-                          editor_input *Input, u32 RenderWidth, u32 RenderHeight,
+UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
+                          nk_context *Nk, render_group *RenderGroup,
+                          engine_input *Input, u32 RenderWidth, u32 RenderHeight,
                           editor_mode_assets *AssetsMode)
 {
     editor_assets *Assets = TranState->Assets;
-    b32 Result = CheckForMetaInput(EditorState, TranState, Input);
+    b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
         Orthographic(RenderGroup, 1.0f);
@@ -1326,10 +1336,113 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             v2 CanvasHalfDim = 0.5f*V2(CanvasSize, CanvasSize);
             rectangle2 CanvasRect = RectCenterDim(V2(0, 0), CanvasDim);
 
+            nk_ui *UI = &Platform.UI;
             switch(AssetsMode->EditMode)
             {
                 case EditMode_None:
                 {
+                    UI->NkLayoutRowBegin(Nk, NK_STATIC, 50, 8);
+                    {
+                        UI->NkLayoutRowPush(Nk, 100);
+                        if(UI->NkButtonLabel(Nk, "Edit Bitmaps"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit Sounds"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit SpriteSheets"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit Tilesets"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit Fonts"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit Texts"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit Files"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "Edit SSWM"))
+                        {
+                        }
+
+                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
+                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
+                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
+
+                    }
+                    UI->NkLayoutRowEnd(Nk);
+                    UI->NkLayoutRowDynamic(Nk, 30, 1);
+                    UI->NkSpacer(Nk);
+
+                    char Text[256];
+                    FormatString(ArrayCount(Text), Text,
+                                 "Asset Count: %d",
+                                 AssetsMode->StoredHeader.AssetCount);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                    FormatString(ArrayCount(Text), Text,
+                                 "SizeOfStoredAsset: %d",
+                                 AssetsMode->StoredHeader.SizeOfStoredAsset);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                    FormatString(ArrayCount(Text), Text,
+                                 "Major High  Version: %d",
+                                 (AssetsMode->StoredHeader.Version >> 24) & 0xFF);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                    FormatString(ArrayCount(Text), Text,
+                                 "Major Low Version: %d",
+                                 (AssetsMode->StoredHeader.Version >> 16) & 0xFF);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                    FormatString(ArrayCount(Text), Text,
+                                 "Minor High  Version: %d",
+                                 (AssetsMode->StoredHeader.Version >> 8) & 0xFF);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                    FormatString(ArrayCount(Text), Text,
+                                 "Minor Low Version: %d",
+                                 AssetsMode->StoredHeader.Version & 0xFF);
+                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+#if 0
+                    UIDrawScrollWindow(UIState, Layout, "Show Stored Assets", V2(933.0f, 400.0f),
+                                       &AssetsMode->ShowStoredAssetIndex, "Stored Assets", ScrollDataType_StoredAssets, 3,
+                                       AssetsMode->StoredHeader.AssetCount, AssetsMode->StoredAssets);
+
+                    ui_layout BottomLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-1275.0f, -665.0f));
+                    UIBeginRow(&BottomLeftLayout);
+
+                    UIButton(&BottomLeftLayout, "Exit",
+                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->Exit, true),
+                             200.0f, BColor_Red);
+                    UIButton(&BottomLeftLayout, "Write Assets", 
+                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->WriteAssets, true),
+                             200.0f, BColor_Green);
+                    UIButton(&BottomLeftLayout, "Write SSA", 
+                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->WriteSSA, true),
+                             200.0f, BColor_Green);
+
+                    UIEndRow(&BottomLeftLayout);
+                    UIEndLayout(&BottomLeftLayout);
+
+                    ui_layout RightLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-315.0f, 680.0f));
+                    UIDrawAssetAdvanceView(UIState, &RightLayout, "Asset Advance View Window", V2(1580.0f, 1380.0f),
+                                           AssetsMode);
+                    UIEndLayout(&RightLayout);
+#endif
+                    
                     if(AssetsMode->EditStoredAsset)
                     {
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
