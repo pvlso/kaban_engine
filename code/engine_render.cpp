@@ -98,11 +98,6 @@ AspectRatioFit(u32 RenderWidth, u32 RenderHeight,
             Result.MinX = HalfEmpty;
             Result.MaxX = Result.MinX + UseWidth;
         }
-
-        Result.MinY = 0;
-        Result.MaxY = RoundReal32ToInt32(OptimalWindowHeight);
-        Result.MinX = 0;
-        Result.MaxX = RoundReal32ToInt32(OptimalWindowWidth);
     }
     
     return(Result);

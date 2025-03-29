@@ -528,7 +528,7 @@ Win32NkFontStashEnd(nk_win32 *NkWin32)
 
 internal void
 Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 WindowHeight,
-                    u32 DrawWidth, u32 DrawHeight, f32 dt)
+                    rectangle2i DrawRegion, f32 dt)
 {
     /*
       NOTE(paul): The implementation of this function is based on
@@ -547,8 +547,8 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
 
     NkWin32->width = WindowWidth;
     NkWin32->height = WindowHeight;
-    NkWin32->display_width = DrawWidth;
-    NkWin32->display_height = DrawHeight;
+    NkWin32->display_width = GetWidth(DrawRegion);
+    NkWin32->display_height = GetHeight(DrawRegion);
     NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
     NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
 
@@ -595,6 +595,13 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     }
 
     Win32GetCursorPos(State, &x, &y);
+
+    r32 MouseU = Clamp01MapToRange((r32)DrawRegion.MinX, (f32)x, (r32)DrawRegion.MaxX);
+    r32 MouseV = Clamp01MapToRange((r32)DrawRegion.MinY, (f32)y, (r32)DrawRegion.MaxY);
+                            
+    x = (r32)NkWin32->width*MouseU;
+    y = (r32)NkWin32->height*MouseV;
+
     nk_input_motion(ctx, (int)x, (int)y);
     if (ctx->input.mouse.grabbed) {
         Win32SetCursorPos(State, (double)ctx->input.mouse.prev.x, (double)ctx->input.mouse.prev.y);
@@ -634,14 +641,16 @@ Win32NkShutdown(nk_win32 *NkWin32)
 }
 
 inline nk_context *
-Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32)
+Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height)
 {
     struct nk_context *Result = 0;
     Result = Win32InitNkContext(State, NkWin32);
+    Result->BaseWidth = Width;
+    Result->BaseHeight = Height;
     {
         struct nk_font_atlas *atlas;
         Win32NkFontStashBegin(NkWin32, &atlas);
-        struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 14, 0);
+        struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 12, 0);
         /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
         /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
         /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
@@ -1620,7 +1629,7 @@ Win32MainWindowCallback(HWND Window,
 
         case WM_WINDOWPOSCHANGING:
         {
-//            if(GetKeyState(VK_SHIFT) & 0x8000)
+            if(GetKeyState(VK_SHIFT) & 0x8000)
             {
                 WINDOWPOS *NewPos = (WINDOWPOS *)LParam;
 
@@ -2711,7 +2720,7 @@ WinMain(HINSTANCE Instance,
     bool32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
     
 #if EDITOR_INTERNAL
-    DEBUGGlobalShowCursor = false;
+    DEBUGGlobalShowCursor = true;
 #endif
 
     // NOTE(paul): Set intitial dimentions 
@@ -2834,26 +2843,22 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main);
-            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug);
+            s32 UIBaseWidth = 1280;
+            s32 UIBaseHeight = 720;
+            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main,
+                                                 UIBaseWidth, UIBaseHeight);
+            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug,
+                                                       UIBaseWidth, UIBaseHeight);
             nk_colorf bg = {};
             
             GlobalRunning = true;
             while(GlobalRunning)
             {
-                HMONITOR Monitor = MonitorFromWindow(Window, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO MInfo = {};
-                MInfo.cbSize = sizeof(MONITORINFO);
-                GetMonitorInfo(Monitor, &MInfo);
-
-                GlobalFramebufferDim.Width = MInfo.rcWork.right - MInfo.rcWork.left;
-                GlobalFramebufferDim.Height = MInfo.rcWork.bottom - MInfo.rcWork.top;
-                
                 // NOTE(paul): Init Render Commands and Handle Aspect Ratio
                 editor_render_commands RenderCommands = RenderCommandStruct(
                     PushBufferSize, PushBuffer,
-                    (u32)GlobalFramebufferDim.Width,
-                    (u32)GlobalFramebufferDim.Height);
+                    (u32)GlobalFramebufferDim.Width, (u32)GlobalFramebufferDim.Height);
+//                    1280, 720);
 
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
                 rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
@@ -2888,7 +2893,7 @@ WinMain(HINSTANCE Instance,
                     Win32ProcessPendingMessages(&Win32State, NewKeyboardController, &MouseZ);
                 }
 
-                if(!GlobalPause && GlobalAppIsActive)
+//                if(!GlobalPause && GlobalAppIsActive)
                 {
                     {
                         TIMED_BLOCK("Mouse Position");
@@ -2945,13 +2950,13 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
                 Win32NkUpdateInputs(&Win32State, &Win32State.Main,
-                                    Dimension.Width, Dimension.Height,
-                                    GetWidth(DrawRegion), GetHeight(DrawRegion),
+                                    UIBaseWidth, UIBaseHeight,
+                                    DrawRegion,
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
                 Win32NkUpdateInputs(&Win32State, &Win32State.Debug,
-                                    Dimension.Width, Dimension.Height,
-                                    GetWidth(DrawRegion), GetHeight(DrawRegion),
+                                    UIBaseWidth, UIBaseHeight,
+                                    DrawRegion,
                                     TargetSecondsPerFrame);
 #endif
                 BEGIN_BLOCK("Engine Update");

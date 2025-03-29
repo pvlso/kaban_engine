@@ -6603,6 +6603,9 @@ struct nk_context {
     struct nk_page_element *freelist;
     unsigned int count;
     unsigned int seq;
+
+    s32 BaseWidth;
+    s32 BaseHeight;
 };
 
 /* ==============================================================

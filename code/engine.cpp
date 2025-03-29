@@ -12,6 +12,7 @@
 #include "engine_asset.cpp"
 #include "editor_audio.cpp"
 //#include "editor_json_parser.cpp"
+#include "editor_triangle.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
@@ -146,7 +147,7 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-//#include "editor_game_mode.cpp"
+#include "editor_game_mode.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -266,7 +267,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform T = DefaultFlatTransform();
     PushRect(RenderGroup, &T, V3(0, 0, 0), V2((r32)RenderWidth, (r32)RenderHeight));
     
-    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)RenderWidth, (f32)RenderHeight), 0))
+    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, 1280, 720), 0))
     {
         b32 Rerun = false;
         do

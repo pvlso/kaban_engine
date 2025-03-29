@@ -1380,5 +1380,25 @@ CalculateTriangleBoundingBox(triangle *T)
     }
 }
 
+inline f32
+PolygonSignedArea(polygon2 *Polygon)
+{
+    f32 Result = 0.0f;
+    for(s32 Index = 0;
+        Index < Polygon->VertexCount;
+        ++Index)
+    {
+        s32 Next = (Index + 1) % Polygon->VertexCount;
+        v2 FirstVertex = Polygon->Vertices[Index];
+        v2 SecondVertex = Polygon->Vertices[Next];
+
+        Result += Cross(FirstVertex, SecondVertex);
+    }
+
+    Result = 0.5f*Result;
+    
+    return(Result);
+}
+
 #define ENGINE_MATH_H
 #endif

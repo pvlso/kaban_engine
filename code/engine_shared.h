@@ -9,6 +9,8 @@
 
 #include "engine_intrinsics.h"
 #include "engine_math.h"
+#include "editor_triangle.h"
+
 #include "engine_random.h"
 #include "engine_memory.h"
 #include "engine_string.h"

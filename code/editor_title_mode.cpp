@@ -27,9 +27,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     if(!Result)
     {
         char Buffer[256];
-        UI->NkLayoutRowBegin(Nk, NK_STATIC, 50, 8);
+        UI->NkLayoutRowBegin(Nk, NK_STATIC, 30, 8);
         {
-            UI->NkLayoutRowPush(Nk, 100);
+            UI->NkLayoutRowPush(Nk, 80);
             if(UI->NkButtonLabel(Nk, "Assets Mode"))
             {
                 PlayAssetsMode(EditorState, TranState);
