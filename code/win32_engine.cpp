@@ -3166,8 +3166,8 @@ WinMain(HINSTANCE Instance,
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                NKOpenGLRenderCommands(&Win32State.Main, DrawRegion, NK_ANTI_ALIASING_ON);
                 NKOpenGLRenderCommands(&Win32State.Debug, DrawRegion, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.Main, DrawRegion, NK_ANTI_ALIASING_ON);
 #if EDITOR_INTERNAL
 #endif
                 SwapBuffers(DeviceContext);

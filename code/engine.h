@@ -39,11 +39,12 @@
 #include "engine_render_group.h"
 #include "engine_asset.h"
 #include "editor_audio.h"
-//#include "editor_json_parser.h"
+#include "engine_json_parser.h"
+#include "engine_ui.h"
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
-#include "editor_game_mode.h"
+#include "engine_game_mode.h"
 #include "editor_ssa_file_builder.h"
 
 enum editor_mode
@@ -85,6 +86,8 @@ struct editor_state
 
     working_version Version;
     world_map_startup MapStartup;
+
+    ui_state UIState;
     
     char window_title[64];
     editor_mode EditorMode;

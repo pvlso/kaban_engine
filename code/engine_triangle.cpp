@@ -1,4 +1,3 @@
-
 /* ========================================================================
    $File: $
    $Date: 2024 $
@@ -7,7 +6,44 @@
    $Notice:  $
    ======================================================================== */
 
+#define TRIANGULATE_F64 1
+
 // NOTE(babykaban): Triangle Subtraction =====================================================================================================================
+
+internal b32
+PlanarPointWithinTriangle(v2 P, v2 A, v2 B, v2 C)
+{
+    v2 AB = A - B;
+    v2 BC = B - C;
+    v2 CA = C - A;
+    v2 AP = A - P;
+    v2 BP = B - P;
+    v2 CP = C - P;
+
+    v2 N1 = V2(AB.y, -AB.x);
+    v2 N2 = V2(BC.y, -BC.x);
+    v2 N3 = V2(CA.y, -CA.x);
+    
+    f32 S1 = Inner(N1, AP);
+    f32 S2 = Inner(N2, BP);
+    f32 S3 = Inner(N3, CP);
+
+    f32 Tolerance = 0.0001f;
+
+    b32 Result = (((S1 <= 0) && (S2 <= 0) && (S3 <= 0))||
+                  ((S1 <= Tolerance) && (S2 <= 0) && (S3 <= 0))||
+                  ((S2 <= Tolerance) && (S1 <= 0) && (S3 <= 0))||
+                  ((S3 <= Tolerance) && (S1 <= 0) && (S2 <= 0)));
+
+    return(Result);
+}
+
+inline b32
+PlanarPointWithinTriangle(v2 P, triangle *T)
+{
+    b32 Result = PlanarPointWithinTriangle(P, T->Vertices[0], T->Vertices[1], T->Vertices[2]);
+    return(Result);
+}
 
 inline void
 TRISUBProjectVerticesOntoNormal(v2 *Vertices, v2 Normal, f32 *Min, f32 *Max)
@@ -79,6 +115,7 @@ TRISUBTrianglesOverlapExcludingVerticesAndEdges(triangle *A, triangle *B)
     return(Result);
 }
 
+#if 1
 inline b32
 TRISUBLineSect(v2 x0, v2 x1, v2 y0, v2 y1, v2 *res)
 {
@@ -89,14 +126,14 @@ TRISUBLineSect(v2 x0, v2 x1, v2 y0, v2 y1, v2 *res)
     v2 d = x0 - y0;
 
     f32 dyx = Cross(dy, dx);
-    if(AbsoluteValue(dyx) < TRISUB_EPSILON_F32)
+    if(dyx == 0.0f)
     {
         Result = false;
     }
     else
     {
         dyx = Cross(d, dx) / dyx;
-        if(dyx <= 0 || dyx >= 1)
+        if(dyx < 0 || dyx > 1)
         {
             Result = false;
         }
@@ -105,16 +142,6 @@ TRISUBLineSect(v2 x0, v2 x1, v2 y0, v2 y1, v2 *res)
             *res = y0 + dyx * dy;
         }
     }
-
-    return(Result);
-}
-
-inline b32
-TRISUBInside(v2 p, v2 Clipper1, v2 Clipper2)
-{
-    b32 Result = false;
-    f32 CrossProduct = (Clipper2.x - Clipper1.x) * (p.y - Clipper1.y) - (Clipper2.y - Clipper1.y) * (p.x - Clipper1.x);
-    Result = CrossProduct < TRISUB_EPSILON_F32;
 
     return(Result);
 }
@@ -129,15 +156,15 @@ TRISUBLeftOf(v2 a, v2 b, v2 c)
 
     f32 x = Cross(ba, cb);
 
-    Result = (x < TRISUB_EPSILON_F32) ? -1 : (x > 0);
+    Result = (x < 0) ? -1 : 1;
     return(Result);
 }
 
 inline void
 TRISUBPolyEdgeClip(polygon2 *Sub, v2 x0, v2 x1, s32 Left, polygon2 *Res)
 {
-    v2 v0 = Sub->Vertices[Sub->VertexCount- 1];
-    v2 v1 = {};
+    v2 v0 = Sub->Vertices[Sub->VertexCount - 1];
+    v2 v1;
 
     Res->VertexCount = 0;
 
@@ -156,8 +183,7 @@ TRISUBPolyEdgeClip(polygon2 *Sub, v2 x0, v2 x1, s32 Left, polygon2 *Res)
         if(((Side0 + Side1) == 0) && Side0)
         {
             v2 Intersect;
-//            if(TRISUBLineSect(x0, x1, v0, v1, &Intersect))
-            if(LineIntersect(x0, x1, v0, v1, &Intersect))
+            if(TRISUBLineSect(x0, x1, v0, v1, &Intersect))
             {
                 Res->Vertices[Res->VertexCount++] = Intersect;
             }
@@ -181,38 +207,32 @@ TRISUBPolyEdgeClip(polygon2 *Sub, v2 x0, v2 x1, s32 Left, polygon2 *Res)
 internal void
 TRISUBSutherlandHodgman(polygon2 *Subject, triangle *Clip, polygon2 *Result, memory_arena *Arena)
 {
-    polygon2 Temp;
-    Temp.VertexCount = 0;
-    Temp.Vertices = PushArray(Arena, MAX_VERTEX_COUNT, v2);
+    polygon2 *P1 = PushStruct(Arena, polygon2);
+    P1->VertexCount = 0;
+    P1->Vertices = PushArray(Arena, MAX_VERTEX_COUNT, v2);
 
-    polygon2 New0;
-    New0.VertexCount = 0;
-    New0.Vertices = PushArray(Arena, MAX_VERTEX_COUNT, v2);
-
+    polygon2 *Temp;
+    
     s32 dir = TRISUBLeftOf(Clip->Vertices[0], Clip->Vertices[1], Clip->Vertices[2]);
     TRISUBPolyEdgeClip(Subject, Clip->Vertices[2], Clip->Vertices[0], dir, Result);
     for(s32 I = 0;
         I < 2;
         ++I)
     {
-        Temp.VertexCount = Result->VertexCount;
-        Copy(sizeof(v2)*Result->VertexCount, Result->Vertices, Temp.Vertices);
+        Temp = Result;
+        Result = P1;
+        P1 = Temp;
 
-        Result->VertexCount = New0.VertexCount;
-        Copy(sizeof(v2)*New0.VertexCount, New0.Vertices, Result->Vertices);
-
-        New0.VertexCount = Temp.VertexCount;
-        Copy(sizeof(v2)*Temp.VertexCount, Temp.Vertices, New0.Vertices);
-
-        if(Temp.VertexCount == 0)
+        if(P1->VertexCount == 0)
         {
             Result->VertexCount = 0;
             break;
         }
 
-        TRISUBPolyEdgeClip(&New0, Clip->Vertices[I], Clip->Vertices[I + 1], dir, Result);
+        TRISUBPolyEdgeClip(P1, Clip->Vertices[I], Clip->Vertices[I + 1], dir, Result);
     }
 }
+#endif
 
 inline void
 TRISUBCleanUpOverlapPolygon(polygon2 *Poly)
@@ -663,10 +683,9 @@ SubtractTriangels(triangle *Subject, triangle *Subtractor, f32 MinimalOverlapAre
 
     subtract_result Result = {};
     Result.Set.Polygons = (polygon2 *)Platform.AllocateMemory(sizeof(polygon2)*TRISUB_MAX_POLYGON_COUNT);
-
+    
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
 
-    b32 ExcludingOverlap = TRISUBTrianglesOverlapExcludingVerticesAndEdges(Subject, Subtractor);
     f32 AreaA = TriangleSignedArea(Subject);
     f32 AreaB = TriangleSignedArea(Subtractor);
 
@@ -702,7 +721,7 @@ SubtractTriangels(triangle *Subject, triangle *Subtractor, f32 MinimalOverlapAre
         TRISUBSutherlandHodgman(&PolygonA, Subtractor, &Poly, TempMem.Arena);
         TRISUBCleanUpOverlapPolygon(&Poly);
 
-        f32 OverlappingArea = AbsoluteValue(PolygonSignedArea(&Poly));
+        f32 OverlappingArea = AbsoluteValue(0.5f*PolygonSignedArea2(&Poly));
         if((OverlappingArea > MinimalOverlapArea) && ((AbsoluteValue(AreaA) - OverlappingArea) > MinimalResultArea))
         {
             // NOTE(babykaban): Checks if any points of a subtractor lies on first vertex of subject if so rotate points in array
@@ -786,9 +805,33 @@ SubtractTriangels(triangle *Subject, triangle *Subtractor, f32 MinimalOverlapAre
                     ++PolygonIndex)
                 {
                     polygon2 *P = Result.Set.Polygons + PolygonIndex;
+                    
                     TRISUBRemoveDublicatPoints(P);
 
-                    if((P->VertexCount < 3) || (AbsoluteValue(PolygonSignedArea(P)) < MinimalResultArea))
+                    for(s32 I = 0;
+                        I < P->VertexCount;
+                        ++I)
+                    {
+                        v2 Cur = P->Vertices[I];
+                        v2 Next = P->Vertices[(I + 1) % P->VertexCount];
+                        r32 l = Length(Cur - Next);
+                        if(l < 0.001f)
+                        {
+                            P->Vertices[I + 1] = {};
+                            for(s32 J = I + 1;
+                                J < (P->VertexCount - 1);
+                                ++J)
+                            {
+                                P->Vertices[J] = P->Vertices[J + 1];                
+                            }
+                            --P->VertexCount;
+                            --I;
+                        }
+                    }
+
+                    P->Vertices[P->VertexCount] = {};
+
+                    if(P->VertexCount < 3)
                     {
                         for(s32 J = PolygonIndex;
                             J < (Result.Set.PolygonCount - 1);
@@ -830,7 +873,9 @@ SubtractTriangels(triangle *Subject, triangle *Subtractor, f32 MinimalOverlapAre
         }
         else
         {
-            if((AbsoluteValue(AreaA) - OverlappingArea) <= MinimalResultArea)
+            if(PlanarPointWithinTriangle(Subject->Vertices[0], Subtractor) &&
+               PlanarPointWithinTriangle(Subject->Vertices[1], Subtractor) &&
+               PlanarPointWithinTriangle(Subject->Vertices[2], Subtractor))
             {
                 Result.FullyRemoved = true;
             }
@@ -847,7 +892,6 @@ SubtractTriangels(triangle *Subject, triangle *Subtractor, f32 MinimalOverlapAre
 
     return(Result);
 }
-
 // ===========================================================================================================================================================
 
 // NOTE(babykaban): Triangulations ===========================================================================================================================
@@ -875,34 +919,6 @@ PlanarPointWithinTriangle(v2d P, v2d A, v2d B, v2d C)
     b32 Result = (((S1 < 0) && (S2 < 0) && (S3 < 0)) ||
                   ((S1 < Tolerance) && (S2 < 0) && (S3 < 0)) ||
                   ((S2 < Tolerance) && (S1 < 0) && (S3 < 0)) ||
-                  ((S3 < Tolerance) && (S1 < 0) && (S2 < 0)));
-
-    return(Result);
-}
-
-internal b32
-PlanarPointWithinTriangle(v2 P, v2 A, v2 B, v2 C)
-{
-    v2 AB = A - B;
-    v2 BC = B - C;
-    v2 CA = C - A;
-    v2 AP = A - P;
-    v2 BP = B - P;
-    v2 CP = C - P;
-
-    v2 N1 = V2(AB.y, -AB.x);
-    v2 N2 = V2(BC.y, -BC.x);
-    v2 N3 = V2(CA.y, -CA.x);
-    
-    f32 S1 = Inner(N1, AP);
-    f32 S2 = Inner(N2, BP);
-    f32 S3 = Inner(N3, CP);
-
-    f32 Tolerance = 0.0001f;
-
-    b32 Result = (((S1 < 0) && (S2 < 0) && (S3 < 0))||
-                  ((S1 < Tolerance) && (S2 < 0) && (S3 < 0))||
-                  ((S2 < Tolerance) && (S1 < 0) && (S3 < 0))||
                   ((S3 < Tolerance) && (S1 < 0) && (S2 < 0)));
 
     return(Result);
@@ -978,26 +994,6 @@ SplitTriangle(triangulate_triangle *TriangleArray, s32 SubjectIndex, s32 FirstNe
     Subject->AdjV2V3 = Subject->AdjV1V2;
     Subject->AdjV3V1 = FirstNewIndex;
     Subject->AdjV1V2 = SecondNewIndex;
-}
-
-inline void
-AdjacenciesFindWhichEqualAndSetTo(triangulate_triangle *Test, s32 Compare, s32 Set)
-{
-    /*
-      NOTE(babykaban):
-      The function checks all three adjacency entries (AdjV1V2, AdjV2V3, AdjV3V1) of the triangle it's called on.
-      It searches for the adjacency value that equals the old neighbor's index (Compare).
-      It replaces that old neighbor index with the new one (Set), reflecting the new connection after the flip.
-    */
-
-    for(s32 m = 0; m < 3; m++)
-    {
-        if(Test->Adjacencies[m] == Compare)
-        {
-            Test->Adjacencies[m] = Set;
-            break;
-        }
-    }
 }
 
 inline rectangle2d
@@ -1429,7 +1425,7 @@ EarClipTriangulate(render_group *RenderGroup, object_transform *Flat, polygon2 *
         s32 TriangleCount = Poly->VertexCount - 2;
         tri_verts *Triangles = PushArray(TempMem.Arena, TriangleCount, tri_verts);
 
-        b32 Clockwise = (PolygonSignedArea(Poly) < 0.0f);
+        b32 Clockwise = (PolygonSignedArea2(Poly) < 0.0f);
     
         s32 PrevOffset = Clockwise ? -1 : 1;
         s32 NextOffset = Clockwise ? 1 : -1;
@@ -1522,9 +1518,9 @@ struct edge_list
 
 // return 1 if p3 is left of p1->p2, 0 if right
 inline b32
-pointDirectionFromLineSegment2D(v2d p1, v2d p2, v2d p3)
+pointDirectionFromLineSegment2D(v2 p1, v2 p2, v2 p3)
 {
-    f64 CrossProduct = Cross(p2 - p1, p3 - p1);
+    f32 CrossProduct = Cross(p2 - p1, p3 - p1);
     b32 Result = CrossProduct > 0.0f;
 
     return(Result);
@@ -1532,16 +1528,16 @@ pointDirectionFromLineSegment2D(v2d p1, v2d p2, v2d p3)
 
 // return 1 if p1->p2 crosses p3->p4
 inline b32
-LineSegmentsCross2D(v2d p1, v2d p2, v2d p3, v2d p4)
+LineSegmentsCross2D(v2 p1, v2 p2, v2 p3, v2 p4)
 {
     b32 Result = true;
     
-    v2d p12 = p2 - p1;
-    v2d p23 = p3 - p2;
-    v2d p24 = p4 - p2;
+    v2 p12 = p2 - p1;
+    v2 p23 = p3 - p2;
+    v2 p24 = p4 - p2;
 
-    f64 cp1 = Cross(p12, p23);
-    f64 cp2 = Cross(p12, p24);
+    f32 cp1 = Cross(p12, p23);
+    f32 cp2 = Cross(p12, p24);
 
     if((cp1*cp2) >= 0.0f) // 1st orientation test proves no intersection possible
     {
@@ -1549,9 +1545,9 @@ LineSegmentsCross2D(v2d p1, v2d p2, v2d p3, v2d p4)
     }
     else
     {
-        v2d p34 = p4 - p3;
-        v2d p41 = p1 - p4;
-        v2d p42 = p2 - p4; // this is the opposite of v24 above, can consolidate for performance
+        v2 p34 = p4 - p3;
+        v2 p41 = p1 - p4;
+        v2 p42 = p2 - p4; // this is the opposite of v24 above, can consolidate for performance
 
         cp1 = Cross(p34, p41);
         cp2 = Cross(p34, p42);
@@ -1568,11 +1564,11 @@ LineSegmentsCross2D(v2d p1, v2d p2, v2d p3, v2d p4)
 
 // returns 1 if quadrilateral p1-p2-p3-p4 is convex
 inline b32
-QuadrilateralConvex2D(v2d p1, v2d p2, v2d p3, v2d p4)
+QuadrilateralConvex2D(v2 p1, v2 p2, v2 p3, v2 p4)
 {
-    v2d sides[4]={p2 - p1, p3 - p2, p4 - p3, p1 - p4};
+    v2 sides[4]={p2 - p1, p3 - p2, p4 - p3, p1 - p4};
 
-    f64 cp;
+    f32 cp;
     b32 sign = false;
     for(s32 i = 0; i < 4;i++)
     {
@@ -1586,87 +1582,75 @@ QuadrilateralConvex2D(v2d p1, v2d p2, v2d p3, v2d p4)
     return 1;
 }
 
-union v2_m256d
+union v2_m256
 {
     struct
     {
-        __m256d x, y;
+        __m256 x, y;
     };
 
-    __m256d E[2];
+    __m256 E[2];
 };
 
-inline __m256d
-Cross(v2_m256d A, v2_m256d B)
+inline __m256
+Cross(v2_m256 A, v2_m256 B)
 {
-    __m256d Result = _mm256_sub_pd(_mm256_mul_pd(A.x, B.y), _mm256_mul_pd(A.y, B.x));
+    __m256 Result = _mm256_sub_ps(_mm256_mul_ps(A.x, B.y), _mm256_mul_ps(A.y, B.x));
 
     return(Result);
 }
 
 // return 1 if p1->p2 crosses p3->p4
-inline __m256d
-SIMDLineSegmentsCross2D(v2_m256d p1, v2_m256d p2, v2_m256d p3, v2_m256d p4)
+inline __m256
+SIMDLineSegmentsCross2D(v2_m256 p1, v2_m256 p2, v2_m256 p3, v2_m256 p4)
 {
-    __m256d Zero_4x = _mm256_set1_pd(0.0f);
-    __m256d Neg1_4x = _mm256_set1_pd(-1.0f);
+    __m256 Zero_4x = _mm256_set1_ps(0.0f);
+    __m256 Neg1_4x = _mm256_set1_ps(-1.0f);
     
-    v2_m256d p12 = {_mm256_sub_pd(p2.x, p1.x), _mm256_sub_pd(p2.y, p1.y)};
-    v2_m256d p23 = {_mm256_sub_pd(p3.x, p2.x), _mm256_sub_pd(p3.y, p2.y)};
-    v2_m256d p24 = {_mm256_sub_pd(p4.x, p2.x), _mm256_sub_pd(p4.y, p2.y)};
+    v2_m256 p12 = {_mm256_sub_ps(p2.x, p1.x), _mm256_sub_ps(p2.y, p1.y)};
+    v2_m256 p23 = {_mm256_sub_ps(p3.x, p2.x), _mm256_sub_ps(p3.y, p2.y)};
+    v2_m256 p24 = {_mm256_sub_ps(p4.x, p2.x), _mm256_sub_ps(p4.y, p2.y)};
 
-    v2_m256d p34 = {_mm256_sub_pd(p4.x, p3.x), _mm256_sub_pd(p4.y, p3.y)};
-    v2_m256d p41 = {_mm256_sub_pd(p1.x, p4.x), _mm256_sub_pd(p1.y, p4.y)};
-    v2_m256d p42 = {_mm256_sub_pd(p2.x, p4.x), _mm256_sub_pd(p2.y, p4.y)};
+    v2_m256 p34 = {_mm256_sub_ps(p4.x, p3.x), _mm256_sub_ps(p4.y, p3.y)};
+    v2_m256 p41 = {_mm256_sub_ps(p1.x, p4.x), _mm256_sub_ps(p1.y, p4.y)};
+    v2_m256 p42 = {_mm256_sub_ps(p2.x, p4.x), _mm256_sub_ps(p2.y, p4.y)};
 
-    __m256d cp1 = Cross(p12, p23);
-    __m256d cp2 = Cross(p12, p24);
+    __m256 cp1 = Cross(p12, p23);
+    __m256 cp2 = Cross(p12, p24);
 
-    __m256d FirstResult = _mm256_cmp_pd(_mm256_mul_pd(cp1,cp2), Zero_4x, _CMP_GE_OQ);
+    __m256 FirstResult = _mm256_cmp_ps(_mm256_mul_ps(cp1,cp2), Zero_4x, _CMP_GE_OQ);
 
     cp1 = Cross(p34, p41);
     cp2 = Cross(p34, p42);
 
-    __m256d SecondResult = _mm256_cmp_pd(_mm256_mul_pd(cp1,cp2), Zero_4x, _CMP_GE_OQ);
+    __m256 SecondResult = _mm256_cmp_ps(_mm256_mul_ps(cp1,cp2), Zero_4x, _CMP_GE_OQ);
 
-    FirstResult = _mm256_or_pd(FirstResult, SecondResult);
+    FirstResult = _mm256_or_ps(FirstResult, SecondResult);
     
     return(FirstResult);
 }
 
-struct lined
-{
-    v2d a;
-    v2d b;
-};
-
-struct line
-{
-    v2 a;
-    v2 b;
-};
-
 internal s32
-MarkOutsideTriangles(polygon2 *Poly, v2d *Points, triangulate_triangle *Triangles, s32 TriangleCount, b32 *IsOutside, memory_arena *Arena)
+MarkOutsideTriangles(polygon2 *Poly, v2 *Points, triangulate_triangle *Triangles, s32 TriangleCount, b32 *IsOutside, memory_arena *Arena)
 {
     TIMED_FUNCTION();
 
     s32 Result = TriangleCount;
     
-    u32 *Counts = PushArray(Arena, TriangleCount, u32, Align(16, true));
-    lined *TestLines = PushArray(Arena, TriangleCount, lined);
+    u32 *Counts = PushArray(Arena, TriangleCount, u32, Align(32, true));
+    line *TestLines = PushArray(Arena, TriangleCount, line);
 
-    __m128i Zero_4x = _mm_set1_epi32(0);
-    __m128i One_4x = _mm_set1_epi32(1);
+    __m256i Zero_4x = _mm256_set1_epi32(0);
+    __m256i One_4x = _mm256_set1_epi32(1);
     f32 OneOverThree = 1.0f / 3.0f;
     for(s32 I = 0;
         I < TriangleCount;
         ++I)
     {
         triangulate_triangle *T = Triangles + I;
-        lined *Line = TestLines + I;
+        line *Line = TestLines + I;
         Line->a = OneOverThree*(Points[T->V1] + Points[T->V2] + Points[T->V3]);
-        Line->b = V2d(13.0f*Line->a.x, 17.0f*Line->a.y);//V2(17.0f*(AbsoluteValue(Line->a.x) + 3.0f), 33.0f*Line->a.y);
+        Line->b = V2(13.0f*Line->a.x, 17.0f*Line->a.y);//V2(17.0f*(AbsoluteValue(Line->a.x) + 3.0f), 33.0f*Line->a.y);
     }
 
     for(s32 VertexIndex = 0;
@@ -1676,37 +1660,45 @@ MarkOutsideTriangles(polygon2 *Poly, v2d *Points, triangulate_triangle *Triangle
         v2 p1 = Poly->Vertices[VertexIndex];
         v2 p2 = Poly->Vertices[(VertexIndex + 1) % Poly->VertexCount];
 
-        v2_m256d p1_4x = {_mm256_set1_pd(p1.x), _mm256_set1_pd(p1.y)};
-        v2_m256d p2_4x = {_mm256_set1_pd(p2.x), _mm256_set1_pd(p2.y)};
+        v2_m256 p1_4x = {_mm256_set1_ps(p1.x), _mm256_set1_ps(p1.y)};
+        v2_m256 p2_4x = {_mm256_set1_ps(p2.x), _mm256_set1_ps(p2.y)};
         
         for(s32 LineIndex = 0;
             LineIndex < TriangleCount;
-            LineIndex += 4)
+            LineIndex += 8)
         {
             s32 I0 = LineIndex;
             s32 I1 = LineIndex + 1;
             s32 I2 = LineIndex + 2;
             s32 I3 = LineIndex + 3;
+            s32 I4 = LineIndex + 4;
+            s32 I5 = LineIndex + 5;
+            s32 I6 = LineIndex + 6;
+            s32 I7 = LineIndex + 7;
 
-            v2_m256d p3 =
+            v2_m256 p3 =
                 {
-                    _mm256_set_pd(TestLines[I3].a.x, TestLines[I2].a.x, TestLines[I1].a.x, TestLines[I0].a.x),
-                    _mm256_set_pd(TestLines[I3].a.y, TestLines[I2].a.y, TestLines[I1].a.y, TestLines[I0].a.y),
+                    _mm256_set_ps(TestLines[I7].a.x, TestLines[I6].a.x, TestLines[I5].a.x, TestLines[I4].a.x,
+                                  TestLines[I3].a.x, TestLines[I2].a.x, TestLines[I1].a.x, TestLines[I0].a.x),
+                    _mm256_set_ps(TestLines[I7].a.y, TestLines[I6].a.y, TestLines[I5].a.y, TestLines[I4].a.y,
+                                  TestLines[I3].a.y, TestLines[I2].a.y, TestLines[I1].a.y, TestLines[I0].a.y),
                 };
 
-            v2_m256d p4 =
+            v2_m256 p4 =
                 {
-                    _mm256_set_pd(TestLines[I3].b.x, TestLines[I2].b.x, TestLines[I1].b.x, TestLines[I0].b.x),
-                    _mm256_set_pd(TestLines[I3].b.y, TestLines[I2].b.y, TestLines[I1].b.y, TestLines[I0].b.y),
+                    _mm256_set_ps(TestLines[I7].b.x, TestLines[I6].b.x, TestLines[I5].b.x, TestLines[I4].b.x,
+                                  TestLines[I3].b.x, TestLines[I2].b.x, TestLines[I1].b.x, TestLines[I0].b.x),
+                    _mm256_set_ps(TestLines[I7].b.y, TestLines[I6].b.y, TestLines[I5].b.y, TestLines[I4].b.y,
+                                  TestLines[I3].b.y, TestLines[I2].b.y, TestLines[I1].b.y, TestLines[I0].b.y),
                 };
 
-            __m128i Result = _mm256_cvtpd_epi32(SIMDLineSegmentsCross2D(p1_4x, p2_4x, p3, p4));
+            __m256i Result = _mm256_cvtps_epi32(SIMDLineSegmentsCross2D(p1_4x, p2_4x, p3, p4));
 
-            __m128i Mask = _mm_cmpeq_epi32(Result, Zero_4x);
-            __m128i Inc = _mm_and_si128(Mask, One_4x);
-            __m128i Counts_4x = _mm_load_si128((__m128i *)&Counts[LineIndex]);
-            Counts_4x = _mm_add_epi32(Counts_4x, Inc);
-            _mm_store_si128((__m128i *)&Counts[LineIndex], Counts_4x);
+            __m256i Mask = _mm256_cmpeq_epi32(Result, Zero_4x);
+            __m256i Inc = _mm256_and_si256(Mask, One_4x);
+            __m256i Counts_4x = _mm256_load_si256((__m256i *)&Counts[LineIndex]);
+            Counts_4x = _mm256_add_epi32(Counts_4x, Inc);
+            _mm256_store_si256((__m256i *)&Counts[LineIndex], Counts_4x);
         }
     }
 
@@ -1723,37 +1715,45 @@ MarkOutsideTriangles(polygon2 *Poly, v2d *Points, triangulate_triangle *Triangle
             v2 p1 = Poly->HolesVertices[Offset + VertexIndex];
             v2 p2 = Poly->HolesVertices[Offset + ((VertexIndex + 1) % VertexCount)];
 
-            v2_m256d p1_4x = {_mm256_set1_pd(p1.x), _mm256_set1_pd(p1.y)};
-            v2_m256d p2_4x = {_mm256_set1_pd(p2.x), _mm256_set1_pd(p2.y)};
+            v2_m256 p1_4x = {_mm256_set1_ps(p1.x), _mm256_set1_ps(p1.y)};
+            v2_m256 p2_4x = {_mm256_set1_ps(p2.x), _mm256_set1_ps(p2.y)};
         
             for(s32 LineIndex = 0;
                 LineIndex < TriangleCount;
-                LineIndex += 4)
+                LineIndex += 8)
             {
                 s32 I0 = LineIndex;
                 s32 I1 = LineIndex + 1;
                 s32 I2 = LineIndex + 2;
                 s32 I3 = LineIndex + 3;
+                s32 I4 = LineIndex + 4;
+                s32 I5 = LineIndex + 5;
+                s32 I6 = LineIndex + 6;
+                s32 I7 = LineIndex + 7;
 
-                v2_m256d p3 =
+                v2_m256 p3 =
                     {
-                        _mm256_set_pd(TestLines[I3].a.x, TestLines[I2].a.x, TestLines[I1].a.x, TestLines[I0].a.x),
-                        _mm256_set_pd(TestLines[I3].a.y, TestLines[I2].a.y, TestLines[I1].a.y, TestLines[I0].a.y),
+                        _mm256_set_ps(TestLines[I7].a.x, TestLines[I6].a.x, TestLines[I5].a.x, TestLines[I4].a.x,
+                                      TestLines[I3].a.x, TestLines[I2].a.x, TestLines[I1].a.x, TestLines[I0].a.x),
+                        _mm256_set_ps(TestLines[I7].a.y, TestLines[I6].a.y, TestLines[I5].a.y, TestLines[I4].a.y,
+                                      TestLines[I3].a.y, TestLines[I2].a.y, TestLines[I1].a.y, TestLines[I0].a.y),
                     };
 
-                v2_m256d p4 =
+                v2_m256 p4 =
                     {
-                        _mm256_set_pd(TestLines[I3].b.x, TestLines[I2].b.x, TestLines[I1].b.x, TestLines[I0].b.x),
-                        _mm256_set_pd(TestLines[I3].b.y, TestLines[I2].b.y, TestLines[I1].b.y, TestLines[I0].b.y),
+                        _mm256_set_ps(TestLines[I7].b.x, TestLines[I6].b.x, TestLines[I5].b.x, TestLines[I4].b.x,
+                                      TestLines[I3].b.x, TestLines[I2].b.x, TestLines[I1].b.x, TestLines[I0].b.x),
+                        _mm256_set_ps(TestLines[I7].b.y, TestLines[I6].b.y, TestLines[I5].b.y, TestLines[I4].b.y,
+                                      TestLines[I3].b.y, TestLines[I2].b.y, TestLines[I1].b.y, TestLines[I0].b.y),
                     };
 
-                __m128i Result = _mm256_cvtpd_epi32(SIMDLineSegmentsCross2D(p1_4x, p2_4x, p3, p4));
+                __m256i Result = _mm256_cvtps_epi32(SIMDLineSegmentsCross2D(p1_4x, p2_4x, p3, p4));
 
-                __m128i Mask = _mm_cmpeq_epi32(Result, Zero_4x);
-                __m128i Inc = _mm_and_si128(Mask, One_4x);
-                __m128i Counts_4x = _mm_load_si128((__m128i *)&Counts[LineIndex]);
-                Counts_4x = _mm_add_epi32(Counts_4x, Inc);
-                _mm_store_si128((__m128i *)&Counts[LineIndex], Counts_4x);
+                __m256i Mask = _mm256_cmpeq_epi32(Result, Zero_4x);
+                __m256i Inc = _mm256_and_si256(Mask, One_4x);
+                __m256i Counts_4x = _mm256_load_si256((__m256i *)&Counts[LineIndex]);
+                Counts_4x = _mm256_add_epi32(Counts_4x, Inc);
+                _mm256_store_si256((__m256i *)&Counts[LineIndex], Counts_4x);
             }
         }
 
@@ -1791,7 +1791,7 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
     {
     
         s32 PointCount = Poly->VertexCount;
-        v2 *PrePoints = 0;
+        v2 *Points = 0;
         if(Poly->HasHoles)
         {
             s32 HolesPointCount = 0;
@@ -1799,9 +1799,9 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
                 HolesPointCount += Poly->HoleVertexCounts[I];
 
             PointCount += HolesPointCount;
-            PrePoints = PushArray(TempMem.Arena, PointCount + 3, v2);
+            Points = PushArray(TempMem.Arena, PointCount + 3, v2);
 
-            v2 *At = PrePoints;
+            v2 *At = Points;
             Copy(sizeof(v2)*(Poly->VertexCount), Poly->Vertices, At);
             At += Poly->VertexCount;
 
@@ -1816,8 +1816,8 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
         }
         else
         {
-            PrePoints = PushArray(TempMem.Arena, PointCount + 3, v2);
-            Copy(sizeof(v2)*PointCount, Poly->Vertices, PrePoints);
+            Points = PushArray(TempMem.Arena, PointCount + 3, v2);
+            Copy(sizeof(v2)*PointCount, Poly->Vertices, Points);
         }
 
         edge_list* ConstraintEdges = 0;
@@ -1862,28 +1862,21 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
         s32 *PointOrder = PushArray(TempMem.Arena, PointCount + 3, s32);
         for(s32 I = 0; I < PointCount; ++I)
             PointOrder[I] = I;
-
-        v2d *Points = PushArray(TempMem.Arena, PointCount + 3, v2d);
-        for(s32 I = 0; I < PointCount; ++ I)
-        {
-            Points[I].x = PrePoints[I].x;
-            Points[I].y = PrePoints[I].y;
-        }
             
         // NOTE(babykaban): Find boundaries of Poly
-        rectangle2d Bounds = CalculateBoundsForPoints(Points, PointCount);
+        rectangle2 Bounds = CalculateBoundsForPoints(Points, PointCount);
 
         // NOTE(babykaban): Remap everything (preserving the aspect ratio) to between (0,0)-(1,1)
-        v2d BoundsDim = GetDim(Bounds);
-        f64 d = BoundsDim.y; // d = largest dimension
+        v2 BoundsDim = GetDim(Bounds);
+        f32 d = BoundsDim.y; // d = largest dimension
         if(BoundsDim.x > d) d = BoundsDim.x;
-        f64 OneOverd = 1.0f / d;
+        f32 OneOverd = 1.0f / d;
 
         for(s32 I = 0;
             I < PointCount;
             ++I)
         {
-            Points[I].V = (OneOverd*(Points[I] - Bounds.Min)).V;
+            Points[I] = (OneOverd*(Points[I] - Bounds.Min));
         }
 
         // NOTE(babykaban): Sort points by proximity
@@ -1906,29 +1899,26 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
             ++I)
         {
             Key = Bins[I];
-            v2d Temp = Points[I];
-            v2 PreTemp = PrePoints[I];
+            v2 Temp = Points[I];
             s32 TempI = PointOrder[I];
             s32 J = I - 1;
             while((J >= 0) && (Bins[J] > Key))
             {
                 Bins[J + 1] = Bins[J];
                 Points[J + 1] = Points[J];
-                PrePoints[J + 1] = PrePoints[J];
                 PointOrder[J + 1] = PointOrder[J];
                 --J;
             }
 
             Bins[J + 1] = Key;
             Points[J + 1] = Temp;
-            PrePoints[J + 1] = PreTemp;
             PointOrder[J + 1] = TempI;
         }
 
         // NOTE(babykaban): Add big triangle around point cloud
-        Points[PointCount] = V2d(-100.0f, -100.0f);
-        Points[PointCount + 1] = V2d(100.0f, -100.0f);
-        Points[PointCount + 2] = V2d(0.0f, 100.0f);
+        Points[PointCount] = V2(-100.0f, -100.0f);
+        Points[PointCount + 1] = V2(100.0f, -100.0f);
+        Points[PointCount + 2] = V2(0.0f, 100.0f);
 
         PointOrder[PointCount] = PointCount;
         PointOrder[PointCount + 1] = PointCount + 1;
@@ -1980,14 +1970,14 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
 
                     while(Tos >= 0)
                     {
-                        v2d P = Points[CurrentPointIndex];
+                        v2 P = Points[CurrentPointIndex];
 
                         // NOTE(babykaban): Looping thru the stack
                         s32 TestTIndex = TriangleStack[Tos--];
                         // NOTE(babykaban): TestT, triangle at the top of the stack that is being tested.
                         triangulate_triangle *TestT = Triangles + TestTIndex;
-                        v2d Vertex1 = Points[TestT->V3];
-                        v2d Vertex2 = Points[TestT->V2];
+                        v2 Vertex1 = Points[TestT->V3];
+                        v2 Vertex2 = Points[TestT->V2];
 
                         s32 OpositeTIndex = TestT->AdjV2V3;
                         // NOTE(babykaban): OpositeT, triangle adjacent to TestT across the edge formed by Vertex1 and Vertex2.
@@ -2006,13 +1996,13 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
                             }
                         }
 
-                        v2d Vertex3 = Points[OppVert];
+                        v2 Vertex3 = Points[OppVert];
 
                         // NOTE(babykaban): Check if P in circumcircle of TestT
-                        f64 cosa = Inner(Vertex1 - Vertex3, Vertex2 - Vertex3);
-                        f64 cosb = Inner(Vertex2 - P, Vertex1 - P);
-                        f64 sina = Cross(Vertex1 - Vertex3, Vertex2 - Vertex3);
-                        f64 sinb = Cross(Vertex2 - P, Vertex1 - P);
+                        f32 cosa = Inner(Vertex1 - Vertex3, Vertex2 - Vertex3);
+                        f32 cosb = Inner(Vertex2 - P, Vertex1 - P);
+                        f32 sina = Cross(Vertex1 - Vertex3, Vertex2 - Vertex3);
+                        f32 sinb = Cross(Vertex2 - P, Vertex1 - P);
 
                         if(((cosa < 0) && (cosb < 0)) || ((-cosa*sinb) > (cosb*sina)))
                         {
@@ -2078,21 +2068,21 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
                 }
 
                 // NOTE(babykaban): Adjust LastCreatedIndex in the direction of target point CurrentPointIndex
-                v2d AB = Points[LastCreatedT->V2] - Points[LastCreatedT->V1];
-                v2d BC = Points[LastCreatedT->V3] - Points[LastCreatedT->V2];
-                v2d CA = Points[LastCreatedT->V1] - Points[LastCreatedT->V3];
+                v2 AB = Points[LastCreatedT->V2] - Points[LastCreatedT->V1];
+                v2 BC = Points[LastCreatedT->V3] - Points[LastCreatedT->V2];
+                v2 CA = Points[LastCreatedT->V1] - Points[LastCreatedT->V3];
 
-                v2d AP = Points[CurrentPointIndex] - Points[LastCreatedT->V1];
-                v2d BP = Points[CurrentPointIndex] - Points[LastCreatedT->V2];
-                v2d CP = Points[CurrentPointIndex] - Points[LastCreatedT->V3];
+                v2 AP = Points[CurrentPointIndex] - Points[LastCreatedT->V1];
+                v2 BP = Points[CurrentPointIndex] - Points[LastCreatedT->V2];
+                v2 CP = Points[CurrentPointIndex] - Points[LastCreatedT->V3];
 
-                v2d N1 = V2d(AB.y, -AB.x);
-                v2d N2 = V2d(BC.y, -BC.x);
-                v2d N3 = V2d(CA.y, -CA.x);
+                v2 N1 = V2(AB.y, -AB.x);
+                v2 N2 = V2(BC.y, -BC.x);
+                v2 N3 = V2(CA.y, -CA.x);
 
-                f64 S1 = Inner(AP, N1);
-                f64 S2 = Inner(BP, N2);
-                f64 S3 = Inner(CP, N3);
+                f32 S1 = Inner(AP, N1);
+                f32 S2 = Inner(BP, N2);
+                f32 S3 = Inner(CP, N3);
 
                 if((S1 >= 0) && (S1 >= S2) && (S1 >= S3)) LastCreatedIndex = LastCreatedT->AdjV1V2;
                 else if((S2 >= 0) && (S2 >= S1) && (S2 >= S3)) LastCreatedIndex = LastCreatedT->AdjV2V3;
@@ -2493,15 +2483,15 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
                                     s32 NextVertexFromLone1 = (Triangle1LoneVertexIndex + 1) % 3;
                                     s32 PrevVertexFromLone1 = (Triangle1LoneVertexIndex + 2) % 3;
                                 
-                                    v2d v1a = Points[T0->Vertices[Triangle0LoneVertexIndex]];
-                                    v2d v1b = Points[T0->Vertices[NextVertexFromLone0]];
-                                    v2d v1c = Points[T0->Vertices[PrevVertexFromLone0]];  
-                                    v2d v2a = Points[T1->Vertices[Triangle1LoneVertexIndex]];
+                                    v2 v1a = Points[T0->Vertices[Triangle0LoneVertexIndex]];
+                                    v2 v1b = Points[T0->Vertices[NextVertexFromLone0]];
+                                    v2 v1c = Points[T0->Vertices[PrevVertexFromLone0]];  
+                                    v2 v2a = Points[T1->Vertices[Triangle1LoneVertexIndex]];
 
-                                    f64 cosa = Inner(v1b - v1a, v1c - v1a);
-                                    f64 cosb = Inner(v1c - v2a, v1b - v2a);
-                                    f64 sina = (v1c.x - v2a.x)*(v1b.y - v2a.y) - (v1c.y - v2a.y)*(v1b.x - v2a.x);
-                                    f64 sinb = (v1b.x - v1a.x)*(v1c.y - v1a.y) - (v1b.y - v1a.y)*(v1c.x - v1a.x);
+                                    f32 cosa = Inner(v1b - v1a, v1c - v1a);
+                                    f32 cosb = Inner(v1c - v2a, v1b - v2a);
+                                    f32 sina = (v1c.x - v2a.x)*(v1b.y - v2a.y) - (v1c.y - v2a.y)*(v1b.x - v2a.x);
+                                    f32 sinb = (v1b.x - v1a.x)*(v1c.y - v1a.y) - (v1b.y - v1a.y)*(v1c.x - v1a.x);
                                 
                                     // NOTE(babykaban): if triangle 0 vertex is inside triangle 1 circumcircle or
                                     // if triangle 1 vertex is inside triangle 0 circumcircle
@@ -2631,9 +2621,9 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
                     triangle *T = Result.Triangles + TIndex;
                     triangle_adjs *Adjs = Result.Adjacencies + I;
 
-                    T->Vertices[0] = V2(Points[Triangle.V1]);
-                    T->Vertices[1] = V2(Points[Triangle.V2]);
-                    T->Vertices[2] = V2(Points[Triangle.V3]);
+                    T->Vertices[0] = Points[Triangle.V1];
+                    T->Vertices[1] = Points[Triangle.V2];
+                    T->Vertices[2] = Points[Triangle.V3];
 
                     Adjs->Adjacencies[0] = Triangle.Adjacencies[0];
                     Adjs->Adjacencies[1] = Triangle.Adjacencies[1];
@@ -2667,34 +2657,8 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
 
     return(Result);
 }
+
 // ===========================================================================================================================================================
-
-inline void
-RemoveAt(polygon2 *Poly, s32 Index)
-{
-    Poly->Vertices[Index] = {};
-    for(s32 I = Index;
-        I < (Poly->VertexCount - 1);
-        ++I)
-    {
-        Poly->Vertices[I] = Poly->Vertices[I + 1];
-    }
-
-    Poly->Vertices[Poly->VertexCount] = {};
-    --Poly->VertexCount;
-}
-
-inline void
-RemoveAt(line *Array, s32 Count, s32 Index)
-{
-    Array[Index] = {};
-    for(s32 I = Index;
-        I < Count - 1;
-        ++I)
-    {
-        Array[I] = Array[I + 1];
-    }
-}
 
 internal void
 SplitPolygon(polygon2 *ResultArray, s32 *ResultCount, s32 *NotConvexIndices, s32 *NotConvexCount, s32 SubjectIndex, memory_arena *TempArena)
@@ -2703,7 +2667,7 @@ SplitPolygon(polygon2 *ResultArray, s32 *ResultCount, s32 *NotConvexIndices, s32
     polygon2 *Poly = ResultArray + SubjectIndex;
     if((Poly->VertexCount > 3) && !IsConvex(Poly))
     {
-        b32 Clockwise = (PolygonSignedArea(Poly) < 0.0f);
+        b32 Clockwise = (PolygonSignedArea2(Poly) < 0.0f);
     
         s32 PrevOffset = Clockwise ? -1 : 1;
         s32 NextOffset = Clockwise ? 1 : -1;

@@ -29,7 +29,6 @@ struct world_triangle
         world_position Vertices[3]; 
     };
 
-    s32 AdjCount;
     triangle_adjs Adj;
     
     rectangle2i Bounds;
@@ -44,6 +43,12 @@ struct world_polygon
     s32 HoleCount;
     s32 *HoleVertexCounts;
     world_position *HoleVertices;
+};
+
+struct world_polygon_set
+{
+    s32 PolygonCount;
+    world_polygon *Polygons;
 };
 
 #define EDITOR_GAME_MODE_NAVMESH_H

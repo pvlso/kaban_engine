@@ -27,7 +27,7 @@ inline bool32
 IsCanonical(real32 TileDim, real32 TileRel)
 {
     // TODO(casey): Fix floating point math so this can be exact?
-    real32 Epsilon = 0.01f;
+    real32 Epsilon = 0.0001f;
     bool32 Result = ((TileRel >= -(0.5f*TileDim + Epsilon)) &&
                      (TileRel <= (0.5f*TileDim + Epsilon)));
 

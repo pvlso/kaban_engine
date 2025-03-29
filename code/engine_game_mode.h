@@ -7,14 +7,14 @@
    $Notice: $
    ======================================================================== */
 
-#include "editor_game_mode_world.h"
-#include "editor_game_mode_entity.h"
-#include "editor_game_mode_sim_region.h"
+#include "engine_game_mode_world.h"
+#include "engine_game_mode_entity.h"
+#include "engine_game_mode_sim_region.h"
 
-#include "editor_game_mode_undo.h"
+#include "engine_game_mode_undo.h"
 
-#include "editor_game_mode_tile.h"
-#include "editor_game_mode_navmesh.h"
+#include "engine_game_mode_tile.h"
+#include "engine_game_mode_navmesh.h"
 
 struct controlled_camera
 {
@@ -84,7 +84,7 @@ struct editor_mode_game
     u32 LayerCount;
     s32 CurrentZLayer;
     ssa_tile Tile;
-//    array_cursor TileCursor;
+    array_cursor TileCursor;
     
     u32 CurrentPolygonIndex;
     world_polygon *CurrentPolygon;

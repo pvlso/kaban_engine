@@ -6,14 +6,14 @@
    $Notice:  $
    ======================================================================== */
 
-#include "editor_game_mode_world.cpp"
-#include "editor_game_mode_entity.cpp"
-#include "editor_game_mode_sim_region.cpp"
+#include "engine_game_mode_world.cpp"
+#include "engine_game_mode_entity.cpp"
+#include "engine_game_mode_sim_region.cpp"
 
-#include "editor_game_mode_undo.cpp"
+#include "engine_game_mode_undo.cpp"
 
-#include "editor_game_mode_tile.cpp"
-#include "editor_game_mode_navmesh.cpp"
+#include "engine_game_mode_tile.cpp"
+#include "engine_game_mode_navmesh.cpp"
 
 inline b32
 AbleToStart(world_map_startup MapStartup)
@@ -229,6 +229,21 @@ RenderMapGrid(render_group *RenderGroup, ui_state *UIState, world *World, world_
             if(((u32)TileX < World->TileWidth) && ((u32)TileY < World->TileHeight))
             {
                 v2 Delta = Subtract(World, &TileP, &CameraP);
+#if 0
+                for(f32 I = -0.5f;
+                    I < 0.5f;
+                    I += 0.125f)
+                {
+                    for(f32 J = -0.5f;
+                        J < 0.5f;
+                        J += 0.125f)
+                    {
+                        rectangle2 R = RectCenterDim(Delta + V2(J + 0.05f, I + 0.05f), V2(0.05f, 0.05f));
+                        PushRect(RenderGroup, &Transform, R, 20.0f, V4(0, 0, 1, 1));
+                    }
+                }
+#endif
+#if 1
 
                 if(Global_EditorGameMode_ShowCoords)
                 {
@@ -240,6 +255,9 @@ RenderMapGrid(render_group *RenderGroup, ui_state *UIState, world *World, world_
 
                 PushRectOutline(RenderGroup, &Transform, V3(Delta, 0.0f),
                                 World->TileDimInMeters.xy, V4(0.0f, 0.0f, 1.0f, 1.0f), 0.04f);
+#endif
+
+                
             }
         }
     }
@@ -313,7 +331,7 @@ DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s
         
         ConvertWorldPolygonToPolygon2(World, &BaseP, Polygon, &TempPoly);
 
-        b32 Clockwise = (PolygonSignedArea(&TempPoly) < 0.0f);
+        b32 Clockwise = (PolygonSignedArea2(&TempPoly) < 0.0f);
     
         s32 PrevOffset = Clockwise ? -1 : 1;
         s32 NextOffset = Clockwise ? 1 : -1;
@@ -412,39 +430,36 @@ DrawMeshTriangles(ui_state *UIState, render_group *RenderGroup, world *World, wo
         ++Index)
     {
         world_triangle *T = Triangles + Index; 
-        if(IsValid(T->Vertices[0]))
-        {
-            r32 Z = 10.0f;
+        r32 Z = 10.0f;
 
-            triangle ConvertedT = {};
-            ConvertedT.Vertices[0] = Subtract(World, &T->V1, &SimRegion->Origin);
-            ConvertedT.Vertices[1] = Subtract(World, &T->V2, &SimRegion->Origin);
-            ConvertedT.Vertices[2] = Subtract(World, &T->V3, &SimRegion->Origin);
+        triangle ConvertedT = {};
+        ConvertedT.Vertices[0] = Subtract(World, &T->V1, &SimRegion->Origin);
+        ConvertedT.Vertices[1] = Subtract(World, &T->V2, &SimRegion->Origin);
+        ConvertedT.Vertices[2] = Subtract(World, &T->V3, &SimRegion->Origin);
 //        CalculateTriangleBoundingBox(&ConvertedT);
 #if 1
-            v2 Center = OneOverThree*(ConvertedT.Vertices[0] + ConvertedT.Vertices[1] + ConvertedT.Vertices[2]);
-            BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform, &Flat, V3(Center, 0.0f));
-            P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
-            FormatString(ArrayCount(Buffer), Buffer, "%d", Index);
-            UITextOutAt(UIState, P.xy, Buffer, 0.8f);
+        v2 Center = OneOverThree*(ConvertedT.Vertices[0] + ConvertedT.Vertices[1] + ConvertedT.Vertices[2]);
+        BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform, &Flat, V3(Center, 0.0f));
+        P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
+        FormatString(ArrayCount(Buffer), Buffer, "%d", Index);
+        UITextOutAt(UIState, P.xy, Buffer, 0.8f);
 #endif        
 //        PushTriangle(RenderGroup, &Flat, ConvertedT, Z, V4(RectanglesIntersect(ConvertedT.Bounds, Bounds) ? V3(1, 0, 0) : DebugColorTable[Index % ArrayCount(DebugColorTable)], 0.5f));
-            PushTriangle(RenderGroup, &Flat, ConvertedT, Z, V4(DebugColorTable[Index % ArrayCount(DebugColorTable)], 0.5f));
-        }
+        PushTriangle(RenderGroup, &Flat, ConvertedT, Z, V4(DebugColorTable[Index % ArrayCount(DebugColorTable)], 0.5f));
     }
 }
 
 //#include "subtruct_poly.cpp"
 
 inline controlled_camera *
-CheckForInput(editor_mode_game *GameMode, editor_input *Input)
+CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 {
     controlled_camera *Result = 0;
     for(int ControllerIndex = 0;
         ControllerIndex < ArrayCount(Input->Controllers);
         ++ControllerIndex)
     {
-        editor_controller_input *Controller = GetController(Input, ControllerIndex);
+        engine_controller_input *Controller = GetController(Input, ControllerIndex);
         Result = GameMode->ControlledCameras + ControllerIndex;
 
         if(Controller->IsConnected)
@@ -566,7 +581,6 @@ CheckForInput(editor_mode_game *GameMode, editor_input *Input)
                     case EditGameMode_NavMeshes:
                     {
                         if(WasPressed(Controller->Start))
-//                        if(Controller->Start.EndedDown)
                         {
                             GameMode->CurrentAction = GMAction_SubtractRegion;
                         }
@@ -581,12 +595,12 @@ CheckForInput(editor_mode_game *GameMode, editor_input *Input)
 
 internal b32
 UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
-                        editor_input *Input, u32 RenderWidth, u32 RenderHeight,
+                        engine_input *Input, u32 RenderWidth, u32 RenderHeight,
                         editor_mode_game *GameMode)
 {
     editor_assets *Assets = TranState->Assets;
     ui_state *UIState = &EditorState->UIState;
-    b32 Result = CheckForMetaInput(EditorState, TranState, Input);
+    b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
         real32 WidthOfMonitor = 0.635f; // NOTE(casey): Horizontal measurement of monitor in meters
@@ -743,33 +757,39 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                     polygon2 Poly = {};
                     temporary_memory TempMem = BeginTemporaryMemory(&World->Arena);
-                    Poly.VertexCount = 4;
-                    Poly.Vertices = PushArray(TempMem.Arena, 4, v2);
+#if 0
+                    Poly.VertexCount = 8;
+                    Poly.Vertices = PushArray(TempMem.Arena, 8, v2);
                     Poly.Vertices[0] = V2(-1.0f, -2.0f);
                     Poly.Vertices[1] = V2(1.0f, -2.0f);
 
                     Poly.Vertices[2] = V2(2.0f, -1.0f);
                     Poly.Vertices[3] = V2(2.0f, 1.0f);;
-#if 0
+
                     Poly.Vertices[4] = V2(1.0f, 2.0f);;
                     Poly.Vertices[5] = V2(-1.0f, 2.0f);;
 
                     Poly.Vertices[6] = V2(-2.0f, 1.0f);;
                     Poly.Vertices[7] = V2(-2.0f, -1.0f);;
 #endif
+                    Poly.VertexCount = 4;
+                    Poly.Vertices = PushArray(TempMem.Arena, 4, v2);
+                    Poly.Vertices[0] = V2(-0.5f, -0.5f);
+                    Poly.Vertices[1] = V2(0.5f, -0.5f);
+
+                    Poly.Vertices[2] = V2(0.5f, 0.5f);
+                    Poly.Vertices[3] = V2(-0.5f, 0.5f);;
                     
                     triangulate_result TriangulatedPoly = ConstrainedDelaunayTriangulate(&Poly, TempMem.Arena);
                     for(s32 I = 0;
-                        I < TriangulatedPoly.TriangleCount;
+                        I < 1;//TriangulatedPoly.TriangleCount;
                         ++I)
                     {
                         PushTriangle(RenderGroup, &Flat, TriangulatedPoly.Triangles[I], 60.0f, V4(0, 0, 0, 0.5f));
                     }
-
                     Platform.DeallocateMemory(TriangulatedPoly.Triangles);
                     Platform.DeallocateMemory(TriangulatedPoly.Adjacencies);
-                    
-                    b32 Skip = false;
+
                     switch(GameMode->CurrentAction)
                     {
                         case GMAction_StartNewPolygon:
@@ -794,29 +814,16 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                         case GMAction_TriangulateAll:
                         {
-                            TriangulatePolygons(GameMode, &SimRegion->Origin, &World->Arena);
-                            BuildAdjacenciesArray(GameMode, SimRegion);
+                            TriangulatePolygons(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
+//                            BuildAdjacenciesArray(GameMode, SimRegion);
                             GameMode->Triangulated = true;
                         } break;
 
                         case GMAction_SubtractRegion:
                         {
                             SubtractPolyFromMesh(GameMode, SimRegion, &Poly, &World->Arena);
-                            BuildAdjacenciesArray(GameMode, SimRegion);
-#if EDITOR_SLOW
-                            for(s32 I = 0;
-                                I < GameMode->MeshTriangleCount;
-                                ++I)
-                            {
-                                world_triangle *T = GameMode->MeshTriangles + I;
-                                b32 Condition = ((T->Adj.AdjV1V2 == -1) && (T->Adj.AdjV2V3 == -1) && (T->Adj.AdjV3V1 == -1));
-//                                Assert(!Condition);
-                            }
-#endif
                         } break;
                     }
-
-                    MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
                         
                     if(IsSetGameModeFlag(GameMode, GMFlag_EditEnable))
                     {
@@ -834,17 +841,16 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                             RemoveVertex(GameMode, GameMode->CurrentPolygon, World, TestP);
                         }
                     }
-                    
-                    temporary_memory TMem = BeginTemporaryMemory(&World->Arena);
-                    
+
                     DrawPolygons(RenderGroup, World, GameMode->Polies, GameMode->PolygonCount, SimRegion->Origin, GameMode->CurrentPolygonIndex,
-                                 TMem.Arena);
-                    EndTemporaryMemory(TMem);
+                                 TempMem.Arena);
 
                     EndTemporaryMemory(TempMem);
                     
                     if(GameMode->Triangulated)
                     {
+//                            BuildAdjacenciesArray(GameMode, SimRegion);
+//                            MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
                         DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
                     }
                 } break;

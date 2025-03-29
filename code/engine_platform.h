@@ -98,6 +98,8 @@ typedef real64 f64;
 
 typedef uintptr_t umm;
 typedef intptr_t  smm;
+
+typedef int32 fp22_10;
     
 struct memory_arena
 {
@@ -220,6 +222,58 @@ struct rectangle3
 {
     v3 Min;
     v3 Max;
+};
+
+union v2_s32
+{
+    struct
+    {
+        s32 x, y;
+    };
+
+    s32 E[2];
+};
+    
+union fp22_10_v2
+{
+    struct
+    {
+        fp22_10 x, y;
+    };
+    struct
+    {
+        fp22_10 u, v;
+    };
+
+    fp22_10 E[2];
+};
+
+struct edgefp22_10
+{
+    fp22_10_v2 a;
+    fp22_10_v2 b;
+};
+    
+union v2d
+{
+    __m128d V;
+
+    struct
+    {
+        f64 x, y;
+    };
+};
+
+struct rectangle2d
+{
+    v2d Min;
+    v2d Max;
+};
+
+struct edge
+{
+    v2 a;
+    v2 b;
 };
 
 

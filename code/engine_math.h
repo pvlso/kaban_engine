@@ -6,11 +6,35 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
+
+inline fp22_10
+F32ToFixed(f32 Value)
+{
+    fp22_10 Result = (fp22_10)((f32)(Value * (1 << 10)) +
+                                   ((Value >= 0.0f) ? 0.5f : -0.5f));
+
+    return(Result);
+}
+
+inline f32
+FixedToF32(fp22_10 Value)
+{
+    f32 Result = (f32)Value / (f32)(1 << 10);
+    return(Result);
+}
     
 inline v2
 V2i(int32 X, int32 Y)
 {
     v2 Result = {(real32)X, (real32)Y};
+
+    return(Result);
+}
+    
+inline v2
+V2i(v2_s32 A)
+{
+    v2 Result = {(f32)A.x, (f32)A.y};
 
     return(Result);
 }
@@ -30,6 +54,41 @@ V2(real32 X, real32 Y)
 
     Result.x = X;
     Result.y = Y;
+
+    return(Result);
+}
+
+#if 0
+inline v2
+V2(fp22_10 X, fp22_10 Y)
+{
+    v2 Result;
+
+    Result.x = FixedToF32(X);
+    Result.y = FixedToF32(Y);
+
+    return(Result);
+}
+
+inline v2
+V2(fp22_10_v2 A)
+{
+    v2 Result;
+
+    Result.x = FixedToF32(A.x);
+    Result.y = FixedToF32(A.y);
+
+    return(Result);
+}
+#endif
+
+inline v2
+V2(v2d A)
+{
+    v2 Result;
+
+    Result.x = (f32)round(A.x*10000.f) * 0.0001f;
+    Result.y = (f32)round(A.y*10000.f) * 0.0001f;
 
     return(Result);
 }
@@ -1380,17 +1439,361 @@ CalculateTriangleBoundingBox(triangle *T)
     }
 }
 
-inline f32
-PolygonSignedArea(polygon2 *Polygon)
+// NOTE(babykaban): V2 double precision
+inline v2d
+V2d(v2 A)
 {
-    f32 Result = 0.0f;
+    v2d Result = {A.x, A.y};
+    return(Result);
+}
+
+
+inline v2d
+V2d(f64 X, f64 Y)
+{
+    v2d Result = {X, Y};
+    return(Result);
+}
+
+inline v2d
+V2d(__m128d A)
+{
+    v2d Result = {A};
+    return(Result);
+}
+
+inline v2d
+operator*(v2d A, v2d B)
+{
+    v2d Result;
+
+    Result = {_mm_mul_pd(A.V, B.V)};
+    
+    return(Result);
+}
+
+inline v2d &
+operator*=(v2d &B, v2d A)
+{
+    B = A * B;
+
+    return(B);
+}
+
+inline v2d
+operator*(f64 A, v2d B)
+{
+    v2d Result;
+
+    __m128d C = _mm_set1_pd(A);
+    Result = {_mm_mul_pd(C, B.V)};
+    
+    return(Result);
+}
+
+inline v2d
+operator*(v2d B, f64 A)
+{
+    v2d Result = A*B;
+
+    return(Result);
+}
+
+inline v2d &
+operator*=(v2d &B, f64 A)
+{
+    B = A * B;
+
+    return(B);
+}
+
+inline v2d
+operator-(v2d A)
+{
+    v2d Result;
+
+    Result.x = -A.x;
+    Result.y = -A.y;
+
+    return(Result);
+}
+
+inline v2d
+operator+(v2d A, v2d B)
+{
+    v2d Result;
+
+    Result = {_mm_add_pd(A.V, B.V)};
+
+    return(Result);
+}
+
+inline v2d &
+operator+=(v2d &A, v2d B)
+{
+    A = A + B;
+
+    return(A);
+}
+
+inline v2d
+operator-(v2d A, v2d B)
+{
+    v2d Result;
+
+    Result = {_mm_sub_pd(A.V, B.V)};
+
+    return(Result);
+}
+
+inline v2d &
+operator-=(v2d &A, v2d B)
+{
+    A = A - B;
+
+    return(A);
+}
+
+inline v2d
+Lerp(v2d A, f64 t, v2d B)
+{
+    v2d Result = (1.0 - t)*A + t*B;
+
+    return(Result);
+}
+
+inline v2d
+Perp(v2d A)
+{
+    v2d Result = {-A.y, A.x};
+    return(Result);
+}
+
+inline f64
+Inner(v2d A, v2d B)
+{
+    v2d Mul = A*B;
+    f64 Result = Mul.x + Mul.y;
+
+    return(Result);
+}
+
+inline f64
+LengthSq(v2d A)
+{
+    f64 Result = Inner(A, A);
+
+    return(Result);
+}
+
+inline f64
+Length(v2d A)
+{
+    f64 Result = SquareRoot(LengthSq(A));
+    return(Result);
+}
+
+inline f64
+Cross(v2d A, v2d B)
+{
+    v2d Mul = A*V2d(B.y, B.x);
+    f64 Result = Mul.x - Mul.y;
+
+    return(Result);
+}
+
+inline f64
+Clamp(f64 Min, f64 Value, f64 Max)
+{
+    f64 Result = Value;
+
+    if(Result < Min)
+    {
+        Result = Min;
+    }
+    else if(Result > Max)
+    {
+        Result = Max;
+    }
+
+    return(Result);
+}
+
+inline rectangle2d
+InvertedInfinityRectangle2d(void)
+{
+    rectangle2d Result;
+
+    Result.Min.V = _mm_set1_pd(Real64Maximum);
+    Result.Max.V = _mm_set1_pd(Real64Minimum);
+
+    return(Result);
+}
+
+inline v2d
+GetDim(rectangle2d Rect)
+{
+    v2d Result = Rect.Max - Rect.Min;
+    return(Result);
+}
+
+inline s32
+LineIntersect(v2d x0, v2d x1, v2d y0, v2d y1, v2d *sect)
+{
+    s32 Result = 1;
+
+    v2d dx = x1 - x0;
+    v2d dy = y1 - y0;
+    f64 d = Cross(dy, dx);
+
+    if(!d)
+    {
+        Result = 0;
+    }
+    else
+    {
+        f64 a = (Cross(x0, dx) - Cross(y0, dx)) / d;
+        if(sect)
+        {
+            *sect = y0 + a*dy;
+        }
+
+        if((a < 0.0f) || (a > 1.0f))
+        {
+            Result = -1;
+        }
+        else
+        {
+            a = (Cross(x0, dy) - Cross(y0, dy)) / d;
+            if((a < 0) || (a > 1))
+            {
+                Result = -1;
+            }
+        }
+    }
+    
+    return(Result);
+}
+
+inline f64
+DistanceToSegment(v2d p, v2d a, v2d b)
+{
+    f64 Result = 0.0f;
+    
+    f64 l2 = LengthSq(a - b);
+    if(l2 == 0.0f)
+    {
+        Result = Length(p - a);
+    }
+    else
+    {
+        v2d pa = p - a;
+        v2d ba = b - a;
+        f64 t = Inner(pa, ba) / l2;
+        t = Clamp(0, t, 1);
+
+        v2d Closest = Lerp(a, t, b);
+
+        Result = Length(p - Closest);
+    }
+
+    return(Result);
+}
+
+struct triangled
+{
+    v2d Vertices[3];
+    rectangle2d Bounds;
+};
+
+inline triangle
+TriangleDtoTriangle(triangled T)
+{
+    triangle Result = {};
+    Result.Vertices[0] = V2(T.Vertices[0]);
+    Result.Vertices[1] = V2(T.Vertices[1]);
+    Result.Vertices[2] = V2(T.Vertices[2]);
+
+    return(Result);
+}
+
+inline f64
+TriangleSignedArea(v2d a, v2d b, v2d c)
+{
+    f64 Result = 0.5f*(a.x*(b.y - c.y) + b.x*(c.y - a.y) + c.x*(a.y - b.y));
+    return(Result);
+}
+
+inline f64
+TriangleSignedArea(triangled *T)
+{
+    f64 Result = 0.5f*(T->Vertices[0].x*(T->Vertices[1].y - T->Vertices[2].y) +
+                       T->Vertices[1].x*(T->Vertices[2].y - T->Vertices[0].y) +
+                       T->Vertices[2].x*(T->Vertices[0].y - T->Vertices[1].y));
+    return(Result);
+}
+
+inline b32
+IsTriangleCollinear(triangled *A, f64 Epsilon)
+{
+    f64 d0 = DistanceToSegment(A->Vertices[0], A->Vertices[1], A->Vertices[2]);
+    f64 d1 = DistanceToSegment(A->Vertices[1], A->Vertices[0], A->Vertices[2]);
+    f64 d2 = DistanceToSegment(A->Vertices[2], A->Vertices[0], A->Vertices[1]);
+
+    b32 Result = ((d0 < Epsilon) || (d1 < Epsilon) || (d2 < Epsilon));
+    return(Result);
+}
+
+inline b32
+IsInTriangle(v2d p, v2d a, v2d b, v2d c)
+{
+    b32 Result = true;
+    
+    v2d ab = b - a;
+    v2d bc = c - b;
+    v2d ca = a - c;
+
+    v2d ap = p - a;
+    v2d bp = p - b;
+    v2d cp = p - c;
+
+    f64 Cross0 = Cross(ab, ap);
+    f64 Cross1 = Cross(bc, bp);
+    f64 Cross2 = Cross(ca, cp);
+
+    Result = !((Cross0 > 0.0f) || (Cross1 > 0.0f) || (Cross2 > 0.0f));
+
+    return(Result);
+}
+
+struct polygon2d
+{
+    s32 VertexCount;
+    v2d *Vertices;
+
+    b32 HasHoles;
+    s32 HoleCount;
+    s32 *HoleVertexCounts;
+    v2d *HolesVertices;
+};
+
+struct polygon2d_set
+{
+    s32 PolygonCount;
+    polygon2d *Polygons;
+};
+
+inline f64
+PolygonSignedArea(polygon2d *Polygon)
+{
+    f64 Result = 0.0f;
     for(s32 Index = 0;
         Index < Polygon->VertexCount;
         ++Index)
     {
         s32 Next = (Index + 1) % Polygon->VertexCount;
-        v2 FirstVertex = Polygon->Vertices[Index];
-        v2 SecondVertex = Polygon->Vertices[Next];
+        v2d FirstVertex = Polygon->Vertices[Index];
+        v2d SecondVertex = Polygon->Vertices[Next];
 
         Result += Cross(FirstVertex, SecondVertex);
     }
@@ -1399,6 +1802,392 @@ PolygonSignedArea(polygon2 *Polygon)
     
     return(Result);
 }
+
+inline b32
+IsConvex(polygon2d *Poly)
+{
+    b32 Result = true;
+    if(Poly->VertexCount > 3)
+    {
+        s32 Sign = 0;
+        for(s32 I = 0;
+            I < Poly->VertexCount;
+            ++I)
+        {
+            v2d a = Poly->Vertices[I];
+            v2d b = Poly->Vertices[(I + 1) % Poly->VertexCount];
+            v2d c = Poly->Vertices[(I + 2) % Poly->VertexCount];
+
+            v2d d1 = b - a;
+            v2d d2 = c - b;
+
+            f64 CrossProduct = Cross(d1, d2);
+
+            if(CrossProduct != 0.0f)
+            {
+                if(Sign == 0)
+                {
+                    Sign = (CrossProduct > 0.0f) ? 1 : -1;
+                }
+                else if(((CrossProduct > 0.0f) && (Sign < 0)) || ((CrossProduct < 0.0f) && (Sign > 0)))
+                {
+                    Result = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    return(Result);
+}
+
+inline v2d
+Normalize(v2d A)
+{
+    v2d Result = {};
+
+    f64 L = Length(A);
+    f64 OneOverL = 1.0 / L;
+    if(L)
+    {
+        Result = OneOverL*A;
+    }
+
+    return(Result);
+}
+
+inline void
+CalculateTriangleBoundingBox(triangled *T)
+{
+    T->Bounds.Min = T->Bounds.Max = T->Vertices[0];
+
+    for(s32 I = 1;
+        I < ArrayCount(T->Vertices);
+        ++I)
+    {
+        if(T->Vertices[I].x < T->Bounds.Min.x) T->Bounds.Min.x = T->Vertices[I].x;
+        if(T->Vertices[I].x > T->Bounds.Max.x) T->Bounds.Max.x = T->Vertices[I].x;
+        if(T->Vertices[I].y < T->Bounds.Min.y) T->Bounds.Min.y = T->Vertices[I].y;
+        if(T->Vertices[I].y > T->Bounds.Max.y) T->Bounds.Max.y = T->Vertices[I].y;
+    }
+}
+
+inline b32
+RectanglesIntersect(rectangle2d A, rectangle2d B)
+{
+    b32 Result = !((B.Max.x <= A.Min.x) ||
+                   (B.Min.x >= A.Max.x) ||
+                   (B.Max.y <= A.Min.y) ||
+                   (B.Min.y >= A.Max.y));
+    return(Result);
+}
+
+inline f32
+TriangleArea2(v2 a, v2 b, v2 c)
+{
+    f32 Result = Cross(a, b) + Cross(c, a) + Cross(b, c);
+    return(Result);
+}
+
+inline f32
+TriangleArea2(triangle *T)
+{
+    f32 Result = (Cross(T->Vertices[0], T->Vertices[1]) +
+                  Cross(T->Vertices[2], T->Vertices[0]) +
+                  Cross(T->Vertices[1], T->Vertices[2]));
+    return(Result);
+}
+
+inline f32
+PolygonSignedArea2(polygon2 *P)
+{
+    f32 Result = 0.0f;
+    for(s32 I = 1;
+        I < (P->VertexCount - 1);
+        ++I)
+    {
+        Result += TriangleArea2(P->Vertices[0], P->Vertices[I], P->Vertices[I + 1]);
+    }
+    
+    return(Result);
+}
+
+inline fp22_10
+fixed_mul(fp22_10 a, fp22_10 b)
+{
+    fp22_10 Result = ((s64)a * (s64)b) >> 10;
+    return(Result);
+}
+
+inline fp22_10
+fixed_mul(f32 a, fp22_10 b)
+{
+    fp22_10 Result = ((s64)F32ToFixed(a) * (s64)b) >> 10;
+    return(Result);
+}
+
+inline fp22_10
+fixed_mul(fp22_10 a, f32 b)
+{
+    fp22_10 Result = ((s64)a * (s64)F32ToFixed(b)) >> 10;
+    return(Result);
+}
+
+inline fp22_10
+fixed_div(fp22_10 a, fp22_10 b)
+{
+    fp22_10 Result = ((s64)a << 10) / (s64)b;
+    return(Result);
+}
+
+// NOTE(babykaban): FIXED
+inline fp22_10_v2
+Fp22_10_V2(v2 A)
+{
+    fp22_10_v2 Result = {F32ToFixed(A.x), F32ToFixed(A.y)};
+    return(Result);
+}
+
+inline fp22_10_v2
+Fp22_10_V2(fp22_10 X, fp22_10 Y)
+{
+    fp22_10_v2 Result = {X, Y};
+    return(Result);
+}
+
+inline fp22_10_v2
+Fp22_10_V2(f32 X, f32 Y)
+{
+    fp22_10_v2 Result = {F32ToFixed(X), F32ToFixed(Y)};
+    return(Result);
+}
+
+inline fp22_10_v2
+operator*(fp22_10_v2 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Result;
+
+    Result.x = fixed_mul(A.x, B.x);
+    Result.y = fixed_mul(A.y, B.y);
+    
+    return(Result);
+}
+
+inline fp22_10_v2 &
+operator*=(fp22_10_v2 &B, fp22_10_v2 A)
+{
+    B = A * B;
+
+    return(B);
+}
+
+inline fp22_10_v2
+operator*(fp22_10 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Result;
+
+    Result.x = fixed_mul(A, B.x);
+    Result.y = fixed_mul(A, B.y);
+    
+    return(Result);
+}
+
+inline fp22_10_v2
+operator*(fp22_10_v2 B, fp22_10 A)
+{
+    fp22_10_v2 Result = A*B;
+
+    return(Result);
+}
+
+inline fp22_10_v2 &
+operator*=(fp22_10_v2 &B, fp22_10 A)
+{
+    B = A * B;
+
+    return(B);
+}
+inline fp22_10_v2
+operator*(f32 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Result;
+
+    Result.x = fixed_mul(F32ToFixed(A), B.x);
+    Result.y = fixed_mul(F32ToFixed(A), B.y);
+    
+    return(Result);
+}
+
+inline fp22_10_v2
+operator*(fp22_10_v2 B, f32 A)
+{
+    fp22_10_v2 Result = A*B;
+
+    return(Result);
+}
+
+inline fp22_10_v2 &
+operator*=(fp22_10_v2 &B, f32 A)
+{
+    B = A * B;
+
+    return(B);
+}
+
+inline fp22_10_v2
+operator-(fp22_10_v2 A)
+{
+    fp22_10_v2 Result;
+
+    Result.x = -A.x;
+    Result.y = -A.y;
+
+    return(Result);
+}
+
+inline fp22_10_v2
+operator+(fp22_10_v2 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Result;
+
+    Result.x = A.x + B.x;
+    Result.y = A.y + B.y;
+
+    return(Result);
+}
+
+inline fp22_10_v2 &
+operator+=(fp22_10_v2 &A, fp22_10_v2 B)
+{
+    A = A + B;
+
+    return(A);
+}
+
+inline fp22_10_v2
+operator-(fp22_10_v2 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Result;
+
+    Result.x = A.x - B.x;
+    Result.y = A.y - B.y;
+
+    return(Result);
+}
+
+inline fp22_10_v2 &
+operator-=(fp22_10_v2 &A, fp22_10_v2 B)
+{
+    A = A - B;
+
+    return(A);
+}
+
+inline fp22_10_v2
+Lerp(fp22_10_v2 A, fp22_10 t, fp22_10_v2 B)
+{
+    fp22_10_v2 Result = (F32ToFixed(1.0f) - t)*A + t*B;
+
+    return(Result);
+}
+
+inline fp22_10_v2
+Perp(fp22_10_v2 A)
+{
+    fp22_10_v2 Result = {-A.y, A.x};
+    return(Result);
+}
+
+inline fp22_10
+Inner(fp22_10_v2 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Mul = A*B;
+    fp22_10 Result = Mul.x + Mul.y;
+
+    return(Result);
+}
+
+inline fp22_10
+LengthSq(fp22_10_v2 A)
+{
+    fp22_10 Result = Inner(A, A);
+
+    return(Result);
+}
+
+inline fp22_10
+Length(fp22_10_v2 A)
+{
+    fp22_10 Result = F32ToFixed(SquareRoot(FixedToF32(LengthSq(A))));
+    return(Result);
+}
+
+inline fp22_10
+Cross(fp22_10_v2 A, fp22_10_v2 B)
+{
+    fp22_10_v2 Mul = A*Fp22_10_V2(B.y, B.x);
+    fp22_10 Result = Mul.x - Mul.y;
+
+    return(Result);
+}
+
+struct rectanglefp22_10
+{
+    fp22_10_v2 Min;
+    fp22_10_v2 Max;
+};
+
+struct trianglefp22_10
+{
+    fp22_10_v2 Vertices[3];
+    rectanglefp22_10 Bounds;
+};
+
+inline rectanglefp22_10
+InvertedInfinityRectangleFp22_10(void)
+{
+    rectanglefp22_10 Result;
+
+    Result.Min.x = Result.Min.y = INT_MAX;
+    Result.Max.x = Result.Max.y = -INT_MAX;
+
+    return(Result);
+}
+
+inline fp22_10_v2
+GetDim(rectanglefp22_10 Rect)
+{
+    fp22_10_v2 Result = Rect.Max - Rect.Min;
+    return(Result);
+}
+
+inline void
+CalculateTriangleBoundingBox(trianglefp22_10 *T)
+{
+    T->Bounds.Min = T->Bounds.Max = T->Vertices[0];
+
+    for(s32 I = 1;
+        I < ArrayCount(T->Vertices);
+        ++I)
+    {
+        if(T->Vertices[I].x < T->Bounds.Min.x) T->Bounds.Min.x = T->Vertices[I].x;
+        if(T->Vertices[I].x > T->Bounds.Max.x) T->Bounds.Max.x = T->Vertices[I].x;
+        if(T->Vertices[I].y < T->Bounds.Min.y) T->Bounds.Min.y = T->Vertices[I].y;
+        if(T->Vertices[I].y > T->Bounds.Max.y) T->Bounds.Max.y = T->Vertices[I].y;
+    }
+}
+
+inline bool32
+RectanglesIntersect(rectanglefp22_10 A, rectanglefp22_10 B)
+{
+    bool32 Result = !((B.Max.x <= A.Min.x) ||
+                      (B.Min.x >= A.Max.x) ||
+                      (B.Max.y <= A.Min.y) ||
+                      (B.Min.y >= A.Max.y));
+    return(Result);
+}
+
+#include "engine_triangle.h"
 
 #define ENGINE_MATH_H
 #endif

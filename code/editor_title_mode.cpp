@@ -39,6 +39,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(UI->NkButtonLabel(Nk, "Game Mode"))
             {
+                PlayGameMode(EditorState, TranState);
+                Result = true;
+                return(Result);
             }
 
             if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
@@ -115,8 +118,6 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             case EditorMode_GameMode:
             {
-//                PlayGameMode(EditorState, TranState);
-//                Result = true;
             } break;
         }
     }

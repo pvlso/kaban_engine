@@ -1,4 +1,3 @@
-
 /* ========================================================================
    $File: $
    $Date: 2024 $
@@ -16,6 +15,21 @@ ConvertWorldPolygonToPolygon2(world *World, world_position *BaseP, world_polygon
     {
         world_position *PolygonPoint0 = A->Vertices + VertexIndex;
         v2 P = Subtract(World, PolygonPoint0, BaseP);
+        Dest->Vertices[VertexIndex] = P;
+    }
+
+    Dest->VertexCount = A->VertexCount;
+}
+
+inline void
+ConvertWorldPolygonToPolygon2d(world *World, world_position *BaseP, world_polygon *A, polygon2d *Dest)
+{
+    for(s32 VertexIndex = 0;
+        VertexIndex < A->VertexCount;
+        ++VertexIndex)
+    {
+        world_position *PolygonPoint0 = A->Vertices + VertexIndex;
+        v2d P = V2d(Subtract(World, PolygonPoint0, BaseP));
         Dest->Vertices[VertexIndex] = P;
     }
 
@@ -115,27 +129,11 @@ DeletePolygon(editor_mode_game *GameMode)
     }
 }
 
-inline void
-CalculateTriangleTileBoundingBox(world_triangle *T)
+#if 0
+inline edge *
+CreateEdge(v2 V1, v2 V2, edge *Edges, s32 Index)
 {
-    T->Bounds.MinX = T->Bounds.MaxX = T->Vertices[0].TileX;
-    T->Bounds.MinY = T->Bounds.MaxY = T->Vertices[0].TileY;
-
-    for(s32 I = 1;
-        I < ArrayCount(T->Vertices);
-        ++I)
-    {
-        if(T->Vertices[I].TileX < T->Bounds.MinX) T->Bounds.MinX = T->Vertices[I].TileX;
-        if(T->Vertices[I].TileX > T->Bounds.MaxX) T->Bounds.MaxX = T->Vertices[I].TileX;
-        if(T->Vertices[I].TileY < T->Bounds.MinY) T->Bounds.MinY = T->Vertices[I].TileY;
-        if(T->Vertices[I].TileY > T->Bounds.MaxY) T->Bounds.MaxY = T->Vertices[I].TileY;
-    }
-}
-
-inline edgefp22_10 *
-CreateEdge(fp22_10_v2 V1, fp22_10_v2 V2, edgefp22_10 *Edges, s32 Index)
-{
-    edgefp22_10 *Result = Edges + Index;
+    edge *Result = Edges + Index;
     if((V1.x < V2.x) || ((V1.x == V2.x) && (V1.y < V2.y)))
     {
         Result->a = V1;
@@ -158,10 +156,10 @@ EdgesEqual(edge A, edge B)
 }
 
 internal void
-FindOrAddEdge(hash_table *Table, edgefp22_10 *Edge, s32 TriangleIndex, memory_arena *Arena)
+FindOrAddEdge(hash_table *Table, edge *Edge, s32 TriangleIndex, memory_arena *Arena)
 {
     TIMED_FUNCTION();
-    
+
     void *Data = GetHashElement(Table, Edge, HashKeyType_EDGEV2);
     if(Data)
     {
@@ -177,46 +175,26 @@ FindOrAddEdge(hash_table *Table, edgefp22_10 *Edge, s32 TriangleIndex, memory_ar
 }
 
 inline b32
-WorldPointsAreEqual(world *World, world_position *A, world_position *B)
+ShareEdge(editor_mode_game *GameMode, s32 T, s32 Adj)
 {
-    b32 Result = false;
-    if(AreInSameTile(World, A, B))
-    {
-        Result = PointsAreEqual(A->Offset, B->Offset, 0.01f);
-    }
-
-    return(Result);
-}
-
-inline b32
-SameEdge(world *World, world_position *a, world_position *b, world_position *c, world_position *d)
-{
-    b32 Result = ((WorldPointsAreEqual(World, a, c) && WorldPointsAreEqual(World, b, d)) ||
-                  (WorldPointsAreEqual(World, a, d) && WorldPointsAreEqual(World, b, c)));
-    return(Result);
-}
-
-inline b32
-ShareAnEdge(world *World, world_triangle *T0, world_triangle *T1)
-{
-    b32 Result = false;
+    s32 SharedCount = 0;
+    world_triangle *Tri = GameMode->MeshTriangles + T;
+    world_triangle *AdjTri = GameMode->MeshTriangles + Adj;
     for(s32 I = 0; I < 3; ++I)
     {
-        s32 INext = (I + 1) % 3;
         for(s32 J = 0; J < 3; ++J)
         {
-            s32 JNext = (J + 1) % 3;
-            if(SameEdge(World, &T0->Vertices[I], &T0->Vertices[INext],
-                        &T1->Vertices[J], &T1->Vertices[JNext]))
+            if(AreInSameTile(GameMode->World, &Tri->Vertices[I], &AdjTri->Vertices[J]))
             {
-                Result = true;
+                if(PointsAreEqual(Tri->Vertices[I].Offset, AdjTri->Vertices[J].Offset, 0.0001f))
+                {
+                    ++SharedCount;
+                }
             }
         }
-
-        if(Result)
-            break;
     }
 
+    b32 Result = (SharedCount == 2);
     return(Result);
 }
 
@@ -227,52 +205,11 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
 
     temporary_memory TempMem = BeginTemporaryMemory(&GameMode->World->Arena); 
 
-    u32 *Counts = PushArray(TempMem.Arena, GameMode->MeshTriangleCount, u32);
-    triangle_adjs *Adjs = PushArray(TempMem.Arena, GameMode->MeshTriangleCount, triangle_adjs);
-    
-    for(s32 I = 0;
-        I < GameMode->MeshTriangleCount;
-        ++I)
-    {
-        for(s32 J = I + 1;
-            J < GameMode->MeshTriangleCount;
-            ++J)
-        {
-            world_triangle *A = GameMode->MeshTriangles + I;
-            world_triangle *B = GameMode->MeshTriangles + J;
-            if((I != J) && IsValid(A->Vertices[0]) && IsValid(B->Vertices[0]))
-            {
-                if(ShareAnEdge(GameMode->World, A, B))
-                {
-                    Adjs[I].Adjacencies[Counts[I]++] = J;
-                    Adjs[J].Adjacencies[Counts[J]++] = I;
-                }
-            }
-        }    
-    }    
-
-    for(s32 I = 0;
-        I < GameMode->MeshTriangleCount;
-        ++I)
-    {
-        world_triangle *A = GameMode->MeshTriangles + I;
-        A->Adj.Adjacencies[0] = -1;
-        A->Adj.Adjacencies[1] = -1;
-        A->Adj.Adjacencies[2] = -1;
-        for(u32 J = 0; J < Counts[I]; ++J)
-        {
-            A->Adj.Adjacencies[J] = Adjs[I].Adjacencies[J];
-        }
-    }
-
-    int a = 0;
-    
-#if 0
     hash_table EdgeHashTable = {};
     EdgeHashTable.Size = 3*GameMode->MeshTriangleCount;
     EdgeHashTable.Hash = PushArray(TempMem.Arena, EdgeHashTable.Size, hash_table_entry *);
 
-    edgefp22_10 *Edges = PushArray(TempMem.Arena, 3*GameMode->MeshTriangleCount, edgefp22_10);
+    edge *Edges = PushArray(TempMem.Arena, 3*GameMode->MeshTriangleCount, edge);
     
     for(s32 I = 0;
         I < GameMode->MeshTriangleCount;
@@ -281,14 +218,14 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
         world_triangle *T = GameMode->MeshTriangles + I;
         if(IsValid(T->V1))
         {
-            fp22_10_v2 V1 = Fp22_10_V2(Subtract(GameMode->World, &T->V1, &SimRegion->Origin));
-            fp22_10_v2 V2 = Fp22_10_V2(Subtract(GameMode->World, &T->V2, &SimRegion->Origin));
-            fp22_10_v2 V3 = Fp22_10_V2(Subtract(GameMode->World, &T->V3, &SimRegion->Origin));
-            
+            v2 V1 = Subtract(GameMode->World, &T->V1, &SimRegion->Origin);
+            v2 V2 = Subtract(GameMode->World, &T->V2, &SimRegion->Origin);
+            v2 V3 = Subtract(GameMode->World, &T->V3, &SimRegion->Origin);
+
             s32 TIndex = 3*I;
-            edgefp22_10 *Edge1 = CreateEdge(V1, V2, Edges, TIndex + 0);
-            edgefp22_10 *Edge2 = CreateEdge(V2, V3, Edges, TIndex + 1);
-            edgefp22_10 *Edge3 = CreateEdge(V3, V1, Edges, TIndex + 2);
+            edge *Edge1 = CreateEdge(V1, V2, Edges, TIndex + 0);
+            edge *Edge2 = CreateEdge(V2, V3, Edges, TIndex + 1);
+            edge *Edge3 = CreateEdge(V3, V1, Edges, TIndex + 2);
 
             FindOrAddEdge(&EdgeHashTable, Edge1, I, TempMem.Arena);
             FindOrAddEdge(&EdgeHashTable, Edge2, I, TempMem.Arena);
@@ -305,9 +242,9 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
         {
 
             s32 TIndex = 3*I;
-            edgefp22_10 *Edge1 = Edges + TIndex + 0;
-            edgefp22_10 *Edge2 = Edges + TIndex + 1;
-            edgefp22_10 *Edge3 = Edges + TIndex + 2;
+            edge *Edge1 = Edges + TIndex + 0;
+            edge *Edge2 = Edges + TIndex + 1;
+            edge *Edge3 = Edges + TIndex + 2;
 
             triangle_map *Map0 = (triangle_map *)GetHashElement(&EdgeHashTable, Edge1, HashKeyType_EDGEV2);
             triangle_map *Map1 = (triangle_map *)GetHashElement(&EdgeHashTable, Edge2, HashKeyType_EDGEV2);
@@ -362,50 +299,24 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
             }
         }
     }
+
+#if EDITOR_SLOW
+    for(s32 I = 0; I < GameMode->MeshTriangleCount; ++I)
+    {
+        for(s32 J = 0; J < 3; ++J)
+        {
+            s32 AdjIndex = GameMode->MeshTriangles[I].Adj.Adjacencies[J];
+            if(AdjIndex >= 0)
+            {
+                Assert(ShareEdge(GameMode, I, AdjIndex))
+            }
+        }
+    }
 #endif
     
     EndTemporaryMemory(TempMem);
 }
-
-internal void
-TriangulatePolygons(editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
-{
-    TIMED_FUNCTION();
-
-    GameMode->MeshTriangleCount = 0;
-    temporary_memory TempMem = BeginTemporaryMemory(Arena);
-
-    polygon2 P = {};
-    P.VertexCount = 0;
-    P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
-
-    for(u32 Index = 0;
-        Index < GameMode->PolygonCount;
-        ++Index)
-    {
-        world_polygon *Poly = GameMode->Polies + Index;
-        
-        ConvertWorldPolygonToPolygon2(GameMode->World, BaseP, Poly, &P);
-        triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
-
-        for(s32 TIndex = GameMode->MeshTriangleCount;
-            TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
-            ++TIndex)
-        {
-            triangle *T = TResult.Triangles + (TIndex - GameMode->MeshTriangleCount);
-            world_triangle *WorldT = GameMode->MeshTriangles + TIndex;
-            WorldT->V1 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[0]);
-            WorldT->V2 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[1]);
-            WorldT->V3 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[2]);
-        }
-        GameMode->MeshTriangleCount += TResult.TriangleCount;
-
-        Platform.DeallocateMemory(TResult.Triangles);
-        Platform.DeallocateMemory(TResult.Adjacencies);
-    }
-
-    EndTemporaryMemory(TempMem);
-}
+#endif
 
 struct sub_region_result
 {
@@ -439,12 +350,15 @@ SubtractRegionFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, triang
         ++SubjectIndex)
     {
         triangle *Subject = SubjectTris + SubjectIndex;
-        SubResults[SubCount] = SubtractTriangels(Subject, Subtractor, 0.0f, 0.0f, 0.01f, TempArena);
+        SubResults[SubCount] = SubtractTriangels(Subject, Subtractor, 0.0f, 0.0f, 0.0001f, TempArena);
         if((SubResults[SubCount].Set.PolygonCount > 0) || SubResults[SubCount].FullyRemoved)
         {
             world_triangle *WorldT = GameMode->MeshTriangles + SubjectIndices[SubjectIndex];
             *WorldT = {};
             WorldT->Vertices[0].TileX = TILE_CHUNK_UNINITIALIZED;
+            WorldT->Adj.Adjacencies[0] = -1;
+            WorldT->Adj.Adjacencies[1] = -1;
+            WorldT->Adj.Adjacencies[2] = -1;
             SubCount++;
         }
         else
@@ -567,11 +481,11 @@ SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2
     triangle *SubjectTris = PushArray(TempMem.Arena, 1024, triangle);
 
     for(s32 RegionTIndex = 0;
-        RegionTIndex < TriangulatedRegion.TriangleCount;
+        RegionTIndex < 1;//TriangulatedRegion.TriangleCount;
         ++RegionTIndex)
     {
         triangle *RegionT = TriangulatedRegion.Triangles + RegionTIndex;
-
+        
         CalculateTriangleBoundingBox(RegionT);
         FindSubjectTris(GameMode, SimRegion, RegionT->Bounds, SubjectTris, SubjectIndices, &SubjectCount);
 
@@ -632,51 +546,6 @@ struct t_adj_pair
     s32 T;
     s32 Adj;
 };
-
-inline b32
-IsCollinear(v2 a, v2 b, v2 c, f32 Epsilon) 
-{
-    b32 Result = false;
-
-    v2 ab = b - a;
-    v2 bc = c - b;
-    
-    f32 CrossProduct = Cross(ab, bc);
-    f32 L = Length(ab)*Length(bc);
-
-    Result = (AbsoluteValue(CrossProduct) < Epsilon*L);
-
-    return(Result);
-}
-
-inline void
-SimplifyPolygon(polygon2 *Poly, memory_arena *TempArena)
-{
-    if(Poly->VertexCount > 3)
-    {
-        s32 PointCount = 0;
-        v2 *Points = PushArray(TempArena, Poly->VertexCount, v2);
-
-        Points[PointCount++] = Poly->Vertices[0];
-
-        for(s32 I = 1;
-            I < (Poly->VertexCount - 1);
-            ++I)
-        {
-            v2 Prev = Poly->Vertices[I - 1];
-            v2 Cur = Poly->Vertices[I];
-            v2 Next = Poly->Vertices[I + 1];
-
-            if(!IsCollinear(Prev, Cur, Next, 0.001f))
-            {
-                Points[PointCount++] = Cur;
-            }
-        }
-
-        Poly->VertexCount = PointCount;
-        Copy(sizeof(v2)*PointCount, Points, Poly->Vertices);
-    }
-}
 
 internal void
 MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
@@ -754,7 +623,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
                 if(TAdjPair.Adj >= 0)
                 {
                     TempPoly.VertexCount = CurrentP->VertexCount;
-                    Copy(sizeof(v2)*CurrentP->VertexCount, CurrentP->Vertices, TempPoly.Vertices);
+                    Copy(sizeof(v2d)*CurrentP->VertexCount, CurrentP->Vertices, TempPoly.Vertices);
 
                     triangle *TestT = Triangles + TAdjPair.Adj;
                     s32 SharedCount = 0;
@@ -764,7 +633,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
                     {
                         for(s32 J = 0; J < 3; ++J)
                         {
-                            if(PointsAreEqual(CurrentP->Vertices[I], TestT->Vertices[J], 0.01f))
+                            if(PointsAreEqual(CurrentP->Vertices[I], TestT->Vertices[J], 0.0001f))
                             {
                                 PolyEdgeVertices[SharedCount] = I;
                                 TriEdgeVertices[SharedCount++] = J;
@@ -844,35 +713,65 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
         }
     }
 
-#if 1
-//    GameMode->MeshTriangleCount = 0;
-//    GameMode->FreeIndexCount = 0;
     world_polygon *NewPolygons = PushArray(TempMem.Arena, PolygonCount, world_polygon);
     for(s32 I = 0;
         I < PolygonCount;
         ++I)
     {
         polygon2 *Poly = ResultPolygons + I;
-        TRISUBRemoveDublicatPoints(Poly);
+        world_polygon *WorldPoly = NewPolygons + I;
 
-        for(s32 I = 0;
-            I < Poly->VertexCount;
-            ++I)
+        WorldPoly->VertexCount = Poly->VertexCount;
+        WorldPoly->Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, world_position);
+        for(s32 J = 0;
+            J < Poly->VertexCount;
+            ++J)
         {
-            v2 Prev = Poly->Vertices[(I - 1 + Poly->VertexCount) % Poly->VertexCount];
-            v2 Cur = Poly->Vertices[I];
-            v2 Next = Poly->Vertices[(I + 1) % Poly->VertexCount];
-
-            f32 Area = TriangleSignedArea(Prev, Cur, Next);
-            if(Area < 0.001f)
-            {
-                RemoveAt(Poly, I);
-                --I;
-            }
+            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->World, *BaseP, Poly->Vertices[J]);
         }
-#if 0
-        triangulate_result TResult = ConstrainedDelaunayTriangulate(Poly, TempMem.Arena);
+    }
 
+#if 1
+    for(s32 I = 0;
+        I < PolygonCount;
+        ++I)
+    {
+        polygon2 *Poly = ResultPolygons + I;
+        triangulate_result TResult = ConstrainedDelaunayTriangulate(Poly, TempMem.Arena);
+        for(s32 J = 0;
+            J < TResult.TriangleCount;
+            ++J)
+        {
+            PushTriangle(RenderGroup, Flat, TResult.Triangles[J], 70.0f, V4(DebugColorTable[I % ArrayCount(DebugColorTable)], 1.0f));
+        }
+
+        Platform.DeallocateMemory(TResult.Triangles);
+        Platform.DeallocateMemory(TResult.Adjacencies);
+    }
+#endif    
+    EndTemporaryMemory(TempMem);
+}
+
+internal void
+TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
+{
+    TIMED_FUNCTION();
+
+    GameMode->MeshTriangleCount = 0;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+
+    polygon2 P = {};
+    P.VertexCount = 0;
+    P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+
+    for(u32 Index = 0;
+        Index < GameMode->PolygonCount;
+        ++Index)
+    {
+        world_polygon *Poly = GameMode->Polies + Index;
+
+        ConvertWorldPolygonToPolygon2(GameMode->World, BaseP, Poly, &P);
+        triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
         for(s32 TIndex = GameMode->MeshTriangleCount;
             TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
             ++TIndex)
@@ -883,38 +782,12 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
             WorldT->V2 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[1]);
             WorldT->V3 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[2]);
         }
+
         GameMode->MeshTriangleCount += TResult.TriangleCount;
 
         Platform.DeallocateMemory(TResult.Triangles);
         Platform.DeallocateMemory(TResult.Adjacencies);
-#endif
     }
-#endif
-    
-#if 1
-    for(s32 I = 0;
-        I < PolygonCount;
-        ++I)
-    {
-        polygon2 *Poly = ResultPolygons + I;
-        
-        triangulate_result TResult = ConstrainedDelaunayTriangulate(Poly, TempMem.Arena);
-        for(s32 J = 0;
-            J < TResult.TriangleCount;
-            ++J)
-        {
-            PushTriangle(RenderGroup, Flat, TResult.Triangles[J], 70.0f, V4(DebugColorTable[I % ArrayCount(DebugColorTable)], 1.0f));
-        }
 
-        for(s32 M = 0; M < Poly->VertexCount; ++M)
-        {
-            PushRect(RenderGroup, Flat, V3(Poly->Vertices[M], 100.0f), V2(0.15f, 0.15f),
-                     V4(DebugColorTable[(I + 1) % ArrayCount(DebugColorTable)], 1.0f));
-        }
-        
-        Platform.DeallocateMemory(TResult.Triangles);
-        Platform.DeallocateMemory(TResult.Adjacencies);
-    }
-#endif    
     EndTemporaryMemory(TempMem);
 }
