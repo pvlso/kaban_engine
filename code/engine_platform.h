@@ -3211,6 +3211,7 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
  * \param[in] columns | Number of widgets inside row
  */
     NK_API void nk_layout_space_begin(struct nk_context*, enum nk_layout_format, float height, int widget_count);
+    typedef void platform_nk_layout_space_begin(struct nk_context*, enum nk_layout_format, float height, int widget_count);
 
 /**
  * # # nk_layout_space_push
@@ -3225,6 +3226,7 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
  * \param[in] bounds  | Position and size in laoyut space local coordinates
  */
     NK_API void nk_layout_space_push(struct nk_context*, struct nk_rect bounds);
+    typedef void platform_nk_layout_space_push(struct nk_context*, struct nk_rect bounds);
 
 /**
  * # # nk_layout_space_end
@@ -3238,6 +3240,7 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_layout_space_begin`
  */
     NK_API void nk_layout_space_end(struct nk_context*);
+    typedef void platform_nk_layout_space_end(struct nk_context*);
 
 /**
  * # # nk_layout_space_bounds
@@ -3253,6 +3256,7 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
  * \returns `nk_rect` holding the total space allocated
  */
     NK_API struct nk_rect nk_layout_space_bounds(const struct nk_context *ctx);
+    typedef struct nk_rect platform_nk_layout_space_bounds(const struct nk_context *ctx);
 
 /**
  * # # nk_layout_space_to_screen
@@ -3317,6 +3321,7 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
  * \returns transformed `nk_rect` in layout space coordinates
  */
     NK_API struct nk_rect nk_layout_space_rect_to_local(const struct nk_context *ctx, struct nk_rect bounds);
+    typedef struct nk_rect platform_nk_layout_space_rect_to_local(const struct nk_context *ctx, struct nk_rect bounds);
 
 /**
  * # # nk_spacer
@@ -6744,6 +6749,12 @@ struct nk_ui
     platform_nk_layout_row_push *NkLayoutRowPush;
     platform_nk_layout_row_end *NkLayoutRowEnd;
     platform_nk_layout_row_static *NkLayoutRowStatic;
+
+    platform_nk_layout_space_begin *NkLayoutSpaceBegin;
+    platform_nk_layout_space_push *NkLayoutSpacePush;
+    platform_nk_layout_space_end *NkLayoutSpaceEnd;
+    platform_nk_layout_space_bounds *NkLayoutSpaceBounds;
+    platform_nk_layout_space_rect_to_local *NkLayoutSpaceRectToLocal;
 
     platform_nk_text *NkText;
     platform_nk_text_colored *NkTextColored;

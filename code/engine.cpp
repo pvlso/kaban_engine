@@ -108,7 +108,7 @@ UpdateVersion(u32 Version)
         MinorLow += 1;
     }
 
-    working_version Result = {MajorHigh, MajorLow, MinorHigh, MinorLow};//(u32)((MajorHigh << 24) | (MajorLow << 16) | (MinorHigh << 8) | MinorLow); 
+    working_version Result = {MajorHigh, MajorLow, MinorHigh, MinorLow};
 
     return(Result);
 }

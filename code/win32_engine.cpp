@@ -680,6 +680,12 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkLayoutRowEnd = nk_layout_row_end;
     UI->NkLayoutRowStatic = nk_layout_row_static;
 
+    UI->NkLayoutSpaceBegin = nk_layout_space_begin;
+    UI->NkLayoutSpacePush = nk_layout_space_push;
+    UI->NkLayoutSpaceEnd = nk_layout_space_end;
+    UI->NkLayoutSpaceBounds = nk_layout_space_bounds;
+    UI->NkLayoutSpaceRectToLocal = nk_layout_space_rect_to_local;
+
     UI->NkText = nk_text;
     UI->NkTextColored = nk_text_colored;
     UI->NkTextWrap = nk_text_wrap;

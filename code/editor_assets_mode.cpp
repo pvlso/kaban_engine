@@ -7,6 +7,7 @@
    ======================================================================== */
 
 #include "editor_ssa_file_builder.cpp"
+#include "engine_assets_mode_ui.cpp"
 
 internal void
 PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
@@ -1339,135 +1340,15 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             v2 CanvasHalfDim = 0.5f*V2(CanvasSize, CanvasSize);
             rectangle2 CanvasRect = RectCenterDim(V2(0, 0), CanvasDim);
 
+
             nk_ui *UI = &Platform.UI;
+
+            DrawAssetsModeUI(AssetsMode, UI, Nk);
+
             switch(AssetsMode->EditMode)
             {
                 case EditMode_None:
                 {
-                    UI->NkLayoutRowBegin(Nk, NK_STATIC, 50, 8);
-                    {
-                        UI->NkLayoutRowPush(Nk, 100);
-                        if(UI->NkButtonLabel(Nk, "Edit Bitmaps"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit Sounds"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit SpriteSheets"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit Tilesets"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit Fonts"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit Texts"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit Files"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "Edit SSWM"))
-                        {
-                        }
-
-                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
-                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
-                        if(UI->NkButtonLabel(Nk, "placeholder")) {}
-
-                    }
-                    UI->NkLayoutRowEnd(Nk);
-                    UI->NkLayoutRowDynamic(Nk, 20, 1);
-                    UI->NkSpacer(Nk);
-
-                    char Text[256];
-                    FormatString(ArrayCount(Text), Text,
-                                 "Asset Count: %d",
-                                 AssetsMode->StoredHeader.AssetCount);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    FormatString(ArrayCount(Text), Text,
-                                 "SizeOfStoredAsset: %d",
-                                 AssetsMode->StoredHeader.SizeOfStoredAsset);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    FormatString(ArrayCount(Text), Text,
-                                 "Major High  Version: %d",
-                                 (AssetsMode->StoredHeader.Version >> 24) & 0xFF);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    FormatString(ArrayCount(Text), Text,
-                                 "Major Low Version: %d",
-                                 (AssetsMode->StoredHeader.Version >> 16) & 0xFF);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    FormatString(ArrayCount(Text), Text,
-                                 "Minor High  Version: %d",
-                                 (AssetsMode->StoredHeader.Version >> 8) & 0xFF);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    FormatString(ArrayCount(Text), Text,
-                                 "Minor Low Version: %d",
-                                 AssetsMode->StoredHeader.Version & 0xFF);
-                    UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                    
-                    UI->NkLayoutRowStatic(Nk, 20, 300, 1);
-                    UI->NkSelectableLabel(Nk, "Show Stored Assets", NK_TEXT_ALIGN_LEFT, &AssetsMode->ShowStoredAssets);
-                    UI->NkLayoutRowBegin(Nk, NK_STATIC, 240, 1);
-                    {
-                        UI->NkLayoutRowPush(Nk, 300);
-                        if(AssetsMode->ShowStoredAssets)
-                        {
-                            if(UI->NkGroupBegin(Nk, "Show Stored Assets",
-                                                NK_WINDOW_BORDER))
-                            {
-                                UI->NkLayoutRowDynamic(Nk, 20, 1);
-                                for(u32 AssetIndex = 0;
-                                    AssetIndex < AssetsMode->StoredHeader.AssetCount;
-                                    ++AssetIndex)
-                                {
-                                    stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
-                                    char *TypeIDString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", Asset.TypeID);
-                                    char *TypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", Asset.Type);
-                                    FormatString(ArrayCount(Text), Text,
-                                                 "%d. AssetID: %d",
-                                                 AssetIndex, Asset.ID);
-
-                                    UI->NkLayoutRowStatic(Nk, 100, 280, 1);
-                                    if(UI->NkGroupBegin(Nk, Text,
-                                                        NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
-                                    {
-                                        UI->NkLayoutRowStatic(Nk, 20, 280, 1);
-                                        FormatString(ArrayCount(Text), Text,
-                                                     "AssetTypeID: %s",
-                                                     TypeIDString);
-                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-                                        FormatString(ArrayCount(Text), Text,
-                                                     "AssetType: %s",
-                                                     TypeString);
-                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-                                        FormatString(ArrayCount(Text), Text,
-                                                     "TagCount: %d",
-                                                     Asset.TagCount);
-                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
-
-                                        UI->NkGroupEnd(Nk);
-                                    }
-                                }
-                                UI->NkGroupEnd(Nk);
-                            }
-                        }
-                    }
-                    UI->NkLayoutRowEnd(Nk);
 #if 0
                     UIDrawScrollWindow(UIState, Layout, "Show Stored Assets", V2(933.0f, 400.0f),
                                        &AssetsMode->ShowStoredAssetIndex, "Stored Assets", ScrollDataType_StoredAssets, 3,
