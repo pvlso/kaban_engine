@@ -87,6 +87,7 @@ struct editor_state
     working_version Version;
     world_map_startup MapStartup;
 
+    b32 UIEnable;
     ui_state UIState;
     
     char window_title[64];

@@ -670,9 +670,28 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkBegin = nk_begin;
     UI->NkEnd = nk_end;
     UI->NkSpacer = nk_spacer;
+ 
+    UI->NkWindowSetFocus = nk_window_set_focus;
 
     UI->NkGroupBegin = nk_group_begin;
     UI->NkGroupEnd = nk_group_end;
+
+    UI->NkInputHasMouseClick = nk_input_has_mouse_click;
+    UI->NkInputHasMouseClickInRect = nk_input_has_mouse_click_in_rect;
+    UI->NkInputHasMouseClickInButtonRect = nk_input_has_mouse_click_in_button_rect;
+    UI->NkInputHasMouseClickDownInRect = nk_input_has_mouse_click_down_in_rect;
+    UI->NkInputIsMouseClickInRect = nk_input_is_mouse_click_in_rect;
+    UI->NkInputIsMouseClickDownInRect = nk_input_is_mouse_click_down_in_rect;
+    UI->NkInputAnyMouseClickInRect = nk_input_any_mouse_click_in_rect;
+    UI->NkInputIsMousePrevHoveringRect = nk_input_is_mouse_prev_hovering_rect;
+    UI->NkInputIsMouseHoveringRect = nk_input_is_mouse_hovering_rect;
+    UI->NkInputMouseClicked = nk_input_mouse_clicked;
+    UI->NkInputIsMouseDown = nk_input_is_mouse_down;
+    UI->NkInputIsMousePressed = nk_input_is_mouse_pressed;
+    UI->NkInputIsMouseReleased = nk_input_is_mouse_released;
+    UI->NkInputIsKeyPressed = nk_input_is_key_pressed;
+    UI->NkInputIsKeyReleased = nk_input_is_key_released;
+    UI->NkInputIsKeyDown = nk_input_is_key_down;
 
     UI->NkLayoutRowDynamic = nk_layout_row_dynamic;
     UI->NkLayoutRowBegin = nk_layout_row_begin;
@@ -839,6 +858,17 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkTooltipEnd = nk_tooltip_end;
 
     UI->NkPropertyInt = nk_property_int;
+
+
+    UI->NkHandlePtr = nk_handle_ptr;
+    UI->NkHandleID = nk_handle_id;
+    UI->NkImageHandle = nk_image_handle;
+    UI->NkImagePtr = nk_image_ptr;
+    UI->NkImageID = nk_image_id;
+    UI->NkImageIsSubimage = nk_image_is_subimage;
+    UI->NkSubimagePtr = nk_subimage_ptr;
+    UI->NkSubimageID = nk_subimage_id;
+    UI->NkSubimageHandle = nk_subimage_handle;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3181,9 +3211,9 @@ WinMain(HINSTANCE Instance,
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                NKOpenGLRenderCommands(&Win32State.Debug, DrawRegion, NK_ANTI_ALIASING_ON);
                 NKOpenGLRenderCommands(&Win32State.Main, DrawRegion, NK_ANTI_ALIASING_ON);
 #if EDITOR_INTERNAL
+                NKOpenGLRenderCommands(&Win32State.Debug, DrawRegion, NK_ANTI_ALIASING_ON);
 #endif
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);

@@ -2578,6 +2578,7 @@ NK_API void nk_window_set_size(struct nk_context *ctx, const char *name, struct 
 
  */
 NK_API void nk_window_set_focus(struct nk_context *ctx, const char *name);
+typedef void platform_nk_window_set_focus(struct nk_context *ctx, const char *name);
 
 /**
  * # # nk_window_set_scroll
@@ -4662,6 +4663,16 @@ NK_API nk_bool nk_image_is_subimage(const struct nk_image* img);
 NK_API struct nk_image nk_subimage_ptr(void*, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
 NK_API struct nk_image nk_subimage_id(int, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
 NK_API struct nk_image nk_subimage_handle(nk_handle, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
+
+typedef nk_handle platform_nk_handle_ptr(void*);
+typedef nk_handle platform_nk_handle_id(int);
+typedef struct nk_image platform_nk_image_handle(nk_handle);
+typedef struct nk_image platform_nk_image_ptr(void*);
+typedef struct nk_image platform_nk_image_id(int);
+typedef nk_bool platform_nk_image_is_subimage(const struct nk_image* img);
+typedef struct nk_image platform_nk_subimage_ptr(void*, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
+typedef struct nk_image platform_nk_subimage_id(int, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
+typedef struct nk_image platform_nk_subimage_handle(nk_handle, nk_ushort w, nk_ushort h, struct nk_rect sub_region);
 /* =============================================================================
  *
  *                                  9-SLICE
@@ -5648,6 +5659,23 @@ NK_API nk_bool nk_input_is_mouse_released(const struct nk_input*, enum nk_button
 NK_API nk_bool nk_input_is_key_pressed(const struct nk_input*, enum nk_keys);
 NK_API nk_bool nk_input_is_key_released(const struct nk_input*, enum nk_keys);
 NK_API nk_bool nk_input_is_key_down(const struct nk_input*, enum nk_keys);
+
+typedef nk_bool platform_nk_input_has_mouse_click(const struct nk_input*, enum nk_buttons);
+typedef nk_bool platform_nk_input_has_mouse_click_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect);
+typedef nk_bool platform_nk_input_has_mouse_click_in_button_rect(const struct nk_input*, enum nk_buttons, struct nk_rect);
+typedef nk_bool platform_nk_input_has_mouse_click_down_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect, nk_bool down);
+typedef nk_bool platform_nk_input_is_mouse_click_in_rect(const struct nk_input*, enum nk_buttons, struct nk_rect);
+typedef nk_bool platform_nk_input_is_mouse_click_down_in_rect(const struct nk_input *i, enum nk_buttons id, struct nk_rect b, nk_bool down);
+typedef nk_bool platform_nk_input_any_mouse_click_in_rect(const struct nk_input*, struct nk_rect);
+typedef nk_bool platform_nk_input_is_mouse_prev_hovering_rect(const struct nk_input*, struct nk_rect);
+typedef nk_bool platform_nk_input_is_mouse_hovering_rect(const struct nk_input*, struct nk_rect);
+typedef nk_bool platform_nk_input_mouse_clicked(const struct nk_input*, enum nk_buttons, struct nk_rect);
+typedef nk_bool platform_nk_input_is_mouse_down(const struct nk_input*, enum nk_buttons);
+typedef nk_bool platform_nk_input_is_mouse_pressed(const struct nk_input*, enum nk_buttons);
+typedef nk_bool platform_nk_input_is_mouse_released(const struct nk_input*, enum nk_buttons);
+typedef nk_bool platform_nk_input_is_key_pressed(const struct nk_input*, enum nk_keys);
+typedef nk_bool platform_nk_input_is_key_released(const struct nk_input*, enum nk_keys);
+typedef nk_bool platform_nk_input_is_key_down(const struct nk_input*, enum nk_keys);
 
 /* ===============================================================
  *
@@ -6741,8 +6769,27 @@ struct nk_ui
     platform_nk_end *NkEnd;
     platform_nk_spacer *NkSpacer;
 
+    platform_nk_window_set_focus *NkWindowSetFocus;
+
     platform_nk_group_begin *NkGroupBegin;
     platform_nk_group_end *NkGroupEnd;
+
+    platform_nk_input_has_mouse_click *NkInputHasMouseClick;
+    platform_nk_input_has_mouse_click_in_rect *NkInputHasMouseClickInRect;
+    platform_nk_input_has_mouse_click_in_button_rect *NkInputHasMouseClickInButtonRect;
+    platform_nk_input_has_mouse_click_down_in_rect *NkInputHasMouseClickDownInRect;
+    platform_nk_input_is_mouse_click_in_rect *NkInputIsMouseClickInRect;
+    platform_nk_input_is_mouse_click_down_in_rect *NkInputIsMouseClickDownInRect;
+    platform_nk_input_any_mouse_click_in_rect *NkInputAnyMouseClickInRect;
+    platform_nk_input_is_mouse_prev_hovering_rect *NkInputIsMousePrevHoveringRect;
+    platform_nk_input_is_mouse_hovering_rect *NkInputIsMouseHoveringRect;
+    platform_nk_input_mouse_clicked *NkInputMouseClicked;
+    platform_nk_input_is_mouse_down *NkInputIsMouseDown;
+    platform_nk_input_is_mouse_pressed *NkInputIsMousePressed;
+    platform_nk_input_is_mouse_released *NkInputIsMouseReleased;
+    platform_nk_input_is_key_pressed *NkInputIsKeyPressed;
+    platform_nk_input_is_key_released *NkInputIsKeyReleased;
+    platform_nk_input_is_key_down *NkInputIsKeyDown;
 
     platform_nk_layout_row_dynamic *NkLayoutRowDynamic;
     platform_nk_layout_row_begin *NkLayoutRowBegin;
@@ -6909,6 +6956,17 @@ struct nk_ui
     platform_nk_tooltip_end *NkTooltipEnd;
 
     platform_nk_property_int *NkPropertyInt;
+
+    platform_nk_handle_ptr *NkHandlePtr;
+    platform_nk_handle_id *NkHandleID;
+    platform_nk_image_handle *NkImageHandle;
+    platform_nk_image_ptr *NkImagePtr;
+    platform_nk_image_id *NkImageID;
+    platform_nk_image_is_subimage *NkImageIsSubimage;
+    platform_nk_subimage_ptr *NkSubimagePtr;
+    platform_nk_subimage_id *NkSubimageID;
+    platform_nk_subimage_handle *NkSubimageHandle;
+
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)

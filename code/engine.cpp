@@ -278,8 +278,13 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     object_transform T = DefaultFlatTransform();
 //    PushRect(RenderGroup, &T, V3(0, 0, 0), V2((r32)RenderWidth, (r32)RenderHeight));
     
+    if(WasPressed(Input->Controllers[0].RightShoulder))
+    {
+        EditorState->UIEnable = !EditorState->UIEnable;        
+    }
     
-    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, 1280, 720), 0))
+    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, 1280, 720),
+                  (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE : NK_WINDOW_REMOVE_ROM))
     {
         b32 Rerun = false;
         do
