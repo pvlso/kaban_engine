@@ -2966,19 +2966,19 @@ NK_API void nk_rule_horizontal(struct nk_context *ctx, struct nk_color color, nk
 
 
 
-enum nk_widget_align {
-    NK_WIDGET_ALIGN_LEFT        = 0x01,
-    NK_WIDGET_ALIGN_CENTERED    = 0x02,
-    NK_WIDGET_ALIGN_RIGHT       = 0x04,
-    NK_WIDGET_ALIGN_TOP         = 0x08,
-    NK_WIDGET_ALIGN_MIDDLE      = 0x10,
-    NK_WIDGET_ALIGN_BOTTOM      = 0x20
-};
-enum nk_widget_alignment {
-    NK_WIDGET_LEFT        = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_LEFT,
-    NK_WIDGET_CENTERED    = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_CENTERED,
-    NK_WIDGET_RIGHT       = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_RIGHT
-};
+    enum nk_widget_align {
+        NK_WIDGET_ALIGN_LEFT        = 0x01,
+        NK_WIDGET_ALIGN_CENTERED    = 0x02,
+        NK_WIDGET_ALIGN_RIGHT       = 0x04,
+        NK_WIDGET_ALIGN_TOP         = 0x08,
+        NK_WIDGET_ALIGN_MIDDLE      = 0x10,
+        NK_WIDGET_ALIGN_BOTTOM      = 0x20
+    };
+    enum nk_widget_alignment {
+        NK_WIDGET_LEFT        = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_LEFT,
+        NK_WIDGET_CENTERED    = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_CENTERED,
+        NK_WIDGET_RIGHT       = NK_WIDGET_ALIGN_MIDDLE|NK_WIDGET_ALIGN_RIGHT
+    };
 
 /**
  * Sets the currently used minimum row height.
@@ -2993,7 +2993,7 @@ enum nk_widget_alignment {
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] height  | New minimum row height to be used for auto generating the row height
  */
-NK_API void nk_layout_set_min_row_height(struct nk_context*, float height);
+    NK_API void nk_layout_set_min_row_height(struct nk_context*, float height);
 
 /**
  * Reset the currently used minimum row height back to `font_height + text_padding + padding`
@@ -3003,7 +3003,7 @@ NK_API void nk_layout_set_min_row_height(struct nk_context*, float height);
  *
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  */
-NK_API void nk_layout_reset_min_row_height(struct nk_context*);
+    NK_API void nk_layout_reset_min_row_height(struct nk_context*);
 
 /**
  * \brief Returns the width of the next row allocate by one of the layouting functions
@@ -3017,7 +3017,7 @@ NK_API void nk_layout_reset_min_row_height(struct nk_context*);
  *
  * \return `nk_rect` with both position and size of the next row
  */
-NK_API struct nk_rect nk_layout_widget_bounds(const struct nk_context *ctx);
+    NK_API struct nk_rect nk_layout_widget_bounds(const struct nk_context *ctx);
 
 /**
  * \brief Utility functions to calculate window ratio from pixel size
@@ -3032,7 +3032,7 @@ NK_API struct nk_rect nk_layout_widget_bounds(const struct nk_context *ctx);
  *
  * \returns `nk_rect` with both position and size of the next row
  */
-NK_API float nk_layout_ratio_from_pixel(const struct nk_context *ctx, float pixel_width);
+    NK_API float nk_layout_ratio_from_pixel(const struct nk_context *ctx, float pixel_width);
 
 /**
  * \brief Sets current row layout to share horizontal space
@@ -3048,8 +3048,8 @@ NK_API float nk_layout_ratio_from_pixel(const struct nk_context *ctx, float pixe
  * \param[in] height  | Holds height of each widget in row or zero for auto layouting
  * \param[in] columns | Number of widget inside row
  */
-NK_API void nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
-typedef void platform_nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
+    NK_API void nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
+    typedef void platform_nk_layout_row_dynamic(struct nk_context *ctx, float height, int cols);
 
 /**
  * \brief Sets current row layout to fill @cols number of widgets
@@ -3066,8 +3066,8 @@ typedef void platform_nk_layout_row_dynamic(struct nk_context *ctx, float height
  * \param[in] width   | Holds pixel width of each widget in the row
  * \param[in] columns | Number of widget inside row
  */
-NK_API void nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
-typedef void platform_nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
+    NK_API void nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
+    typedef void platform_nk_layout_row_static(struct nk_context *ctx, float height, int item_width, int cols);
 
 /**
  * \brief Starts a new dynamic or fixed row with given height and columns.
@@ -3082,8 +3082,8 @@ typedef void platform_nk_layout_row_static(struct nk_context *ctx, float height,
  * \param[in] height  | holds height of each widget in row or zero for auto layouting
  * \param[in] columns | Number of widget inside row
  */
-NK_API void nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
-typedef void platform_nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
+    NK_API void nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
+    typedef void platform_nk_layout_row_begin(struct nk_context *ctx, enum nk_layout_format fmt, float row_height, int cols);
 
 /**
  * \breif Specifies either window ratio or width of a single column
@@ -3096,8 +3096,8 @@ typedef void platform_nk_layout_row_begin(struct nk_context *ctx, enum nk_layout
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] value   | either a window ratio or fixed width depending on @fmt in previous `nk_layout_row_begin` call
  */
-NK_API void nk_layout_row_push(struct nk_context*, float value);
-typedef void platform_nk_layout_row_push(struct nk_context*, float value);
+    NK_API void nk_layout_row_push(struct nk_context*, float value);
+    typedef void platform_nk_layout_row_push(struct nk_context*, float value);
 
 /**
  * \brief Finished previously started row
@@ -3109,8 +3109,8 @@ typedef void platform_nk_layout_row_push(struct nk_context*, float value);
  *
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  */
-NK_API void nk_layout_row_end(struct nk_context*);
-typedef void platform_nk_layout_row_end(struct nk_context*);
+    NK_API void nk_layout_row_end(struct nk_context*);
+    typedef void platform_nk_layout_row_end(struct nk_context*);
 
 /**
  * \brief Specifies row columns in array as either window ratio or size
@@ -3125,7 +3125,7 @@ typedef void platform_nk_layout_row_end(struct nk_context*);
  * \param[in] height  | Holds height of each widget in row or zero for auto layouting
  * \param[in] columns | Number of widget inside row
  */
-NK_API void nk_layout_row(struct nk_context*, enum nk_layout_format, float height, int cols, const float *ratio);
+    NK_API void nk_layout_row(struct nk_context*, enum nk_layout_format, float height, int cols, const float *ratio);
 
 /**
  * # # nk_layout_row_template_begin
@@ -3139,7 +3139,7 @@ NK_API void nk_layout_row(struct nk_context*, enum nk_layout_format, float heigh
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] height  | Holds height of each widget in row or zero for auto layouting
  */
-NK_API void nk_layout_row_template_begin(struct nk_context*, float row_height);
+    NK_API void nk_layout_row_template_begin(struct nk_context*, float row_height);
 
 /**
  * # # nk_layout_row_template_push_dynamic
@@ -3153,7 +3153,7 @@ NK_API void nk_layout_row_template_begin(struct nk_context*, float row_height);
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] height  | Holds height of each widget in row or zero for auto layouting
  */
-NK_API void nk_layout_row_template_push_dynamic(struct nk_context*);
+    NK_API void nk_layout_row_template_push_dynamic(struct nk_context*);
 
 /**
  * # # nk_layout_row_template_push_variable
@@ -3167,7 +3167,7 @@ NK_API void nk_layout_row_template_push_dynamic(struct nk_context*);
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] width   | Holds the minimum pixel width the next column must always be
  */
-NK_API void nk_layout_row_template_push_variable(struct nk_context*, float min_width);
+    NK_API void nk_layout_row_template_push_variable(struct nk_context*, float min_width);
 
 /**
  * # # nk_layout_row_template_push_static
@@ -3181,7 +3181,7 @@ NK_API void nk_layout_row_template_push_variable(struct nk_context*, float min_w
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  * \param[in] width   | Holds the absolute pixel width value the next column must be
  */
-NK_API void nk_layout_row_template_push_static(struct nk_context*, float width);
+    NK_API void nk_layout_row_template_push_static(struct nk_context*, float width);
 
 /**
  * # # nk_layout_row_template_end
@@ -3194,7 +3194,7 @@ NK_API void nk_layout_row_template_push_static(struct nk_context*, float width);
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_begin_xxx`
  */
-NK_API void nk_layout_row_template_end(struct nk_context*);
+    NK_API void nk_layout_row_template_end(struct nk_context*);
 
 /**
  * # # nk_layout_space_begin
@@ -3210,7 +3210,7 @@ NK_API void nk_layout_row_template_end(struct nk_context*);
  * \param[in] height  | Holds height of each widget in row or zero for auto layouting
  * \param[in] columns | Number of widgets inside row
  */
-NK_API void nk_layout_space_begin(struct nk_context*, enum nk_layout_format, float height, int widget_count);
+    NK_API void nk_layout_space_begin(struct nk_context*, enum nk_layout_format, float height, int widget_count);
 
 /**
  * # # nk_layout_space_push
@@ -3224,7 +3224,7 @@ NK_API void nk_layout_space_begin(struct nk_context*, enum nk_layout_format, flo
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_layout_space_begin`
  * \param[in] bounds  | Position and size in laoyut space local coordinates
  */
-NK_API void nk_layout_space_push(struct nk_context*, struct nk_rect bounds);
+    NK_API void nk_layout_space_push(struct nk_context*, struct nk_rect bounds);
 
 /**
  * # # nk_layout_space_end
@@ -3237,7 +3237,7 @@ NK_API void nk_layout_space_push(struct nk_context*, struct nk_rect bounds);
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_layout_space_begin`
  */
-NK_API void nk_layout_space_end(struct nk_context*);
+    NK_API void nk_layout_space_end(struct nk_context*);
 
 /**
  * # # nk_layout_space_bounds
@@ -3252,7 +3252,7 @@ NK_API void nk_layout_space_end(struct nk_context*);
  *
  * \returns `nk_rect` holding the total space allocated
  */
-NK_API struct nk_rect nk_layout_space_bounds(const struct nk_context *ctx);
+    NK_API struct nk_rect nk_layout_space_bounds(const struct nk_context *ctx);
 
 /**
  * # # nk_layout_space_to_screen
@@ -3268,7 +3268,7 @@ NK_API struct nk_rect nk_layout_space_bounds(const struct nk_context *ctx);
  *
  * \returns transformed `nk_vec2` in screen space coordinates
  */
-NK_API struct nk_vec2 nk_layout_space_to_screen(const struct nk_context* ctx, struct nk_vec2 vec);
+    NK_API struct nk_vec2 nk_layout_space_to_screen(const struct nk_context* ctx, struct nk_vec2 vec);
 
 /**
  * # # nk_layout_space_to_local
@@ -3284,7 +3284,7 @@ NK_API struct nk_vec2 nk_layout_space_to_screen(const struct nk_context* ctx, st
  *
  * \returns transformed `nk_vec2` in layout space coordinates
  */
-NK_API struct nk_vec2 nk_layout_space_to_local(const struct nk_context *ctx, struct nk_vec2 vec);
+    NK_API struct nk_vec2 nk_layout_space_to_local(const struct nk_context *ctx, struct nk_vec2 vec);
 
 /**
  * # # nk_layout_space_rect_to_screen
@@ -3300,7 +3300,7 @@ NK_API struct nk_vec2 nk_layout_space_to_local(const struct nk_context *ctx, str
  *
  * \returns transformed `nk_rect` in screen space coordinates
  */
-NK_API struct nk_rect nk_layout_space_rect_to_screen(const struct nk_context *ctx, struct nk_rect bounds);
+    NK_API struct nk_rect nk_layout_space_rect_to_screen(const struct nk_context *ctx, struct nk_rect bounds);
 
 /**
  * # # nk_layout_space_rect_to_local
@@ -3316,7 +3316,7 @@ NK_API struct nk_rect nk_layout_space_rect_to_screen(const struct nk_context *ct
  *
  * \returns transformed `nk_rect` in layout space coordinates
  */
-NK_API struct nk_rect nk_layout_space_rect_to_local(const struct nk_context *ctx, struct nk_rect bounds);
+    NK_API struct nk_rect nk_layout_space_rect_to_local(const struct nk_context *ctx, struct nk_rect bounds);
 
 /**
  * # # nk_spacer
@@ -3330,8 +3330,8 @@ NK_API struct nk_rect nk_layout_space_rect_to_local(const struct nk_context *ctx
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after call `nk_layout_space_begin`
  *
  */
-NK_API void nk_spacer(struct nk_context *ctx);
-typedef void platform_nk_spacer(struct nk_context *ctx);
+    NK_API void nk_spacer(struct nk_context *ctx);
+    typedef void platform_nk_spacer(struct nk_context *ctx);
 
 
 /** =============================================================================
@@ -3424,36 +3424,37 @@ typedef void platform_nk_spacer(struct nk_context *ctx);
  * \ref nk_group_set_scroll             | Sets the scroll offset for the given group
  */
 
- /**
- * \brief Starts a new widget group. Requires a previous layouting function to specify a pos/size.
- * ```c
- * nk_bool nk_group_begin(struct nk_context*, const char *title, nk_flags);
- * ```
- *
- * Parameter   | Description
- * ------------|-----------------------------------------------------------
- * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
- * \param[in] title   | Must be an unique identifier for this group that is also used for the group header
- * \param[in] flags   | Window flags defined in the nk_panel_flags section with a number of different group behaviors
- *
- * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
- */
-NK_API nk_bool nk_group_begin(struct nk_context*, const char *title, nk_flags);
+    /**
+     * \brief Starts a new widget group. Requires a previous layouting function to specify a pos/size.
+     * ```c
+     * nk_bool nk_group_begin(struct nk_context*, const char *title, nk_flags);
+     * ```
+     *
+     * Parameter   | Description
+     * ------------|-----------------------------------------------------------
+     * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
+     * \param[in] title   | Must be an unique identifier for this group that is also used for the group header
+     * \param[in] flags   | Window flags defined in the nk_panel_flags section with a number of different group behaviors
+     *
+     * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
+     */
+    NK_API nk_bool nk_group_begin(struct nk_context*, const char *title, nk_flags);
+    typedef nk_bool platform_nk_group_begin(struct nk_context*, const char *title, nk_flags);
 
- /**
- * \brief Starts a new widget group. Requires a previous layouting function to specify a pos/size.
- * ```c
- * nk_bool nk_group_begin_titled(struct nk_context*, const char *name, const char *title, nk_flags);
- * ```
- *
- * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
- * \param[in] id      | Must be an unique identifier for this group
- * \param[in] title   | Group header title
- * \param[in] flags   | Window flags defined in the nk_panel_flags section with a number of different group behaviors
- *
- * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
- */
-NK_API nk_bool nk_group_begin_titled(struct nk_context*, const char *name, const char *title, nk_flags);
+    /**
+     * \brief Starts a new widget group. Requires a previous layouting function to specify a pos/size.
+     * ```c
+     * nk_bool nk_group_begin_titled(struct nk_context*, const char *name, const char *title, nk_flags);
+     * ```
+     *
+     * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
+     * \param[in] id      | Must be an unique identifier for this group
+     * \param[in] title   | Group header title
+     * \param[in] flags   | Window flags defined in the nk_panel_flags section with a number of different group behaviors
+     *
+     * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
+     */
+    NK_API nk_bool nk_group_begin_titled(struct nk_context*, const char *name, const char *title, nk_flags);
 
 /**
  * # # nk_group_end
@@ -3466,7 +3467,8 @@ NK_API nk_bool nk_group_begin_titled(struct nk_context*, const char *name, const
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
  */
-NK_API void nk_group_end(struct nk_context*);
+    NK_API void nk_group_end(struct nk_context*);
+    typedef void platform_nk_group_end(struct nk_context*);
 
 /**
  * # # nk_group_scrolled_offset_begin
@@ -3486,7 +3488,7 @@ NK_API void nk_group_end(struct nk_context*);
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_group_scrolled_offset_begin(struct nk_context*, nk_uint *x_offset, nk_uint *y_offset, const char *title, nk_flags flags);
+    NK_API nk_bool nk_group_scrolled_offset_begin(struct nk_context*, nk_uint *x_offset, nk_uint *y_offset, const char *title, nk_flags flags);
 
 /**
  * # # nk_group_scrolled_begin
@@ -3505,7 +3507,7 @@ NK_API nk_bool nk_group_scrolled_offset_begin(struct nk_context*, nk_uint *x_off
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_group_scrolled_begin(struct nk_context*, struct nk_scroll *off, const char *title, nk_flags);
+    NK_API nk_bool nk_group_scrolled_begin(struct nk_context*, struct nk_scroll *off, const char *title, nk_flags);
 
 /**
  * # # nk_group_scrolled_end
@@ -3518,7 +3520,7 @@ NK_API nk_bool nk_group_scrolled_begin(struct nk_context*, struct nk_scroll *off
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct
  */
-NK_API void nk_group_scrolled_end(struct nk_context*);
+    NK_API void nk_group_scrolled_end(struct nk_context*);
 
 /**
  * # # nk_group_get_scroll
@@ -3534,7 +3536,7 @@ NK_API void nk_group_scrolled_end(struct nk_context*);
  * \param[in] x_offset | A pointer to the x offset output (or NULL to ignore)
  * \param[in] y_offset | A pointer to the y offset output (or NULL to ignore)
  */
-NK_API void nk_group_get_scroll(struct nk_context*, const char *id, nk_uint *x_offset, nk_uint *y_offset);
+    NK_API void nk_group_get_scroll(struct nk_context*, const char *id, nk_uint *x_offset, nk_uint *y_offset);
 
 /**
  * # # nk_group_set_scroll
@@ -3550,7 +3552,7 @@ NK_API void nk_group_get_scroll(struct nk_context*, const char *id, nk_uint *x_o
  * \param[in] x_offset | The x offset to scroll to
  * \param[in] y_offset | The y offset to scroll to
  */
-NK_API void nk_group_set_scroll(struct nk_context*, const char *id, nk_uint x_offset, nk_uint y_offset);
+    NK_API void nk_group_set_scroll(struct nk_context*, const char *id, nk_uint x_offset, nk_uint y_offset);
 
 /** =============================================================================
  *
@@ -3686,8 +3688,8 @@ NK_API void nk_group_set_scroll(struct nk_context*, const char *id, nk_uint x_of
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
-typedef nk_bool platform_nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
+    NK_API nk_bool nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
+    typedef nk_bool platform_nk_tree_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
 
 /**
  * # # nk_tree_image_push
@@ -3756,7 +3758,7 @@ typedef nk_bool platform_nk_tree_push_hashed(struct nk_context*, enum nk_tree_ty
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_tree_image_push_hashed(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
+    NK_API nk_bool nk_tree_image_push_hashed(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states initial_state, const char *hash, int len,int seed);
 
 /**
  * # # nk_tree_pop
@@ -3769,8 +3771,8 @@ NK_API nk_bool nk_tree_image_push_hashed(struct nk_context*, enum nk_tree_type, 
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after calling `nk_tree_xxx_push_xxx`
  */
-NK_API void nk_tree_pop(struct nk_context*);
-typedef void platform_nk_tree_pop(struct nk_context*);
+    NK_API void nk_tree_pop(struct nk_context*);
+    typedef void platform_nk_tree_pop(struct nk_context*);
 
 /**
  * # # nk_tree_state_push
@@ -3788,7 +3790,7 @@ typedef void platform_nk_tree_pop(struct nk_context*);
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_tree_state_push(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states *state);
+    NK_API nk_bool nk_tree_state_push(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states *state);
 
 /**
  * # # nk_tree_state_image_push
@@ -3807,7 +3809,7 @@ NK_API nk_bool nk_tree_state_push(struct nk_context*, enum nk_tree_type, const c
  *
  * \returns `true(1)` if visible and fillable with widgets or `false(0)` otherwise
  */
-NK_API nk_bool nk_tree_state_image_push(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states *state);
+    NK_API nk_bool nk_tree_state_image_push(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states *state);
 
 /**
  * # # nk_tree_state_pop
@@ -3820,96 +3822,96 @@ NK_API nk_bool nk_tree_state_image_push(struct nk_context*, enum nk_tree_type, s
  * ------------|-----------------------------------------------------------
  * \param[in] ctx     | Must point to an previously initialized `nk_context` struct after calling `nk_tree_xxx_push_xxx`
  */
-NK_API void nk_tree_state_pop(struct nk_context*);
+    NK_API void nk_tree_state_pop(struct nk_context*);
 
 #define nk_tree_element_push(ctx, type, title, state, sel) nk_tree_element_push_hashed(ctx, type, title, state, sel, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),__LINE__)
 #define nk_tree_element_push_id(ctx, type, title, state, sel, id) nk_tree_element_push_hashed(ctx, type, title, state, sel, NK_FILE_LINE,nk_strlen(NK_FILE_LINE),id)
-NK_API nk_bool nk_tree_element_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, nk_bool *selected, const char *hash, int len, int seed);
-NK_API nk_bool nk_tree_element_image_push_hashed(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states initial_state, nk_bool *selected, const char *hash, int len,int seed);
-NK_API void nk_tree_element_pop(struct nk_context*);
+    NK_API nk_bool nk_tree_element_push_hashed(struct nk_context*, enum nk_tree_type, const char *title, enum nk_collapse_states initial_state, nk_bool *selected, const char *hash, int len, int seed);
+    NK_API nk_bool nk_tree_element_image_push_hashed(struct nk_context*, enum nk_tree_type, struct nk_image, const char *title, enum nk_collapse_states initial_state, nk_bool *selected, const char *hash, int len,int seed);
+    NK_API void nk_tree_element_pop(struct nk_context*);
 
 /* =============================================================================
  *
  *                                  LIST VIEW
  *
  * ============================================================================= */
-struct nk_list_view {
+    struct nk_list_view {
 /* public: */
-    int begin, end, count;
+        int begin, end, count;
 /* private: */
-    int total_height;
-    struct nk_context *ctx;
-    nk_uint *scroll_pointer;
-    nk_uint scroll_value;
-};
-NK_API nk_bool nk_list_view_begin(struct nk_context*, struct nk_list_view *out, const char *id, nk_flags, int row_height, int row_count);
-NK_API void nk_list_view_end(struct nk_list_view*);
+        int total_height;
+        struct nk_context *ctx;
+        nk_uint *scroll_pointer;
+        nk_uint scroll_value;
+    };
+    NK_API nk_bool nk_list_view_begin(struct nk_context*, struct nk_list_view *out, const char *id, nk_flags, int row_height, int row_count);
+    NK_API void nk_list_view_end(struct nk_list_view*);
 /* =============================================================================
  *
  *                                  WIDGET
  *
  * ============================================================================= */
-enum nk_widget_layout_states {
-    NK_WIDGET_INVALID, /**< The widget cannot be seen and is completely out of view */
-    NK_WIDGET_VALID,   /**< The widget is completely inside the window and can be updated and drawn */
-    NK_WIDGET_ROM,     /**< The widget is partially visible and cannot be updated */
-    NK_WIDGET_DISABLED /**< The widget is manually disabled and acts like NK_WIDGET_ROM */
-};
-enum nk_widget_states {
-    NK_WIDGET_STATE_MODIFIED    = NK_FLAG(1),
-    NK_WIDGET_STATE_INACTIVE    = NK_FLAG(2), /**!< widget is neither active nor hovered */
-    NK_WIDGET_STATE_ENTERED     = NK_FLAG(3), /**!< widget has been hovered on the current frame */
-    NK_WIDGET_STATE_HOVER       = NK_FLAG(4), /**!< widget is being hovered */
-    NK_WIDGET_STATE_ACTIVED     = NK_FLAG(5),/**!< widget is currently activated */
-    NK_WIDGET_STATE_LEFT        = NK_FLAG(6), /**!< widget is from this frame on not hovered anymore */
-    NK_WIDGET_STATE_HOVERED     = NK_WIDGET_STATE_HOVER|NK_WIDGET_STATE_MODIFIED, /**!< widget is being hovered */
-    NK_WIDGET_STATE_ACTIVE      = NK_WIDGET_STATE_ACTIVED|NK_WIDGET_STATE_MODIFIED /**!< widget is currently activated */
-};
+    enum nk_widget_layout_states {
+        NK_WIDGET_INVALID, /**< The widget cannot be seen and is completely out of view */
+        NK_WIDGET_VALID,   /**< The widget is completely inside the window and can be updated and drawn */
+        NK_WIDGET_ROM,     /**< The widget is partially visible and cannot be updated */
+        NK_WIDGET_DISABLED /**< The widget is manually disabled and acts like NK_WIDGET_ROM */
+    };
+    enum nk_widget_states {
+        NK_WIDGET_STATE_MODIFIED    = NK_FLAG(1),
+        NK_WIDGET_STATE_INACTIVE    = NK_FLAG(2), /**!< widget is neither active nor hovered */
+        NK_WIDGET_STATE_ENTERED     = NK_FLAG(3), /**!< widget has been hovered on the current frame */
+        NK_WIDGET_STATE_HOVER       = NK_FLAG(4), /**!< widget is being hovered */
+        NK_WIDGET_STATE_ACTIVED     = NK_FLAG(5),/**!< widget is currently activated */
+        NK_WIDGET_STATE_LEFT        = NK_FLAG(6), /**!< widget is from this frame on not hovered anymore */
+        NK_WIDGET_STATE_HOVERED     = NK_WIDGET_STATE_HOVER|NK_WIDGET_STATE_MODIFIED, /**!< widget is being hovered */
+        NK_WIDGET_STATE_ACTIVE      = NK_WIDGET_STATE_ACTIVED|NK_WIDGET_STATE_MODIFIED /**!< widget is currently activated */
+    };
 
-NK_API enum nk_widget_layout_states nk_widget(struct nk_rect*, const struct nk_context*);
-NK_API enum nk_widget_layout_states nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
-NK_API struct nk_rect nk_widget_bounds(const struct nk_context*);
-NK_API struct nk_vec2 nk_widget_position(const struct nk_context*);
-NK_API struct nk_vec2 nk_widget_size(const struct nk_context*);
-NK_API float nk_widget_width(const struct nk_context*);
-NK_API float nk_widget_height(const struct nk_context*);
-NK_API nk_bool nk_widget_is_hovered(const struct nk_context*);
-NK_API nk_bool nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
-NK_API nk_bool nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
-NK_API void nk_spacing(struct nk_context*, int cols);
-NK_API void nk_widget_disable_begin(struct nk_context* ctx);
-NK_API void nk_widget_disable_end(struct nk_context* ctx);
+    NK_API enum nk_widget_layout_states nk_widget(struct nk_rect*, const struct nk_context*);
+    NK_API enum nk_widget_layout_states nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
+    NK_API struct nk_rect nk_widget_bounds(const struct nk_context*);
+    NK_API struct nk_vec2 nk_widget_position(const struct nk_context*);
+    NK_API struct nk_vec2 nk_widget_size(const struct nk_context*);
+    NK_API float nk_widget_width(const struct nk_context*);
+    NK_API float nk_widget_height(const struct nk_context*);
+    NK_API nk_bool nk_widget_is_hovered(const struct nk_context*);
+    NK_API nk_bool nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
+    NK_API nk_bool nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
+    NK_API void nk_spacing(struct nk_context*, int cols);
+    NK_API void nk_widget_disable_begin(struct nk_context* ctx);
+    NK_API void nk_widget_disable_end(struct nk_context* ctx);
 
-typedef enum nk_widget_layout_states platform_nk_widget(struct nk_rect*, const struct nk_context*);
-typedef enum nk_widget_layout_states platform_nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
-typedef struct nk_rect platform_nk_widget_bounds(const struct nk_context*);
-typedef struct nk_vec2 platform_nk_widget_position(const struct nk_context*);
-typedef struct nk_vec2 platform_nk_widget_size(const struct nk_context*);
-typedef float platform_nk_widget_width(const struct nk_context*);
-typedef float platform_nk_widget_height(const struct nk_context*);
-typedef nk_bool platform_nk_widget_is_hovered(const struct nk_context*);
-typedef nk_bool platform_nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
-typedef nk_bool platform_nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
-typedef void platform_nk_spacing(struct nk_context*, int cols);
-typedef void platform_nk_widget_disable_begin(struct nk_context* ctx);
-typedef void platform_nk_widget_disable_end(struct nk_context* ctx);
+    typedef enum nk_widget_layout_states platform_nk_widget(struct nk_rect*, const struct nk_context*);
+    typedef enum nk_widget_layout_states platform_nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
+    typedef struct nk_rect platform_nk_widget_bounds(const struct nk_context*);
+    typedef struct nk_vec2 platform_nk_widget_position(const struct nk_context*);
+    typedef struct nk_vec2 platform_nk_widget_size(const struct nk_context*);
+    typedef float platform_nk_widget_width(const struct nk_context*);
+    typedef float platform_nk_widget_height(const struct nk_context*);
+    typedef nk_bool platform_nk_widget_is_hovered(const struct nk_context*);
+    typedef nk_bool platform_nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
+    typedef nk_bool platform_nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
+    typedef void platform_nk_spacing(struct nk_context*, int cols);
+    typedef void platform_nk_widget_disable_begin(struct nk_context* ctx);
+    typedef void platform_nk_widget_disable_end(struct nk_context* ctx);
 
 /* =============================================================================
  *
  *                                  TEXT
  *
  * ============================================================================= */
-enum nk_text_align {
-    NK_TEXT_ALIGN_LEFT        = 0x01,
-    NK_TEXT_ALIGN_CENTERED    = 0x02,
-    NK_TEXT_ALIGN_RIGHT       = 0x04,
-    NK_TEXT_ALIGN_TOP         = 0x08,
-    NK_TEXT_ALIGN_MIDDLE      = 0x10,
-    NK_TEXT_ALIGN_BOTTOM      = 0x20
-};
-enum nk_text_alignment {
-    NK_TEXT_LEFT        = NK_TEXT_ALIGN_MIDDLE|NK_TEXT_ALIGN_LEFT,
-    NK_TEXT_CENTERED    = NK_TEXT_ALIGN_MIDDLE|NK_TEXT_ALIGN_CENTERED,
+    enum nk_text_align {
+        NK_TEXT_ALIGN_LEFT        = 0x01,
+        NK_TEXT_ALIGN_CENTERED    = 0x02,
+        NK_TEXT_ALIGN_RIGHT       = 0x04,
+        NK_TEXT_ALIGN_TOP         = 0x08,
+        NK_TEXT_ALIGN_MIDDLE      = 0x10,
+        NK_TEXT_ALIGN_BOTTOM      = 0x20
+    };
+    enum nk_text_alignment {
+        NK_TEXT_LEFT        = NK_TEXT_ALIGN_MIDDLE|NK_TEXT_ALIGN_LEFT,
+        NK_TEXT_CENTERED    = NK_TEXT_ALIGN_MIDDLE|NK_TEXT_ALIGN_CENTERED,
     NK_TEXT_RIGHT       = NK_TEXT_ALIGN_MIDDLE|NK_TEXT_ALIGN_RIGHT
 };
 NK_API void nk_text(struct nk_context*, const char*, int, nk_flags);
@@ -4064,6 +4066,13 @@ NK_API nk_bool nk_selectable_image_label(struct nk_context*,struct nk_image,  co
 NK_API nk_bool nk_selectable_image_text(struct nk_context*,struct nk_image, const char*, int, nk_flags align, nk_bool *value);
 NK_API nk_bool nk_selectable_symbol_label(struct nk_context*,enum nk_symbol_type,  const char*, nk_flags align, nk_bool *value);
 NK_API nk_bool nk_selectable_symbol_text(struct nk_context*,enum nk_symbol_type, const char*, int, nk_flags align, nk_bool *value);
+
+typedef nk_bool platform_nk_selectable_label(struct nk_context*, const char*, nk_flags align, nk_bool *value);
+typedef nk_bool platform_nk_selectable_text(struct nk_context*, const char*, int, nk_flags align, nk_bool *value);
+typedef nk_bool platform_nk_selectable_image_label(struct nk_context*,struct nk_image,  const char*, nk_flags align, nk_bool *value);
+typedef nk_bool platform_nk_selectable_image_text(struct nk_context*,struct nk_image, const char*, int, nk_flags align, nk_bool *value);
+typedef nk_bool platform_nk_selectable_symbol_label(struct nk_context*,enum nk_symbol_type,  const char*, nk_flags align, nk_bool *value);
+typedef nk_bool platform_nk_selectable_symbol_text(struct nk_context*,enum nk_symbol_type, const char*, int, nk_flags align, nk_bool *value);
 
 NK_API nk_bool nk_select_label(struct nk_context*, const char*, nk_flags align, nk_bool value);
 NK_API nk_bool nk_select_text(struct nk_context*, const char*, int, nk_flags align, nk_bool value);
@@ -6727,6 +6736,9 @@ struct nk_ui
     platform_nk_end *NkEnd;
     platform_nk_spacer *NkSpacer;
 
+    platform_nk_group_begin *NkGroupBegin;
+    platform_nk_group_end *NkGroupEnd;
+
     platform_nk_layout_row_dynamic *NkLayoutRowDynamic;
     platform_nk_layout_row_begin *NkLayoutRowBegin;
     platform_nk_layout_row_push *NkLayoutRowPush;
@@ -6792,6 +6804,13 @@ struct nk_ui
     platform_nk_checkbox_text_align *NkCheckboxTextAlign;
     platform_nk_checkbox_flags_label *NkCheckboxFlagsLabel;
     platform_nk_checkbox_flags_text *NkCheckboxFlagsText;
+
+    platform_nk_selectable_label *NkSelectableLabel;
+    platform_nk_selectable_text  *NkSelectableText;
+    platform_nk_selectable_image_label *NkSelectableImageLabel;
+    platform_nk_selectable_image_text *NkSelectableImageText;
+    platform_nk_selectable_symbol_label *NkSelectableSymbolLabel;
+    platform_nk_selectable_symbol_text *NkSelectableSymbolText;
 
     platform_nk_edit_string *NkEditString;
     platform_nk_edit_string_zero_terminated *NkEditStringZeroTerminated;

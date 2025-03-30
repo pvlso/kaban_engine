@@ -671,6 +671,9 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkEnd = nk_end;
     UI->NkSpacer = nk_spacer;
 
+    UI->NkGroupBegin = nk_group_begin;
+    UI->NkGroupEnd = nk_group_end;
+
     UI->NkLayoutRowDynamic = nk_layout_row_dynamic;
     UI->NkLayoutRowBegin = nk_layout_row_begin;
     UI->NkLayoutRowPush = nk_layout_row_push;
@@ -736,6 +739,13 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkCheckboxTextAlign = nk_checkbox_text_align;
     UI->NkCheckboxFlagsLabel = nk_checkbox_flags_label;
     UI->NkCheckboxFlagsText = nk_checkbox_flags_text;
+
+    UI->NkSelectableLabel = nk_selectable_label;
+    UI->NkSelectableText = nk_selectable_text;
+    UI->NkSelectableImageLabel = nk_selectable_image_label;
+    UI->NkSelectableImageText = nk_selectable_image_text;
+    UI->NkSelectableSymbolLabel = nk_selectable_symbol_label;
+    UI->NkSelectableSymbolText = nk_selectable_symbol_text;
 
     UI->NkEditString = nk_edit_string;
     UI->NkEditStringZeroTerminated = nk_edit_string_zero_terminated;
@@ -823,7 +833,6 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkTooltipEnd = nk_tooltip_end;
 
     UI->NkPropertyInt = nk_property_int;
-
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

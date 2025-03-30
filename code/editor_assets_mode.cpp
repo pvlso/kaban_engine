@@ -54,6 +54,9 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     Result->SSWMFiles = PushArray(&EditorState->ModeArena, Result->SSWMFileCount, char *);
     Platform.ListFilesInDirectory(PlatformFileType_SSWM, Result->SSWMFiles, &EditorState->ModeArena);
     
+
+    Result->JsonStringsHead = ParseJson("enum_strings.json", &EditorState->ModeArena);
+
     EditorState->AssetsMode = Result;
 }
 
@@ -1382,7 +1385,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
 
                     }
                     UI->NkLayoutRowEnd(Nk);
-                    UI->NkLayoutRowDynamic(Nk, 30, 1);
+                    UI->NkLayoutRowDynamic(Nk, 20, 1);
                     UI->NkSpacer(Nk);
 
                     char Text[256];
@@ -1416,6 +1419,55 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                                  AssetsMode->StoredHeader.Version & 0xFF);
                     UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
 
+                    
+                    UI->NkLayoutRowStatic(Nk, 20, 300, 1);
+                    UI->NkSelectableLabel(Nk, "Show Stored Assets", NK_TEXT_ALIGN_LEFT, &AssetsMode->ShowStoredAssets);
+                    UI->NkLayoutRowBegin(Nk, NK_STATIC, 240, 1);
+                    {
+                        UI->NkLayoutRowPush(Nk, 300);
+                        if(AssetsMode->ShowStoredAssets)
+                        {
+                            if(UI->NkGroupBegin(Nk, "Show Stored Assets",
+                                                NK_WINDOW_BORDER))
+                            {
+                                UI->NkLayoutRowDynamic(Nk, 20, 1);
+                                for(u32 AssetIndex = 0;
+                                    AssetIndex < AssetsMode->StoredHeader.AssetCount;
+                                    ++AssetIndex)
+                                {
+                                    stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
+                                    char *TypeIDString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", Asset.TypeID);
+                                    char *TypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", Asset.Type);
+                                    FormatString(ArrayCount(Text), Text,
+                                                 "%d. AssetID: %d",
+                                                 AssetIndex, Asset.ID);
+
+                                    UI->NkLayoutRowStatic(Nk, 100, 280, 1);
+                                    if(UI->NkGroupBegin(Nk, Text,
+                                                        NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
+                                    {
+                                        UI->NkLayoutRowStatic(Nk, 20, 280, 1);
+                                        FormatString(ArrayCount(Text), Text,
+                                                     "AssetTypeID: %s",
+                                                     TypeIDString);
+                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+                                        FormatString(ArrayCount(Text), Text,
+                                                     "AssetType: %s",
+                                                     TypeString);
+                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+                                        FormatString(ArrayCount(Text), Text,
+                                                     "TagCount: %d",
+                                                     Asset.TagCount);
+                                        UI->NkLabel(Nk, Text, NK_TEXT_ALIGN_LEFT);
+
+                                        UI->NkGroupEnd(Nk);
+                                    }
+                                }
+                                UI->NkGroupEnd(Nk);
+                            }
+                        }
+                    }
+                    UI->NkLayoutRowEnd(Nk);
 #if 0
                     UIDrawScrollWindow(UIState, Layout, "Show Stored Assets", V2(933.0f, 400.0f),
                                        &AssetsMode->ShowStoredAssetIndex, "Stored Assets", ScrollDataType_StoredAssets, 3,

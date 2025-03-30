@@ -104,22 +104,6 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkPropertyInt(Nk, "#Map ID: ", 0, (int *)&EditorState->MapStartup.MapID, 255, 1, 0.1f);
         }
         UI->NkLayoutRowEnd(Nk);
-
-        
-        switch(TitleScreen->ModeToPlay)
-        {
-            case EditorMode_None:
-            {
-            } break;
-
-            case EditorMode_AssetsMode:
-            {
-            } break;
-
-            case EditorMode_GameMode:
-            {
-            } break;
-        }
     }
 
     return(Result);

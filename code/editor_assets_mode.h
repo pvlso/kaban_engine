@@ -275,6 +275,7 @@ struct editor_mode_assets
     b32 EditStoredAsset;
     b32 RemoveStoredAsset;
 
+    b32 ShowStoredAssets;
     u32 ShowStoredAssetIndex;
     u32 LastShowStoredAssetIndex;
     stored_asset *StoredAssets;
@@ -323,7 +324,9 @@ struct editor_mode_assets
 
     v2 PixelPosition;
     r32 Time;
-    
+
+    json_element *JsonStringsHead;    
+
     union
     {
         bitmap_mode BitmapMode;
