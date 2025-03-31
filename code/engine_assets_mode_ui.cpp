@@ -9,68 +9,52 @@
 inline void
 DrawWidget(editor_mode_assets *AssetsMode, u32 AssetIndex, nk_ui *UI, nk_context *Nk)
 {
-    stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
-    char *TypeIDString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", Asset.TypeID);
-    char *TypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", Asset.Type);
-
-    UI->NkLayoutRowStatic(Nk, 100, 280, 1);
-    if(UI->NkGroupBegin(Nk, "Asset",
-                        NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
-    {
-        UI->NkLayoutRowStatic(Nk, 20, 280, 1);
-        UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "%d. AssetID: %d",
-                     AssetIndex, Asset.ID);
-
-        UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT,"AssetTypeID: %s",
-                     TypeIDString);
-
-        UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "AssetType: %s",
-                     TypeString);
-
-        UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "TagCount: %d",
-                     Asset.TagCount);
-
-        UI->NkGroupEnd(Nk);
-    }
-
-    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-    Rect.h += 4;
-    Rect.y -= 2;
-
-    if(UI->NkWidgetIsHovered(Nk))
-        UI->NkFillRect(&Nk->current->buffer, Rect, 0.0f, {255, 0, 255, 100});
-    else
-        UI->NkFillRect(&Nk->current->buffer, Rect, 0.0f, {255, 0, 0, 100});
-
-    if(UI->NkWidgetIsMouseClicked(Nk, NK_BUTTON_LEFT))
-    {
-        AssetsMode->ShowStoredAssetIndex = AssetIndex;
-    }
 }
 
 inline void
 DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 {
-    UI->NkLayoutRowStatic(Nk, 20, 300, 1);
-    UI->NkSelectableLabel(Nk, "Show Stored Assets", NK_TEXT_ALIGN_CENTERED, &AssetsMode->ShowStoredAssets);
-    UI->NkLayoutRowBegin(Nk, NK_STATIC, 240, 1);
+    char Text[64];
+    UI->NkLayoutRowStatic(Nk, 360, 300, 1);
+    if(UI->NkGroupBegin(Nk, "Stored Assets View", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
     {
-        UI->NkLayoutRowPush(Nk, 300);
-        if(AssetsMode->ShowStoredAssets)
+        UI->NkLayoutRowStatic(Nk, 100, 280, 1);
+        for(u32 AssetIndex = 0;
+            AssetIndex < AssetsMode->StoredHeader.AssetCount;
+            ++AssetIndex)
         {
-            if(UI->NkGroupBegin(Nk, "ShowStoredAssets", NK_WINDOW_BORDER))
+            stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
+            char *TypeIDString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", Asset.TypeID);
+            char *TypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", Asset.Type);
+
+            FormatString(ArrayCount(Text), Text, "Asset%d", AssetIndex);
+            struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
+
+            nk_color C = {255, 255, 255, 255};
+            if(UI->NkWidgetIsHovered(Nk))
+                C = {255, 0, 0, 255};                
+
+            if(UI->NkWidgetIsMouseClicked(Nk, NK_BUTTON_LEFT))
+                AssetsMode->ShowStoredAssetIndex = AssetIndex;
+            Platform.UI.NkFillRect(&Nk->current->buffer, Bounds, 0.0f, C);
+
+            if(UI->NkGroupBegin(Nk, Text, NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
             {
-                for(u32 AssetIndex = 0;
-                    AssetIndex < AssetsMode->StoredHeader.AssetCount;
-                    ++AssetIndex)
-                {
-                    DrawWidget(AssetsMode, AssetIndex, UI, Nk);
-                }
+                UI->NkLayoutRowStatic(Nk, 20, 280, 1);
+                UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "%d. AssetID: %d",
+                             AssetIndex, Asset.ID);
+                UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT,"AssetTypeID: %s",
+                             TypeIDString);
+                UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "AssetType: %s",
+                             TypeString);
+                UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "TagCount: %d",
+                             Asset.TagCount);
+
                 UI->NkGroupEnd(Nk);
             }
         }
+        UI->NkGroupEnd(Nk);
     }
-    UI->NkLayoutRowEnd(Nk);
 }
 
 inline void
@@ -143,7 +127,6 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             UI->NkSpacer(Nk);
             UI->NkLayoutRowStatic(Nk, 18, 300, 1);
 
-            char Text[256];
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Asset Count: %d",
                          AssetsMode->StoredHeader.AssetCount);
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "SizeOfStoredAsset: %d",
@@ -158,11 +141,29 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                          AssetsMode->StoredHeader.Version & 0xFF);
 
             DrawShowStoredAssets(AssetsMode, UI, Nk);
-
-            UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, INT_MAX);
+            
+            UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, INT_MAX);
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(0, 12, 98, 40));
+            if(UI->NkButtonLabel(Nk, "Exit"))
             {
-                UI->NkLayoutSpacePush(Nk, UI->NkRect(320, -555, 940, 700));
-                if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
+                AssetsMode->Exit = true;
+            }
+
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(104, 12, 98, 40));
+            if(UI->NkButtonLabel(Nk, "Write Assets"))
+            {
+            }
+
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(208, 12, 98, 40));
+            if(UI->NkButtonLabel(Nk, "Write SSA"))
+            {
+            }
+            UI->NkLayoutSpaceEnd(Nk);
+
+            char Text[256];
+#if 1
+                UI->NkLayoutSpacePush(Nk, UI->NkRect(320, -650, 940, 700));
+                if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_BORDER))
                 {
                     stored_asset *StoredAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex; 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
@@ -381,29 +382,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkGroupEnd(Nk);
                 }
-            }
-            UI->NkLayoutSpaceEnd(Nk);
-
-            UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, 1);
-            {
-                UI->NkLayoutSpacePush(Nk, UI->NkRect(0, 80, 300, 60));
-                if(UI->NkGroupBegin(Nk, "Action Buttons", 0))
-                {
-                    UI->NkLayoutRowDynamic(Nk, 40, 3);
-                    if(UI->NkButtonLabel(Nk, "Exit"))
-                    {
-                    }
-                    if(UI->NkButtonLabel(Nk, "Write Assets"))
-                    {
-                    }
-                    if(UI->NkButtonLabel(Nk, "Write SSA"))
-                    {
-                    }
-
-                    UI->NkGroupEnd(Nk);
-                }
-            }
-            UI->NkLayoutSpaceEnd(Nk);
+#endif
 
 #if 0
             ui_layout BottomLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-1275.0f, -665.0f));
