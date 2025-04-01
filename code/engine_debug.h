@@ -198,6 +198,7 @@ struct debug_thread
 struct debug_state
 {
     b32 Initialized;
+    b32 ShowProfiler;
 
     memory_arena DebugArena;
     memory_arena PerFrameArena;

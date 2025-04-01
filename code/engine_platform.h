@@ -564,7 +564,7 @@ typedef struct engine_controller_input
             engine_button_state TerminateSound;
 
             engine_button_state Undo;
-            engine_button_state UIEnable;
+            engine_button_state ShowProfiler;
 
             // NOTE(casey): All buttons must be added above this line
             
@@ -2466,6 +2466,7 @@ NK_API nk_bool nk_window_is_closed(const struct nk_context *ctx, const char* nam
 
  */
 NK_API nk_bool nk_window_is_hidden(const struct nk_context *ctx, const char* name);
+typedef nk_bool platform_nk_window_is_hidden(const struct nk_context *ctx, const char* name);
 
 /**
  * # # nk_window_is_active
@@ -2482,6 +2483,7 @@ NK_API nk_bool nk_window_is_hidden(const struct nk_context *ctx, const char* nam
  * \returns `true(1)` if current window is active or `false(0)` window not found or not active
  */
 NK_API nk_bool nk_window_is_active(const struct nk_context *ctx, const char* name);
+typedef nk_bool platform_nk_window_is_active(const struct nk_context *ctx, const char* name);
 
 /**
  * # # nk_window_is_any_hovered
@@ -2629,6 +2631,7 @@ NK_API void nk_window_close(struct nk_context *ctx, const char *name);
 
  */
 NK_API void nk_window_collapse(struct nk_context *ctx, const char *name, enum nk_collapse_states state);
+typedef void platform_nk_window_collapse(struct nk_context *ctx, const char *name, enum nk_collapse_states state);
 
 /**
  * # # nk_window_collapse_if
@@ -2661,6 +2664,7 @@ NK_API void nk_window_collapse_if(struct nk_context *ctx, const char *name, enum
  * \param[in] state   | state with either visible or hidden to modify the window with
  */
 NK_API void nk_window_show(struct nk_context *ctx, const char *name, enum nk_show_states state);
+typedef void platform_nk_window_show(struct nk_context *ctx, const char *name, enum nk_show_states state);
 
 /**
  * # # nk_window_show_if
@@ -6770,6 +6774,10 @@ struct nk_ui
     platform_nk_spacer *NkSpacer;
 
     platform_nk_window_set_focus *NkWindowSetFocus;
+    platform_nk_window_collapse *NkWindowCollapse;
+    platform_nk_window_show *NkWindowShow;
+    platform_nk_window_is_active *NkWindowIsActive;
+    platform_nk_window_is_hidden *NkWindowIsHidden;
 
     platform_nk_group_begin *NkGroupBegin;
     platform_nk_group_end *NkGroupEnd;

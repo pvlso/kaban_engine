@@ -672,6 +672,10 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkSpacer = nk_spacer;
  
     UI->NkWindowSetFocus = nk_window_set_focus;
+    UI->NkWindowCollapse = nk_window_collapse;
+    UI->NkWindowShow = nk_window_show;
+    UI->NkWindowIsActive = nk_window_is_active;
+    UI->NkWindowIsHidden = nk_window_is_hidden;
 
     UI->NkGroupBegin = nk_group_begin;
     UI->NkGroupEnd = nk_group_end;
@@ -2150,6 +2154,10 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     else if(VKCode == '5')
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->TerminateSound, IsDown);
+                    }
+                    else if(VKCode == 'H')
+                    {
+                        Win32ProcessKeyboardMessage(&KeyboardController->ShowProfiler, IsDown);
                     }
                     else if(VKCode == VK_UP)
                     {

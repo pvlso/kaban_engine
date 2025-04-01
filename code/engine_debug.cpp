@@ -1593,7 +1593,7 @@ DEBUGStart(debug_state *DebugState)
 }
 
 internal void
-DEBUGEnd(debug_state *DebugState)
+DEBUGEnd(debug_state *DebugState, engine_input *Input)
 {
     TIMED_FUNCTION();
 
@@ -1604,12 +1604,29 @@ DEBUGEnd(debug_state *DebugState)
                  MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
                  MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
+    Assert((&Input->Controllers[0].Terminator - &Input->Controllers[0].Buttons[0]) ==
+           (ArrayCount(Input->Controllers[0].Buttons)));
+
     nk_ui UI = Platform.UI;
     nk_context *nk = DebugState->nk;
+
+    if(WasPressed(Input->Controllers[0].ShowProfiler))
+    {
+        if(UI.NkWindowIsHidden(nk, "Profiler"))
+            DebugState->ShowProfiler = true;
+        else
+            DebugState->ShowProfiler = false;
+    }
     if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 200, 70),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
+        if(DebugState->ShowProfiler)
+            UI.NkWindowShow(nk, "Profiler", NK_SHOWN);
+        else
+            UI.NkWindowShow(nk, "Profiler", NK_HIDDEN);
+
+
         DrawTrees(DebugState);
     }
     UI.NkEnd(nk);
@@ -1638,6 +1655,6 @@ extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
     {
         DEBUGStart(DebugState);
         CollateDebugRecords(DebugState, EventCount, GlobalDebugTable->Events[EventArrayIndex]);
-        DEBUGEnd(DebugState);
+        DEBUGEnd(DebugState, Input);
     }
 }
