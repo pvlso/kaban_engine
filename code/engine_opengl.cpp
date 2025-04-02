@@ -215,7 +215,7 @@ OpenGLDisplayBitmap(s32 Width, s32 Height, void *Memory, int Pitch,
     glDisable(GL_BLEND);
     glBindTexture(GL_TEXTURE_2D, BlitTexture);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, Width, Height, 0,
+    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat, Width, Height, 0,
                  GL_BGRA_EXT, GL_UNSIGNED_BYTE, Memory);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -474,9 +474,18 @@ NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
     glBindTexture(GL_TEXTURE_2D, Ogl->font_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)width, (GLsizei)height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, image);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);    
+    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat, (GLsizei)width, (GLsizei)height, 0,
+                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, image);
 }
+
+struct nk_gl_vertex
+{
+    float position[2];
+    float uv[2];
+    float col[4];
+};
 
 internal void
 NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_aliasing AA)
@@ -529,7 +538,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
         static const struct nk_draw_vertex_layout_element vertex_layout[] = {
             {NK_VERTEX_POSITION, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_gl_vertex, position)},
             {NK_VERTEX_TEXCOORD, NK_FORMAT_FLOAT, NK_OFFSETOF(struct nk_gl_vertex, uv)},
-            {NK_VERTEX_COLOR, NK_FORMAT_R8G8B8A8, NK_OFFSETOF(struct nk_gl_vertex, col)},
+            {NK_VERTEX_COLOR, NK_FORMAT_R32G32B32A32_FLOAT, NK_OFFSETOF(struct nk_gl_vertex, col)},
             {NK_VERTEX_LAYOUT_END}
         };
 
@@ -554,7 +563,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
         {const void *vertices = nk_buffer_memory_const(&vbuf);
             glVertexPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vp));
             glTexCoordPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vt));
-            glColorPointer(4, GL_UNSIGNED_BYTE, vs, (const void*)((const nk_byte*)vertices + vc));}
+            glColorPointer(4, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vc));}
 
         /* iterate over and execute each draw command */
         offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);

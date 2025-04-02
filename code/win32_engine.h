@@ -58,13 +58,6 @@ struct nk_opengl
     GLuint font_tex;
 };
 
-struct nk_gl_vertex
-{
-    float position[2];
-    float uv[2];
-    nk_byte col[4];
-};
-
 struct nk_win32
 {
     int width, height;

@@ -282,7 +282,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     {
         EditorState->UIEnable = !EditorState->UIEnable;        
     }
-    
+
+#if 1
     if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, 1280, 720),
                   (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE : NK_WINDOW_REMOVE_ROM))
     {
@@ -318,7 +319,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         } while(Rerun);
     }
     UI.NkEnd(nk);
-
+#endif
+    
     EndRenderGroup(RenderGroup);
 
     EndTemporaryMemory(RenderMemory);
