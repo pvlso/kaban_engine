@@ -1185,6 +1185,19 @@ Linear1ToSRGB255(v4 C)
     return(Result);
 }
 
+inline v4
+Linear1ToSRGB1(v4 C)
+{
+    v4 Result;
+
+    Result.r = SquareRoot(C.r);
+    Result.g = SquareRoot(C.g);
+    Result.b = SquareRoot(C.b);
+    Result.a = C.a;
+
+    return(Result);
+}
+
 inline s32
 LineIntersect(v2 x0, v2 x1, v2 y0, v2 y1, v2 *sect)
 {
