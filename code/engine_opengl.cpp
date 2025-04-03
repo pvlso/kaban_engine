@@ -72,7 +72,7 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
     // and the framebuffer side, then we can enable it, otherwise it is
     // safer for us to pass it straight through.
     OpenGLDefaultInternalTextureFormat = GL_RGBA8;
-    if(FramebufferSupportsSRGB && GLEW_EXT_texture_sRGB && GLEW_EXT_framebuffer_sRGB)
+    if(FramebufferSupportsSRGB && GLEW_EXT_texture_sRGB)
     {
         OpenGLDefaultInternalTextureFormat = GL_SRGB8_ALPHA8;
 

@@ -4297,16 +4297,13 @@ nk_draw_vertex_color(void *attr, const float *vals,
         NK_MEMCPY(attr, col, sizeof(col));
     } break;
     case NK_FORMAT_R32G32B32A32_FLOAT:
-#if 1
-        v4 C = Linear1ToSRGB1(V4(val[0], val[1], val[2], val[3]));
+        v4 C = SRGB1ToLinear1(V4(val[0], val[1], val[2], val[3]));
         f32 col[4];
         col[0] = C.E[0];
         col[1] = C.E[1];
         col[2] = C.E[2];
         col[3] = C.E[3];
         NK_MEMCPY(attr, col, sizeof(float)*4);
-#endif
-        NK_MEMCPY(attr, val, sizeof(float)*4);
         break;
     case NK_FORMAT_R32G32B32A32_DOUBLE: {
         double col[4];
