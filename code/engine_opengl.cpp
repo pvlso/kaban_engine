@@ -571,11 +571,12 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
         {
             if (!cmd->elem_count) continue;
             glBindTexture(GL_TEXTURE_2D, (GLuint)cmd->texture.id);
-            glScissor(
-                (GLint)(cmd->clip_rect.x * NkWin32->fb_scale.x),
-                (GLint)((NkWin32->height - (GLint)(cmd->clip_rect.y + cmd->clip_rect.h)) * NkWin32->fb_scale.y),
-                (GLint)(cmd->clip_rect.w * NkWin32->fb_scale.x),
-                (GLint)(cmd->clip_rect.h * NkWin32->fb_scale.y));
+
+            GLint x = (GLint)CeilReal32ToInt32(cmd->clip_rect.x * NkWin32->fb_scale.x);
+            GLint y = (GLint)CeilReal32ToInt32((NkWin32->height - (GLint)(cmd->clip_rect.y + cmd->clip_rect.h)) * NkWin32->fb_scale.y);
+            GLint w = (GLint)CeilReal32ToInt32(cmd->clip_rect.w * NkWin32->fb_scale.x);
+            GLint h = (GLint)CeilReal32ToInt32(cmd->clip_rect.h * NkWin32->fb_scale.y);
+            glScissor(x, y, w, h);
             glDrawElements(GL_TRIANGLES, (GLsizei)cmd->elem_count, GL_UNSIGNED_SHORT, offset);
             offset += cmd->elem_count;
         }
