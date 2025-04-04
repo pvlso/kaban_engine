@@ -759,6 +759,9 @@ struct platform_texture_op_queue
 // NOTE(paul): NUKLEAR API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+#define UI_BASE_RESOLUTION_X 1920
+#define UI_BASE_RESOLUTION_Y 1080
+
 #define NK_INCLUDE_FIXED_TYPES
 //#define NK_INCLUDE_STANDARD_IO
 #define NK_INCLUDE_STANDARD_VARARGS

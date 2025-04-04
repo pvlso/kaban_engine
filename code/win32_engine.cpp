@@ -650,7 +650,7 @@ Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height
     {
         struct nk_font_atlas *atlas;
         Win32NkFontStashBegin(NkWin32, &atlas);
-        struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 12, 0);
+        struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 20, 0);
         /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
         /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
         /*struct nk_font *clean = nk_font_atlas_add_from_file(atlas, "../../../extra_font/ProggyClean.ttf", 12, 0);*/
@@ -2896,12 +2896,10 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            s32 UIBaseWidth = 1280;
-            s32 UIBaseHeight = 720;
             nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main,
-                                                 UIBaseWidth, UIBaseHeight);
+                                                 UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
             nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug,
-                                                       UIBaseWidth, UIBaseHeight);
+                                                       UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
             nk_colorf bg = {};
             
             GlobalRunning = true;
@@ -3003,12 +3001,12 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
                 Win32NkUpdateInputs(&Win32State, &Win32State.Main,
-                                    UIBaseWidth, UIBaseHeight,
+                                    UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                                     DrawRegion,
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
                 Win32NkUpdateInputs(&Win32State, &Win32State.Debug,
-                                    UIBaseWidth, UIBaseHeight,
+                                    UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                                     DrawRegion,
                                     TargetSecondsPerFrame);
 #endif

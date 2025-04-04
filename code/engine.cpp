@@ -284,7 +284,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     }
 
 #if 1
-    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, 1280, 720),
+    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
                   (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE : NK_WINDOW_REMOVE_ROM))
     {
         b32 Rerun = false;

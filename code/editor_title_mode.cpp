@@ -27,9 +27,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     if(!Result)
     {
         char Buffer[256];
-        UI->NkLayoutRowBegin(Nk, NK_STATIC, 30, 8);
+        UI->NkLayoutRowBegin(Nk, NK_STATIC, 40, 8);
         {
-            UI->NkLayoutRowPush(Nk, 80);
+            UI->NkLayoutRowPush(Nk, 130);
             if(UI->NkButtonLabel(Nk, "Assets Mode"))
             {
                 PlayAssetsMode(EditorState, TranState);
@@ -53,7 +53,7 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
         }
         UI->NkLayoutRowEnd(Nk);
 
-        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        UI->NkLayoutRowDynamic(Nk, 40, 1);
         UI->NkSpacer(Nk);
         UI->NkLabel(Nk, "Stored Assets Version: ", NK_TEXT_ALIGN_LEFT);
 
@@ -80,9 +80,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkCheckboxLabel(Nk, "Load Map", &EditorState->MapStartup.NewMap);
         }
 
-        UI->NkLayoutRowBegin(Nk, NK_STATIC, 30, 1);
+        UI->NkLayoutRowBegin(Nk, NK_STATIC, 40, 1);
         {
-            UI->NkLayoutRowPush(Nk, 240);
+            UI->NkLayoutRowPush(Nk, 320);
             if(!EditorState->MapStartup.NewMap)
             {
                 UI->NkPropertyInt(Nk, "#Map Major High Version: ", 0,
