@@ -1349,33 +1349,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             {
                 case EditMode_None:
                 {
-#if 0
-                    UIDrawScrollWindow(UIState, Layout, "Show Stored Assets", V2(933.0f, 400.0f),
-                                       &AssetsMode->ShowStoredAssetIndex, "Stored Assets", ScrollDataType_StoredAssets, 3,
-                                       AssetsMode->StoredHeader.AssetCount, AssetsMode->StoredAssets);
-
-                    ui_layout BottomLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-1275.0f, -665.0f));
-                    UIBeginRow(&BottomLeftLayout);
-
-                    UIButton(&BottomLeftLayout, "Exit",
-                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->Exit, true),
-                             200.0f, BColor_Red);
-                    UIButton(&BottomLeftLayout, "Write Assets", 
-                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->WriteAssets, true),
-                             200.0f, BColor_Green);
-                    UIButton(&BottomLeftLayout, "Write SSA", 
-                             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->WriteSSA, true),
-                             200.0f, BColor_Green);
-
-                    UIEndRow(&BottomLeftLayout);
-                    UIEndLayout(&BottomLeftLayout);
-
-                    ui_layout RightLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-315.0f, 680.0f));
-                    UIDrawAssetAdvanceView(UIState, &RightLayout, "Asset Advance View Window", V2(1580.0f, 1380.0f),
-                                           AssetsMode);
-                    UIEndLayout(&RightLayout);
-#endif
-                    
                     if(AssetsMode->EditStoredAsset)
                     {
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
@@ -1422,7 +1395,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->WriteSSA = false;
                     }
 
-                    PushRect(RenderGroup, &Flat, V3(0, 0, 0), V2(120.0f, 120.0f), V4(0.0f, 0, 1.0f, 1.0f));
                 } break;
 
                 case EditMode_Bitmap:

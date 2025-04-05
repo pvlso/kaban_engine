@@ -57,10 +57,10 @@ enum editor_mode
 
 struct working_version
 {
-    u32 MajorHigh;
-    u32 MajorLow;
-    u32 MinorHigh;
-    u32 MinorLow;
+    u8 MajorHigh;
+    u8 MajorLow;
+    u8 MinorHigh;
+    u8 MinorLow;
 };
 
 struct world_map_startup

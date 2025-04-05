@@ -419,6 +419,7 @@ BuilderAddAsset(builder_assets *Assets, asset_type_id TypeID)
 
                 case Asset_FontGlyph:
                 {
+                    // TODO(paul): Not working at the moment, may be removed
 #if 0
                     ssa_asset_type *TypeToFix = Assets->AssetTypes + Asset_Font;
                     for(u32 AssetIndex = TypeToFix->FirstAssetIndex;
@@ -726,6 +727,7 @@ AddSpriteSheetAsset(builder_assets *Assets, builder_loaded_spritesheet *Sheet)
 internal bitmap_id
 AddCharacterAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *Glyphs, u32 CodePoint)
 {
+    // TODO(paul): Not working at the moment, may be removed
 #if 0
     builder_added_asset Asset = BuilderAddAsset(Assets, Asset_FontGlyph);
 
@@ -751,6 +753,7 @@ AddCharacterAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_gl
 internal font_id
 AddFontAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *Glyphs)
 {
+    // TODO(paul): Not working at the moment, may be removed
 #if 0
     builder_added_asset Asset = BuilderAddAsset(Assets, Asset_Font);
 
@@ -817,7 +820,6 @@ WriteLogForAsset(FILE *LogFile, builder_asset_source *Source, char *Text = 0)
 
         case BuilderAssetType_Sound:
         {
-//            char *ChainString = GET_STRING(SSASoundChain, Source->Sound.Sound->Chain);
             Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer,
                                        "    FirstSampleIndex: %d\n"\
                                        "    Chain Type: none\n",
@@ -826,6 +828,7 @@ WriteLogForAsset(FILE *LogFile, builder_asset_source *Source, char *Text = 0)
 
         case BuilderAssetType_Font:
         {
+            // TODO(paul): Not working at the moment, may be removed
 #if 0
             Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer,
                                        "    OnePastHighestCodePoint: %d\n"\
@@ -1043,6 +1046,7 @@ BuilderWriteSSA(builder_assets *Assets, working_version Version, memory_arena *T
             }
             else if(Source->Type == BuilderAssetType_Font)
             {
+                // TODO(paul): Not working at the moment, may be removed
 #if 0
                 BeginWritingLog(LogFile, "font");
                 WriteLogForAsset(LogFile, Source);
@@ -1262,6 +1266,7 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
 
             case StoredAssetType_Font:
             {
+                // TODO(paul): Not working at the moment, may be removed
 #if 0
                 stored_asset_font *StoredFont = &StoredAsset->Font;
                 builder_loaded_font Font = Platform.LoadFontAsset(StoredFont->SourceFileName,

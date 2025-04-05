@@ -188,16 +188,12 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         {
             fread(&EditorState->Version, 4, 1, VersionFile);
             fclose(VersionFile);
-
-            EditorState->Version.MinorLow = EditorState->Version.MajorHigh >> 24;
-            EditorState->Version.MinorHigh = (EditorState->Version.MajorHigh >> 16) & 0xff;
-            EditorState->Version.MajorLow = (EditorState->Version.MajorHigh >> 8) & 0xff;
-            EditorState->Version.MajorHigh = EditorState->Version.MajorHigh & 0xff;
         }
         else
         {
             fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
-            fwrite(&EditorState->Version, sizeof(working_version), 1, VersionFile);
+            EditorState->Version.MinorLow = 63;
+            fwrite(&EditorState->Version, 4, 1, VersionFile);
             fclose(VersionFile);
         }
 
