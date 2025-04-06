@@ -4436,6 +4436,15 @@ NK_API void nk_combobox(struct nk_context*, const char *const *items, int count,
 NK_API void nk_combobox_string(struct nk_context*, const char *items_separated_by_zeros, int *selected, int count, int item_height, struct nk_vec2 size);
 NK_API void nk_combobox_separator(struct nk_context*, const char *items_separated_by_separator, int separator, int *selected, int count, int item_height, struct nk_vec2 size);
 NK_API void nk_combobox_callback(struct nk_context*, void(*item_getter)(void*, int, const char**), void*, int *selected, int count, int item_height, struct nk_vec2 size);
+
+typedef int platform_nk_combo(struct nk_context*, const char *const *items, int count, int selected, int item_height, struct nk_vec2 size);
+typedef int platform_nk_combo_separator(struct nk_context*, const char *items_separated_by_separator, int separator, int selected, int count, int item_height, struct nk_vec2 size);
+typedef int platform_nk_combo_string(struct nk_context*, const char *items_separated_by_zeros, int selected, int count, int item_height, struct nk_vec2 size);
+typedef int platform_nk_combo_callback(struct nk_context*, void(*item_getter)(void*, int, const char**), void *userdata, int selected, int count, int item_height, struct nk_vec2 size);
+typedef void platform_nk_combobox(struct nk_context*, const char *const *items, int count, int *selected, int item_height, struct nk_vec2 size);
+typedef void platform_nk_combobox_string(struct nk_context*, const char *items_separated_by_zeros, int *selected, int count, int item_height, struct nk_vec2 size);
+typedef void platform_nk_combobox_separator(struct nk_context*, const char *items_separated_by_separator, int separator, int *selected, int count, int item_height, struct nk_vec2 size);
+typedef void platform_nk_combobox_callback(struct nk_context*, void(*item_getter)(void*, int, const char**), void*, int *selected, int count, int item_height, struct nk_vec2 size);
 /* =============================================================================
  *
  *                                  ABSTRACT COMBOBOX
@@ -4458,6 +4467,24 @@ NK_API nk_bool nk_combo_item_symbol_label(struct nk_context*, enum nk_symbol_typ
 NK_API nk_bool nk_combo_item_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
 NK_API void nk_combo_close(struct nk_context*);
 NK_API void nk_combo_end(struct nk_context*);
+
+typedef nk_bool platform_nk_combo_begin_text(struct nk_context*, const char *selected, int, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_label(struct nk_context*, const char *selected, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_color(struct nk_context*, struct nk_color color, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_symbol(struct nk_context*,  enum nk_symbol_type,  struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_symbol_label(struct nk_context*, const char *selected, enum nk_symbol_type, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_symbol_text(struct nk_context*, const char *selected, int, enum nk_symbol_type, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_image(struct nk_context*, struct nk_image img,  struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_image_label(struct nk_context*, const char *selected, struct nk_image, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_begin_image_text(struct nk_context*,  const char *selected, int, struct nk_image, struct nk_vec2 size);
+typedef nk_bool platform_nk_combo_item_label(struct nk_context*, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_combo_item_text(struct nk_context*, const char*,int, nk_flags alignment);
+typedef nk_bool platform_nk_combo_item_image_label(struct nk_context*, struct nk_image, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_combo_item_image_text(struct nk_context*, struct nk_image, const char*, int,nk_flags alignment);
+typedef nk_bool platform_nk_combo_item_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_combo_item_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
+typedef void platform_nk_combo_close(struct nk_context*);
+typedef void platform_nk_combo_end(struct nk_context*);
 /* =============================================================================
  *
  *                                  CONTEXTUAL
@@ -6958,6 +6985,33 @@ struct nk_ui
     platform_nk_fill_triangle *NkFillTriangle;
     platform_nk_fill_polygon *NkFillPolygon;
 
+    platform_nk_combo *NkCombo;
+    platform_nk_combo_separator *NkComboSeparator;
+    platform_nk_combo_string *NkComboString;
+    platform_nk_combo_callback *NkComboCallback;
+    platform_nk_combobox *NkCombobox;
+    platform_nk_combobox_string *NkComboboxString;
+    platform_nk_combobox_separator *NkComboboxSeparator;
+    platform_nk_combobox_callback *NkComboboxCallback;
+
+    platform_nk_combo_begin_text *NkComboBeginText;
+    platform_nk_combo_begin_label *NkComboBeginLabel;
+    platform_nk_combo_begin_color *NkComboBeginColor;
+    platform_nk_combo_begin_symbol *NkComboBeginSymbol;
+    platform_nk_combo_begin_symbol_label *NkComboBeginSymbolLabel;
+    platform_nk_combo_begin_symbol_text *NkComboBeginSymbolText;
+    platform_nk_combo_begin_image *NkComboBeginImage;
+    platform_nk_combo_begin_image_label *NkComboBeginImageLabel;
+    platform_nk_combo_begin_image_text *NkComboBeginImageText;
+    platform_nk_combo_item_label *NkComboItemLabel;
+    platform_nk_combo_item_text *NkComboItemText;
+    platform_nk_combo_item_image_label *NkComboItemImageLabel;
+    platform_nk_combo_item_image_text *NkComboItemImageText;
+    platform_nk_combo_item_symbol_label *NkComboItemSymbolLabel;
+    platform_nk_combo_item_symbol_text *NkComboItemSymbolText;
+    platform_nk_combo_close *NkComboClose;
+    platform_nk_combo_end *NkComboEnd;
+    
     platform_nk_tooltip *NkTooltip;
 #ifdef NK_INCLUDE_STANDARD_VARARGS
     platform_nk_tooltipf *NkTooltipf;

@@ -16,6 +16,8 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     
     editor_mode_assets *Result = PushStruct(&EditorState->ModeArena, editor_mode_assets);
     Result->EditMode = EditMode_None;
+    SubArena(&Result->UtilityArena, &EditorState->ModeArena, Megabytes(1));
+
     // NOTE(babykaban): Setting it to one because first stored asset is always zero
     Result->ShowStoredAssetIndex = 1;
 

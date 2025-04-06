@@ -39,6 +39,57 @@ global_variable nk_color ColorTable[] =
     {0xFF, 0xFF, 0xFF, 0xFF}
 };
 
+internal string_array *
+GetOrCreateStringArray(editor_mode_assets *AssetsMode, char *Key, u32 StringCount)
+{
+    u64 LowMask = 0x00000000FFFFFFFF;
+    u64 CRC = CRC64FromString(Key);
+
+    u32 High = (u32)(CRC >> 32);
+    u32 Low = (u32)(CRC & LowMask);
+
+    u32 HashIndex = ((High >> 2) + (Low >> 2)) % ArrayCount(AssetsMode->EnumStringArraysHash);
+    string_array **HashSlot = AssetsMode->EnumStringArraysHash + HashIndex;
+
+    string_array *Result = 0;
+    for(string_array *Search = *HashSlot;
+        Search;
+        Search = Search->NextInHash)
+    {
+        if(StringsAreEqual(Search->Key, Key))
+        {
+            Result = Search;
+            break;
+        }
+    }
+
+    if(!Result)
+    {
+        Result = PushStruct(&AssetsMode->UtilityArena, string_array);
+        Result->Key = PushString(&AssetsMode->UtilityArena, Key);
+        Result->StringCount = StringCount;
+        Result->Strings = PushArray(&AssetsMode->UtilityArena, Result->StringCount, char *);
+
+        json_element *EnumStrings = JsonLookupElement(AssetsMode->JsonStringsHead, Key);
+        if(EnumStrings)
+        {
+            json_element *EnumString = EnumStrings->FirstSubElement;
+            for(u32 ElementIndex = 0;
+                ElementIndex < Result->StringCount;
+                ++ElementIndex)
+            {
+                Result->Strings[ElementIndex] = EnumString->Value;
+                EnumString = EnumString->NextSibling;
+            }
+        }
+        
+        Result->NextInHash = *HashSlot;
+        *HashSlot = Result;
+    }
+
+    return(Result);
+}
+
 inline void
 DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 {
@@ -431,6 +482,66 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
     }
 }
 
+inline b32
+IsUNUSED(char *String)
+{
+    b32 Result = false;
+
+    char *At = String;
+    char TestString[] = {'U', 'N', 'U', 'S', 'E', 'D'};
+
+    u8 Index = 0;
+    char TestAt = TestString[0];
+    while(*At)
+    {
+        if(*At == TestAt)
+            ++Index;
+        else
+            Index = 0;
+
+        if(Index < ArrayCount(TestString))
+            TestAt = TestString[Index];
+        else
+        {
+            Result = true;
+            break;
+        }
+
+        *At++;
+    }
+
+    return(Result);
+}
+
+inline char *
+AssambleStrings(memory_arena *Arena, char **Strings, u32 Count)
+{
+    char *Result = 0;
+    u32 TotalSize = 0;
+    for(u32 I = 0;
+        I < Count;
+        ++I)
+    {
+        u32 L = StringLength(Strings[I]);
+        TotalSize += L + 1;
+    }
+
+    Result = (char *)PushSize(Arena, TotalSize);
+    char *At = Result;
+    for(u32 I = 0;
+        I < Count;
+        ++I)
+    {
+        u32 L = StringLength(Strings[I]);
+        Copy(L, Strings[I], At);
+        At += L;
+        *At = 0;
+        *At++;
+    }
+
+    return(Result);
+}
+
 inline void
 DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 {
@@ -514,11 +625,13 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     }
     else
     {
+        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+
+        
+        char *Strings = AssambleStrings(&AssetsMode->UtilityArena, FileStrings, FileCount);
+        static int selected = 0;
+        UI->NkComboboxString(Nk, Strings, &selected, FileCount, 20, {460, 460});
 #if 0
-        UIDrawScrollWindow(UIState, Layout, "Stored Asset Files Preview", V2(580.0f, 400.0f), &AssetsMode->FileIndex,
-                           Text, ScrollDataType_Strings, 5, FileCount, FileStrings);
-#endif
-        UI->NkLayoutRowStatic(Nk, 400, 460, 1);
         if(UI->NkGroupBegin(Nk, "Stored Asset Files Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
         {
             UI->NkLayoutRowDynamic(Nk, 40, 1);
@@ -538,11 +651,12 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
             
             UI->NkGroupEnd(Nk);
         }
+#endif
     }
 
-    #if 0
-    string_array *AssetStringArray = GetOrCreateStringArray(UIState, "AssetType", Asset_Count);
-    UI->NkLayoutRowStatic(Nk, 400, 360, 1);
+#if 0
+    string_array *AssetStringArray = GetOrCreateStringArray(AssetsMode, "AssetType", Asset_Count);
+    UI->NkLayoutRowStatic(Nk, 200, 460, 1);
     if(UI->NkGroupBegin(Nk, "Asset Types Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
     {
         UI->NkLayoutRowDynamic(Nk, 40, 1);
@@ -554,54 +668,95 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
             I < AssetStringArray->StringCount;
             ++I)
         {
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
-                         AssetStringArray->Strings[I]);
+            if(!IsUNUSED(AssetStringArray->Strings[I]))
+            {
+                Rect = UI->NkWidgetBounds(Nk);
+                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
+                             AssetStringArray->Strings[I]);
+
+            }
+        }
+        UI->NkGroupEnd(Nk);
+    }
+
+    string_array *TagStringArray = GetOrCreateStringArray(AssetsMode, "AssetTag", Tag_Count);
+    UI->NkLayoutRowStatic(Nk, 200, 460, 1);
+    if(UI->NkGroupBegin(Nk, "Asset Tags Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
+    {
+        UI->NkLayoutRowDynamic(Nk, 40, 1);
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
+        UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        for(u32 I = 0;
+            I < TagStringArray->StringCount;
+            ++I)
+        {
+            if(!IsUNUSED(TagStringArray->Strings[I]))
+            {
+                Rect = UI->NkWidgetBounds(Nk);
+                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
+                             TagStringArray->Strings[I]);
+            }
         }
             
         UI->NkGroupEnd(Nk);
     }
-#endif
     
-#if 0            
-    string_array *AssetStringArray = GetOrCreateStringArray(UIState, "AssetType", Asset_Count);
-    UIDrawScrollWindow(UIState, Layout, "Asset Types Preview", V2(580.0f, 400.0f), &CurrentAsset->TypeID,
-                       "Choose TypeID", ScrollDataType_Strings, 5,
-                       AssetStringArray->StringCount, AssetStringArray->Strings);
-            
-    string_array *TagStringArray = GetOrCreateStringArray(UIState, "AssetTag", Tag_Count);
-    UIDrawScrollWindow(UIState, Layout, "Asset Tags Preview", V2(580.0f, 400.0f), &AssetsMode->CurrentTagID,
-                       "Choose Tag", ScrollDataType_Strings, 5,
-                       TagStringArray->StringCount, TagStringArray->Strings);
-
-    char *TagString = JsonGetEnumString(UIState->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
-    FormatString(ArrayCount(Buffer), Buffer, "Current Tag: %s", TagString);
-
-    UILabel(Layout, Buffer, 580.0f);
+    UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+    char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s", TagString);
 
     if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
     {
         AssetsMode->LastTagID = AssetsMode->CurrentTagID;
         AssetsMode->CurrentTagValue = 0;
     }
-            
-    char *TagValueStringsKey = JsonGetTagValueEnumKey(UIState->JsonStringsHead, AssetsMode->CurrentTagID);
+
+    char *TagValueStringsKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, AssetsMode->CurrentTagID);
     if(StringsAreEqual(TagValueStringsKey, "Number"))
     {
-        UIBeginRow(Layout);
-        UIScrollAdjustU32Button(Layout, " ", 500.0f, (u32 *)&AssetsMode->CurrentTagValue, BColor_Blue);
-        UIIncrementButton(Layout, &AssetsMode->CurrentTagValue);
-        UIDecrementButton(Layout, &AssetsMode->CurrentTagValue);
-        UIEndRow(Layout);
+        UI->NkPropertyInt(Nk, "Stored Asset: ", 0,
+                          (int *)&AssetsMode->CurrentTagValue,
+                          256, 1, 0.1f);
 
-        FormatString(ArrayCount(Buffer), Buffer, "Current Value: %d", AssetsMode->CurrentTagValue);
+        UI->NkLabelf(Nk, NK_TEXT_LEFT, "Current Value: %d", AssetsMode->CurrentTagValue);
     }
     else
     {
         u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
-        string_array *ValueStringArray = GetOrCreateStringArray(UIState, TagValueStringsKey, ValueCount);
+        string_array *ValueStringArray = GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
             
+        UI->NkLayoutRowStatic(Nk, 160, 460, 1);
+        if(UI->NkGroupBegin(Nk, "Tag Value Picker", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
+        {
+            UI->NkLayoutRowDynamic(Nk, 40, 1);
+            struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
+            UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
+            UI->NkLayoutRowDynamic(Nk, 30, 1);
+            for(u32 I = 0;
+                I < ValueStringArray->StringCount;
+                ++I)
+            {
+                Rect = UI->NkWidgetBounds(Nk);
+                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
+                             ValueStringArray->Strings[I]);
+            }
+            
+            UI->NkGroupEnd(Nk);
+        }
+
+        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        char *ValueString = ValueStringArray->Strings[AssetsMode->CurrentTagValue];
+        UI->NkLabelf(Nk, NK_TEXT_LEFT, "Current Value: %s", ValueString);
+        
+#if 0
         UIBeginRow(Layout);
         UIDrawScrollWindow(UIState, Layout, "Tag Value Picker", V2(500.0f, 200.0f), &AssetsMode->CurrentTagValue,
                            "Choose Value", ScrollDataType_Strings, 4,
@@ -613,7 +768,11 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 
         char *ValueString = ValueStringArray->Strings[AssetsMode->CurrentTagValue];
         FormatString(ArrayCount(Buffer), Buffer, "Current Value: %s", ValueString);
+#endif
     }
+#endif
+
+#if 0            
 
     UILabel(Layout, Buffer, 580.0f);
 

@@ -44,57 +44,6 @@ GetOrCreateUIObject(ui_state *UIState, ui_object_id ID)
     return(Result);
 }
 
-internal string_array *
-GetOrCreateStringArray(ui_state *UIState, char *Key, u32 StringCount)
-{
-    u64 LowMask = 0x00000000FFFFFFFF;
-    u64 CRC = CRC64FromString(Key);
-
-    u32 High = (u32)(CRC >> 32);
-    u32 Low = (u32)(CRC & LowMask);
-
-    u32 HashIndex = ((High >> 2) + (Low >> 2)) % ArrayCount(UIState->EnumStringArraysHash);
-    string_array **HashSlot = UIState->EnumStringArraysHash + HashIndex;
-
-    string_array *Result = 0;
-    for(string_array *Search = *HashSlot;
-        Search;
-        Search = Search->NextInHash)
-    {
-        if(StringsAreEqual(Search->Key, Key))
-        {
-            Result = Search;
-            break;
-        }
-    }
-
-    if(!Result)
-    {
-        Result = PushStruct(&UIState->UIArena, string_array);
-        Result->Key = PushString(&UIState->UIArena, Key);
-        Result->StringCount = StringCount;
-        Result->Strings = PushArray(&UIState->UIArena, Result->StringCount, char *);
-
-        json_element *EnumStrings = JsonLookupElement(UIState->JsonStringsHead, Key);
-        if(EnumStrings)
-        {
-            json_element *EnumString = EnumStrings->FirstSubElement;
-            for(u32 ElementIndex = 0;
-                ElementIndex < Result->StringCount;
-                ++ElementIndex)
-            {
-                Result->Strings[ElementIndex] = EnumString->Value;
-                EnumString = EnumString->NextSibling;
-            }
-        }
-        
-        Result->NextInHash = *HashSlot;
-        *HashSlot = Result;
-    }
-
-    return(Result);
-}
-
 inline ui_object_id
 GetUIObjectID(char *Name)
 {
@@ -2422,7 +2371,7 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
         UIDrawScrollWindow(UIState, Layout, "Stored Asset Files Preview", V2(580.0f, 400.0f), &AssetsMode->FileIndex,
                            Text, ScrollDataType_Strings, 5, FileCount, FileStrings);
     }
-            
+#if 0            
     string_array *AssetStringArray = GetOrCreateStringArray(UIState, "AssetType", Asset_Count);
     UIDrawScrollWindow(UIState, Layout, "Asset Types Preview", V2(580.0f, 400.0f), &CurrentAsset->TypeID,
                        "Choose TypeID", ScrollDataType_Strings, 5,
@@ -2432,7 +2381,7 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
     UIDrawScrollWindow(UIState, Layout, "Asset Tags Preview", V2(580.0f, 400.0f), &AssetsMode->CurrentTagID,
                        "Choose Tag", ScrollDataType_Strings, 5,
                        TagStringArray->StringCount, TagStringArray->Strings);
-
+#endif
     char *TagString = JsonGetEnumString(UIState->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
     FormatString(ArrayCount(Buffer), Buffer, "Current Tag: %s", TagString);
 
@@ -2457,6 +2406,7 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
     }
     else
     {
+#if 0
         u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
         string_array *ValueStringArray = GetOrCreateStringArray(UIState, TagValueStringsKey, ValueCount);
             
@@ -2464,13 +2414,13 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
         UIDrawScrollWindow(UIState, Layout, "Tag Value Picker", V2(500.0f, 200.0f), &AssetsMode->CurrentTagValue,
                            "Choose Value", ScrollDataType_Strings, 4,
                            ValueStringArray->StringCount, ValueStringArray->Strings);
-
         UIIncrementButton(Layout, &AssetsMode->CurrentTagValue, ValueCount);
         UIDecrementButton(Layout, &AssetsMode->CurrentTagValue);
         UIEndRow(Layout);
 
         char *ValueString = ValueStringArray->Strings[AssetsMode->CurrentTagValue];
         FormatString(ArrayCount(Buffer), Buffer, "Current Value: %s", ValueString);
+#endif
     }
 
     UILabel(Layout, Buffer, 580.0f);
@@ -2481,6 +2431,7 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
 
     UILabel(RightMenuLayout, "Stored Asset Attributes: ", 575.0f);
 
+#if 0
     char *TypeIDString = AssetStringArray->Strings[CurrentAsset->TypeID];
     FormatString(ArrayCount(Buffer), Buffer, "TypeID: %s", TypeIDString);
     UILabel(RightMenuLayout, Buffer, 575.0f);
@@ -2494,12 +2445,12 @@ DrawStandardEditLayout(ui_state *UIState, ui_layout *Layout, ui_layout *RightMen
             
     UIDrawScrollWindow(UIState, RightMenuLayout, "Stored Asset Tags", V2(575.0f, 200.0f), &AssetsMode->CurrentTag,
                        "Tags", ScrollDataType_Tags, 5, ArrayCount(CurrentAsset->AssetTags), CurrentAsset->AssetTags);
-
     ssa_tag *CurrentTag = CurrentAsset->AssetTags + AssetsMode->CurrentTag;
     char *CurrentTagString = TagStringArray->Strings[CurrentTag->ID];
     FormatString(ArrayCount(Buffer), Buffer, "CurrentTag: %d. %s, %d",
                  AssetsMode->CurrentTag, CurrentTagString, CurrentTag->Value);
     UILabel(RightMenuLayout, Buffer, 575.0f);
+#endif
 
     UIButton(RightMenuLayout, "Remove Current Tag",
              UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->RemoveTag, true),
@@ -2739,16 +2690,16 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_la
     FormatString(ArrayCount(Buffer), Buffer, "%s attributes : ",
                  AssetsMode->SoundFiles[AssetsMode->FileIndex]);
     UILabel(&RightMenuLayout, Buffer, 575.0f);
-
+#if 0
     string_array *SoundChainStringArray = GetOrCreateStringArray(UIState, "SSASoundChain", SSASoundChain_Count);
     char *ChainString = SoundChainStringArray->Strings[StoredSound->Chain];
     FormatString(ArrayCount(Buffer), Buffer, "Current Chain: %s", ChainString);
 
     UILabel(&RightMenuLayout, Buffer, 575.0f);
-
     UIDrawScrollWindow(UIState, &RightMenuLayout, "SSA Sound Chain Picker", V2(575.0f, 200.0f), &StoredSound->Chain,
                        "Choose Chain", ScrollDataType_Strings, 3,
                        SoundChainStringArray->StringCount, SoundChainStringArray->Strings);
+#endif
 
     UIEndLayout(&RightMenuLayout);
 }

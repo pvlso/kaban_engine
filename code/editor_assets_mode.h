@@ -270,6 +270,8 @@ struct editor_mode_assets
     assets_edit_mode LastEditMode;
     assets_edit_mode EditMode;
 
+    memory_arena UtilityArena;
+    
     stored_asset_file_header StoredHeader;
     b32 StoredAssetChanged;
     b32 EditStoredAsset;
@@ -326,6 +328,7 @@ struct editor_mode_assets
     r32 Time;
 
     json_element *JsonStringsHead;    
+    string_array *EnumStringArraysHash[4096];
 
     union
     {

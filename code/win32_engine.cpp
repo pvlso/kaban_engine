@@ -853,6 +853,33 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkFillTriangle = nk_fill_triangle;
     UI->NkFillPolygon = nk_fill_polygon;
 
+    UI->NkCombo = nk_combo;
+    UI->NkComboSeparator = nk_combo_separator;
+    UI->NkComboString = nk_combo_string;
+    UI->NkComboCallback = nk_combo_callback;
+    UI->NkCombobox = nk_combobox;
+    UI->NkComboboxString = nk_combobox_string;
+    UI->NkComboboxSeparator = nk_combobox_separator;
+    UI->NkComboboxCallback = nk_combobox_callback;
+
+    UI->NkComboBeginText = nk_combo_begin_text;
+    UI->NkComboBeginLabel = nk_combo_begin_label;
+    UI->NkComboBeginColor = nk_combo_begin_color;
+    UI->NkComboBeginSymbol = nk_combo_begin_symbol;
+    UI->NkComboBeginSymbolLabel = nk_combo_begin_symbol_label;
+    UI->NkComboBeginSymbolText = nk_combo_begin_symbol_text;
+    UI->NkComboBeginImage = nk_combo_begin_image;
+    UI->NkComboBeginImageLabel = nk_combo_begin_image_label;
+    UI->NkComboBeginImageText = nk_combo_begin_image_text;
+    UI->NkComboItemLabel = nk_combo_item_label;
+    UI->NkComboItemText = nk_combo_item_text;
+    UI->NkComboItemImageLabel = nk_combo_item_image_label;
+    UI->NkComboItemImageText = nk_combo_item_image_text;
+    UI->NkComboItemSymbolLabel = nk_combo_item_symbol_label;
+    UI->NkComboItemSymbolText = nk_combo_item_symbol_text;
+    UI->NkComboClose = nk_combo_close;
+    UI->NkComboEnd = nk_combo_end;
+
     UI->NkTooltip = nk_tooltip;
 #ifdef NK_INCLUDE_STANDARD_VARARGS
     UI->NkTooltipf = nk_tooltipf;
