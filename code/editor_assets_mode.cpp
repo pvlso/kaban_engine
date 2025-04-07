@@ -1290,7 +1290,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
     if(!Result)
     {
         Orthographic(RenderGroup, 1.0f);
-        Clear(RenderGroup, V4(0.25f, 0.25f, 0.25f, 1.0f));
+        Clear(RenderGroup, UI_COLOR_RGBA1_4D3020FF);
 
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;

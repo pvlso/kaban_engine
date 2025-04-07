@@ -109,9 +109,9 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             FormatString(ArrayCount(Text), Text, "Asset%d", AssetIndex);
             struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
 
-            nk_color C = {255, 255, 255, 255};
+            nk_color C = ColorTable[2];
             if(UI->NkWidgetIsHovered(Nk))
-                C = {255, 0, 0, 255};                
+                C = ColorTable[3];                
 
             if(UI->NkWidgetIsMouseClicked(Nk, NK_BUTTON_LEFT))
                 AssetsMode->ShowStoredAssetIndex = AssetIndex;
@@ -141,7 +141,9 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 {
     char Text[256];
     UI->NkLayoutSpacePush(Nk, UI->NkRect(612, -900, 1290, 1068));
-    if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
+    if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_NO_SCROLLBAR))
     {
         stored_asset *StoredAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex; 
         UI->NkLayoutRowDynamic(Nk, 40, 1);
@@ -150,7 +152,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                           AssetsMode->StoredHeader.AssetCount, 1, 0.1f);
 
         UI->NkLayoutRowStatic(Nk, 770, 1280, 1);
-        if(UI->NkGroupBegin(Nk, "Asset Specific View", NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
+        if(UI->NkGroupBegin(Nk, "Asset Specific View", NK_WINDOW_NO_SCROLLBAR))
         {
             switch(StoredAsset->Type)
             {
@@ -161,13 +163,13 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     UI->NkLabel(Nk, StoredBitmap->FileName, NK_TEXT_CENTERED);
 
                     UI->NkLayoutRowStatic(Nk, 520, 520, 1);
                     Rect = UI->NkWidgetBounds(Nk);
                     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[14]);
-                    UI->NkStrokeRect(&Nk->current->buffer, Rect, 10.0f, 3.0f, ColorTable[1]);
+                    UI->NkStrokeRect(&Nk->current->buffer, Rect, 10.0f, 3.0f, ColorTable[2]);
 
                     if(BitmapMode->Bitmap.TextureHandle)
                     {
@@ -182,16 +184,16 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                         {
                             UI->NkLayoutRowDynamic(Nk, 30, 2);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Width: %d pixels", BitmapMode->Bitmap.Width);
 
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Height: %d pixels", BitmapMode->Bitmap.Height);
 
                             UI->NkLayoutRowDynamic(Nk, 30, 1);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "AlignPercentage: V2(%.02f, %.02f)",
                                          StoredBitmap->AlignPercentage.x, StoredBitmap->AlignPercentage.y);
                             
@@ -208,21 +210,27 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     UI->NkLabel(Nk, SpriteSheet->SourceFileName, NK_TEXT_CENTERED);
 
                     u32 SpriteIndex = (FloorReal32ToInt32(AssetsMode->Time*SpriteSheet->SpriteCount) %
                                        SpriteSheet->SpriteCount);
                     loaded_bitmap *SpriteBitmap = SpriteSheetMode->Sprites + SpriteIndex;
-                    UI->NkLayoutRowStatic(Nk, 520, 520, 1);
-                    Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[14]);
-                    UI->NkStrokeRect(&Nk->current->buffer, Rect, 10.0f, 3.0f, ColorTable[1]);
 
-                    if(SpriteBitmap->TextureHandle)
+                    UI->NkLayoutRowStatic(Nk, 530, 530, 1);
+                    Rect = UI->NkWidgetBounds(Nk);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
+                    UI->NkStrokeRect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
+                    if(UI->NkGroupBegin(Nk, "Image Stats", NK_WINDOW_NO_SCROLLBAR))
                     {
-                        struct nk_image Img = UI->NkImagePtr(SpriteBitmap->TextureHandle);
-                        UI->NkImage(Nk, Img);
+                        UI->NkLayoutRowStatic(Nk, 520, 520, 1);
+                        if(SpriteBitmap->TextureHandle)
+                        {
+                            struct nk_image Img = UI->NkImagePtr(SpriteBitmap->TextureHandle);
+                            UI->NkImage(Nk, Img);
+                        }
+                        
+                        UI->NkGroupEnd(Nk);
                     }
 
                     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
@@ -232,21 +240,21 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                         {
                             UI->NkLayoutRowDynamic(Nk, 30, 2);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Sprite Width: %d pixels", SpriteSheet->SpriteWidth);
 
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Sprite Height: %d pixels", SpriteSheet->SpriteHeight);
 
                             UI->NkLayoutRowDynamic(Nk, 30, 1);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "AlignPercentage: V2(%.02f, %.02f)",
                                  SpriteSheet->SpriteAlignPercentage.x, SpriteSheet->SpriteAlignPercentage.y);
 
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Sprite Count: %d", SpriteSheet->SpriteCount);
                             
                             UI->NkGroupEnd(Nk);
@@ -262,18 +270,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredTileset->SourceFileName);
 
                     u32 TileIndex = (FloorReal32ToInt32(AssetsMode->Time) %
                                      StoredTileset->TileCount);
                     loaded_bitmap *TileBitmap = TilesetMode->Tiles + TileIndex;
                     UI->NkLayoutRowStatic(Nk, 530, 530, 1);
-                    if(UI->NkGroupBegin(Nk, "Image Stats", NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
+                    Rect = UI->NkWidgetBounds(Nk);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
+                    UI->NkStrokeRect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
+                    if(UI->NkGroupBegin(Nk, "Image Stats", NK_WINDOW_NO_SCROLLBAR))
                     {
                         UI->NkLayoutRowStatic(Nk, 520, 520, 1);
-                        Rect = UI->NkWidgetBounds(Nk);
-                        UI->NkFillRect(&Nk->current->buffer, Rect, 0.0f, ColorTable[14]);
                         if(TileBitmap->TextureHandle)
                         {
                             struct nk_image Img = UI->NkImagePtr(TileBitmap->TextureHandle);
@@ -286,24 +295,24 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
                     {
                         UI->NkLayoutSpacePush(Nk, UI->NkRect(528, -528, 530, 374));
-                        if(UI->NkGroupBegin(Nk, "SpriteSheet Stats", NK_WINDOW_NO_SCROLLBAR))
+                        if(UI->NkGroupBegin(Nk, "Tileset Stats", NK_WINDOW_NO_SCROLLBAR))
                         {
                             UI->NkLayoutRowDynamic(Nk, 30, 2);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Tile Width: %d pixels", StoredTileset->TileWidth);
 
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Tile Height: %d pixels", StoredTileset->TileHeight);
 
                             UI->NkLayoutRowDynamic(Nk, 30, 1);
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Tile Count: %d", StoredTileset->TileCount);
 
                             Rect = UI->NkWidgetBounds(Nk);
-                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                            UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Merge Tile Source: %s", StoredTileset->MergeTileFileName);
                             
                             UI->NkGroupEnd(Nk);
@@ -319,21 +328,21 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredFont->SourceFileName);
 
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Code Point Count: %d", StoredFont->CodePointCount);
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Font Size: %d pixels", StoredFont->FontSizeInPixels);
 
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "First Code Point: %#x", StoredFont->FirstCodePoint);
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Last Code Point: %#x", StoredFont->LastCodePoint);
 
                     // TODO(paul): Font Handling ?? may be removed
@@ -353,7 +362,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredText->SourceFileName);
 
                     // TODO(paul): Show Text
@@ -368,21 +377,21 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredSound->SourceFileName);
 
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "First Sample Index: %d", StoredSound->FirstSampleIndex);
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     char *ChainString = JsonGetEnumString(AssetsMode->JsonStringsHead, "SSASoundChain", StoredSound->Chain);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Chain: %s", ChainString);
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Sample Count: %d", SoundMode->Sound.SampleCount);
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Channel Count: %d", SoundMode->Sound.ChannelCount);
                 } break;
 
@@ -394,19 +403,21 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredFile->SourceFileName);
 
                     Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[1]);
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "File Size: %d", StoredFile->FileSize);
                 } break;
             }
             UI->NkGroupEnd(Nk);
         }
 
-        UI->NkLayoutRowStatic(Nk, 244, 1280, 1);
-        if(UI->NkGroupBegin(Nk, "General View", NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
+        UI->NkLayoutRowStatic(Nk, 240, 1280, 1);
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[2]);
+        if(UI->NkGroupBegin(Nk, "General View", NK_WINDOW_NO_SCROLLBAR))
         {
             UI->NkLayoutRowDynamic(Nk, 190, 2);
             if(UI->NkGroupBegin(Nk, "Stored Attributes: ", NK_WINDOW_TITLE))
@@ -417,19 +428,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                 FormatString(ArrayCount(Text), Text, "  InEditorID: %d",
                              StoredAsset->ID);
                 struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, {0x4d, 0x30, 0x20, 255});
+                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                 UI->NkLabel(Nk, Text, NK_TEXT_LEFT);
 
                 FormatString(ArrayCount(Text), Text, "  TypeID: %s",
                              TypeID);
                 Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, {0x4d, 0x30, 0x20, 255});
+                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                 UI->NkLabel(Nk, Text, NK_TEXT_LEFT);
 
                 FormatString(ArrayCount(Text), Text, "  StoredType: %s",
                              StoredType);
                 Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, {0x4d, 0x30, 0x20, 255});
+                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                 UI->NkLabel(Nk, Text, NK_TEXT_LEFT);
                 
                 
@@ -448,7 +459,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     u32 TagValue = Tag.Value;
                     char *ValueKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, Tag.ID);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-                    UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, {0x4d, 0x30, 0x20, 255});
+                    UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                     if(StringsAreEqual(ValueKey, "Number"))
                     {
                         UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %d. %s, %#x", TagIndex, TagString, TagValue);
@@ -619,11 +630,13 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
     string_array *ValueStringArray = GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
 
-    UI->NkLayoutRowStatic(Nk, 480, 468, 1);
+    UI->NkLayoutRowStatic(Nk, 450, 450, 1);
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(UI->NkGroupBegin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
     {        
         char *Strings = AssambleStrings(TempMem.Arena, FileStrings, &FileCount);
-        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        UI->NkLayoutRowStatic(Nk, 30, 440, 1);
         struct nk_rect Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, Text, NK_TEXT_CENTERED);
@@ -632,14 +645,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         if(AssetsMode->EditMode == EditMode_Tileset)
         {
             char *Strings = AssambleStrings(TempMem.Arena, AssetsMode->SolidTileFiles, &AssetsMode->SolidTileFileCount);
-            UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+            UI->NkLayoutRowStatic(Nk, 30, 440, 1);
             struct nk_rect Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabel(Nk, "Choose Merge Tile", NK_TEXT_CENTERED);
             UI->NkComboboxString(Nk, Strings, (int *)&AssetsMode->SubFileIndex, AssetsMode->SolidTileFileCount, 30, {460, 460});
         }
 
-        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        UI->NkLayoutRowStatic(Nk, 30, 440, 1);
         Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, "Choose TypeID", NK_TEXT_CENTERED);
@@ -648,7 +661,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         char *AssetStrings = AssambleStrings(TempMem.Arena, AssetStringArray->Strings, &Count, true);
         UI->NkComboboxString(Nk, AssetStrings, (int *)&CurrentAsset->TypeID, Count, 30, {460, 460});
 
-        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        UI->NkLayoutRowStatic(Nk, 30, 440, 1);
         Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, "Choose Tag", NK_TEXT_CENTERED);
@@ -656,7 +669,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         char *TagStrings = AssambleStrings(TempMem.Arena, TagStringArray->Strings, &Count, true);
         UI->NkComboboxString(Nk, TagStrings, (int *)&AssetsMode->CurrentTagID, Count, 30, {460, 460});
 
-        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        UI->NkLayoutRowStatic(Nk, 30, 440, 1);
         char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
 
         if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
@@ -683,7 +696,9 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     }
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
-    UI->NkLayoutSpacePush(Nk, {1500, -480, 420, 320});
+    UI->NkLayoutSpacePush(Nk, {1480, -450, 420, 320});
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(UI->NkGroupBegin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
     {        
         UI->NkLayoutRowDynamic(Nk, 30, 1);
@@ -754,7 +769,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     UI->NkLayoutSpaceEnd(Nk);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
-    UI->NkLayoutSpacePush(Nk, {0, 518, 460, 50});
+    UI->NkLayoutSpacePush(Nk, {-5, 550, 450, 50});
     if(UI->NkGroupBegin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {        
         UI->NkLayoutRowDynamic(Nk, 40, 2);
@@ -769,6 +784,53 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     UI->NkLayoutSpaceEnd(Nk);
 
     EndTemporaryMemory(TempMem);
+}
+
+internal void
+DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk, stored_asset *CurrentAsset)
+{
+    bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
+    stored_asset_bitmap *StoredBitmap = &CurrentAsset->Bitmap;
+    loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
+    
+    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
+    UI->NkLayoutSpacePush(Nk, {1480, -160, 420, 180});
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(UI->NkGroupBegin(Nk, "Bitmap Attributes", NK_WINDOW_NO_SCROLLBAR))
+    {
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ", AssetsMode->BitmapFiles[AssetsMode->FileIndex]);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Width: %d pixels", Bitmap->Width);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Height: %d pixels", Bitmap->Height);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Stored Bitmap: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", StoredBitmap->FileName);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "AlignPercentage: V2(%.02f, %.02f)",
+                     StoredBitmap->AlignPercentage.x, StoredBitmap->AlignPercentage.y);
+
+        UI->NkGroupEnd(Nk);
+    }
+    UI->NkLayoutSpaceEnd(Nk);
 }
 
 internal void
@@ -824,17 +886,29 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             UI->NkSpacer(Nk);
             UI->NkLayoutRowStatic(Nk, 30, 300, 1);
 
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Asset Count: %d",
+            struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Asset Count: %d",
                          AssetsMode->StoredHeader.AssetCount);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "SizeOfStoredAsset: %d",
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  SizeOfStoredAsset: %d",
                          AssetsMode->StoredHeader.SizeOfStoredAsset);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Major High  Version: %d",
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Major High  Version: %d",
                          (AssetsMode->StoredHeader.Version >> 24) & 0xFF);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Major Low Version: %d",
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Major Low Version: %d",
                          (AssetsMode->StoredHeader.Version >> 16) & 0xFF);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Minor High  Version: %d",
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Minor High  Version: %d",
                          (AssetsMode->StoredHeader.Version >> 8) & 0xFF);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "Minor Low Version: %d",
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Minor Low Version: %d",
                          AssetsMode->StoredHeader.Version & 0xFF);
 
             DrawShowStoredAssets(AssetsMode, UI, Nk);
@@ -864,8 +938,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
         case EditMode_Bitmap:
         {
-            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
-//            DrawAssetsBitmapEditMode(AssetsMode, UIState, Layout, CurrentAsset);
+            DrawAssetsBitmapEditMode(AssetsMode, UI, Nk, CurrentAsset);
         } break;
 
         case EditMode_SpriteSheet:

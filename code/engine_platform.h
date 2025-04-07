@@ -7191,7 +7191,7 @@ struct platform_nk_list_view
     platform_nk_list_view_end *End;
 };
 
-struct platform_nk_widget_
+struct platform_nk_widget_funcs
 {
     // WIDGET
     platform_nk_widget_fitting *Fitting;
@@ -7205,6 +7205,10 @@ struct platform_nk_widget_
     platform_nk_widget_has_mouse_click_down *HasMouseClickDown;
     platform_nk_widget_disable_begin *DisableBegin;
     platform_nk_widget_disable_end *DisableEnd;
+};
+
+struct platform_nk_text_funcs
+{
 };
 
 struct _nk_ui
@@ -7224,17 +7228,19 @@ struct _nk_ui
 
     platform_nk_widget *NkWidget;
     platform_nk_spacing *Spacing;
-    platform_nk_widget_ Widget;
+    platform_nk_widget_funcs Widget;
 
     // TEXT
     NK_API void nk_text(struct nk_context*, const char*, int, nk_flags);
     NK_API void nk_text_colored(struct nk_context*, const char*, int, nk_flags, struct nk_color);
     NK_API void nk_text_wrap(struct nk_context*, const char*, int);
     NK_API void nk_text_wrap_colored(struct nk_context*, const char*, int, struct nk_color);
+
     NK_API void nk_label(struct nk_context*, const char*, nk_flags align);
     NK_API void nk_label_colored(struct nk_context*, const char*, nk_flags align, struct nk_color);
     NK_API void nk_label_wrap(struct nk_context*, const char*);
     NK_API void nk_label_colored_wrap(struct nk_context*, const char*, struct nk_color);
+
     NK_API void nk_image(struct nk_context*, struct nk_image);
     NK_API void nk_image_color(struct nk_context*, struct nk_image, struct nk_color);
 
@@ -7246,6 +7252,7 @@ struct _nk_ui
     NK_API void nk_labelfv_colored(struct nk_context*, nk_flags, struct nk_color, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(4);
     NK_API void nk_labelfv_wrap(struct nk_context*, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(2);
     NK_API void nk_labelfv_colored_wrap(struct nk_context*, struct nk_color, NK_PRINTF_FORMAT_STRING const char*, va_list) NK_PRINTF_VALIST_FUNC(3);
+
     NK_API void nk_value_bool(struct nk_context*, const char *prefix, int);
     NK_API void nk_value_int(struct nk_context*, const char *prefix, int);
     NK_API void nk_value_uint(struct nk_context*, const char *prefix, unsigned int);
