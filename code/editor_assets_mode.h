@@ -271,6 +271,7 @@ struct editor_mode_assets
     assets_edit_mode EditMode;
 
     memory_arena UtilityArena;
+    memory_arena UtilityTempArena;
     
     stored_asset_file_header StoredHeader;
     b32 StoredAssetChanged;

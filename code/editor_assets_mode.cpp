@@ -16,6 +16,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     
     editor_mode_assets *Result = PushStruct(&EditorState->ModeArena, editor_mode_assets);
     Result->EditMode = EditMode_None;
+    SubArena(&Result->UtilityTempArena, &EditorState->ModeArena, Megabytes(1));
     SubArena(&Result->UtilityArena, &EditorState->ModeArena, Megabytes(1));
 
     // NOTE(babykaban): Setting it to one because first stored asset is always zero
@@ -56,7 +57,6 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     Result->SSWMFileCount = Platform.ListFilesInDirectory(PlatformFileType_SSWM, 0, 0);
     Result->SSWMFiles = PushArray(&EditorState->ModeArena, Result->SSWMFileCount, char *);
     Platform.ListFilesInDirectory(PlatformFileType_SSWM, Result->SSWMFiles, &EditorState->ModeArena);
-    
 
     Result->JsonStringsHead = ParseJson("enum_strings.json", &EditorState->ModeArena);
 
@@ -1344,9 +1344,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
 
 
             nk_ui *UI = &Platform.UI;
-
-            DrawAssetsModeUI(AssetsMode, UI, Nk);
-
             switch(AssetsMode->EditMode)
             {
                 case EditMode_None:
@@ -1445,6 +1442,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             
                 InvalidDefaultCase;
             }
+
+            DrawAssetsModeUI(AssetsMode, UI, Nk);
+
 
             AssetsMode->Time += Input->dtForFrame;
         }

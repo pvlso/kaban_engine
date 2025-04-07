@@ -244,7 +244,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-        PlayTitleScreen(EditorState, TranState);
+        PlayAssetsMode(EditorState, TranState);
+//        PlayTitleScreen(EditorState, TranState);
     }
 
     if(EditorState->EditorMode == EditorMode_GameMode)
@@ -281,7 +282,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
 #if 1
     if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
-                  (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE : NK_WINDOW_REMOVE_ROM))
+                  (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
         b32 Rerun = false;
         do

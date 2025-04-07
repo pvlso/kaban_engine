@@ -680,6 +680,14 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkGroupBegin = nk_group_begin;
     UI->NkGroupEnd = nk_group_end;
 
+    UI->NkFilterDefault = nk_filter_default;
+    UI->NkFilterASCII = nk_filter_ascii;
+    UI->NkFilterFloat = nk_filter_float;
+    UI->NkFilterDecimal = nk_filter_decimal;
+    UI->NkFilterHEX = nk_filter_hex;
+    UI->NkFilterOCT = nk_filter_oct;
+    UI->NkFilterBIN = nk_filter_binary;
+
     UI->NkInputHasMouseClick = nk_input_has_mouse_click;
     UI->NkInputHasMouseClickInRect = nk_input_has_mouse_click_in_rect;
     UI->NkInputHasMouseClickInButtonRect = nk_input_has_mouse_click_in_button_rect;
@@ -900,6 +908,22 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkSubimagePtr = nk_subimage_ptr;
     UI->NkSubimageID = nk_subimage_id;
     UI->NkSubimageHandle = nk_subimage_handle;
+
+    UI->NkContextualBegin = nk_contextual_begin;
+    UI->NkContextualItemText = nk_contextual_item_text;
+    UI->NkContextualItemLabel = nk_contextual_item_label;
+    UI->NkContextualItemImageLabel = nk_contextual_item_image_label;
+    UI->NkContextualItemImageText = nk_contextual_item_image_text;
+    UI->NkContextualItemSymbolLabel = nk_contextual_item_symbol_label;
+    UI->NkContextualItemSymbolText = nk_contextual_item_symbol_text;
+    UI->NkContextualClose = nk_contextual_close;
+    UI->NkContextualEnd = nk_contextual_end;
+
+    UI->NkPopupBegin = nk_popup_begin;
+    UI->NkPopupClose = nk_popup_close;
+    UI->NkPopupEnd = nk_popup_end;
+    UI->NkPopupGetScroll = nk_popup_get_scroll;
+    UI->NkPopupSetScroll = nk_popup_set_scroll;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

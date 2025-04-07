@@ -465,15 +465,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             // NOTE(paul): Action on Current Stored Asset 
             UI->NkLayoutRowDynamic(Nk, 30, 2);
             if(UI->NkButtonLabel(Nk, "Edit Stored Asset"))
-            {
                 AssetsMode->EditStoredAsset = true;
-            }
 
             UI->NkLayoutSpacePush(Nk, UI->NkRect(790, 12, 470, 40));
             if(UI->NkButtonLabel(Nk, "Remove Stored Asset"))
-            {
                 AssetsMode->RemoveStoredAsset = true;
-            }
 
             UI->NkGroupEnd(Nk);
         }
@@ -514,24 +510,32 @@ IsUNUSED(char *String)
 }
 
 inline char *
-AssambleStrings(memory_arena *Arena, char **Strings, u32 Count)
+AssambleStrings(memory_arena *Arena, char **Strings, u32 *Count, b32 Filter = false)
 {
+    u32 ResultCount = 0;
     char *Result = 0;
     u32 TotalSize = 0;
     for(u32 I = 0;
-        I < Count;
+        I < *Count;
         ++I)
     {
+        if(Filter && IsUNUSED(Strings[I]))
+            continue;
+
         u32 L = StringLength(Strings[I]);
         TotalSize += L + 1;
+        ++ResultCount;
     }
 
     Result = (char *)PushSize(Arena, TotalSize);
     char *At = Result;
     for(u32 I = 0;
-        I < Count;
+        I < *Count;
         ++I)
     {
+        if(Filter && IsUNUSED(Strings[I]))
+            continue;
+
         u32 L = StringLength(Strings[I]);
         Copy(L, Strings[I], At);
         At += L;
@@ -539,293 +543,239 @@ AssambleStrings(memory_arena *Arena, char **Strings, u32 Count)
         *At++;
     }
 
+    *Count = ResultCount;
+    
     return(Result);
 }
 
 inline void
-DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
+DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+                       stored_asset *CurrentAsset)
 {
+    temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+
     u32 FileCount = 0;
     char **FileStrings = 0;
     char *Text = 0;
     switch(AssetsMode->EditMode)
     {
         case EditMode_Bitmap:
-        {
             FileCount = AssetsMode->BitmapFileCount; 
             FileStrings = AssetsMode->BitmapFiles;
             Text = "Choose Bitmap";
-        } break;
+            break;
 
         case EditMode_SpriteSheet:
-        {
             FileCount = AssetsMode->SpriteSheetFileCount; 
             FileStrings = AssetsMode->SpriteSheetFiles;
             Text = "Choose SpriteSheet";
-        } break;
+            break;
 
         case EditMode_Tileset:
-        {
             FileCount = AssetsMode->TilesetFileCount; 
             FileStrings = AssetsMode->TilesetFiles;
             Text = "Choose Tileset";
-        } break;
+            break;
 
         case EditMode_Sound:
-        {
             FileCount = AssetsMode->SoundFileCount; 
             FileStrings = AssetsMode->SoundFiles;
             Text = "Choose Sound";
-        } break;
+            break;
 
         case EditMode_Text:
-        {
             FileCount = AssetsMode->TextFileCount; 
             FileStrings = AssetsMode->TextFiles;
             Text = "Choose Text";
-        } break;
+            break;
 
         case EditMode_Font:
-        {
             FileCount = AssetsMode->FontFileCount; 
             FileStrings = AssetsMode->FontFiles;
             Text = "Choose Font";
-        } break;
+            break;
 
         case EditMode_File:
-        {
             FileCount = AssetsMode->BinaryFileCount; 
             FileStrings = AssetsMode->BinaryFiles;
             Text = "Choose File";
-        } break;
+            break;
 
         case EditMode_SSWM:
-        {
             FileCount = AssetsMode->SSWMFileCount; 
             FileStrings = AssetsMode->SSWMFiles;
             Text = "Choose SSWM";
-        } break;
+            break;
 
         InvalidDefaultCase;
     }
 
     Assert((FileStrings != 0) && (FileCount != 0) && (Text != 0));
-    
-    if(AssetsMode->EditMode == EditMode_Tileset)
-    {
-#if 0
-        UIBeginRow(Layout);
-        UIDrawScrollWindow(UIState, Layout, "Tileset Files Preview", V2(278.0f, 200.0f), &AssetsMode->FileIndex,
-                           Text, ScrollDataType_Strings, 5, FileCount, FileStrings);
-        UIDrawScrollWindow(UIState, Layout, "Merge Tile Files Preview", V2(278.0f, 200.0f), &AssetsMode->SubFileIndex,
-                           "Choose Merge Tile", ScrollDataType_Strings, 2,
-                           AssetsMode->SolidTileFileCount, AssetsMode->SolidTileFiles);
-        UIEndRow(Layout);            
-#endif
-    }
-    else
-    {
-        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
 
-        
-        char *Strings = AssambleStrings(&AssetsMode->UtilityArena, FileStrings, FileCount);
-        static int selected = 0;
-        UI->NkComboboxString(Nk, Strings, &selected, FileCount, 20, {460, 460});
-#if 0
-        if(UI->NkGroupBegin(Nk, "Stored Asset Files Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
-        {
-            UI->NkLayoutRowDynamic(Nk, 40, 1);
-            struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
-            UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
-            UI->NkLayoutRowDynamic(Nk, 30, 1);
-            for(u32 FileIndex = 0;
-                FileIndex < FileCount;
-                ++FileIndex)
-            {
-                Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
-                             FileStrings[FileIndex]);
-            }
-            
-            UI->NkGroupEnd(Nk);
-        }
-#endif
-    }
-
-#if 0
     string_array *AssetStringArray = GetOrCreateStringArray(AssetsMode, "AssetType", Asset_Count);
-    UI->NkLayoutRowStatic(Nk, 200, 460, 1);
-    if(UI->NkGroupBegin(Nk, "Asset Types Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
-    {
-        UI->NkLayoutRowDynamic(Nk, 40, 1);
-        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
-        UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
-        UI->NkLayoutRowDynamic(Nk, 30, 1);
-        for(u32 I = 0;
-            I < AssetStringArray->StringCount;
-            ++I)
-        {
-            if(!IsUNUSED(AssetStringArray->Strings[I]))
-            {
-                Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
-                             AssetStringArray->Strings[I]);
-
-            }
-        }
-        UI->NkGroupEnd(Nk);
-    }
-
     string_array *TagStringArray = GetOrCreateStringArray(AssetsMode, "AssetTag", Tag_Count);
-    UI->NkLayoutRowStatic(Nk, 200, 460, 1);
-    if(UI->NkGroupBegin(Nk, "Asset Tags Preview", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
-    {
-        UI->NkLayoutRowDynamic(Nk, 40, 1);
-        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
-        UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
-        UI->NkLayoutRowDynamic(Nk, 30, 1);
-        for(u32 I = 0;
-            I < TagStringArray->StringCount;
-            ++I)
-        {
-            if(!IsUNUSED(TagStringArray->Strings[I]))
-            {
-                Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
-                             TagStringArray->Strings[I]);
-            }
-        }
-            
-        UI->NkGroupEnd(Nk);
-    }
-    
-    UI->NkLayoutRowStatic(Nk, 30, 460, 1);
-    char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
-    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s", TagString);
-
-    if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
-    {
-        AssetsMode->LastTagID = AssetsMode->CurrentTagID;
-        AssetsMode->CurrentTagValue = 0;
-    }
 
     char *TagValueStringsKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, AssetsMode->CurrentTagID);
-    if(StringsAreEqual(TagValueStringsKey, "Number"))
-    {
-        UI->NkPropertyInt(Nk, "Stored Asset: ", 0,
-                          (int *)&AssetsMode->CurrentTagValue,
-                          256, 1, 0.1f);
+    u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
+    string_array *ValueStringArray = GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
 
-        UI->NkLabelf(Nk, NK_TEXT_LEFT, "Current Value: %d", AssetsMode->CurrentTagValue);
-    }
-    else
-    {
-        u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
-        string_array *ValueStringArray = GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
-            
-        UI->NkLayoutRowStatic(Nk, 160, 460, 1);
-        if(UI->NkGroupBegin(Nk, "Tag Value Picker", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
+    UI->NkLayoutRowStatic(Nk, 480, 468, 1);
+    if(UI->NkGroupBegin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
+    {        
+        char *Strings = AssambleStrings(TempMem.Arena, FileStrings, &FileCount);
+        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, Text, NK_TEXT_CENTERED);
+        UI->NkComboboxString(Nk, Strings, (int *)&AssetsMode->FileIndex, FileCount, 30, {460, 460});
+
+        if(AssetsMode->EditMode == EditMode_Tileset)
         {
-            UI->NkLayoutRowDynamic(Nk, 40, 1);
+            char *Strings = AssambleStrings(TempMem.Arena, AssetsMode->SolidTileFiles, &AssetsMode->SolidTileFileCount);
+            UI->NkLayoutRowStatic(Nk, 30, 460, 1);
             struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
-            UI->NkLabel(Nk, "  Search Placeholder", NK_TEXT_LEFT);
-            UI->NkLayoutRowDynamic(Nk, 30, 1);
-            for(u32 I = 0;
-                I < ValueStringArray->StringCount;
-                ++I)
-            {
-                Rect = UI->NkWidgetBounds(Nk);
-                UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-                UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %s",
-                             ValueStringArray->Strings[I]);
-            }
-            
-            UI->NkGroupEnd(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+            UI->NkLabel(Nk, "Choose Merge Tile", NK_TEXT_CENTERED);
+            UI->NkComboboxString(Nk, Strings, (int *)&AssetsMode->SubFileIndex, AssetsMode->SolidTileFileCount, 30, {460, 460});
         }
 
         UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Choose TypeID", NK_TEXT_CENTERED);
+
+        u32 Count = AssetStringArray->StringCount;
+        char *AssetStrings = AssambleStrings(TempMem.Arena, AssetStringArray->Strings, &Count, true);
+        UI->NkComboboxString(Nk, AssetStrings, (int *)&CurrentAsset->TypeID, Count, 30, {460, 460});
+
+        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Choose Tag", NK_TEXT_CENTERED);
+        Count = TagStringArray->StringCount;
+        char *TagStrings = AssambleStrings(TempMem.Arena, TagStringArray->Strings, &Count, true);
+        UI->NkComboboxString(Nk, TagStrings, (int *)&AssetsMode->CurrentTagID, Count, 30, {460, 460});
+
+        UI->NkLayoutRowStatic(Nk, 30, 460, 1);
+        char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetTag", AssetsMode->CurrentTagID);
+
+        if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
+        {
+            AssetsMode->LastTagID = AssetsMode->CurrentTagID;
+            AssetsMode->CurrentTagValue = 0;
+        }
+
+        UI->NkPropertyInt(Nk, "Stored Asset: ", 0, (int *)&AssetsMode->CurrentTagValue, ValueCount - 1, 1, 0.1f);
+
         char *ValueString = ValueStringArray->Strings[AssetsMode->CurrentTagValue];
-        UI->NkLabelf(Nk, NK_TEXT_LEFT, "Current Value: %s", ValueString);
+        UI->NkLabelf(Nk, NK_TEXT_LEFT, "Current Value: %s|%d", ValueString, AssetsMode->CurrentTagValue);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Choose Value", NK_TEXT_CENTERED);
+        char *TagValues = AssambleStrings(TempMem.Arena, ValueStringArray->Strings, &ValueStringArray->StringCount);
+        UI->NkComboboxString(Nk, TagValues, (int *)&AssetsMode->CurrentTagValue, ValueStringArray->StringCount, 30, {460, 460});
+
+        if(UI->NkButtonLabel(Nk, "Add Tag"))
+            AssetsMode->AddTag = true;
+
+        UI->NkGroupEnd(Nk);
+    }
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
+    UI->NkLayoutSpacePush(Nk, {1500, -480, 420, 320});
+    if(UI->NkGroupBegin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
+    {        
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        char *TypeIDString = AssetStringArray->Strings[CurrentAsset->TypeID];
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "TypeID: %s", TypeIDString);
+
+        char *StoredTypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", CurrentAsset->Type);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", StoredTypeString);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "TagCount: %d", CurrentAsset->TagCount);
+
+        char *TagsString = 0;
+        u32 TotalSize = 0;
+        for(u32 I = 0;
+            I < CurrentAsset->TagCount;
+            ++I)
+        {
+            ssa_tag *CurrentTag = CurrentAsset->AssetTags + I;
+            u32 L = StringLength(TagStringArray->Strings[CurrentTag->ID]);
+            TotalSize += L + 1;
+        }
+
+        TagsString = (char *)PushSize(TempMem.Arena, TotalSize);
+        char *At = TagsString;
+        for(u32 I = 0;
+            I < CurrentAsset->TagCount;
+            ++I)
+        {
+            ssa_tag *CurrentTag = CurrentAsset->AssetTags + I;
+            u32 L = StringLength(TagStringArray->Strings[CurrentTag->ID]);
+            Copy(L, TagStringArray->Strings[CurrentTag->ID], At);
+            At += L;
+            *At = 0;
+            *At++;
+        }
         
-#if 0
-        UIBeginRow(Layout);
-        UIDrawScrollWindow(UIState, Layout, "Tag Value Picker", V2(500.0f, 200.0f), &AssetsMode->CurrentTagValue,
-                           "Choose Value", ScrollDataType_Strings, 4,
-                           ValueStringArray->StringCount, ValueStringArray->Strings);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
+        UI->NkLabel(Nk, "Stored Asset Tags", NK_TEXT_CENTERED);
+        UI->NkComboboxString(Nk, TagsString, (int *)&AssetsMode->CurrentTag, CurrentAsset->TagCount, 30, {370, 380});
 
-        UIIncrementButton(Layout, &AssetsMode->CurrentTagValue, ValueCount);
-        UIDecrementButton(Layout, &AssetsMode->CurrentTagValue);
-        UIEndRow(Layout);
+        ssa_tag *CurrentTag = CurrentAsset->AssetTags + AssetsMode->CurrentTag;
+        char *CurrentTagString = TagStringArray->Strings[CurrentTag->ID];
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Tag: %d. %s, %d",
+                     AssetsMode->CurrentTag, CurrentTagString, CurrentTag->Value);
 
-        char *ValueString = ValueStringArray->Strings[AssetsMode->CurrentTagValue];
-        FormatString(ArrayCount(Buffer), Buffer, "Current Value: %s", ValueString);
-#endif
+        char *TagValueStringsKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, CurrentTag->ID);
+        u32 ValueCount = TagValueCounts[CurrentTag->ID];
+        string_array *ValueStringArray = GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Value: %s|%d",
+                     ValueStringArray->Strings[CurrentTag->Value], CurrentTag->Value);
+
+        if(UI->NkButtonLabel(Nk, "Remove Current Tag"))
+            AssetsMode->RemoveTag = true;
+        
+        UI->NkGroupEnd(Nk);
     }
-#endif
+    UI->NkLayoutSpaceEnd(Nk);
 
-#if 0            
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
+    UI->NkLayoutSpacePush(Nk, {0, 518, 460, 50});
+    if(UI->NkGroupBegin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
+    {        
+        UI->NkLayoutRowDynamic(Nk, 40, 2);
+        if(UI->NkButtonLabel(Nk, "Exit"))
+            AssetsMode->EditMode = EditMode_None;
 
-    UILabel(Layout, Buffer, 580.0f);
-
-    UIButton(Layout, "Add Tag",
-             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->AddTag, true),
-             580.0f, BColor_Green);
-
-    UILabel(RightMenuLayout, "Stored Asset Attributes: ", 575.0f);
-
-    char *TypeIDString = AssetStringArray->Strings[CurrentAsset->TypeID];
-    FormatString(ArrayCount(Buffer), Buffer, "TypeID: %s", TypeIDString);
-    UILabel(RightMenuLayout, Buffer, 575.0f);
-
-    char *StoredTypeString = JsonGetEnumString(UIState->JsonStringsHead, "StoredAssetType", CurrentAsset->Type);
-    FormatString(ArrayCount(Buffer), Buffer, "%s", StoredTypeString);
-    UILabel(RightMenuLayout, Buffer, 575.0f);
-
-    FormatString(ArrayCount(Buffer), Buffer, "TagCount: %d", CurrentAsset->TagCount);
-    UILabel(RightMenuLayout, Buffer, 575.0f);
-            
-    UIDrawScrollWindow(UIState, RightMenuLayout, "Stored Asset Tags", V2(575.0f, 200.0f), &AssetsMode->CurrentTag,
-                       "Tags", ScrollDataType_Tags, 5, ArrayCount(CurrentAsset->AssetTags), CurrentAsset->AssetTags);
-
-    ssa_tag *CurrentTag = CurrentAsset->AssetTags + AssetsMode->CurrentTag;
-    char *CurrentTagString = TagStringArray->Strings[CurrentTag->ID];
-    FormatString(ArrayCount(Buffer), Buffer, "CurrentTag: %d. %s, %d",
-                 AssetsMode->CurrentTag, CurrentTagString, CurrentTag->Value);
-    UILabel(RightMenuLayout, Buffer, 575.0f);
-
-    UIButton(RightMenuLayout, "Remove Current Tag",
-             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->RemoveTag, true),
-             575.0f, BColor_Green);
-
-    ui_layout BottomLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-1275.0f, -670.0f));
-    UIButton(&BottomLeftLayout, "Exit",
-             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->EditMode, EditMode_None),
-             200.0f, BColor_Red);
-    UIEndLayout(&BottomLeftLayout);
-
-    ui_layout BottomRightLayout = UIBeginLayout(UIState, Layout->MouseP, V2(1055.0f, -670.0f));
-    if(!AssetsMode->EditStoredAsset)
-    {
-        UIButton(&BottomRightLayout, "Add Asset",
-                 UISetUInt32Interaction(InteractionID(UIState), (u32 *)&AssetsMode->AddAsset, true),
-                 200.0f, BColor_Green);
+        if(UI->NkButtonLabel(Nk, "Add Asset"))
+            AssetsMode->AddAsset = true;
+        
+        UI->NkGroupEnd(Nk);
     }
-    UIEndLayout(&BottomRightLayout);
-#endif
+    UI->NkLayoutSpaceEnd(Nk);
+
+    EndTemporaryMemory(TempMem);
 }
 
 internal void
 DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 {
+    TIMED_FUNCTION();
+    
     stored_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
     if(AssetsMode->EditStoredAsset)
     {
@@ -840,36 +790,28 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             {
                 UI->NkLayoutRowPush(Nk, 200);
                 if(UI->NkButtonLabel(Nk, "Edit Bitmaps"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_Bitmap;
 
                 if(UI->NkButtonLabel(Nk, "Edit Sounds"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_Sound;
 
                 if(UI->NkButtonLabel(Nk, "Edit SpriteSheets"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_SpriteSheet;
 
                 if(UI->NkButtonLabel(Nk, "Edit Tilesets"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_Tileset;
 
                 if(UI->NkButtonLabel(Nk, "Edit Fonts"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_Font;
 
                 if(UI->NkButtonLabel(Nk, "Edit Texts"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_Text;
 
                 if(UI->NkButtonLabel(Nk, "Edit Files"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_File;
 
                 if(UI->NkButtonLabel(Nk, "Edit SSWM"))
-                {
-                }
+                    AssetsMode->EditMode = EditMode_SSWM;
 
                 if(UI->NkButtonLabel(Nk, "placeholder")) {}
                 if(UI->NkButtonLabel(Nk, "placeholder")) {}
@@ -922,42 +864,49 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
         case EditMode_Bitmap:
         {
-            DrawStandardEditLayout(AssetsMode, UI, Nk);
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsBitmapEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_SpriteSheet:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsSpriteSheetEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_Tileset:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsTilesetEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_Sound:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsSoundEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_Text:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsTextEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_Font:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsFontEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_File:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsFileEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
 
         case EditMode_SSWM:
         {
+            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 //            DrawAssetsSSWMEditMode(AssetsMode, UIState, Layout, CurrentAsset);
         } break;
     }

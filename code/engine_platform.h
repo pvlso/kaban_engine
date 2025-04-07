@@ -4423,6 +4423,13 @@ NK_API void nk_popup_close(struct nk_context*);
 NK_API void nk_popup_end(struct nk_context*);
 NK_API void nk_popup_get_scroll(const struct nk_context*, nk_uint *offset_x, nk_uint *offset_y);
 NK_API void nk_popup_set_scroll(struct nk_context*, nk_uint offset_x, nk_uint offset_y);
+
+typedef nk_bool platform_nk_popup_begin(struct nk_context*, enum nk_popup_type, const char*, nk_flags, struct nk_rect bounds);
+typedef void platform_nk_popup_close(struct nk_context*);
+typedef void platform_nk_popup_end(struct nk_context*);
+typedef void platform_nk_popup_get_scroll(const struct nk_context*, nk_uint *offset_x, nk_uint *offset_y);
+typedef void platform_nk_popup_set_scroll(struct nk_context*, nk_uint offset_x, nk_uint offset_y);
+
 /* =============================================================================
  *
  *                                  COMBOBOX
@@ -4499,6 +4506,17 @@ NK_API nk_bool nk_contextual_item_symbol_label(struct nk_context*, enum nk_symbo
 NK_API nk_bool nk_contextual_item_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
 NK_API void nk_contextual_close(struct nk_context*);
 NK_API void nk_contextual_end(struct nk_context*);
+
+typedef nk_bool platform_nk_contextual_begin(struct nk_context*, nk_flags, struct nk_vec2, struct nk_rect trigger_bounds);
+typedef nk_bool platform_nk_contextual_item_text(struct nk_context*, const char*, int,nk_flags align);
+typedef nk_bool platform_nk_contextual_item_label(struct nk_context*, const char*, nk_flags align);
+typedef nk_bool platform_nk_contextual_item_image_label(struct nk_context*, struct nk_image, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_contextual_item_image_text(struct nk_context*, struct nk_image, const char*, int len, nk_flags alignment);
+typedef nk_bool platform_nk_contextual_item_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_contextual_item_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
+typedef void platform_nk_contextual_close(struct nk_context*);
+typedef void platform_nk_contextual_end(struct nk_context*);
+
 /* =============================================================================
  *
  *                                  TOOLTIP
@@ -5330,6 +5348,14 @@ NK_API nk_bool nk_filter_decimal(const struct nk_text_edit*, nk_rune unicode);
 NK_API nk_bool nk_filter_hex(const struct nk_text_edit*, nk_rune unicode);
 NK_API nk_bool nk_filter_oct(const struct nk_text_edit*, nk_rune unicode);
 NK_API nk_bool nk_filter_binary(const struct nk_text_edit*, nk_rune unicode);
+
+typedef nk_bool platform_nk_filter_default(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_ascii(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_float(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_decimal(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_hex(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_oct(const struct nk_text_edit*, nk_rune unicode);
+typedef nk_bool platform_nk_filter_binary(const struct nk_text_edit*, nk_rune unicode);
 
 /** text editor */
 #ifdef NK_INCLUDE_DEFAULT_ALLOCATOR
@@ -6812,6 +6838,14 @@ struct nk_ui
     platform_nk_group_begin *NkGroupBegin;
     platform_nk_group_end *NkGroupEnd;
 
+    platform_nk_filter_default *NkFilterDefault;
+    platform_nk_filter_ascii *NkFilterASCII;
+    platform_nk_filter_float *NkFilterFloat;
+    platform_nk_filter_decimal *NkFilterDecimal;
+    platform_nk_filter_hex *NkFilterHEX;
+    platform_nk_filter_oct *NkFilterOCT;
+    platform_nk_filter_binary *NkFilterBIN;
+
     platform_nk_input_has_mouse_click *NkInputHasMouseClick;
     platform_nk_input_has_mouse_click_in_rect *NkInputHasMouseClickInRect;
     platform_nk_input_has_mouse_click_in_button_rect *NkInputHasMouseClickInButtonRect;
@@ -7032,6 +7066,21 @@ struct nk_ui
     platform_nk_subimage_id *NkSubimageID;
     platform_nk_subimage_handle *NkSubimageHandle;
 
+    platform_nk_contextual_begin *NkContextualBegin;
+    platform_nk_contextual_item_text *NkContextualItemText;
+    platform_nk_contextual_item_label *NkContextualItemLabel;
+    platform_nk_contextual_item_image_label *NkContextualItemImageLabel;
+    platform_nk_contextual_item_image_text *NkContextualItemImageText;
+    platform_nk_contextual_item_symbol_label *NkContextualItemSymbolLabel;
+    platform_nk_contextual_item_symbol_text *NkContextualItemSymbolText;
+    platform_nk_contextual_close *NkContextualClose;
+    platform_nk_contextual_end *NkContextualEnd;
+
+    platform_nk_popup_begin *NkPopupBegin;
+    platform_nk_popup_close *NkPopupClose;
+    platform_nk_popup_end *NkPopupEnd;
+    platform_nk_popup_get_scroll *NkPopupGetScroll;
+    platform_nk_popup_set_scroll *NkPopupSetScroll;
 };
 
 #define NkTreePush(ui, ctx, type, title, state) ui.NkTreePushHashed(ctx, type, title, state, NK_FILE_LINE, ui.NkStrlen(NK_FILE_LINE),__LINE__)
