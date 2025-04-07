@@ -7135,6 +7135,29 @@ struct platform_nk_tree
 #define NkTreeElementPush(ui, ctx, type, title, state, sel) ui.Tree.ElementPushHashed(ctx, type, title, state, sel, NK_FILE_LINE,ui.String.Len(NK_FILE_LINE),__LINE__)
 #define NkTreeElementPushID(ui, ctx, type, title, state, sel, id) ui.Tree.ElementPushHashed(ctx, type, title, state, sel, NK_FILE_LINE,ui.String.Len(NK_FILE_LINE),id)
 
+struct platform_nk_list_view
+{
+    // LIST VIEW
+    platform_nk_list_view_begin *Begin;
+    platform_nk_list_view_end *End;
+};
+
+struct platform_nk_widget_
+{
+    // WIDGET
+    platform_nk_widget_fitting *Fitting;
+    platform_nk_widget_bounds *Bounds;
+    platform_nk_widget_position *Position;
+    platform_nk_widget_size *Size;
+    platform_nk_widget_width *Width;
+    platform_nk_widget_height *Height;
+    platform_nk_widget_is_hovered *IsHovered;
+    platform_nk_widget_is_mouse_clicked *IsMouseClicked;
+    platform_nk_widget_has_mouse_click_down *HasMouseClickDown;
+    platform_nk_widget_disable_begin *DisableBegin;
+    platform_nk_widget_disable_end *DisableEnd;
+};
+
 struct _nk_ui
 {
     NK_API nk_bool nk_begin(struct nk_context *ctx, const char *title, struct nk_rect bounds, nk_flags flags);
@@ -7148,24 +7171,11 @@ struct _nk_ui
     platform_nk_group Group;
     platform_nk_tree Tree;
 
-    // LIST VIEW
-    NK_API nk_bool nk_list_view_begin(struct nk_context*, struct nk_list_view *out, const char *id, nk_flags, int row_height, int row_count);
-    NK_API void nk_list_view_end(struct nk_list_view*);
+    platform_nk_list_view ListView;
 
-    // WIDGET
-    NK_API enum nk_widget_layout_states nk_widget(struct nk_rect*, const struct nk_context*);
-    NK_API enum nk_widget_layout_states nk_widget_fitting(struct nk_rect*, const struct nk_context*, struct nk_vec2);
-    NK_API struct nk_rect nk_widget_bounds(const struct nk_context*);
-    NK_API struct nk_vec2 nk_widget_position(const struct nk_context*);
-    NK_API struct nk_vec2 nk_widget_size(const struct nk_context*);
-    NK_API float nk_widget_width(const struct nk_context*);
-    NK_API float nk_widget_height(const struct nk_context*);
-    NK_API nk_bool nk_widget_is_hovered(const struct nk_context*);
-    NK_API nk_bool nk_widget_is_mouse_clicked(const struct nk_context*, enum nk_buttons);
-    NK_API nk_bool nk_widget_has_mouse_click_down(const struct nk_context*, enum nk_buttons, nk_bool down);
-    NK_API void nk_spacing(struct nk_context*, int cols);
-    NK_API void nk_widget_disable_begin(struct nk_context* ctx);
-    NK_API void nk_widget_disable_end(struct nk_context* ctx);
+    platform_nk_widget *NkWidget;
+    platform_nk_spacing *Spacing;
+    platform_nk_widget_ Widget;
 
     // TEXT
     NK_API void nk_text(struct nk_context*, const char*, int, nk_flags);
