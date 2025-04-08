@@ -1291,7 +1291,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
     {
         f32 Ratio = (f32)Nk->BaseHeight/(f32)Nk->BaseWidth;
         Orthographic(RenderGroup, Nk->Scale.x);
-//        Perspective(RenderGroup, Ratio, 2.0f, 2.16f);
         Clear(RenderGroup, UI_COLOR_RGBA1_4D3020FF);
 
         object_transform Flat = DefaultFlatTransform();

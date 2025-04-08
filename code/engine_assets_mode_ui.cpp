@@ -696,7 +696,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     }
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
-    UI->NkLayoutSpacePush(Nk, {1480, -450, 420, 320});
+    UI->NkLayoutSpacePush(Nk, {1460, -454, 450, 320});
     Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(UI->NkGroupBegin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
@@ -744,7 +744,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
         UI->NkLabel(Nk, "Stored Asset Tags", NK_TEXT_CENTERED);
-        UI->NkComboboxString(Nk, TagsString, (int *)&AssetsMode->CurrentTag, CurrentAsset->TagCount, 30, {370, 380});
+        UI->NkComboboxString(Nk, TagsString, (int *)&AssetsMode->CurrentTag, CurrentAsset->TagCount, 30, {440, 380});
 
         ssa_tag *CurrentTag = CurrentAsset->AssetTags + AssetsMode->CurrentTag;
         char *CurrentTagString = TagStringArray->Strings[CurrentTag->ID];
@@ -796,7 +796,7 @@ DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *
     DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
-    UI->NkLayoutSpacePush(Nk, {1480, -160, 420, 180});
+    UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 180});
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(UI->NkGroupBegin(Nk, "Bitmap Attributes", NK_WINDOW_NO_SCROLLBAR))
@@ -832,6 +832,351 @@ DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *
     }
     UI->NkLayoutSpaceEnd(Nk);
 }
+
+internal void
+DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk, stored_asset *CurrentAsset)
+{
+    spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
+    stored_asset_spritesheet *StoredSpriteSheet = &CurrentAsset->SpriteSheet;
+    loaded_bitmap *SpriteSheetBitmap = &SpriteSheetMode->SpriteSheetBitmap;
+
+    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
+    UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 420});
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(UI->NkGroupBegin(Nk, "SpriteSheet Attributes", NK_WINDOW_NO_SCROLLBAR))
+    {
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
+                     AssetsMode->SpriteSheetFiles[AssetsMode->FileIndex]);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Width: %d pixels", SpriteSheetBitmap->Width);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Height: %d pixels", SpriteSheetBitmap->Height);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "SpriteSheet: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", StoredSpriteSheet->SourceFileName);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Sprite Align Percentage:", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "V2(%.02f, %.02f)",
+                     StoredSpriteSheet->SpriteAlignPercentage.x,
+                     StoredSpriteSheet->SpriteAlignPercentage.y);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Sprite Count: %d", StoredSpriteSheet->SpriteCount);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Sprite Width: ", NK_TEXT_CENTERED);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Sprite Height: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredSpriteSheet->SpriteWidth);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredSpriteSheet->SpriteHeight);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        UI->NkPropertyInt(Nk, "Adjust Width: ", 0, (int *)&StoredSpriteSheet->SpriteWidth,
+                          SpriteSheetBitmap->Width, 1, 0.1f);
+
+        if(UI->NkButtonLabel(Nk, "Cut SpriteSheet"))
+            SpriteSheetMode->CutSpriteSheet = true;
+
+        if(UI->NkButtonLabel(Nk, SpriteSheetMode->ShowAnimated ? "Show Bitmap" : "Show Animated"))
+            SpriteSheetMode->ShowAnimated = !SpriteSheetMode->ShowAnimated;
+        
+        UI->NkGroupEnd(Nk);
+    }
+    UI->NkLayoutSpaceEnd(Nk);
+}
+
+internal void
+DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk, stored_asset *CurrentAsset)
+{
+    tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
+    stored_asset_tileset *StoredTileset = &CurrentAsset->Tileset;
+    loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
+
+    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
+    UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 420});
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(UI->NkGroupBegin(Nk, "Tileset Attributes", NK_WINDOW_NO_SCROLLBAR))
+    {
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
+                     AssetsMode->TilesetFiles[AssetsMode->FileIndex]);
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Width: %d pixels", TilesetBitmap->Width);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Height: %d pixels", TilesetBitmap->Height);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Tileset: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", StoredTileset->SourceFileName);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Tile Count: %d", StoredTileset->TileCount);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Tile Width: ", NK_TEXT_CENTERED);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Tile Height: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredTileset->TileWidth);
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredTileset->TileHeight);
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        UI->NkPropertyInt(Nk, "Adjust Width: ", 0, (int *)&StoredTileset->TileWidth,
+                          TilesetBitmap->Width, 1, 0.1f);
+        UI->NkPropertyInt(Nk, "Adjust Height: ", 0, (int *)&StoredTileset->TileHeight,
+                          TilesetBitmap->Height, 1, 0.1f);
+
+
+        UI->NkLayoutRowDynamic(Nk, 30, 2);
+        if(UI->NkButtonLabel(Nk, "Cut With Merge"))
+            TilesetMode->CutWithMergeTileset = true;
+
+        if(UI->NkButtonLabel(Nk, "Cut"))
+            TilesetMode->CutTileset = true;
+
+        UI->NkLayoutRowDynamic(Nk, 30, 1);
+        b32 IsMerged = StoredTileset->MergedTile;
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, IsMerged ? "Tileset is Merged" : "Tileset is not Merged", NK_TEXT_CENTERED);
+
+        if(UI->NkButtonLabel(Nk, TilesetMode->ShowTiles ? "Show Bitmap" : "Show Tiles"))
+            TilesetMode->ShowTiles = !TilesetMode->ShowTiles;
+
+        UI->NkGroupEnd(Nk);
+    }
+    UI->NkLayoutSpaceEnd(Nk);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, 3);
+    if(TilesetMode->ShowTiles)
+    {
+        UI->NkLayoutSpacePush(Nk, {480, -466, 40, 40});
+        if(UI->NkButtonSymbol(Nk, NK_SYMBOL_TRIANGLE_LEFT) &&
+           (TilesetMode->CurrentTileIndex != 0))
+        {
+            TilesetMode->CurrentTileIndex -= 1;
+        }
+
+        UI->NkLayoutSpacePush(Nk, {525, -466, 860, 40});
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Tile Index: %d",
+                     TilesetMode->CurrentTileIndex);
+
+        UI->NkLayoutSpacePush(Nk, {1390, -466, 40, 40});
+        if(UI->NkButtonSymbol(Nk, NK_SYMBOL_TRIANGLE_RIGHT) &&
+           (TilesetMode->CurrentTileIndex < (StoredTileset->TileCount - 1)))
+        {
+            TilesetMode->CurrentTileIndex += 1;
+        }
+    }
+    UI->NkLayoutSpaceEnd(Nk);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, 3);
+    UI->NkLayoutSpacePush(Nk, {0, -90, 460, 30});
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Merge Tile: %s",
+                 AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex]);
+
+    UI->NkLayoutSpacePush(Nk, {0, -55, 460, 460});
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
+    UI->NkStrokeRect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
+
+    UI->NkLayoutSpacePush(Nk, {5, -50, 450, 450});
+    if(TilesetMode->MergeTileBitmap.TextureHandle)
+    {
+        struct nk_image Img = UI->NkImagePtr(TilesetMode->MergeTileBitmap.TextureHandle);
+        UI->NkImage(Nk, Img);
+    }
+
+    UI->NkLayoutSpaceEnd(Nk);
+}
+
+#if 0
+internal void
+DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_layout *Layout,
+                        stored_asset *CurrentAsset)
+{
+    char Buffer[256];
+    sound_mode *SoundMode = &AssetsMode->SoundMode;
+    stored_asset_sound *StoredSound = &CurrentAsset->Sound;
+    
+    ui_layout RightMenuLayout = UIBeginLayout(UIState, Layout->MouseP, V2(680.0f, 690.0f));
+    DrawStandardEditLayout(UIState, Layout, &RightMenuLayout, AssetsMode, CurrentAsset);
+
+    ui_layout MiddleLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-300.0f, 680.0f));
+    UIBeginRow(&MiddleLeftLayout);
+    UIButton(&MiddleLeftLayout, "Play Sound",
+             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&SoundMode->PlaySound, true),
+             200.0f, BColor_Green, 40.0f);
+    UIButton(&MiddleLeftLayout, "Stop Sound",
+             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&SoundMode->StopSound, true),
+             200.0f, BColor_Red, 40.0f);
+    UIEndRow(&MiddleLeftLayout);
+    UIEndLayout(&MiddleLeftLayout);
+
+    FormatString(ArrayCount(Buffer), Buffer, "%s attributes : ",
+                 AssetsMode->SoundFiles[AssetsMode->FileIndex]);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+#if 0
+    string_array *SoundChainStringArray = GetOrCreateStringArray(UIState, "SSASoundChain", SSASoundChain_Count);
+    char *ChainString = SoundChainStringArray->Strings[StoredSound->Chain];
+    FormatString(ArrayCount(Buffer), Buffer, "Current Chain: %s", ChainString);
+
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+    UIDrawScrollWindow(UIState, &RightMenuLayout, "SSA Sound Chain Picker", V2(575.0f, 200.0f), &StoredSound->Chain,
+                       "Choose Chain", ScrollDataType_Strings, 3,
+                       SoundChainStringArray->StringCount, SoundChainStringArray->Strings);
+#endif
+
+    UIEndLayout(&RightMenuLayout);
+}
+
+internal void
+DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_layout *Layout,
+                       stored_asset *CurrentAsset)
+{
+    text_mode *TextMode = &AssetsMode->TextMode;
+    
+    ui_layout RightMenuLayout = UIBeginLayout(UIState, Layout->MouseP, V2(680.0f, 690.0f));
+    DrawStandardEditLayout(UIState, Layout, &RightMenuLayout, AssetsMode, CurrentAsset);
+    
+    ui_layout MiddleLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-670.0f, 675.0f));
+    UILabel(&MiddleLeftLayout, TextMode->Text.String, 1305.0f, 40.0f);
+    UIButton(&MiddleLeftLayout, "Edit",
+             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&TextMode->EditTextFile, true),
+             1325.0f, BColor_Green);
+    UIButton(&MiddleLeftLayout, "Reload",
+             UISetUInt32Interaction(InteractionID(UIState), (u32 *)&TextMode->Reload, true),
+             1325.0f, BColor_Green);
+    UIEndLayout(&MiddleLeftLayout);
+}
+
+internal void
+DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_layout *Layout,
+                       stored_asset *CurrentAsset)
+{
+    char Buffer[256];
+    font_mode *FontMode = &AssetsMode->FontMode;
+    stored_asset_font *StoredFont = &CurrentAsset->Font;
+
+    ui_layout RightMenuLayout = UIBeginLayout(UIState, Layout->MouseP, V2(680.0f, 690.0f));
+    DrawStandardEditLayout(UIState, Layout, &RightMenuLayout, AssetsMode, CurrentAsset);
+    
+    ui_layout MiddleLeftLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-670.0f, 675.0f));
+//    UILabelWithInEditorFont(&MiddleLeftLayout, "abcdefghijklmnopqrstuvwxyz\nABCDEFGHIJKLMNOPQRSTUVWXYZ\n123456789.:,;'\"(!?)+-*/=",
+//                            1305.0f, &FontMode->Font, 3.0f);
+    UIEndLayout(&MiddleLeftLayout);
+
+    FormatString(ArrayCount(Buffer), Buffer, "%s attributes : ",
+                 AssetsMode->FontFiles[AssetsMode->FileIndex]);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    FormatString(ArrayCount(Buffer), Buffer, "CodePointCount: %d", StoredFont->CodePointCount);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+    FormatString(ArrayCount(Buffer), Buffer, "FirstCodePoint: %#x", StoredFont->FirstCodePoint);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+    FormatString(ArrayCount(Buffer), Buffer, "LastCodePoint: %#x", StoredFont->LastCodePoint);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+    FormatString(ArrayCount(Buffer), Buffer, "FontSize: %d pixels", StoredFont->FontSizeInPixels);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    UIEndLayout(&RightMenuLayout);
+}
+
+internal void
+DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_layout *Layout,
+                       stored_asset *CurrentAsset)
+{
+    char Buffer[256];
+    stored_asset_binary_file *StoredFile = &CurrentAsset->File;
+    
+    ui_layout RightMenuLayout = UIBeginLayout(UIState, Layout->MouseP, V2(680.0f, 690.0f));
+    DrawStandardEditLayout(UIState, Layout, &RightMenuLayout, AssetsMode, CurrentAsset);
+
+    FormatString(ArrayCount(Buffer), Buffer, "%s attributes : ",
+                 AssetsMode->BinaryFiles[AssetsMode->FileIndex]);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    FormatString(ArrayCount(Buffer), Buffer, "File Size: %d", StoredFile->FileSize);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    UIEndLayout(&RightMenuLayout);
+}
+
+internal void
+DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, ui_layout *Layout,
+                       stored_asset *CurrentAsset)
+{
+    char Buffer[256];
+    stored_asset_sswm_file *StoredFile = &CurrentAsset->SSWM;
+    
+    ui_layout RightMenuLayout = UIBeginLayout(UIState, Layout->MouseP, V2(680.0f, 690.0f));
+    DrawStandardEditLayout(UIState, Layout, &RightMenuLayout, AssetsMode, CurrentAsset);
+
+    FormatString(ArrayCount(Buffer), Buffer, "%s attributes : ",
+                 AssetsMode->SSWMFiles[AssetsMode->FileIndex]);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    FormatString(ArrayCount(Buffer), Buffer, "File Size: %d", StoredFile->FileSize);
+    UILabel(&RightMenuLayout, Buffer, 575.0f);
+
+    UIEndLayout(&RightMenuLayout);
+}
+#endif
 
 internal void
 DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
@@ -943,14 +1288,12 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
 
         case EditMode_SpriteSheet:
         {
-            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
-//            DrawAssetsSpriteSheetEditMode(AssetsMode, UIState, Layout, CurrentAsset);
+            DrawAssetsSpriteSheetEditMode(AssetsMode, UI, Nk, CurrentAsset);
         } break;
 
         case EditMode_Tileset:
         {
-            DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
-//            DrawAssetsTilesetEditMode(AssetsMode, UIState, Layout, CurrentAsset);
+            DrawAssetsTilesetEditMode(AssetsMode, UI, Nk, CurrentAsset);
         } break;
 
         case EditMode_Sound:
