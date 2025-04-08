@@ -15,6 +15,8 @@
 #include "engine_game_mode_tile.cpp"
 #include "engine_game_mode_navmesh.cpp"
 
+#include "engine_game_mode_ui.cpp"
+
 inline b32
 AbleToStart(world_map_startup MapStartup)
 {
@@ -197,6 +199,9 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         Result->FreeTriangleIndices = PushArray(&EditorState->ModeArena, 1024, s32);
         
         Result->AutoWriteSeconds = 300.0f;
+
+        Result->JsonStringsHead = ParseJson("enum_strings.json", &EditorState->ModeArena);
+
         EditorState->GameMode = Result;
     }
     else
@@ -595,7 +600,7 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
 internal b32
 UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
-                        engine_input *Input, u32 RenderWidth, u32 RenderHeight,
+                        nk_context *Nk, engine_input *Input, u32 RenderWidth, u32 RenderHeight,
                         editor_mode_game *GameMode)
 {
     editor_assets *Assets = TranState->Assets;
@@ -603,6 +608,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
+        nk_ui *UI = &Platform.UI;
+
         real32 WidthOfMonitor = 0.635f; // NOTE(casey): Horizontal measurement of monitor in meters
         real32 MetersToPixels = (real32)RenderWidth/WidthOfMonitor;
 
@@ -619,6 +626,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
+
+        DrawGameModeUI(GameMode, UI, Nk);
 
         b32 Exit = false;
         switch(GameMode->CurrentAction)
@@ -857,7 +866,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                 InvalidDefaultCase;
             }
-
+            
             GameMode->AutoWriteSeconds -= Input->dtForFrame;
             if(GameMode->AutoWriteSeconds <= 0.0f)
             {

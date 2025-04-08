@@ -65,6 +65,9 @@ struct editor_mode_game
     
     edit_game_mode GameEditMode;
 
+    json_element *JsonStringsHead;    
+    string_array *EnumStringArraysHash[4096];
+
     world *World;
     controlled_camera ControlledCameras[ArrayCount(((engine_input *)0)->Controllers)];
 
@@ -109,7 +112,7 @@ struct editor_mode_game
     
     r32 Time;
     r32 AutoWriteSeconds;
-
+    
     action_stack UndoStack;
     action_stack RedoStack;
 };

@@ -5,7 +5,9 @@
    $Creator: BabyKaban $
    $Notice:  $
    ======================================================================== */
+// TODO(paul): Use file API for this
 #include <stdio.h>
+
 #include "engine.h"
 #include "engine_sort.cpp"
 #include "engine_json_parser.cpp"
@@ -244,8 +246,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-        PlayAssetsMode(EditorState, TranState);
-//        PlayTitleScreen(EditorState, TranState);
+        PlayTitleScreen(EditorState, TranState);
     }
 
     if(EditorState->EditorMode == EditorMode_TitleScreen)
@@ -265,23 +266,15 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     render_group RenderGroup_ = BeginRenderGroup(TranState->Assets, RenderCommands, TranState->MainGenerationID,
                                                  false, RenderCommands->Width, RenderCommands->Height);
     render_group *RenderGroup = &RenderGroup_;
-    Orthographic(RenderGroup, 1.0f);
-    Clear(RenderGroup, V4(0.45f, 0, 0.45f, 1.0f));
-
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
-
-
-    object_transform T = DefaultFlatTransform();
-///    PushRect(RenderGroup, &T, V3(0, 0, 0), V2((r32)RenderWidth, (r32)RenderHeight));
     
     if(WasPressed(Input->Controllers[0].RightShoulder))
     {
         EditorState->UIEnable = !EditorState->UIEnable;        
     }
 
-#if 1
-    if(UI.NkBegin(nk, "Title Screen", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
+    if(UI.NkBegin(nk, "UI Window", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
                   (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
         b32 Rerun = false;
@@ -306,7 +299,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_GameMode:
                 {
-                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
+                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup, nk,
                                                     Input, RenderWidth, RenderHeight,
                                                     EditorState->GameMode);
                 } break;
@@ -316,7 +309,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         } while(Rerun);
     }
     UI.NkEnd(nk);
-#endif
     
     EndRenderGroup(RenderGroup);
 
