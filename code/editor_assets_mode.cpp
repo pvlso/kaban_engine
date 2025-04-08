@@ -1289,8 +1289,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
-        f32 Ratio = (f32)Nk->BaseWidth/(f32)Nk->BaseWidth;
-        Perspective(RenderGroup, Ratio, 2.0f, 2.16f);
+        f32 Ratio = (f32)Nk->BaseHeight/(f32)Nk->BaseWidth;
+        Orthographic(RenderGroup, Nk->Scale.x);
+//        Perspective(RenderGroup, Ratio, 2.0f, 2.16f);
         Clear(RenderGroup, UI_COLOR_RGBA1_4D3020FF);
 
         object_transform Flat = DefaultFlatTransform();
@@ -1337,7 +1338,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             }
         
             r32 TileDim = 32.0f;
-            r32 CanvasSize = 1320.0f;
+            r32 CanvasSize = 960.0f;
             r32 HalfCanvasSize = 0.5f*CanvasSize;
             v2 CanvasDim = V2(CanvasSize, CanvasSize);
             v2 CanvasHalfDim = 0.5f*V2(CanvasSize, CanvasSize);

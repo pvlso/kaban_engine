@@ -6760,6 +6760,7 @@ struct nk_context {
     unsigned int count;
     unsigned int seq;
 
+    v2 Scale;
     s32 BaseWidth;
     s32 BaseHeight;
 };

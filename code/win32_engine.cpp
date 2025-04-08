@@ -551,6 +551,7 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     NkWin32->display_height = GetHeight(DrawRegion);
     NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
     NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
+    NkWin32->ctx.Scale = V2(NkWin32->fb_scale.x, NkWin32->fb_scale.y);
 
     nk_input_begin(ctx);
     for (i = 0; i < NkWin32->text_len; ++i)
