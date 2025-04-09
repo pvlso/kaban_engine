@@ -1550,17 +1550,11 @@ ChangeCursorPositionForScrollWindow(array_cursor *Cursor, u32 SourceArrayCount, 
             if(MouseZ > 0)
             {
                 s32 NewFirst = Cursor->Array[0] - 1;
-                for(u32 I = CursorLastIndex;
-                    I > 0;
-                    --I)
-                {
+                for(u32 I = CursorLastIndex; I > 0; --I)
                     Cursor->Array[I] = Cursor->Array[I - 1];
-                }
 
                 if(NewFirst == -1)
-                {
                     NewFirst = SourceArrayCount - 1;
-                }
 
                 Cursor->Array[0] = NewFirst;
             }
@@ -1568,17 +1562,12 @@ ChangeCursorPositionForScrollWindow(array_cursor *Cursor, u32 SourceArrayCount, 
             {
                 u32 NewLast = Cursor->Array[CursorLastIndex] + 1;
 
-                for(u32 I = 0;
-                    I < Cursor->ArrayCount;
-                    ++I)
-                {
+                for(u32 I = 0; I < Cursor->ArrayCount; ++I)
                     Cursor->Array[I] = Cursor->Array[I + 1];
-                }
 
                 if(NewLast == SourceArrayCount)
-                {
                     NewLast = 0;
-                }
+
                 Cursor->Array[CursorLastIndex] = NewLast;
             }
         }
@@ -1601,24 +1590,16 @@ ChangeCursorPositionForToolBar(array_cursor *Cursor, u32 SourceArrayCount, s16 M
                 if(Cursor->ArrayPosition == 0)
                 {
                     s32 NewFirst = Cursor->Array[0] - 1;
-                    for(u32 I = CursorLastIndex;
-                        I > 0;
-                        --I)
-                    {
+                    for(u32 I = CursorLastIndex; I > 0; --I)
                         Cursor->Array[I] = Cursor->Array[I - 1];
-                    }
 
                     if(NewFirst == -1)
-                    {
                         NewFirst = SourceArrayCount - 1;
-                    }
 
                     Cursor->Array[0] = NewFirst;
                 }
                 else
-                {
                     --Cursor->ArrayPosition;
-                }
             }
             else
             {
@@ -1626,23 +1607,16 @@ ChangeCursorPositionForToolBar(array_cursor *Cursor, u32 SourceArrayCount, s16 M
                 {
                     u32 NewLast = Cursor->Array[CursorLastIndex] + 1;
 
-                    for(u32 I = 0;
-                        I < Cursor->ArrayCount;
-                        ++I)
-                    {
+                    for(u32 I = 0; I < Cursor->ArrayCount; ++I)
                         Cursor->Array[I] = Cursor->Array[I + 1];
-                    }
 
                     if(NewLast == SourceArrayCount)
-                    {
                         NewLast = 0;
-                    }
+
                     Cursor->Array[CursorLastIndex] = NewLast;
                 }
                 else
-                {
                     ++Cursor->ArrayPosition;
-                }
             }
         }
     }

@@ -7,9 +7,9 @@
    ======================================================================== */
 
 internal void
-DrawGameModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
+DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, nk_ui *UI, nk_context *Nk)
 {
-    UI->NkLayoutRowStatic(Nk, 30, 200, 2);
+    UI->NkLayoutRowStatic(Nk, 30, 260, 2);
 
     char *ModeString = JsonGetEnumString(GameMode->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -32,53 +32,60 @@ DrawGameModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
     {
         case EditGameMode_None:
         {
-
-            UI->NkLayoutRowStatic(Nk, 30, 400, 1);
+            UI->NkLayoutRowStatic(Nk, 30, 260, 1);
             UI->NkPropertyInt(Nk, "Ground Layer: ", 0,
                               (int *)&GameMode->MapGroundLayer, 15, 1, 0.1f);
             UI->NkPropertyInt(Nk, "Layer Count: ", 0,
                               (int *)&GameMode->LayerCount, 15, 1, 0.1f);
 
             UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
-            UI->NkLayoutSpacePush(Nk, {0, 898, 120, 40});
 
+            UI->NkLayoutSpacePush(Nk, {0, 890, 130, 40});
             if(UI->NkButtonLabel(Nk, "Exit"))
                 GameMode->CurrentAction = GMAction_Exit;
 
-            UI->NkLayoutSpacePush(Nk, {125, 898, 120, 40});
+            UI->NkLayoutSpacePush(Nk, {135, 890, 130, 40});
             if(UI->NkButtonLabel(Nk, "Write SSWM"))
                 GameMode->CurrentAction = GMAction_WriteSSWM;
 
             UI->NkLayoutSpaceEnd(Nk);
         } break;
-#if 0
+
         case EditGameMode_Terrain:
         {
-            UIBeginRow(Layout);
-            FormatString(ArrayCount(Buffer), Buffer, "Current Z Layer: %d", GameMode->CurrentZLayer);
-            UILabel(Layout, Buffer, 200.0f, 30.0f);
-            UIButton(Layout, "Show only this layer",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_ShowCurrentLayer),
-                     200.0f, IsSetGameModeFlag(GameMode, GMAction_ShowCurrentLayer) ? BColor_Green : BColor_Red);
-            UIEndRow(Layout);
+            UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+            UI->NkSpacer(Nk);
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", GameMode->CurrentZLayer);
 
-            UIBeginRow(Layout);
-            FormatString(ArrayCount(Buffer), Buffer, "Fill Active: %s", GameMode->FillActive ? "true" : "false");
-            UILabel(Layout, Buffer, 200.0f, 30.0f);
-            UIButton(Layout, "Activate Fill",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->FillActive, !GameMode->FillActive),
-                     200.0f, GameMode->FillActive ? BColor_Green : BColor_Red);
-            UIEndRow(Layout);
+            UI->NkLayoutRowStatic(Nk, 30, 260, 2);
+            if(UI->NkButtonLabel(Nk, "Show only this layer"))
+                GameMode->CurrentAction = GMAction_ShowCurrentLayer;
+            if(UI->NkButtonLabel(Nk, "Toggle Fill"))
+                GameMode->FillActive = !GameMode->FillActive;
 
-            asset_type TilesetAssetType = RenderGroup->Assets->AssetTypes[Asset_Tileset];
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+            UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
+                                (IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? Green : Red),
+                                "Active: %s", IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? "true" : "false");
+            Rect = UI->NkWidgetBounds(Nk);
+            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+            UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
+                                (GameMode->FillActive ? Green : Red),
+                                "Active: %s", GameMode->FillActive ? "true" : "false");
+
+            asset_type TilesetAssetType = Assets->AssetTypes[Asset_Tileset];
             if(TilesetAssetType.FirstAssetIndex != TilesetAssetType.OnePastLastAssetIndex)
             {
-                UIScrollAdjustU32Button(Layout, "Choose Tileset", 50.0f, &GameMode->CurrentTileset.Value, BColor_Blue,
-                                        TilesetAssetType.FirstAssetIndex, TilesetAssetType.OnePastLastAssetIndex - 1);
+//                UIScrollAdjustU32Button(Layout, "Choose Tileset", 50.0f, &GameMode->CurrentTileset.Value, BColor_Blue,
+//                                        TilesetAssetType.FirstAssetIndex, TilesetAssetType.OnePastLastAssetIndex - 1);
             }
 
             if(GameMode->Tileset)
             {
+#if 0
                 ui_layout MiddleTopLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-300.0f, 690.0f));
                 UIDrawTileToolBar(&MiddleTopLayout, &GameMode->TileCursor, GameMode->Tileset, GameMode->TilesetInfo->TileCount);
                 UIEndLayout(&MiddleTopLayout);
@@ -89,10 +96,12 @@ DrawGameModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
                 GameMode->Tile.CheckSum = GameMode->Tileset->Tiles[TileIndex].CheckSum;
 
 //                UIPictureElement(&UIState->MouseTextLayout, 80.0f, 0, GameMode->Tile.BitmapID);
+#endif
             }
             
         } break;
 
+#if 0
         case EditGameMode_NavMeshes:
         {
             UIBeginRow(Layout);

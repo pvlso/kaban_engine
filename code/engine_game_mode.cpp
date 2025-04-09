@@ -503,24 +503,16 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                 }
 
                 if(WasPressed(Controller->MoveUp))
-                {
                     GameMode->CameraP.TileY += GameMode->CameraMoveStep;
-                }
 
                 if(WasPressed(Controller->MoveDown))
-                {
                     GameMode->CameraP.TileY -= GameMode->CameraMoveStep;
-                }
 
                 if(WasPressed(Controller->MoveLeft))
-                {
                     GameMode->CameraP.TileX -= GameMode->CameraMoveStep;
-                }
 
                 if(WasPressed(Controller->MoveRight))
-                {
                     GameMode->CameraP.TileX += GameMode->CameraMoveStep;
-                }
 
                 if(WasPressed(Controller->ActionLeft))
                 {
@@ -531,9 +523,7 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                 }
 
                 if(WasPressed(Controller->ActionRight))
-                {
                     GameMode->CameraMoveStep += 1;
-                }
 
                 if(Input->ShiftDown && Input->AltDown && WasPressed(Controller->Undo))
                 {
@@ -554,14 +544,10 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                     {
 
                         if(WasPressed(Controller->LeftShoulder))
-                        {
                             ToggleGMFlag(GameMode, GMFlag_ShowCurrentLayer);
-                        }
 
                         if(WasPressed(Controller->Fill))
-                        {
                             GameMode->FillActive = !GameMode->FillActive;
-                        }
 
                         if(WasPressed(Controller->ActionUp))
                         {
@@ -586,9 +572,7 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                     case EditGameMode_NavMeshes:
                     {
                         if(WasPressed(Controller->Start))
-                        {
                             GameMode->CurrentAction = GMAction_SubtractRegion;
-                        }
                     } break;
                 }
             }
@@ -614,7 +598,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         real32 MetersToPixels = (real32)RenderWidth/WidthOfMonitor;
 
         real32 FocalLength = 0.2f;
-        real32 DistanceAboveGround = 9.0f;
+        real32 DistanceAboveGround = 7.2f;
         Perspective(RenderGroup, MetersToPixels, FocalLength, DistanceAboveGround);
 
         Clear(RenderGroup, V4(0.25f, 0.25f, 0.25f, 1.0f));
@@ -627,7 +611,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
 
-        DrawGameModeUI(GameMode, UI, Nk);
+        DrawGameModeUI(GameMode, TranState->Assets, UI, Nk);
 
         b32 Exit = false;
         switch(GameMode->CurrentAction)
