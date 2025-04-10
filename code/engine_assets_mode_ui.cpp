@@ -667,7 +667,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 
         u32 Count = AssetStringArray->StringCount;
         char *AssetStrings = AssambleStrings(TempMem.Arena,
-                                             AssetStringArray->Strings, &Count, true);
+                                             AssetStringArray->Strings, &Count, false);
         UI->NkComboboxString(Nk, AssetStrings, (int *)&CurrentAsset->TypeID,
                              Count, 30, {460, 460});
 
@@ -676,7 +676,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, "Choose Tag", NK_TEXT_CENTERED);
         Count = TagStringArray->StringCount;
-        char *TagStrings = AssambleStrings(TempMem.Arena, TagStringArray->Strings, &Count, true);
+        char *TagStrings = AssambleStrings(TempMem.Arena, TagStringArray->Strings, &Count, false);
         UI->NkComboboxString(Nk, TagStrings, (int *)&AssetsMode->CurrentTagID, Count, 30, {460, 460});
 
         UI->NkLayoutRowStatic(Nk, 30, 440, 1);
@@ -776,13 +776,21 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
             JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, CurrentTag->ID);
 
         u32 ValueCount = TagValueCounts[CurrentTag->ID];
-        string_array *ValueStringArray =
-            GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
 
         Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Value: %s|%d",
-                     ValueStringArray->Strings[CurrentTag->Value], CurrentTag->Value);
+        if(StringsAreEqual(TagValueStringsKey, "Number"))
+        {
+            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Value: %x|%d",
+                         CurrentTag->Value, CurrentTag->Value);
+        }
+        else
+        {
+            string_array *ValueStringArray =
+                GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
+            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Value: %s|%d",
+                         ValueStringArray->Strings[CurrentTag->Value], CurrentTag->Value);
+        }
 
         if(UI->NkButtonLabel(Nk, "Remove Current Tag"))
             AssetsMode->RemoveTag = true;

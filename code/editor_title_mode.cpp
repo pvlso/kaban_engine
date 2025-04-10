@@ -85,18 +85,18 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkLayoutRowPush(Nk, 320);
             if(!EditorState->MapStartup.NewMap)
             {
-                UI->NkPropertyInt(Nk, "#Map Major High Version: ", 0,
-                                  (int *)&EditorState->MapStartup.MapVersion.MajorHigh,
-                                  EditorState->Version.MajorHigh, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Major Low Version: ", 0,
-                                  (int *)&EditorState->MapStartup.MapVersion.MajorLow,
-                                  EditorState->Version.MajorLow, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Minor High Version: ", 0,
-                                  (int *)&EditorState->MapStartup.MapVersion.MinorHigh,
-                                  EditorState->Version.MinorHigh, 1, 0.1f);
-                UI->NkPropertyInt(Nk, "#Map Minor Low Version: ", 0,
-                                  (int *)&EditorState->MapStartup.MapVersion.MinorLow,
-                                  EditorState->Version.MinorLow, 1, 0.1f);
+                UI->NkPropertyU8(Nk, "#Map Major High Version: ", 0,
+                                 &EditorState->MapStartup.MapVersion.MajorHigh,
+                                 EditorState->Version.MajorHigh, 1, 0.1f);
+                UI->NkPropertyU8(Nk, "#Map Major Low Version: ", 0,
+                                 &EditorState->MapStartup.MapVersion.MajorLow,
+                                 EditorState->Version.MajorLow, 1, 0.1f);
+                UI->NkPropertyU8(Nk, "#Map Minor High Version: ", 0,
+                                 &EditorState->MapStartup.MapVersion.MinorHigh,
+                                 EditorState->Version.MinorHigh, 1, 0.1f);
+                UI->NkPropertyU8(Nk, "#Map Minor Low Version: ", 0,
+                                 &EditorState->MapStartup.MapVersion.MinorLow,
+                                 EditorState->Version.MinorLow, 1, 0.1f);
             }
 
             UI->NkPropertyInt(Nk, "#Map Width: ", 16, &EditorState->MapStartup.MapWidth, 512, 1, 0.1f);

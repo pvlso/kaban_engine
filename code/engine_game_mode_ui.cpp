@@ -6,8 +6,117 @@
    $Notice:  $
    ======================================================================== */
 
+inline void
+DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, nk_ui *UI, nk_context *Nk, s16 MouseZ)
+{
+    nk_color Red = {255, 0, 0, 255};
+    nk_color Green = {0, 255, 0, 255};
+    nk_color Highlight = {200, 200, 200, 160};
+    nk_color White = {255, 255, 255, 255};
+
+    UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+    UI->NkSpacer(Nk);
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", GameMode->CurrentZLayer);
+
+    UI->NkLayoutRowStatic(Nk, 30, 260, 2);
+    if(UI->NkButtonLabel(Nk, "Show only this layer"))
+        GameMode->CurrentAction = GMAction_ShowCurrentLayer;
+    if(UI->NkButtonLabel(Nk, "Toggle Fill"))
+        GameMode->FillActive = !GameMode->FillActive;
+
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
+                        (IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? Green : Red),
+                        "Active: %s", IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? "true" : "false");
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
+                        (GameMode->FillActive ? Green : Red),
+                        "Active: %s", GameMode->FillActive ? "true" : "false");
+
+    asset_type TilesetAssetType = Assets->AssetTypes[Asset_Tileset];
+    if(TilesetAssetType.FirstAssetIndex != TilesetAssetType.OnePastLastAssetIndex)
+    {
+        UI->NkPropertyInt(Nk, "Choose Tileset: ", TilesetAssetType.FirstAssetIndex,
+                          (int *)&GameMode->CurrentTileset.Value,
+                          TilesetAssetType.OnePastLastAssetIndex - 1, 1, 0.1f);
+    }
+
+    if(GameMode->Tileset)
+    {
+        u32 TileCount = GameMode->TilesetInfo->TileCount;
+        array_cursor *TileCursor = &GameMode->TileCursor;
+        if(TileCursor->ElementCount != TileCount)
+        {
+            ResetCursorArray(TileCursor);
+        }
+    
+        ChangeCursorPositionForToolBar(TileCursor, TileCount, MouseZ);
+
+        UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 74, 1);
+        UI->NkLayoutSpacePush(Nk, {10, 5, 69*(f32)TileCursor->ArrayCount, 74});
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[2]);
+        Rect.w += 4;
+        Rect.h += 4;
+        Rect.y -= 2;
+        Rect.x -= 2;
+        UI->NkStrokeRect(&Nk->current->buffer, Rect, 5.0f, 6.0f, ColorTable[1]);
+        if(UI->NkGroupBegin(Nk, "Tool Bar", NK_WINDOW_NO_SCROLLBAR))
+        {
+            UI->NkLayoutRowStatic(Nk, 64, 64, TileCursor->ArrayCount);
+            for(u32 ElementIndex = 0;
+                ElementIndex < TileCursor->ArrayCount;
+                ++ElementIndex)
+            {
+                b32 Current = (ElementIndex == TileCursor->ArrayPosition);
+                Rect = UI->NkWidgetBounds(Nk);
+                UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, Current ? ColorTable[1] : ColorTable[3]);
+
+                u32 TileIndex = TileCursor->Array[ElementIndex];
+                bitmap_id ID = GameMode->Tileset->Tiles[TileIndex].BitmapID;
+                ID.Value += GameMode->Tileset->BitmapIDOffset;
+        
+                PrefetchBitmap(Assets, ID, true);
+                loaded_bitmap *Bitmap = GetBitmap(Assets, ID, GenerationID);
+                
+                if(Bitmap->TextureHandle)
+                {
+                    struct nk_image Img = UI->NkImagePtr(Bitmap->TextureHandle);
+                    UI->NkImageColor(Nk, Img, Current ? Highlight : White);
+                }
+            }
+
+            TileCursor->ElementCount = TileCount;
+
+            UI->NkGroupEnd(Nk);
+        }
+        UI->NkLayoutSpaceEnd(Nk);
+
+        u32 TileIndex = GameMode->TileCursor.Array[GameMode->TileCursor.ArrayPosition];
+        GameMode->Tile.BitmapID = GameMode->Tileset->Tiles[TileIndex].BitmapID;
+        GameMode->Tile.BitmapID.Value += GameMode->Tileset->BitmapIDOffset;
+        GameMode->Tile.CheckSum = GameMode->Tileset->Tiles[TileIndex].CheckSum;
+
+        UI->NkTooltipBegin(Nk, 70);
+
+        PrefetchBitmap(Assets, GameMode->Tile.BitmapID, true);
+        loaded_bitmap *Bitmap = GetBitmap(Assets, GameMode->Tile.BitmapID, GenerationID);
+        UI->NkLayoutRowStatic(Nk, 64, 64, 1);
+        if(Bitmap->TextureHandle)
+        {
+            struct nk_image Img = UI->NkImagePtr(Bitmap->TextureHandle);
+            UI->NkImage(Nk, Img);
+        }
+        UI->NkTooltipEnd(Nk);
+    }
+}
+
 internal void
-DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, nk_ui *UI, nk_context *Nk)
+DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, nk_ui *UI, nk_context *Nk, s16 MouseZ)
 {
     UI->NkLayoutRowStatic(Nk, 30, 260, 2);
 
@@ -53,51 +162,7 @@ DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, nk_ui *UI, nk_
 
         case EditGameMode_Terrain:
         {
-            UI->NkLayoutRowStatic(Nk, 30, 260, 1);
-            UI->NkSpacer(Nk);
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", GameMode->CurrentZLayer);
-
-            UI->NkLayoutRowStatic(Nk, 30, 260, 2);
-            if(UI->NkButtonLabel(Nk, "Show only this layer"))
-                GameMode->CurrentAction = GMAction_ShowCurrentLayer;
-            if(UI->NkButtonLabel(Nk, "Toggle Fill"))
-                GameMode->FillActive = !GameMode->FillActive;
-
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                                (IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? Green : Red),
-                                "Active: %s", IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? "true" : "false");
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                                (GameMode->FillActive ? Green : Red),
-                                "Active: %s", GameMode->FillActive ? "true" : "false");
-
-            asset_type TilesetAssetType = Assets->AssetTypes[Asset_Tileset];
-            if(TilesetAssetType.FirstAssetIndex != TilesetAssetType.OnePastLastAssetIndex)
-            {
-//                UIScrollAdjustU32Button(Layout, "Choose Tileset", 50.0f, &GameMode->CurrentTileset.Value, BColor_Blue,
-//                                        TilesetAssetType.FirstAssetIndex, TilesetAssetType.OnePastLastAssetIndex - 1);
-            }
-
-            if(GameMode->Tileset)
-            {
-#if 0
-                ui_layout MiddleTopLayout = UIBeginLayout(UIState, Layout->MouseP, V2(-300.0f, 690.0f));
-                UIDrawTileToolBar(&MiddleTopLayout, &GameMode->TileCursor, GameMode->Tileset, GameMode->TilesetInfo->TileCount);
-                UIEndLayout(&MiddleTopLayout);
-
-                u32 TileIndex = GameMode->TileCursor.Array[GameMode->TileCursor.ArrayPosition];
-                GameMode->Tile.BitmapID = GameMode->Tileset->Tiles[TileIndex].BitmapID;
-                GameMode->Tile.BitmapID.Value += GameMode->Tileset->BitmapIDOffset;
-                GameMode->Tile.CheckSum = GameMode->Tileset->Tiles[TileIndex].CheckSum;
-
-//                UIPictureElement(&UIState->MouseTextLayout, 80.0f, 0, GameMode->Tile.BitmapID);
-#endif
-            }
+            DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, MouseZ);
             
         } break;
 

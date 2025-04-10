@@ -4227,7 +4227,9 @@ NK_API nk_bool nk_color_pick(struct nk_context*, struct nk_colorf*, enum nk_colo
  * \param[in] inc_per_pixel   | Value per pixel added or subtracted on dragging
  */
 NK_API void nk_property_int(struct nk_context*, const char *name, int min, int *val, int max, int step, float inc_per_pixel);
+NK_API void nk_property_u8(struct nk_context*, const char *name, int min, u8 *val, int max, int step, float inc_per_pixel);
 typedef void platform_nk_property_int(struct nk_context*, const char *name, int min, int *val, int max, int step, float inc_per_pixel);
+typedef void platform_nk_property_u8(struct nk_context*, const char *name, int min, u8 *val, int max, int step, float inc_per_pixel);
 
 /**
  * # # nk_property_float
@@ -7056,6 +7058,7 @@ struct nk_ui
     platform_nk_tooltip_end *NkTooltipEnd;
 
     platform_nk_property_int *NkPropertyInt;
+    platform_nk_property_u8 *NkPropertyU8;
 
     platform_nk_handle_ptr *NkHandlePtr;
     platform_nk_handle_id *NkHandleID;

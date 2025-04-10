@@ -898,7 +898,7 @@ Win32SetUIPointers(nk_ui *UI)
     UI->NkTooltipEnd = nk_tooltip_end;
 
     UI->NkPropertyInt = nk_property_int;
-
+    UI->NkPropertyU8 = nk_property_u8;
 
     UI->NkHandlePtr = nk_handle_ptr;
     UI->NkHandleID = nk_handle_id;

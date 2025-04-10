@@ -23282,6 +23282,7 @@ nk_property(struct nk_context *ctx, const char *name, struct nk_property_variant
         win->property.active = 0;
     }
 }
+
 NK_API void
 nk_property_int(struct nk_context *ctx, const char *name,
                 int min, int *val, int max, int step, float inc_per_pixel)
@@ -23296,6 +23297,23 @@ nk_property_int(struct nk_context *ctx, const char *name,
     nk_property(ctx, name, &variant, inc_per_pixel, NK_FILTER_INT);
     *val = variant.value.i;
 }
+
+NK_API void
+nk_property_u8(struct nk_context *ctx, const char *name,
+                int min, u8 *val, int max, int step, float inc_per_pixel)
+{
+    struct nk_property_variant variant;
+    NK_ASSERT(ctx);
+    NK_ASSERT(name);
+    NK_ASSERT(val);
+
+    if (!ctx || !ctx->current || !name || !val) return;
+    variant = nk_property_variant_int(*val, min, max, step);
+    nk_property(ctx, name, &variant, inc_per_pixel, NK_FILTER_INT);
+    *val = (u8)variant.value.i;
+}
+
+
 NK_API void
 nk_property_float(struct nk_context *ctx, const char *name,
                   float min, float *val, float max, float step, float inc_per_pixel)

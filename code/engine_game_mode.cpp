@@ -135,20 +135,23 @@ WritePolygons(world_polygon *Polygons, s32 PolygonCount)
 internal void
 PlayGameMode(editor_state *EditorState, transient_state *TranState)
 {
-    world_map_startup MapStartup = EditorState->MapStartup;
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
-    MatchVector.E[Tag_VersionMajorHigh] = MapStartup.MapVersion.MajorHigh;
-    MatchVector.E[Tag_VersionMajorLow] = MapStartup.MapVersion.MajorLow;
-    MatchVector.E[Tag_VersionMinorHigh] = MapStartup.MapVersion.MinorHigh;
-    MatchVector.E[Tag_VersionMinorLow] = MapStartup.MapVersion.MinorLow;
+    MatchVector.E[Tag_VersionMajorHigh] =
+        EditorState->MapStartup.MapVersion.MajorHigh;
+    MatchVector.E[Tag_VersionMajorLow] =
+        EditorState->MapStartup.MapVersion.MajorLow;
+    MatchVector.E[Tag_VersionMinorHigh] =
+        EditorState->MapStartup.MapVersion.MinorHigh;
+    MatchVector.E[Tag_VersionMinorLow] =
+        EditorState->MapStartup.MapVersion.MinorLow;
     WeightVector.E[Tag_VersionMajorHigh] = 2;
     WeightVector.E[Tag_VersionMajorLow] = 2;
     WeightVector.E[Tag_VersionMinorHigh] = 2;
     WeightVector.E[Tag_VersionMinorLow] = 2;
     EditorState->MapStartup.ID = GetBestMatchSSWMFrom(TranState->Assets, Asset_SSWM, &MatchVector, &WeightVector);
 
-    if(AbleToStart(MapStartup))
+    if(AbleToStart(EditorState->MapStartup))
     {
         SetEditorMode(EditorState, TranState, EditorMode_GameMode);
     
@@ -179,7 +182,7 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         Result->CameraP = NewCameraP;
         Result->CameraMoveStep = 2;
 
-        InitializeCursor(&Result->TileCursor, 7);
+        InitializeCursor(&Result->TileCursor, 8);
 
         InitActionStack(&Result->UndoStack, &EditorState->ModeArena);
         InitActionStack(&Result->RedoStack, &EditorState->ModeArena);
@@ -611,7 +614,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
 
-        DrawGameModeUI(GameMode, TranState->Assets, UI, Nk);
+        DrawGameModeUI(GameMode, TranState->Assets, TranState->MainGenerationID, UI, Nk, Input->MouseZ);
 
         b32 Exit = false;
         switch(GameMode->CurrentAction)

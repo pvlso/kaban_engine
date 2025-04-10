@@ -202,7 +202,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState->MapStartup.MapVersion = EditorState->Version;
         EditorState->MapStartup.MapWidth = 48;
         EditorState->MapStartup.MapHeight = 48;
-        EditorState->MapStartup.NewMap = true;
+        EditorState->MapStartup.NewMap = false;
     }
 
     // NOTE(casey): Transient initialization
