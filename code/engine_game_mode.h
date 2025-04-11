@@ -82,6 +82,7 @@ struct editor_mode_game
     loaded_tileset *Tileset;
     ssa_tileset *TilesetInfo;
 
+    b32 ShowGrid;
     b32 FillActive;
     u32 MapGroundLayer;
     u32 LayerCount;

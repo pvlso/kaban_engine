@@ -15,7 +15,6 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
     nk_color White = {255, 255, 255, 255};
 
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
-    UI->NkSpacer(Nk);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", GameMode->CurrentZLayer);
@@ -113,6 +112,51 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
         }
         UI->NkTooltipEnd(Nk);
     }
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
+    UI->NkLayoutSpacePush(Nk, {0, 825, 160, 40});
+    if(UI->NkButtonLabel(Nk, "Exit"))
+        GameMode->CurrentAction = GMAction_Exit;
+    UI->NkLayoutSpaceEnd(Nk);
+}
+
+inline void
+DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
+{
+    UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Polygon Count: %d", GameMode->PolygonCount);
+    UI->NkLayoutRowStatic(Nk, 30, 130, 4);
+
+    if(UI->NkButtonLabel(Nk, "Start New"))
+        GameMode->CurrentAction = GMAction_StartNewPolygon;
+    if(UI->NkButtonLabel(Nk, "Reset Curr"))
+        GameMode->CurrentAction = GMAction_ResetCurrentPolygon;
+    if(UI->NkButtonLabel(Nk, "Delete Curr"))
+        GameMode->CurrentAction = GMAction_DeleteCurrentPolygon;
+    if(UI->NkButtonLabel(Nk, "Triangulate"))
+        GameMode->CurrentAction = GMAction_TriangulateAll;
+
+    UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+    Rect = UI->NkWidgetBounds(Nk);
+    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Polygon: %d", GameMode->CurrentPolygonIndex);
+
+    UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+    UI->NkPropertyInt(Nk, "Choose Poly: ", 0,
+                      (int *)&GameMode->CurrentPolygonIndex,
+                      GameMode->PolygonCount - 1, 1, 0.1f);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
+    UI->NkLayoutSpacePush(Nk, {0, 825, 160, 40});
+    if(UI->NkButtonLabel(Nk, "Exit"))
+        GameMode->CurrentAction = GMAction_Exit;
+
+    UI->NkLayoutSpacePush(Nk, {165, 825, 160, 40});
+    if(UI->NkButtonLabel(Nk, "Write Polygons"))
+        GameMode->CurrentAction = GMAction_WritePolygons;
+    UI->NkLayoutSpaceEnd(Nk);
 }
 
 internal void
@@ -166,37 +210,9 @@ DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generation
             
         } break;
 
-#if 0
         case EditGameMode_NavMeshes:
         {
-            UIBeginRow(Layout);
-            FormatString(ArrayCount(Buffer), Buffer, "Polygon Count: %d", GameMode->PolygonCount);
-            UILabel(Layout, Buffer, 200.0f, 30.0f);
-            UIButton(Layout, "Start New",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_StartNewPolygon),
-                     120.0f, BColor_Green);
-            UIButton(Layout, "Reset Current",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_ResetCurrentPolygon),
-                     120.0f, BColor_Green);
-            UIButton(Layout, "Delete Current",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_DeleteCurrentPolygon),
-                     120.0f, BColor_Red);
-            UIButton(Layout, "Triangulate All",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_TriangulateAll),
-                     120.0f, BColor_Green);
-            UIEndRow(Layout);
-
-            UIBeginRow(Layout);
-            FormatString(ArrayCount(Buffer), Buffer, "Current Polygon: %d", GameMode->CurrentPolygonIndex);
-            UILabel(Layout, Buffer, 200.0f, 30.0f);
-            UIScrollAdjustU32Button(Layout, " ", 20.0f, (u32 *)&GameMode->CurrentPolygonIndex,
-                                    BColor_Blue, 0, GameMode->PolygonCount - 1, 16.0f);
-            UIEndRow(Layout);
-
-            UIButton(Layout, "Write Polygons",
-                     UISetUInt32Interaction(InteractionID(UIState), (u32 *)&GameMode->CurrentAction, GMAction_WritePolygons),
-                     200.0f, BColor_Green);
+            DrawNavMeshModeUI(GameMode, UI, Nk);
         } break;
-#endif
     }
 }

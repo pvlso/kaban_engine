@@ -677,7 +677,9 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
             PushRectOutline(RenderGroup, &Flat, V3(0.0f, 0.0f, 0.0f), GetDim(SimRegion->UpdatableBounds), V4(1.0f, 0.0f, 1.0f, 1));
 #endif
 
-            if(Global_EditorGameMode_ShowGrid)
+            UI->NkLayoutRowStatic(Nk, 30, 120, 1);
+            UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
+            if(GameMode->ShowGrid)
             {
                 RenderMapGrid(RenderGroup, UIState, World, GameMode->CameraP, SimRegion->Bounds);
             }
