@@ -110,125 +110,10 @@ struct array_cursor
     u32 Array[256];
 };
 
-struct interaction_id
-{
-    u32 Owner;
-    u32 Value;
-};
-
 enum ui_text_op
 {
     UITextOp_DrawText,
     UITextOp_SizeText,
-};
-
-enum interaction_type
-{
-    Interaction_None,
-
-    Interaction_NOP,
-
-    Interaction_AutoModifyVariable,
-
-    Interaction_ToggleValue,
-    Interaction_DragValue,
-    Interaction_TearValue,
-
-    Interaction_Resize,
-    Interaction_Move,
-
-    Interaction_Select,
-
-    Interaction_ToggleExpansion,
-
-    Interaction_SetUInt32,
-    Interaction_SetPointer,
-};
-
-struct interaction
-{
-    interaction_id ID;
-    interaction_type Type;
-
-    void *Target;
-    union
-    {
-        void *Generic;
-        void *Pointer;
-        u32 UInt32;
-        v2 *P;
-    };
-};
-
-struct ui_layout
-{
-    ui_state *UIState;
-    v2 MouseP;
-    v2 BaseCorner;
-
-    u32 Depth;
-
-    v2 At;
-    r32 LineAdvance;
-    r32 NextYDelta;
-    r32 SpacingX;
-    r32 SpacingY;
-    
-    u32 NoLineFeed;
-    b32 LineInitialized;
-};
-
-struct ui_layout_element
-{
-    // NOTE(casey): Storage;
-    ui_layout *Layout;
-    v2 *Dim;
-    v2 *Size;
-    interaction Interaction;
-
-    // NOTE(casey): Out
-    rectangle2 Bounds;
-};
-
-struct ui_window
-{
-    v2 Dim;
-};
-
-struct ui_scroll_window
-{
-    v2 Dim;
-    b32 Viewable;
-
-    u32 CursorElementCount;
-    array_cursor Cursor;
-};
-
-enum ui_object_type
-{
-    UIObjectType_None,
-    UIObjectType_Window,
-    UIObjectType_ScrollWindow,
-};
-
-struct ui_object_id
-{
-    u32 High;
-    u32 Low;
-};
-
-struct ui_object
-{
-    ui_object_id ID;
-    ui_object *NextInHash;
-
-    b32 Initialized;
-    ui_object_type Type;
-    union
-    {
-        ui_window Window;
-        ui_scroll_window ScrollWindow;
-    };
 };
 
 struct string_array
@@ -248,6 +133,7 @@ struct ui_state
     memory_arena StringsArena;
 
     json_element *JsonStringsHead;
+    string_array *EnumStringArraysHash[4096];
 
     u32 DefaultClipRect;
     render_group RenderGroup;
@@ -262,10 +148,6 @@ struct ui_state
     v2 LastMouseP;
     b32 AltUI;
     s16 MouseZ;
-    
-    interaction Interaction;
-    interaction HotInteraction;
-    interaction NextHotInteraction;
 
     r32 LeftEdge;
     r32 RightEdge;
@@ -274,11 +156,8 @@ struct ui_state
     r32 GlobalWidth;
     r32 GlobalHeight;
 
-    u32 NextInteractionID;
-    ui_layout MouseTextLayout;
-
-    ui_object *UIObjectsHash[4096];
-    string_array *EnumStringArraysHash[4096];
+    nk_ui *UI;
+    nk_context *Nk;
 };
 
 #define EDITOR_UI_H

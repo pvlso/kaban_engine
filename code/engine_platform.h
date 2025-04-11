@@ -8291,6 +8291,22 @@ struct _nk_ui
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+typedef struct builder_loaded_font
+{
+    u32 OnePastHighestCodePoint;
+    u32 GlyphCount;
+    r32 AscenderHeight;
+    r32 DescenderHeight;
+    r32 ExternalLeading;
+
+    u32 *UnicodeCodePoints;
+    struct loaded_bitmap *Glyphs;
+    r32 *HorizontalAdvance;
+    u16 *UnicodeMap;
+} builder_loaded_font;
+
+#define PLATFORM_LOAD_FONT_ASSET(name) builder_loaded_font name(char *FileName, u32 FontSize, memory_arena *Arena)
+typedef PLATFORM_LOAD_FONT_ASSET(platform_load_font_asset);
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(paul): PLATFORM API
@@ -8314,6 +8330,8 @@ typedef struct platform_api
     platform_deallocate_memory *DeallocateMemory;
 
     nk_ui UI;
+
+    platform_load_font_asset *LoadFontAsset;    
     
 #if EDITOR_INTERNAL
     debug_platform_execute_system_command *DEBUGExecuteSystemCommand;

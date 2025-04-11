@@ -39,6 +39,10 @@ global_variable WINDOWPLACEMENT GlobalWindowPosition = {sizeof(GlobalWindowPosit
 
 global_variable b32 DEBUGGlobalShowCursor;
 
+// NOTE(paul): Font loading
+global_variable HDC GlobalFontDeviceContext;
+global_variable VOID *GlobalFontBits;
+
 global_variable b32 OpenGLSupportsSRGBFramebuffer;
 global_variable GLuint OpenGLDefaultInternalTextureFormat;
 global_variable GLuint OpenGLReservedBlitTexture;
@@ -2754,6 +2758,388 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(paul): WIN32 FONT LOADING
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+internal win32_loaded_font *
+Win32LoadFont(char *FileName, char *FontName, int PixelHeight)
+{
+    win32_loaded_font *Font = (win32_loaded_font *)Win32AllocateMemory(sizeof(win32_loaded_font));
+    
+    AddFontResourceExA(FileName, FR_PRIVATE, 0);
+    Font->Win32Handle = CreateFontA(PixelHeight, 0, 0, 0,
+                                    FW_NORMAL,
+                                    FALSE,
+                                    FALSE,
+                                    FALSE,
+                                    DEFAULT_CHARSET,
+                                    OUT_DEFAULT_PRECIS,
+                                    CLIP_DEFAULT_PRECIS,
+                                    ANTIALIASED_QUALITY,
+                                    DEFAULT_PITCH|FF_DONTCARE,
+                                    FontName);
+    Assert(Font->Win32Handle);
+    
+    SelectObject(GlobalFontDeviceContext, Font->Win32Handle);
+    GetTextMetrics(GlobalFontDeviceContext, &Font->TextMetric);
+
+    Font->MinCodePoint = INT_MAX;
+    Font->MaxCodePoint = 0;
+
+    Font->MaxGlyphCount = 4096;
+    Font->GlyphCount = 0;
+
+    u32 GlyphIndexFromCodePointSize = ONE_PAST_MAX_FONT_CODEPOINT*sizeof(u32);
+    Font->GlyphIndexFromCodePoint = (u32 *)Win32AllocateMemory(GlyphIndexFromCodePointSize);
+
+    u32 GlyphsSize = Font->MaxGlyphCount*sizeof(u32);
+    Font->Glyphs = (u32 *)Win32AllocateMemory(GlyphsSize);
+    u32 HorizontalAdvanceSize = Font->MaxGlyphCount*Font->MaxGlyphCount*sizeof(r32);
+    Font->HorizontalAdvance = (r32 *)Win32AllocateMemory(HorizontalAdvanceSize);
+
+    Font->OnePastHighestCodePoint = 0;
+    
+    // NOTE(casey): Reserve space for the null glyph
+    Font->GlyphCount = 1;
+    Font->Glyphs[0] = 0;
+
+    return(Font);
+}
+
+internal void
+Win32FinalizeFontKerning(win32_loaded_font *Font)
+{
+    SelectObject(GlobalFontDeviceContext, Font->Win32Handle);
+
+    DWORD KerningPairCount = GetKerningPairsW(GlobalFontDeviceContext, 0, 0);
+    KERNINGPAIR *KerningPairs = (KERNINGPAIR *)Win32AllocateMemory(KerningPairCount*sizeof(KERNINGPAIR));
+    GetKerningPairsW(GlobalFontDeviceContext, KerningPairCount, KerningPairs);
+    for(DWORD KerningPairIndex = 0;
+        KerningPairIndex < KerningPairCount;
+        ++KerningPairIndex)
+    {
+        KERNINGPAIR *Pair = KerningPairs + KerningPairIndex;         
+        if((Pair->wFirst < ONE_PAST_MAX_FONT_CODEPOINT) &&
+           (Pair->wSecond < ONE_PAST_MAX_FONT_CODEPOINT))
+        {
+            u32 First = Font->GlyphIndexFromCodePoint[Pair->wFirst];
+            u32 Second = Font->GlyphIndexFromCodePoint[Pair->wSecond];
+            if((First != 0) && (Second != 0))
+            {
+                Font->HorizontalAdvance[First*Font->MaxGlyphCount + Second] += (r32)Pair->iKernAmount;
+            }
+        }
+    }
+
+    Win32DeallocateMemory(KerningPairs);
+}
+
+internal void
+Win32InitializeFontDC(void)
+{
+    GlobalFontDeviceContext = CreateCompatibleDC(GetDC(0));
+
+    BITMAPINFO Info = {};
+    Info.bmiHeader.biSize = sizeof(Info.bmiHeader);
+    Info.bmiHeader.biWidth = MAX_FONT_WIDTH;
+    Info.bmiHeader.biHeight = MAX_FONT_HEIGHT;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Info.bmiHeader.biCompression = BI_RGB;
+    Info.bmiHeader.biSizeImage = 0;
+    Info.bmiHeader.biXPelsPerMeter = 0;
+    Info.bmiHeader.biYPelsPerMeter = 0;
+    Info.bmiHeader.biClrUsed = 0;
+    Info.bmiHeader.biClrImportant = 0;
+    HBITMAP Bitmap = CreateDIBSection(GlobalFontDeviceContext, &Info, DIB_RGB_COLORS, &GlobalFontBits, 0, 0);
+
+    SelectObject(GlobalFontDeviceContext, Bitmap);
+    SetBkColor(GlobalFontDeviceContext, RGB(0, 0, 0));
+}
+
+internal loaded_bitmap
+Win32LoadGlyphBitmap(win32_loaded_font *Font, u32 CodePoint, memory_arena *Arena)
+{
+    loaded_bitmap Result = {};
+
+    u32 GlyphIndex = Font->GlyphIndexFromCodePoint[CodePoint];
+    
+    SelectObject(GlobalFontDeviceContext, Font->Win32Handle);
+
+    memset(GlobalFontBits, 0x00, MAX_FONT_WIDTH*MAX_FONT_HEIGHT*sizeof(u32));
+    
+    wchar_t CheesePoint = (wchar_t)CodePoint;
+
+    SIZE Size;
+    GetTextExtentPoint32W(GlobalFontDeviceContext, &CheesePoint, 1, &Size);
+
+    int PreStepX = 128;
+    
+    int BoundWidth = Size.cx + 2*PreStepX;
+    if(BoundWidth > MAX_FONT_WIDTH)
+    {
+        BoundWidth = MAX_FONT_WIDTH;
+    }
+
+    int BoundHeight = Size.cy;
+    if(BoundHeight > MAX_FONT_HEIGHT)
+    {
+        BoundHeight = MAX_FONT_HEIGHT;
+    }
+
+    SetTextColor(GlobalFontDeviceContext, RGB(255, 255, 255));
+    TextOutW(GlobalFontDeviceContext, PreStepX, 0, &CheesePoint, 1);
+
+    s32 MinX = 10000;
+    s32 MinY = 10000;
+    s32 MaxX = -10000;
+    s32 MaxY = -10000;
+    u32 *Row = (u32 *)GlobalFontBits + (MAX_FONT_HEIGHT - 1)*MAX_FONT_WIDTH;
+    for(s32 Y = 0;
+        Y < BoundHeight;
+        ++Y)
+    {
+        u32 *Pixel = Row;
+        for(s32 X = 0; 
+            X < BoundWidth;
+            ++X)
+        {
+            if(*Pixel != 0)
+            {
+                if(MinX > X)
+                {
+                    MinX = X;
+                }
+
+                if(MinY > Y)
+                {
+                    MinY = Y;
+                }
+
+                if(MaxX < X)
+                {
+                    MaxX = X;
+                }
+
+                if(MaxY < Y)
+                {
+                    MaxY = Y;
+                }
+            }
+
+            ++Pixel;
+        }
+
+        Row -= MAX_FONT_WIDTH;
+    }
+
+    r32 KerningChange = 0;
+    if(MinX <= MaxX)
+    {
+        int Width = (MaxX - MinX) + 1;
+        int Height = (MaxY - MinY) + 1;
+
+        Result.Width = Width + 2;
+        Result.Height = Height + 2;
+        Result.WidthOverHeight = (r32)Result.Width / (r32)Result.Height;
+        Result.Pitch = Result.Width*4;
+        Result.Memory = (Arena ? PushSize(Arena, Result.Height*Result.Pitch) :
+                         Win32AllocateMemory(Result.Height*Result.Pitch));
+
+        memset(Result.Memory, 0, Result.Height*Result.Pitch);
+        
+        u8 *DestRow = (u8 *)Result.Memory + (Result.Height - 1 - 1)*Result.Pitch;
+        u32 *SourceRow = (u32 *)GlobalFontBits + (MAX_FONT_HEIGHT - 1 - MinY)*MAX_FONT_WIDTH;
+        for(s32 Y = MinY;
+            Y <= MaxY;
+            ++Y)
+        {
+            u32 *Source = (u32 *)SourceRow + MinX;
+            u32 *Dest = (u32 *)DestRow + 1;
+            for(s32 X = MinX; 
+                X <= MaxX;
+                ++X)
+            {
+                u32 Pixel = *Source;
+                r32 Gray = (r32)(Pixel & 0xFF);
+                v4 Texel = {255.0f, 255.0f, 255.0f, Gray};
+                Texel = SRGB255ToLinear1(Texel);
+                Texel.rgb *= Texel.a;
+                Texel = Linear1ToSRGB255(Texel);
+
+                *Dest++ = (((uint32)(Texel.a + 0.5f) << 24) |
+                           ((uint32)(Texel.r + 0.5f) << 16) |
+                           ((uint32)(Texel.g + 0.5f) << 8) |
+                           ((uint32)(Texel.b + 0.5f) << 0));
+                
+                ++Source;
+            }
+
+            DestRow -= Result.Pitch;
+            SourceRow -= MAX_FONT_WIDTH;
+        }
+
+        Result.AlignPercentage.x = (1.0f) / (r32)Result.Width;
+        Result.AlignPercentage.y = (1.0f + (MaxY - (BoundHeight - Font->TextMetric.tmDescent))) / (r32)Result.Height;
+
+        KerningChange = (r32)(MinX - PreStepX);
+    }    
+
+    INT ThisWidth;
+    GetCharWidth32W(GlobalFontDeviceContext, CodePoint, CodePoint, &ThisWidth);
+    r32 CharAdvance = (r32)ThisWidth;
+        
+    for(u32 OtherGlyphIndex = 0;
+        OtherGlyphIndex < Font->MaxGlyphCount;
+        ++OtherGlyphIndex)
+    {
+        Font->HorizontalAdvance[GlyphIndex*Font->MaxGlyphCount + OtherGlyphIndex] += CharAdvance - KerningChange;
+        if(OtherGlyphIndex != 0)
+        {
+            Font->HorizontalAdvance[OtherGlyphIndex*Font->MaxGlyphCount + GlyphIndex] += KerningChange;
+        }
+    }
+    
+    return(Result);
+}
+
+internal void
+Win32AddFontGlyph(win32_loaded_font *Font, u32 CodePoint)
+{
+    Assert(Font->GlyphCount < Font->MaxGlyphCount);
+    u32 GlyphIndex = Font->GlyphCount++;
+    Font->Glyphs[GlyphIndex] = CodePoint;
+
+    Font->GlyphIndexFromCodePoint[CodePoint] = GlyphIndex;
+
+    if(Font->OnePastHighestCodePoint <= CodePoint)
+    {
+        Font->OnePastHighestCodePoint = CodePoint + 1;        
+    }
+}
+
+internal void
+Win32FindFontName(char *FileName, char *Dest, memory_arena *Arena)
+{
+    read_file_result ReadResult = Win32PlatformReadEntireFile(FileName, PlatformFileType_TTF, Arena);
+
+    u8 *Buffer = (u8 *)ReadResult.Contents;
+    u32 NumTable = ReadU16(Buffer, 4);
+    s32 NameTableOffset = -1;
+    for(u32 Index = 0;
+        Index < NumTable;
+        ++Index)
+    {
+        u32 TableOffset = sizeof(ttf_offset_subtable) + Index*sizeof(ttf_table_directory);
+        u32 Tag = ReadU32(Buffer, TableOffset);
+        if(Tag == 0x6E616D65) // NOTE(paul): 'name' in hex
+        {
+            NameTableOffset = ReadU32(Buffer, TableOffset + 8);
+            break;
+        }
+    }
+
+    Assert(NameTableOffset != -1);
+
+    u16 NameTableCount = ReadU16(Buffer, NameTableOffset + 2);
+    u16 StringOffset = ReadU16(Buffer, NameTableOffset + 4);
+    for(u16 RecordIndex = 0;
+        RecordIndex < NameTableCount;
+        ++RecordIndex)
+    {
+        u32 RecordOffset = NameTableOffset + 6 + RecordIndex*sizeof(ttf_name_record);
+        ttf_name_record Record = {};
+        Record.PlatformID = ReadU16(Buffer, RecordOffset);
+        Record.EncodingID = ReadU16(Buffer, RecordOffset + 2);
+        Record.LanguageID = ReadU16(Buffer, RecordOffset + 4);
+        Record.NameID = ReadU16(Buffer, RecordOffset + 6);
+        Record.Length = ReadU16(Buffer, RecordOffset + 8);
+        Record.Offset = ReadU16(Buffer, RecordOffset + 10);
+
+        if((Record.NameID == 1) || (Record.NameID == 4))
+        {
+            u32 StringPos = NameTableOffset + StringOffset + Record.Offset;
+            Copy(Record.Length, Buffer + StringPos, Dest);
+            Dest[Record.Length] = 0;
+            break;
+        }
+    }
+
+    Win32PlatformFreeFileMemory(Arena ? 0 : ReadResult.Contents);
+}
+
+internal PLATFORM_LOAD_FONT_ASSET(Win32LoadFontAsset)
+{
+    builder_loaded_font Result = {};
+    char FontNameFound[256];
+    Win32FindFontName(FileName, FontNameFound, Arena);
+    
+    win32_loaded_font *Font = Win32LoadFont(FileName, FontNameFound, FontSize);
+
+    Win32AddFontGlyph(Font, ' ');
+    for(u32 Character = '!';
+        Character <= '~';
+        ++Character)
+    {
+        Win32AddFontGlyph(Font, Character);
+    }
+
+    Result.OnePastHighestCodePoint = Font->OnePastHighestCodePoint;
+    Result.GlyphCount = Font->GlyphCount;
+    Result.AscenderHeight = (r32)Font->TextMetric.tmAscent;
+    Result.DescenderHeight = (r32)Font->TextMetric.tmDescent;
+    Result.ExternalLeading = (r32)Font->TextMetric.tmExternalLeading;
+
+    u32 GlyphsSize = sizeof(loaded_bitmap)*Font->GlyphCount;
+    Result.Glyphs = (Arena ? PushArray(Arena, Font->GlyphCount, loaded_bitmap) :
+                     (loaded_bitmap *)Win32AllocateMemory(GlyphsSize));
+    u32 UnicodeMapSize = sizeof(u16)*Font->OnePastHighestCodePoint;
+    Result.UnicodeMap = (Arena ? PushArray(Arena, Font->OnePastHighestCodePoint, u16) :
+                         (u16 *)Win32AllocateMemory(UnicodeMapSize));
+
+    u32 CodePointsSize = sizeof(u32)*Font->GlyphCount;
+    Result.UnicodeCodePoints = (Arena ? PushArray(Arena, Font->GlyphCount, u32) :
+                                (u32 *)Win32AllocateMemory(CodePointsSize));
+    Copy(CodePointsSize, Font->Glyphs, Result.UnicodeCodePoints);
+    for(u32 GlyphIndex = 0;
+        GlyphIndex < Font->GlyphCount;
+        ++GlyphIndex)
+    {
+        u32 CodePoint = Result.UnicodeCodePoints[GlyphIndex];
+        Result.UnicodeMap[CodePoint] = (u16)GlyphIndex;
+        Result.Glyphs[GlyphIndex] = Win32LoadGlyphBitmap(Font, CodePoint, Arena);
+    }
+
+    Win32FinalizeFontKerning(Font);
+
+    u32 HorizontalAdvanceSize = sizeof(r32)*Result.GlyphCount*Result.GlyphCount;
+    Result.HorizontalAdvance = (Arena ? PushArray(Arena, Result.GlyphCount*Result.GlyphCount, r32):
+                                (r32 *)Win32AllocateMemory(HorizontalAdvanceSize));
+    u8 *HorizontalAdvanceNew = (u8 *)Result.HorizontalAdvance;
+    u8 *HorizontalAdvance = (u8 *)Font->HorizontalAdvance;
+    for(u32 GlyphIndex = 0;
+        GlyphIndex < Font->GlyphCount;
+        ++GlyphIndex)
+    {
+        u32 HorizontalAdvanceSliceSize = sizeof(r32)*Font->GlyphCount;
+        Copy(HorizontalAdvanceSliceSize, HorizontalAdvance, HorizontalAdvanceNew);
+        HorizontalAdvanceNew += HorizontalAdvanceSliceSize;
+        HorizontalAdvance += sizeof(r32)*Font->MaxGlyphCount;
+    }
+
+    Win32PlatformFreeFileMemory(Font->Glyphs);
+    Win32PlatformFreeFileMemory(Font->HorizontalAdvance);
+    Win32PlatformFreeFileMemory(Font->GlyphIndexFromCodePoint);
+    Win32PlatformFreeFileMemory(Font);
+
+    return(Result);
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
 internal inline void
 Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
                      platform_work_queue *LowPQ)
@@ -2775,6 +3161,8 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
 
     Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
+
+    Memory->PlatformAPI.LoadFontAsset = Win32LoadFontAsset;    
             
 #if EDITOR_INTERNAL
     Memory->DebugTable = GlobalDebugTable;
@@ -2799,6 +3187,7 @@ WinMain(HINSTANCE Instance,
     DEBUGSetEventRecording(true);
 
     win32_state Win32State = {};
+    Win32InitializeFontDC();
     Win32CreateKeyTables(&Win32State);
 
     LARGE_INTEGER PerfCountFrequencyResult;

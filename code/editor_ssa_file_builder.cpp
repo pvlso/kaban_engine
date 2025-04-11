@@ -419,8 +419,6 @@ BuilderAddAsset(builder_assets *Assets, asset_type_id TypeID)
 
                 case Asset_FontGlyph:
                 {
-                    // TODO(paul): Not working at the moment, may be removed
-#if 0
                     ssa_asset_type *TypeToFix = Assets->AssetTypes + Asset_Font;
                     for(u32 AssetIndex = TypeToFix->FirstAssetIndex;
                         AssetIndex < TypeToFix->OnePastLastAssetIndex;
@@ -435,7 +433,6 @@ BuilderAddAsset(builder_assets *Assets, asset_type_id TypeID)
                             Glyph->BitmapID.Value += 1;
                         }
                     }
-#endif
                 } break;
             }
         }
@@ -727,8 +724,6 @@ AddSpriteSheetAsset(builder_assets *Assets, builder_loaded_spritesheet *Sheet)
 internal bitmap_id
 AddCharacterAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *Glyphs, u32 CodePoint)
 {
-    // TODO(paul): Not working at the moment, may be removed
-#if 0
     builder_added_asset Asset = BuilderAddAsset(Assets, Asset_FontGlyph);
 
     u32 GlyphIndex = Font->UnicodeMap[CodePoint];
@@ -745,16 +740,13 @@ AddCharacterAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_gl
     ssa_font_glyph *Glyph = Glyphs + GlyphIndex;
     Glyph->UnicodeCodePoint = CodePoint;
     Glyph->BitmapID = Result;
-#endif    
-    bitmap_id Result = {};
+
     return(Result);
 }
 
 internal font_id
 AddFontAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *Glyphs)
 {
-    // TODO(paul): Not working at the moment, may be removed
-#if 0
     builder_added_asset Asset = BuilderAddAsset(Assets, Asset_Font);
 
     Asset.SSA->Font.OnePastHighestCodePoint = Font->OnePastHighestCodePoint;
@@ -765,9 +757,9 @@ AddFontAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *
     Asset.Source->Type = BuilderAssetType_Font;
     Asset.Source->Font.Glyphs = Glyphs;
     Asset.Source->Font.Font = Font;
-#endif
+
     font_id Result = {};
-//    Result.Value = Asset.ID;
+    Result.Value = Asset.ID;
 
     return(Result);
 }
@@ -828,8 +820,6 @@ WriteLogForAsset(FILE *LogFile, builder_asset_source *Source, char *Text = 0)
 
         case BuilderAssetType_Font:
         {
-            // TODO(paul): Not working at the moment, may be removed
-#if 0
             Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer,
                                        "    OnePastHighestCodePoint: %d\n"\
                                        "    GlyphCount: %d\n"\
@@ -841,7 +831,6 @@ WriteLogForAsset(FILE *LogFile, builder_asset_source *Source, char *Text = 0)
                                        Source->Font.Font->AscenderHeight,
                                        Source->Font.Font->DescenderHeight,
                                        Source->Font.Font->ExternalLeading);
-#endif
         } break;
 
         case BuilderAssetType_FontGlyph:
@@ -1046,8 +1035,6 @@ BuilderWriteSSA(builder_assets *Assets, working_version Version, memory_arena *T
             }
             else if(Source->Type == BuilderAssetType_Font)
             {
-                // TODO(paul): Not working at the moment, may be removed
-#if 0
                 BeginWritingLog(LogFile, "font");
                 WriteLogForAsset(LogFile, Source);
 
@@ -1060,7 +1047,6 @@ BuilderWriteSSA(builder_assets *Assets, working_version Version, memory_arena *T
                 fwrite(Font->HorizontalAdvance, HorizontalAdvanceSize, 1, Out);
 
                 EndWritingLog(LogFile, "font");
-#endif
             }
             else if(Source->Type == BuilderAssetType_Tileset)
             {
@@ -1266,8 +1252,6 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
 
             case StoredAssetType_Font:
             {
-                // TODO(paul): Not working at the moment, may be removed
-#if 0
                 stored_asset_font *StoredFont = &StoredAsset->Font;
                 builder_loaded_font Font = Platform.LoadFontAsset(StoredFont->SourceFileName,
                                                                   StoredFont->FontSizeInPixels, TempArena);
@@ -1285,7 +1269,6 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
                     AddTag(Assets, Tag_UnicodeCodepoint, CodePoint);
                     AddStoredAssetTags(Assets, StoredAsset);
                 }
-#endif
             } break;
 
             case StoredAssetType_File:

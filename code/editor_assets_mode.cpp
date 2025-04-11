@@ -58,8 +58,6 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     Result->SSWMFiles = PushArray(&EditorState->ModeArena, Result->SSWMFileCount, char *);
     Platform.ListFilesInDirectory(PlatformFileType_SSWM, Result->SSWMFiles, &EditorState->ModeArena);
 
-    Result->JsonStringsHead = ParseJson("enum_strings.json", &EditorState->ModeArena);
-
     EditorState->AssetsMode = Result;
 }
 
@@ -434,7 +432,6 @@ internal void
 ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset_type Type,
                      audio_state *AudioState = 0)
 {
-//    Assert(Type != StoredAssetType_Font);
     switch(Type)
     {
         case StoredAssetType_None:
@@ -485,7 +482,6 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
 
         case StoredAssetType_Font:
         {
-#if 0
             // NOTE(paul): Clear Font Mode Data
             font_mode *FontMode = &AssetsMode->FontMode;
             for(u32 GlyphIndex = 1;
@@ -502,7 +498,6 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             Platform.DeallocateMemory(FontMode->Font.UnicodeCodePoints);
             Platform.DeallocateMemory(FontMode->Font.HorizontalAdvance);
             Platform.DeallocateMemory(FontMode->Font.UnicodeMap);
-#endif
         } break;
         
         case StoredAssetType_File:
@@ -585,7 +580,6 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
         AssetsMode->EditMode = AssetsEditModeFromStoredType(StoredAsset->Type);
     }
 
-//    Assert(StoredAsset->Type != StoredAssetType_Font);
     switch(StoredAsset->Type)
     {
         case StoredAssetType_None:
@@ -650,7 +644,6 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 
         case StoredAssetType_Font:
         {
-#if 0
             font_mode *FontMode = &AssetsMode->FontMode;
             stored_asset_font *StoredFont = &StoredAsset->Font;
             u32 StandardFontSize = 24;
@@ -663,7 +656,6 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
                 loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
                 AllocateBitmap(Assets, Bitmap);
             }
-#endif
         } break;
 
         case StoredAssetType_File:
@@ -693,7 +685,6 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 internal void
 LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
 {
-//    Assert(Asset->Type != StoredAssetType_Font);
     switch(Asset->Type)
     {
         case StoredAssetType_None:
@@ -748,7 +739,6 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
 
         case StoredAssetType_Font:
         {
-#if 0
             char *FileName = AssetsMode->FontFiles[AssetsMode->FileIndex];
             StringCopy(FileName, Asset->Font.SourceFileName);
 
@@ -758,7 +748,6 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             Asset->Font.FirstCodePoint = FontMode->Font.UnicodeCodePoints[1];
             Asset->Font.LastCodePoint = FontMode->Font.UnicodeCodePoints[FontMode->Font.GlyphCount - 1];
             Asset->Font.FontSizeInPixels = 24;
-#endif
         } break;
 
         case StoredAssetType_File:
@@ -1280,19 +1269,17 @@ RemoveStoredAsset(editor_mode_assets *AssetsMode)
 }
 
 internal b32
-UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
-                          nk_context *Nk, render_group *RenderGroup,
-                          engine_input *Input, u32 RenderWidth, u32 RenderHeight,
-                          editor_mode_assets *AssetsMode)
+UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState, engine_input *Input)
 {
     editor_assets *Assets = TranState->Assets;
+
+    editor_mode_assets *AssetsMode = EditorState->AssetsMode;
+    ui_state *UIState = &EditorState->UIState;
+
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
-        f32 Ratio = (f32)Nk->BaseHeight/(f32)Nk->BaseWidth;
-        Orthographic(RenderGroup, Nk->Scale.x);
-        Clear(RenderGroup, UI_COLOR_RGBA1_4D3020FF);
-
+        render_group *RenderGroup = &UIState->RenderGroup;
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
         if(!AssetsMode->AssetsInitialized)
@@ -1444,7 +1431,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 InvalidDefaultCase;
             }
 
-            DrawAssetsModeUI(AssetsMode, UI, Nk);
+            DrawAssetsModeUI(AssetsMode, UIState);
 
 
             AssetsMode->Time += Input->dtForFrame;

@@ -18,12 +18,15 @@ PlayTitleScreen(editor_state *EditorState, transient_state *TranState)
 }
 
 internal b32
-UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState, nk_context *Nk, nk_ui *UI,
-                           editor_mode_title_screen *TitleScreen)
+UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
     editor_assets *Assets = TranState->Assets;
+    editor_mode_title_screen *TitleScreen = EditorState->TitleScreen;
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
 
+    ui_state *UIState = &EditorState->UIState;
+    nk_ui *UI = UIState->UI;
+    nk_context *Nk = UIState->Nk;
     if(!Result)
     {
         char Buffer[256];

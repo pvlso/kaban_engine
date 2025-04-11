@@ -40,7 +40,7 @@ global_variable nk_color ColorTable[] =
 };
 
 internal string_array *
-GetOrCreateStringArray(editor_mode_assets *AssetsMode, char *Key, u32 StringCount)
+GetOrCreateStringArray(ui_state *UIState, char *Key, u32 StringCount)
 {
     u64 LowMask = 0x00000000FFFFFFFF;
     u64 CRC = CRC64FromString(Key);
@@ -48,8 +48,8 @@ GetOrCreateStringArray(editor_mode_assets *AssetsMode, char *Key, u32 StringCoun
     u32 High = (u32)(CRC >> 32);
     u32 Low = (u32)(CRC & LowMask);
 
-    u32 HashIndex = ((High >> 2) + (Low >> 2)) % ArrayCount(AssetsMode->EnumStringArraysHash);
-    string_array **HashSlot = AssetsMode->EnumStringArraysHash + HashIndex;
+    u32 HashIndex = ((High >> 2) + (Low >> 2)) % ArrayCount(UIState->EnumStringArraysHash);
+    string_array **HashSlot = UIState->EnumStringArraysHash + HashIndex;
 
     string_array *Result = 0;
     for(string_array *Search = *HashSlot;
@@ -65,12 +65,12 @@ GetOrCreateStringArray(editor_mode_assets *AssetsMode, char *Key, u32 StringCoun
 
     if(!Result)
     {
-        Result = PushStruct(&AssetsMode->UtilityArena, string_array);
-        Result->Key = PushString(&AssetsMode->UtilityArena, Key);
+        Result = PushStruct(&UIState->StringsArena, string_array);
+        Result->Key = PushString(&UIState->StringsArena, Key);
         Result->StringCount = StringCount;
-        Result->Strings = PushArray(&AssetsMode->UtilityArena, Result->StringCount, char *);
+        Result->Strings = PushArray(&UIState->StringsArena, Result->StringCount, char *);
 
-        json_element *EnumStrings = JsonLookupElement(AssetsMode->JsonStringsHead, Key);
+        json_element *EnumStrings = JsonLookupElement(UIState->JsonStringsHead, Key);
         if(EnumStrings)
         {
             json_element *EnumString = EnumStrings->FirstSubElement;
@@ -91,7 +91,7 @@ GetOrCreateStringArray(editor_mode_assets *AssetsMode, char *Key, u32 StringCoun
 }
 
 inline void
-DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
+DrawShowStoredAssets(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk)
 {
     char Text[64];
     UI->NkLayoutRowStatic(Nk, 500, 460, 1);
@@ -103,8 +103,8 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             ++AssetIndex)
         {
             stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
-            char *TypeIDString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", Asset.TypeID);
-            char *TypeString = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", Asset.Type);
+            char *TypeIDString = JsonGetEnumString(UIState->JsonStringsHead, "AssetType", Asset.TypeID);
+            char *TypeString = JsonGetEnumString(UIState->JsonStringsHead, "StoredAssetType", Asset.Type);
 
             FormatString(ArrayCount(Text), Text, "Asset%d", AssetIndex);
             struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
@@ -136,8 +136,187 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
     }
 }
 
+#if 0
+internal rectangle2
+UITextOpWithInEditorFont(ui_state *UIState, ui_text_op Op, v2 P, char *String, builder_loaded_font *Font,
+                         r32 FontScale, v4 Color = V4(1, 1, 1, 1), r32 AtZ = 0.0f)
+{
+    rectangle2 Result = InvertedInfinityRectangle2();
+    if(UIState)
+    {
+        render_group *RenderGroup = &UIState->RenderGroup;
+
+        u32 PrevCodePoint = 0;
+        r32 CharScale = FontScale;
+        r32 AtY = P.y;
+        r32 AtX = P.x;
+        b32 FirstInLine = true;
+        for(char *At = String;
+            *At;
+            )
+        {
+            u32 CodePoint = *At;
+
+            u32 PrevGlyph = Font->UnicodeMap[PrevCodePoint];
+            u32 Glyph = Font->UnicodeMap[CodePoint];
+
+            r32 AdvanceX = CharScale*Font->HorizontalAdvance[PrevGlyph*Font->GlyphCount + Glyph];
+            AtX += FirstInLine ? 0.0f : AdvanceX;
+            FirstInLine = false;
+
+            if(IsEndOfLine(*At))
+            {
+                AtY -= CharScale*(Font->AscenderHeight + Font->DescenderHeight + Font->ExternalLeading);
+                AtX = P.x;
+                FirstInLine = true;
+            }
+            else if(CodePoint != ' ')
+            {
+                loaded_bitmap *Bitmap = &Font->Glyphs[Glyph];
+
+                r32 BitmapScale = CharScale*Bitmap->Height;
+                v3 BitmapOffset = V3(AtX, AtY, 10.0f);
+
+                if(Op == UITextOp_DrawText)
+                {
+                    PushBitmap(RenderGroup, &UIState->TextTransform, Bitmap, BitmapScale,
+                               BitmapOffset, Color, 1.0f);
+                    PushBitmap(RenderGroup, &UIState->ShadowTransform, Bitmap, BitmapScale,
+                               BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
+                }
+                else                    
+                {
+                    Assert(Op == UITextOp_SizeText);
+
+                    if(Bitmap)
+                    {
+                        object_transform Flat = DefaultFlatTransform();
+                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Flat,
+                                                           Bitmap, BitmapScale, BitmapOffset, 1.0f);
+                        rectangle2 GlyphDim = RectMinDim(Dim.P.xy, Dim.Size);
+                        Result = Union(Result, GlyphDim);
+                    }
+                }
+            }
+
+            PrevCodePoint = CodePoint;
+            ++At;
+        }
+    }
+
+    return(Result);
+}
+#endif
+
+#if 0
+internal void
+UITextOpWithInEditorFont(nk_ui *UI, nk_context *Nk, char *Text)
+{
+    u32 L = StringLength(Text);
+    UI->Nk
+    rectangle2 Result = InvertedInfinityRectangle2();
+    u32 PrevCodePoint = 0;
+    r32 CharScale = FontScale;
+    r32 AtY = P.y;
+    r32 AtX = P.x;
+    b32 FirstInLine = true;
+    for(char *At = String;
+        *At;
+        )
+    {
+        u32 CodePoint = *At;
+
+        u32 PrevGlyph = Font->UnicodeMap[PrevCodePoint];
+        u32 Glyph = Font->UnicodeMap[CodePoint];
+
+        r32 AdvanceX = CharScale*Font->HorizontalAdvance[PrevGlyph*Font->GlyphCount + Glyph];
+        AtX += FirstInLine ? 0.0f : AdvanceX;
+        FirstInLine = false;
+
+        if(IsEndOfLine(*At))
+        {
+            AtY -= CharScale*(Font->AscenderHeight + Font->DescenderHeight + Font->ExternalLeading);
+            AtX = P.x;
+            FirstInLine = true;
+        }
+        else if(CodePoint != ' ')
+        {
+            loaded_bitmap *Bitmap = &Font->Glyphs[Glyph];
+
+            r32 BitmapScale = CharScale*Bitmap->Height;
+            v3 BitmapOffset = V3(AtX, AtY, 10.0f);
+//                PushBitmap(RenderGroup, &UIState->TextTransform, Bitmap, BitmapScale,
+//                           BitmapOffset, Color, 1.0f);
+//                PushBitmap(RenderGroup, &UIState->ShadowTransform, Bitmap, BitmapScale,
+//                           BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
+        }
+
+        PrevCodePoint = CodePoint;
+        ++At;
+    }
+
+    return(Result);
+}
+#endif
+
+#if 0
+internal void
+UILabelWithInEditorFont(ui_layout *Layout, char *Name, r32 Width, builder_loaded_font *Font, r32 FontScale = 1.0f, r32 Border = 20.0f)
+{
+    ui_state *UIState = Layout->UIState;
+    interaction NullInteraction = {};
+
+    rectangle2 StandardBound = UITextOpWithInEditorFont(UIState, UITextOp_SizeText, V2(0, 0), Name, Font, FontScale);
+    v2 StandardDim = GetDim(StandardBound);
+
+    rectangle2 TextBounds = {};
+    if(StandardDim.x > Width)
+    {
+        FontScale = Width / StandardDim.x; 
+        TextBounds = UITextOpWithInEditorFont(UIState, UITextOp_SizeText, V2(0, 0), Name, Font, FontScale);
+    }
+    else
+    {
+        TextBounds = StandardBound;
+    }
+    
+    v2 TextDim = GetDim(TextBounds);
+    v2 ElementDim = {TextDim.x + Border, TextDim.y + Border};
+    
+    ui_layout_element Element = UIBeginElementRectangle(Layout, &ElementDim);
+    UIDefaultInteraction(&Element, NullInteraction);
+    UIEndElement(&Element);
+
+    v2 P = V2(GetMinCorner(Element.Bounds).x + 0.5f*ElementDim.x - 0.5f*TextDim.x,
+              GetMaxCorner(Element.Bounds).y - 0.5f*ElementDim.y + 0.5f*TextDim.y - 
+              FontScale*Font->AscenderHeight);
+
+    UITextOpWithInEditorFont(UIState, UITextOp_DrawText, P, Name, Font, FontScale);
+
+    v2 ButtonDim = GetDim(Element.Bounds);
+    v2 ButtonCenter = GetCenter(Element.Bounds);
+
+    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 0),
+             ButtonDim,
+             UI_COLOR_RGBA1_4D3020FF);
+
+    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 1.0f),
+             ButtonDim - V2(4.0f, 4.0f),
+             UI_COLOR_RGBA1_B97A57FF);
+
+    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 2.0f),
+             ButtonDim - V2(8.0f, 8.0f),
+             UI_COLOR_RGBA1_4D3020FF);
+
+    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 3.0f),
+             ButtonDim - V2(12.0f, 12.0f),
+             UI_COLOR_RGBA1_CB9C83FF);
+
+}
+#endif
+
 inline void
-DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
+DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk)
 {
     char Text[256];
     UI->NkLayoutSpacePush(Nk, UI->NkRect(612, -900, 1290, 1068));
@@ -346,13 +525,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Last Code Point: %#x", StoredFont->LastCodePoint);
 
                     // TODO(paul): Font Handling ?? may be removed
-#if 0
                     if(FontMode->Font.GlyphCount)
                     {
-                        UILabelWithInEditorFont(&WindowLayout, "abcdefghijklmnopqrstuvwxyz\nABCDEFGHIJKLMNOPQRSTUVWXYZ\n123456789.:,;'\"(!?)+-*/=",
-                                                1512.0f, &FontMode->Font, 3.0f);
+//                        UILabelWithInEditorFont(&WindowLayout, "abcdefghijklmnopqrstuvwxyz\nABCDEFGHIJKLMNOPQRSTUVWXYZ\n123456789.:,;'\"(!?)+-*/=",
+//                                                1512.0f, &FontMode->Font, 3.0f);
                     }
-#endif
                 } break;
 
                 case StoredAssetType_Text:
@@ -385,7 +562,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "First Sample Index: %d", StoredSound->FirstSampleIndex);
                     Rect = UI->NkWidgetBounds(Nk);
                     UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    char *ChainString = JsonGetEnumString(AssetsMode->JsonStringsHead, "SSASoundChain", StoredSound->Chain);
+                    char *ChainString = JsonGetEnumString(UIState->JsonStringsHead, "SSASoundChain", StoredSound->Chain);
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Chain: %s", ChainString);
                     Rect = UI->NkWidgetBounds(Nk);
                     UI->NkFillRect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
@@ -422,8 +599,8 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             UI->NkLayoutRowDynamic(Nk, 190, 2);
             if(UI->NkGroupBegin(Nk, "Stored Attributes: ", NK_WINDOW_TITLE))
             {
-                char *TypeID = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetType", StoredAsset->TypeID);
-                char *StoredType = JsonGetEnumString(AssetsMode->JsonStringsHead, "StoredAssetType", StoredAsset->Type);
+                char *TypeID = JsonGetEnumString(UIState->JsonStringsHead, "AssetType", StoredAsset->TypeID);
+                char *StoredType = JsonGetEnumString(UIState->JsonStringsHead, "StoredAssetType", StoredAsset->Type);
                 UI->NkLayoutRowDynamic(Nk, 30, 1);
                 FormatString(ArrayCount(Text), Text, "  InEditorID: %d",
                              StoredAsset->ID);
@@ -455,9 +632,9 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     ++TagIndex)
                 {
                     ssa_tag Tag = StoredAsset->AssetTags[TagIndex];
-                    char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead, "AssetTag", Tag.ID);
+                    char *TagString = JsonGetEnumString(UIState->JsonStringsHead, "AssetTag", Tag.ID);
                     u32 TagValue = Tag.Value;
-                    char *ValueKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, Tag.ID);
+                    char *ValueKey = JsonGetTagValueEnumKey(UIState->JsonStringsHead, Tag.ID);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
                     UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                     if(StringsAreEqual(ValueKey, "Number"))
@@ -466,7 +643,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
                     }
                     else
                     {
-                        char *ValueString = JsonGetEnumString(AssetsMode->JsonStringsHead, ValueKey, TagValue);
+                        char *ValueString = JsonGetEnumString(UIState->JsonStringsHead, ValueKey, TagValue);
                         UI->NkLabelf(Nk, NK_TEXT_LEFT, "  %d. %s, %s", TagIndex, TagString, ValueString);
                     }
                 }
@@ -560,7 +737,7 @@ AssambleStrings(memory_arena *Arena, char **Strings, u32 *Count, b32 Filter = fa
 }
 
 inline void
-DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                        stored_asset *CurrentAsset)
 {
     temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
@@ -623,16 +800,16 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 
     Assert((FileStrings != 0) && (FileCount != 0) && (Text != 0));
 
-    string_array *AssetStringArray = GetOrCreateStringArray(AssetsMode,
+    string_array *AssetStringArray = GetOrCreateStringArray(UIState,
                                                             "AssetType", Asset_Count);
-    string_array *TagStringArray = GetOrCreateStringArray(AssetsMode,
+    string_array *TagStringArray = GetOrCreateStringArray(UIState,
                                                           "AssetTag", Tag_Count);
 
-    char *TagValueStringsKey = JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead,
+    char *TagValueStringsKey = JsonGetTagValueEnumKey(UIState->JsonStringsHead,
                                                       AssetsMode->CurrentTagID);
     u32 ValueCount = TagValueCounts[AssetsMode->CurrentTagID];
     string_array *ValueStringArray =
-        GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
+        GetOrCreateStringArray(UIState, TagValueStringsKey, ValueCount);
 
     UI->NkLayoutRowStatic(Nk, 450, 450, 1);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -680,7 +857,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         UI->NkComboboxString(Nk, TagStrings, (int *)&AssetsMode->CurrentTagID, Count, 30, {460, 460});
 
         UI->NkLayoutRowStatic(Nk, 30, 440, 1);
-        char *TagString = JsonGetEnumString(AssetsMode->JsonStringsHead,
+        char *TagString = JsonGetEnumString(UIState->JsonStringsHead,
                                             "AssetTag", AssetsMode->CurrentTagID);
 
         if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
@@ -724,7 +901,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabelf(Nk, NK_TEXT_CENTERED, "TypeID: %s", TypeIDString);
 
-        char *StoredTypeString = JsonGetEnumString(AssetsMode->JsonStringsHead,
+        char *StoredTypeString = JsonGetEnumString(UIState->JsonStringsHead,
                                                    "StoredAssetType", CurrentAsset->Type);
         Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
@@ -773,7 +950,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
                      AssetsMode->CurrentTag, CurrentTagString, CurrentTag->Value);
 
         char *TagValueStringsKey =
-            JsonGetTagValueEnumKey(AssetsMode->JsonStringsHead, CurrentTag->ID);
+            JsonGetTagValueEnumKey(UIState->JsonStringsHead, CurrentTag->ID);
 
         u32 ValueCount = TagValueCounts[CurrentTag->ID];
 
@@ -787,7 +964,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         else
         {
             string_array *ValueStringArray =
-                GetOrCreateStringArray(AssetsMode, TagValueStringsKey, ValueCount);
+                GetOrCreateStringArray(UIState, TagValueStringsKey, ValueCount);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Value: %s|%d",
                          ValueStringArray->Strings[CurrentTag->Value], CurrentTag->Value);
         }
@@ -807,11 +984,8 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
         if(UI->NkButtonLabel(Nk, "Exit"))
             AssetsMode->EditMode = EditMode_None;
 
-        if(AssetsMode->EditMode != EditMode_Font)
-        {
-            if(UI->NkButtonLabel(Nk, "Add Asset"))
-                AssetsMode->AddAsset = true;
-        }
+        if(UI->NkButtonLabel(Nk, "Add Asset"))
+            AssetsMode->AddAsset = true;
         
         UI->NkGroupEnd(Nk);
     }
@@ -821,14 +995,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 }
 
 internal void
-DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                          stored_asset *CurrentAsset)
 {
     bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
     stored_asset_bitmap *StoredBitmap = &CurrentAsset->Bitmap;
     loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
     
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 180});
@@ -870,14 +1044,14 @@ DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *
 }
 
 internal void
-DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                               stored_asset *CurrentAsset)
 {
     spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
     stored_asset_spritesheet *StoredSpriteSheet = &CurrentAsset->SpriteSheet;
     loaded_bitmap *SpriteSheetBitmap = &SpriteSheetMode->SpriteSheetBitmap;
 
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 420});
@@ -957,14 +1131,14 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_cont
 }
 
 internal void
-DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                           stored_asset *CurrentAsset)
 {
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
     stored_asset_tileset *StoredTileset = &CurrentAsset->Tileset;
     loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
 
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 420});
@@ -1090,7 +1264,7 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context 
 }
 
 internal void
-DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                         stored_asset *CurrentAsset)
 {
     // TODO(paul): Make it more comfortable to use, like in a music player,
@@ -1099,7 +1273,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *N
     sound_mode *SoundMode = &AssetsMode->SoundMode;
     stored_asset_sound *StoredSound = &CurrentAsset->Sound;
     
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
@@ -1115,7 +1289,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *N
                      AssetsMode->SoundFiles[AssetsMode->FileIndex]);
 
         string_array *SoundChainStringArray =
-            GetOrCreateStringArray(AssetsMode, "SSASoundChain", SSASoundChain_Count);
+            GetOrCreateStringArray(UIState, "SSASoundChain", SSASoundChain_Count);
         char *ChainString = SoundChainStringArray->Strings[StoredSound->Chain];
         UI->NkLayoutRowDynamic(Nk, 30, 1);
         Rect = UI->NkWidgetBounds(Nk);
@@ -1155,13 +1329,13 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *N
 }
 
 internal void
-DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                        stored_asset *CurrentAsset)
 {
     text_mode *TextMode = &AssetsMode->TextMode;
 
     // TODO(paul): Implement Nuklear text edditing here
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 140});
@@ -1188,7 +1362,7 @@ DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 }
 
 internal void
-DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                        stored_asset *CurrentAsset)
 {
     // TODO(paul): Decide what to do with font assets, should I remove them completely,
@@ -1197,7 +1371,7 @@ DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
     font_mode *FontMode = &AssetsMode->FontMode;
     stored_asset_font *StoredFont = &CurrentAsset->Font;
 
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 140});
@@ -1230,14 +1404,14 @@ DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 }
 
 internal void
-DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                        stored_asset *CurrentAsset)
 {
     // TODO(paul): Advance on this one, what file is loaded what data it containce,
     // visualize all the data posiable?
     stored_asset_binary_file *StoredFile = &CurrentAsset->File;
     
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 140});
@@ -1261,13 +1435,13 @@ DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 }
 
 internal void
-DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk,
+DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
                        stored_asset *CurrentAsset)
 {
     // TODO(paul): Advance on this one, visualize all the data posiable
     stored_asset_sswm_file *StoredFile = &CurrentAsset->SSWM;
     
-    DrawStandardEditLayout(AssetsMode, UI, Nk, CurrentAsset);
+    DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 1);
     UI->NkLayoutSpacePush(Nk, {1460, -170, 450, 140});
@@ -1291,9 +1465,12 @@ DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk
 }
 
 internal void
-DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
+DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 {
     TIMED_FUNCTION();
+
+    nk_ui *UI = UIState->UI;
+    nk_context *Nk = UIState->Nk;
     
     stored_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
     if(AssetsMode->EditStoredAsset)
@@ -1368,7 +1545,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Minor Low Version: %d",
                          AssetsMode->StoredHeader.Version & 0xFF);
 
-            DrawShowStoredAssets(AssetsMode, UI, Nk);
+            DrawShowStoredAssets(AssetsMode, UIState, UI, Nk);
             
             UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, INT_MAX);
             UI->NkLayoutSpacePush(Nk, UI->NkRect(0, 128, 130, 40));
@@ -1390,47 +1567,39 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, nk_ui *UI, nk_context *Nk)
             }
             UI->NkLayoutSpaceEnd(Nk);
 
-            DrawAssetAdvanceView(AssetsMode, UI, Nk);
+            DrawAssetAdvanceView(AssetsMode, UIState, UI, Nk);
         } break;
 
         case EditMode_Bitmap:
-        {
-            DrawAssetsBitmapEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsBitmapEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_SpriteSheet:
-        {
-            DrawAssetsSpriteSheetEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsSpriteSheetEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_Tileset:
-        {
-            DrawAssetsTilesetEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsTilesetEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_Sound:
-        {
-            DrawAssetsSoundEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsSoundEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_Text:
-        {
-            DrawAssetsTextEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsTextEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_Font:
-        {
-            DrawAssetsFontEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsFontEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_File:
-        {
-            DrawAssetsFileEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsFileEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
 
         case EditMode_SSWM:
-        {
-            DrawAssetsSSWMEditMode(AssetsMode, UI, Nk, CurrentAsset);
-        } break;
+            DrawAssetsSSWMEditMode(AssetsMode, UIState, UI, Nk, CurrentAsset);
+            break;
     }
 }

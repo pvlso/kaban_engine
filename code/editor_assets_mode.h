@@ -6,7 +6,6 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
-
 #pragma pack(push, 1)
 struct bitmap_header
 {
@@ -239,11 +238,6 @@ struct text_mode
     loaded_text Text;
 };
 
-struct builder_loaded_font
-{
-    u32 Nothing;
-};
-
 // NOTE(paul): Fonts
 struct font_mode
 {
@@ -327,9 +321,6 @@ struct editor_mode_assets
 
     v2 PixelPosition;
     r32 Time;
-
-    json_element *JsonStringsHead;    
-    string_array *EnumStringArraysHash[4096];
 
     union
     {

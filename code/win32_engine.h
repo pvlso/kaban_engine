@@ -140,5 +140,73 @@ struct win32_platform_file_group
     WIN32_FIND_DATAW FindData;
 };
 
+// NOTE(paul): FONT
+#define ONE_PAST_MAX_FONT_CODEPOINT (0x10FFFF + 1)
+#define MAX_FONT_WIDTH 1024
+#define MAX_FONT_HEIGHT 1024
+
+#pragma pack(push, 1)
+struct ttf_offset_subtable
+{
+    u32 ScalerType;
+    u16 NumTables;
+    u16 SearchRange;
+    u16 EntrySelector;
+    u16 RangeShift;
+};
+
+struct ttf_table_directory
+{
+    u32 Tag;
+    u32 CheckSum;
+    u32 Offset;
+    u32 Length;
+};
+
+struct ttf_name_record
+{
+    u16 PlatformID;
+    u16 EncodingID;
+    u16 LanguageID;
+    u16 NameID;
+    u16 Length;
+    u16 Offset;
+};
+#pragma pack(pop)
+
+inline u16
+ReadU16(u8 *Data, u32 Offset)
+{
+    u16 Result = (Data[Offset] << 8) | (Data[Offset + 1]);
+    return(Result);
+}
+
+inline u32
+ReadU32(u8 *Data, u32 Offset)
+{
+    u32 Result = ((Data[Offset] << 24) | (Data[Offset + 1] << 16) |
+                  (Data[Offset + 2] << 8) | (Data[Offset + 3]));
+    return(Result);
+}
+
+struct win32_loaded_font
+{
+    HFONT Win32Handle;
+    TEXTMETRIC TextMetric;
+    r32 LineAdvance;
+
+    u32 *Glyphs;
+    r32 *HorizontalAdvance;
+
+    u32 MinCodePoint;
+    u32 MaxCodePoint;
+
+    u32 MaxGlyphCount;
+    u32 GlyphCount;
+
+    u32 *GlyphIndexFromCodePoint;
+    u32 OnePastHighestCodePoint;
+};
+
 #define WIN32_EDITOR_H
 #endif

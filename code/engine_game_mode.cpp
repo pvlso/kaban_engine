@@ -203,8 +203,6 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         
         Result->AutoWriteSeconds = 300.0f;
 
-        Result->JsonStringsHead = ParseJson("enum_strings.json", &EditorState->ModeArena);
-
         EditorState->GameMode = Result;
     }
     else
@@ -587,16 +585,17 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
 internal b32
 UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
-                        nk_context *Nk, engine_input *Input, u32 RenderWidth, u32 RenderHeight,
-                        editor_mode_game *GameMode)
+                        engine_input *Input, u32 RenderWidth, u32 RenderHeight)
 {
     editor_assets *Assets = TranState->Assets;
+    editor_mode_game *GameMode = EditorState->GameMode;
     ui_state *UIState = &EditorState->UIState;
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
-        nk_ui *UI = &Platform.UI;
-
+        nk_ui *UI = UIState->UI;
+        nk_context *Nk = UIState->Nk;
+        
         real32 WidthOfMonitor = 0.635f; // NOTE(casey): Horizontal measurement of monitor in meters
         real32 MetersToPixels = (real32)RenderWidth/WidthOfMonitor;
 
@@ -614,7 +613,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
 
-        DrawGameModeUI(GameMode, TranState->Assets, TranState->MainGenerationID, UI, Nk, Input->MouseZ);
+        DrawGameModeUI(GameMode, TranState->Assets, TranState->MainGenerationID, UIState);
 
         b32 Exit = false;
         switch(GameMode->CurrentAction)

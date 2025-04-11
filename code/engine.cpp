@@ -274,6 +274,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState->UIEnable = !EditorState->UIEnable;        
     }
 
+    BeginUI(&EditorState->UIState, RenderCommands, TranState->Assets, TranState->MainGenerationID,
+            RenderWidth, RenderHeight, &UI, nk);
     if(UI.NkBegin(nk, "UI Window", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
                   (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
@@ -288,20 +290,18 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_TitleScreen:
                 {
-                    Rerun = UpdateAndRenderTitleScreen(EditorState, TranState, nk, &UI, EditorState->TitleScreen);
+                    Rerun = UpdateAndRenderTitleScreen(EditorState, TranState);
                 } break;
             
                 case EditorMode_AssetsMode:
                 {
-                    Rerun = UpdateAndRenderAssetsMode(EditorState, TranState, nk, RenderGroup, Input, RenderWidth, RenderHeight,
-                                                      EditorState->AssetsMode);
+                    Rerun = UpdateAndRenderAssetsMode(EditorState, TranState, Input);
                 } break;
 
                 case EditorMode_GameMode:
                 {
-                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup, nk,
-                                                    Input, RenderWidth, RenderHeight,
-                                                    EditorState->GameMode);
+                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
+                                                    Input, RenderWidth, RenderHeight);
                 } break;
 
                 InvalidDefaultCase;
@@ -309,6 +309,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         } while(Rerun);
     }
     UI.NkEnd(nk);
+    EndUI(EditorState, &EditorState->UIState, Input);
     
     EndRenderGroup(RenderGroup);
 

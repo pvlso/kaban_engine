@@ -160,11 +160,14 @@ DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
 }
 
 internal void
-DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, nk_ui *UI, nk_context *Nk, s16 MouseZ)
+DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, ui_state *UIState)
 {
+    nk_ui *UI = UIState->UI;
+    nk_context *Nk = UIState->Nk;
+
     UI->NkLayoutRowStatic(Nk, 30, 260, 2);
 
-    char *ModeString = JsonGetEnumString(GameMode->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
+    char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
     UI->NkLabel(Nk, "Current Mode: ", NK_TEXT_CENTERED);
@@ -206,7 +209,7 @@ DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generation
 
         case EditGameMode_Terrain:
         {
-            DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, MouseZ);
+            DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, UIState->MouseZ);
             
         } break;
 
