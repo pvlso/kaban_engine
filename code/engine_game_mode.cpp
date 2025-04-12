@@ -235,20 +235,6 @@ RenderMapGrid(render_group *RenderGroup, ui_state *UIState, world *World, world_
             if(((u32)TileX < World->TileWidth) && ((u32)TileY < World->TileHeight))
             {
                 v2 Delta = Subtract(World, &TileP, &CameraP);
-#if 0
-                for(f32 I = -0.5f;
-                    I < 0.5f;
-                    I += 0.125f)
-                {
-                    for(f32 J = -0.5f;
-                        J < 0.5f;
-                        J += 0.125f)
-                    {
-                        rectangle2 R = RectCenterDim(Delta + V2(J + 0.05f, I + 0.05f), V2(0.05f, 0.05f));
-                        PushRect(RenderGroup, &Transform, R, 20.0f, V4(0, 0, 1, 1));
-                    }
-                }
-#endif
 #if 1
 
                 if(Global_EditorGameMode_ShowCoords)
