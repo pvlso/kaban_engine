@@ -7,103 +7,73 @@
    $Notice: $
    ======================================================================== */
 
-enum entity_vulnerabilities
+enum stored_entity_type
 {
-    Vulner_Fire = (1 << 0),
-    Vulner_Water = (1 << 1),
-    Vulner_Air = (1 << 2),
-    Vulner_Earth = (1 << 3),
+    EntityType_Hero,
+    EntityType_Monster,
 };
 
-enum entity_loot
+#pragma pack(push, 1)
+
+#define SSEF_CODE(a, b, c, d) (((uint32)(a) << 0) | ((uint32)(b) << 8) | ((uint32)(c) << 16) | ((uint32)(d) << 24))
+struct ssef_header
 {
-    Loot_Potion = (1 << 0),
-    Loot_QuestItem = (1 << 1),
-    Loo_Element = (1 << 2),
+#define SSEF_MAGIC_VALUE SSEF_CODE('s', 's', 'e', 'f')
+    u32 MagicValue;
+    u32 Version;
+
+    u32 StoredEntitySize;
+    u32 StoredEntityCount;
+
+    u64 StoredEntities;
 };
 
-struct entity_stats
+struct stored_entity_stats
 {
-    u16 Health;
-    u16 Mana;
+    u32 MaxHealth_Health;
+    u32 MaxMana_Mana;
+
+    u32 Bufs;
+    u32 Debufs;
 
     u32 Vulnerabilities;
-    u32 InVulnerabilities;
-
-    u16 Damage;
-    f32 MoveSpeed;
-    u16 Loot;
+    u32 Invulnerabilities;
 };
 
-enum entity_ability_type
+struct stored_entity_animation
 {
-    EntityAbility_MeleeAtack,
-    EntityAbility_SpellCast,
-    EntityAbility_Spawn,
+    u8 SpriteSheetSpeedIdle[4];
+    spritesheet_id IdleSpriteSheet[4];
+
+    u8 SpriteSheetSpeedRun[4];
+    spritesheet_id RunSpriteSheet[4];
+
+    u8 SpriteSheetSpeedDeath[4];
+    spritesheet_id RunSpriteSheet[4];
 };
 
-struct entity_melee_ability
-{
-    u32 Damage;
-};
-
-struct entity_spell_ability
-{
-    u32 SpellID;
-};
-
-struct entity_other_ability
-{
-//    u32 AbilityID;
-};
-
-struct entity_ability
+struct stored_entity_ability
 {
     entity_ability_type Type;
-    u32 AbilityEffects;
-    u32 AbilitySound;
-    u32 AbilitySpriteSheets[4];
-    union
-    {
-        melee_ability MeleeAb;
-        spell_ability SpellAb;
-        other_ability OtherAb;
-    };
+
+    u8 AbilitySpriteSheetSpeed[4];
+    spritesheet_id AbilitySpriteSheet[4];
+
+    u8 AbilitySpriteFinishIndex;
+    
 };
 
-struct entity_sprites
+struct stored_entity
 {
-    u32 IdleSpriteSheet[4];
-    u32 RunSpriteSheet[4];
-    u32 DeathSpriteSheet[4];
+    u32 StoredEntityID;
+
+    stored_entity_type Type;
+    stored_entity_stats Stats;
+
+    
 };
 
-struct entity_sounds
-{
-    u32 IdleSound;
-    u32 RunSound;
-    u32 DeathSound;
-};
-
-enum entity_death_effect
-{
-    EntityDeath_None,
-    EntityDeath_Explode,
-    EntityDeath_Spawn,
-};
-
-struct editor_entity
-{
-    entity_type Type;
-    entity_class Class;
-
-    entity_stats Stats;
-
-    entity_ability Abilities[16];
-    entity_sprites Sprites;
-    entity_sounds Sounds;
-    entity_death_effect DeathEffect;
-};
+#pragma pack(pop)
 
 #define ENGINE_ENTITY_FORMAT_H
 #endif
