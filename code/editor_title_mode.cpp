@@ -42,12 +42,17 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(UI->NkButtonLabel(Nk, "Game Mode"))
             {
-                PlayGameMode(EditorState, TranState);
+//                PlayGameMode(EditorState, TranState);
                 Result = true;
                 return(Result);
             }
 
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
+            if(UI->NkButtonLabel(Nk, "Simulate"))
+            {
+                PlaySimulation(EditorState, TranState);
+                Result = true;
+                return(Result);
+            }
             if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
             if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
             if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}

@@ -149,9 +149,22 @@ engine_memory *DebugGlobalMemory;
 
 platform_api Platform;
 
+internal void
+PlaySimulation(editor_state *EditorState, transient_state *TranState)
+{
+    SetEditorMode(EditorState, TranState, EditorMode_Simulate);
+    
+    simulate *Result = PushStruct(&EditorState->ModeArena, simulate);
+    SubArena(&Result->GameArena,&EditorState->ModeArena, Megabytes(256));
+    SubArena(&Result->GameTranArena,&EditorState->ModeArena, Megabytes(128));
+
+    EditorState->Simulate = Result;
+}
+
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-#include "engine_game_mode.cpp"
+//#include "engine_game_mode.cpp"
+#include "engine_game.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -300,8 +313,16 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_GameMode:
                 {
-                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
-                                                    Input, RenderWidth, RenderHeight);
+//                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
+//                                                    Input, RenderWidth, RenderHeight);
+                } break;
+
+                case EditorMode_Simulate:
+                {
+                    Rerun = GameUpdateAndRender(EditorState, TranState, Input,
+                                                &EditorState->Simulate->GameArena,
+                                                &EditorState->Simulate->GameTranArena,
+                                                &Memory->TextureOpQueue, RenderCommands);
                 } break;
 
                 InvalidDefaultCase;

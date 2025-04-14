@@ -7,7 +7,7 @@
    ======================================================================== */
 
 internal playing_sound *
-PlaySound(audio_state *AudioState, sound_id SoundID, loaded_sound *Sound)
+PlaySound(audio_state *AudioState, sound_id SoundID, loaded_sound *Sound = 0)
 {
 //    TIMED_FUNCTION();
 

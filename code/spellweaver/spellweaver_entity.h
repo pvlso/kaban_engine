@@ -267,6 +267,11 @@ union reward
     // TODO(paul): Add others rewards.
 };
 
+struct quest_id
+{
+    u32 Value;
+};
+
 struct quest
 {
     quest_type Type;

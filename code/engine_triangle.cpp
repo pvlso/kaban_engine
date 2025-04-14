@@ -204,6 +204,8 @@ TRISUBPolyEdgeClip(polygon2 *Sub, v2 x0, v2 x1, s32 Left, polygon2 *Res)
     }
 }
 
+#define MAX_VERTEX_COUNT 128
+
 internal void
 TRISUBSutherlandHodgman(polygon2 *Subject, triangle *Clip, polygon2 *Result, memory_arena *Arena)
 {
