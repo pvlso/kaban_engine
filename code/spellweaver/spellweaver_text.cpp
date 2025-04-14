@@ -57,9 +57,9 @@ TextOp(render_group *RenderGroup, text_config TextConfig, char *String, u32 Leng
                 v3 BitmapOffset = V3(AtX, AtY, TextConfig.AtZ);
                 if(Op == TextOp_DrawText)
                 {
-                    PushBitmap(RenderGroup, TextConfig.TextTransform, BitmapID, BitmapScale,
+                    PushBitmap(RenderGroup, &TextConfig.TextTransform, BitmapID, BitmapScale,
                                BitmapOffset, TextConfig.Color, 1.0f);
-                    PushBitmap(RenderGroup, TextConfig.TextShadowTransform, BitmapID, BitmapScale,
+                    PushBitmap(RenderGroup, &TextConfig.TextShadowTransform, BitmapID, BitmapScale,
                                BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
                 }
                 else                    
@@ -69,7 +69,8 @@ TextOp(render_group *RenderGroup, text_config TextConfig, char *String, u32 Leng
                     loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, BitmapID, RenderGroup->GenerationID);
                     if(Bitmap)
                     {
-                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, DefaultFlatTransform(), Bitmap,
+                        object_transform D = DefaultFlatTransform();
+                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &D, Bitmap,
                                                            BitmapScale, BitmapOffset, 1.0f);
                         rectangle2 GlyphDim = RectMinDim(Dim.P.xy, Dim.Size);
                         Result = Union(Result, GlyphDim);

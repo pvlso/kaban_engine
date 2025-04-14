@@ -15,7 +15,7 @@ struct updated_entity
 
 inline void
 HitEntitiesInRectangle(sim_region *SimRegion, audio_state *AudioState, random_series *EffectsEntropy,
-                       object_transform Transform, entity *AttackingEntity, rectangle2 AttackSurface, u32 Damage)
+                       object_transform *Transform, entity *AttackingEntity, rectangle2 AttackSurface, u32 Damage)
 {
     for(u32 TestEntityIndex = 0;
         TestEntityIndex < SimRegion->EntityCount;
@@ -27,7 +27,7 @@ HitEntitiesInRectangle(sim_region *SimRegion, audio_state *AudioState, random_se
             if((TestEntity->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
             {
                 rectangle2 TestEntityRect = RectCenterDim((TestEntity->P + TestEntity->Collision->OffsetP -
-                                                           Transform.OffsetP).xy,
+                                                           Transform->OffsetP).xy,
                                                           GetDim(TestEntity->Collision->CollisionRect).xy);
                 if(RectanglesIntersect(AttackSurface, TestEntityRect))
                 {
@@ -46,7 +46,7 @@ HitEntitiesInRectangle(sim_region *SimRegion, audio_state *AudioState, random_se
 }
 
 inline void
-HealEntitiesInRectangle(sim_region *SimRegion, object_transform Transform, entity *AttackingEntity,
+HealEntitiesInRectangle(sim_region *SimRegion, object_transform *Transform, entity *AttackingEntity,
                         rectangle2 AttackSurface, u32 HealAmount)
 {
     for(u32 TestEntityIndex = 0;
@@ -57,7 +57,7 @@ HealEntitiesInRectangle(sim_region *SimRegion, object_transform Transform, entit
         if((TestEntity->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
         {
             rectangle2 TestEntityRect = RectCenterDim((TestEntity->P + TestEntity->Collision->OffsetP -
-                                                       Transform.OffsetP).xy,
+                                                       Transform->OffsetP).xy,
                                                       GetDim(TestEntity->Collision->CollisionRect).xy);
             if(RectanglesIntersect(AttackSurface, TestEntityRect))
             {
@@ -169,8 +169,9 @@ SpellTypeToSpellIndex(u8 SpellType)
 inline void
 DrawHeroHealthBar(render_group *RenderGroup, entity *Entity, text_config TextConfig)
 {
-    object_transform BarTransform = DefaultFlatTransform();
-
+    object_transform BarTransform_ = DefaultFlatTransform();
+    object_transform *BarTransform = &BarTransform_;
+    
     u16 MaxHealth = (u16)(Entity->HealthMax_Health >> 16);
     u16 Health = (u16)(Entity->HealthMax_Health & 0xffff);
 
@@ -192,17 +193,17 @@ DrawHeroHealthBar(render_group *RenderGroup, entity *Entity, text_config TextCon
     TextConfig.Color = V4(1, 1, 1, 1);
     TextOutAt(RenderGroup, TextConfig, Buffer, 0);
 
-    BarTransform.OffsetP = V3(-11.24f, 7.48f, 1.0f);
-    BarTransform.SortBias = 10100.0f;
+    BarTransform->OffsetP = V3(-11.24f, 7.48f, 1.0f);
+    BarTransform->ChunkZ = 10100;
     PushRectOutline(RenderGroup, BarTransform, V3(-0.5f*Len + HealthHalfRatio, 0, 0),
                     V2(Len*HealthRatio, 0.5f), V4(0.13f, 0.69f, 0.298f, 0.9f), 0.15f);
-    BarTransform.SortBias = 10110.0f;
+    BarTransform->ChunkZ = 10110;
     PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + HealthHalfRatio, 0, 0),
              V2(Len*HealthRatio, 0.5f), V4(0.71f, 0.9f, 0.11f, 0.8f));
 
     if(Mana == 0)
     {
-        BarTransform.SortBias = 10110.0f;
+        BarTransform->ChunkZ = 10110;
         PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
                  V2(Len*ManaRatio, 0.5f), V4(0.25f, 0.28f, 0.8f, 1));
 
@@ -222,12 +223,12 @@ DrawHeroHealthBar(render_group *RenderGroup, entity *Entity, text_config TextCon
         TextConfig.Color = V4(1, 1, 1, 1);
         TextOutAt(RenderGroup, TextConfig, Buffer, 0);
 
-        BarTransform.OffsetP = V3(-11.24f, 6.625f, 1.0f);
-        BarTransform.SortBias = 10100.0f;
+        BarTransform->OffsetP = V3(-11.24f, 6.625f, 1.0f);
+        BarTransform->ChunkZ = 10100;
         PushRectOutline(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
                         V2(Len*ManaRatio, 0.5f), V4(0.0f, 0.16f, 0.91f, 0.9f), 0.15f);
 
-        BarTransform.SortBias = 10110.0f;
+        BarTransform->ChunkZ = 10110;
         PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
                  V2(Len*ManaRatio, 0.5f), V4(0.25f, 0.28f, 0.8f, 0.8f));
     }
@@ -236,12 +237,14 @@ DrawHeroHealthBar(render_group *RenderGroup, entity *Entity, text_config TextCon
 inline void
 DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConfig)
 {
-    object_transform Transform = DefaultFlatTransform();
-    Transform.SortBias = 900.0f;
+    object_transform Transform_ = DefaultFlatTransform();
+    Transform_.ChunkZ = 900;
 
+    object_transform *Transform = &Transform_;
+    
     hero_entity *HeroData = (hero_entity *)Entity->Data;
-    Transform.OffsetP = V3(-0.6f, -6.4f, 1.0f);
-    Transform.SortBias = 10000.0f;
+    Transform->OffsetP = V3(-0.6f, -6.4f, 1.0f);
+    Transform->ChunkZ = 10000;
 
     for(u32 SphereIndex = 0;
         SphereIndex < ArrayCount(HeroData->SpheresRefIndex);
@@ -266,46 +269,46 @@ DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConf
         }
 
         PushBitmap(RenderGroup, Transform, BitmapID, 0.5f, V3(0, 0, 0));
-        Transform.OffsetP.x += 0.6f;
+        Transform->OffsetP.x += 0.6f;
     }
 
-    Transform.OffsetP = V3(-1.35f, -7.2f, 1.0f);
+    Transform->OffsetP = V3(-1.35f, -7.2f, 1.0f);
     PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[0], 0.75f, V3(0, 0, 0));
     PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[1], 0.75f, V3(0.9f, 0, 0));
     PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[2], 0.75f, V3(1.8f, 0, 0));
 
-    TextConfig.TextTransform.OffsetP = Transform.OffsetP + V3(-0.45f, 0.3f, 0);
-    TextConfig.TextShadowTransform.OffsetP = Transform.OffsetP + V3(-2.43f, 2.28f, 0.0f);
+    TextConfig.TextTransform.OffsetP = Transform->OffsetP + V3(-0.45f, 0.3f, 0);
+    TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-2.43f, 2.28f, 0.0f);
     TextConfig.Color = V4(1, 1, 1, 1);
     TextConfig.FontScale = 0.008f;
-    TextConfig.TextTransform.SortBias = 10010.0f;
-    TextConfig.TextShadowTransform.SortBias = 10000.0f;
+    TextConfig.TextTransform.ChunkZ = 10010;
+    TextConfig.TextShadowTransform.ChunkZ = 10000;
 
     object_transform RectTransform = DefaultFlatTransform();
     RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    RectTransform.SortBias = TextConfig.TextTransform.SortBias - 1000.0f;
-    PushRect(RenderGroup, RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
+    RectTransform.ChunkZ = TextConfig.TextTransform.ChunkZ - 1000;
+    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
     TextOutAt(RenderGroup, TextConfig, "1", 0);
 
     TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
     TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
     RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
+    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
     TextOutAt(RenderGroup, TextConfig, "2", 0);
 
     TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
     TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
     RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
+    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
     TextOutAt(RenderGroup, TextConfig, "3", 0);
 
     TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
     TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
     RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
+    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
     TextOutAt(RenderGroup, TextConfig, "Q", 0);
     
-    Transform.OffsetP = V3(-13.65f, -2.35f, 1.0f);
+    Transform->OffsetP = V3(-13.65f, -2.35f, 1.0f);
     TextConfig.FontScale = 0.008f;
     for(u32 SpellIndex = 0;
         SpellIndex < ArrayCount(HeroData->Spells);
@@ -327,7 +330,7 @@ DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConf
             ++WaterSphere)
         {
             PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[0], 0.4f, V3(0, 0, 0), Color);
-            Transform.OffsetP.x += 0.5f;
+            Transform->OffsetP.x += 0.5f;
         }
 
         for(u32 WindSphere = 0;
@@ -335,7 +338,7 @@ DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConf
             ++WindSphere)
         {
             PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[1], 0.4f, V3(0, 0, 0), Color);
-            Transform.OffsetP.x += 0.5f;
+            Transform->OffsetP.x += 0.5f;
         }
 
         for(u32 FireSphere = 0;
@@ -343,11 +346,11 @@ DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConf
             ++FireSphere)
         {
             PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[2], 0.4f, V3(0, 0, 0), Color);
-            Transform.OffsetP.x += 0.5f;
+            Transform->OffsetP.x += 0.5f;
         }
 
-        TextConfig.TextTransform.OffsetP = Transform.OffsetP - V3(0.15f, 0.1f, 0);
-        TextConfig.TextShadowTransform.OffsetP = Transform.OffsetP + V3(-2.12f, 1.88f, 0.0f);
+        TextConfig.TextTransform.OffsetP = Transform->OffsetP - V3(0.15f, 0.1f, 0);
+        TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-2.12f, 1.88f, 0.0f);
         TextConfig.Color = Color;
         
         switch(Spell->Type)
@@ -403,20 +406,20 @@ DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConf
             } break;
         }
 
-        Transform.OffsetP.x -= 3.0f*0.5f;
-        Transform.OffsetP.y -= 0.5f;
+        Transform->OffsetP.x -= 3.0f*0.5f;
+        Transform->OffsetP.y -= 0.5f;
     }
 
     bitmap_id MouseLeftButton = GetFirstBitmapFrom(RenderGroup->Assets, Asset_MouseLeftButton);
-    TextConfig.TextTransform.OffsetP = Transform.OffsetP + V3(0.45f, -0.1f, 0);
-    TextConfig.TextShadowTransform.OffsetP = Transform.OffsetP + V3(-1.52f, 1.88f, 0.0f);
+    TextConfig.TextTransform.OffsetP = Transform->OffsetP + V3(0.45f, -0.1f, 0);
+    TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-1.52f, 1.88f, 0.0f);
     PushBitmap(RenderGroup, Transform, MouseLeftButton, 0.45f, V3(0, 0, 0));
     TextOutAt(RenderGroup, TextConfig, "Melee Attack", 0);
     
 }
 
 inline void
-HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, game_assets *Assets, entity *Entity,
+HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets *Assets, entity *Entity,
               hero_entity *HeroData, v2 MouseP, render_group *RenderGroup)
 {
     hero_spell *Spell = HeroData->Spells + SpellTypeToSpellIndex(HeroData->CurrentSpell);
@@ -493,7 +496,7 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, game_assets *
 
 internal void
 HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *AudioState, entity *Entity,
-           render_group *RenderGroup, object_transform Transform, v3 LocalMouseP)
+           render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
 {
     hero_entity *HeroData = (hero_entity *)Entity->Data;
     if(Entity->State == EntityState_CastingSpell)
@@ -754,7 +757,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
 // ===================================================================================================================
 
 internal void
-MonsterDeathEvent(game_mode_world *WorldMode, game_assets *Assets, entity *Entity)
+MonsterDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity *Entity)
 {
     r32 RandomNumber = RandomBetween(&WorldMode->EffectsEntropy, 0.0f, 1.0f);
     if(RandomNumber > 0.5f)
@@ -766,7 +769,7 @@ MonsterDeathEvent(game_mode_world *WorldMode, game_assets *Assets, entity *Entit
 // NOTE(paul):====================================== Necromancer Update ==============================================
 
 internal void
-NecromancerAttack(game_mode_world *WorldMode, game_assets *Assets, sim_region *SimRegion, entity *Entity)
+NecromancerAttack(game_mode_world *WorldMode, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
 {
     necromancer_entity *EntityData = (necromancer_entity *)Entity->Data;
     switch(Entity->CastSpellType)
@@ -846,7 +849,7 @@ NecromancerAttack(game_mode_world *WorldMode, game_assets *Assets, sim_region *S
 }
 
 internal updated_entity
-UpdateNecromancer(game_mode_world *WorldMode, game_assets *Assets, audio_state *AudioState, sim_region *SimRegion,
+UpdateNecromancer(game_mode_world *WorldMode, editor_assets *Assets, audio_state *AudioState, sim_region *SimRegion,
                   entity *Entity)
 {
     updated_entity Result = {};
@@ -990,7 +993,7 @@ UpdateFlyingSpell(game_mode_world *WorldMode, entity *Entity)
 
 internal void
 ImmidiateSpellAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *AudioState,
-                     entity *Entity, render_group *RenderGroup, object_transform Transform)
+                     entity *Entity, render_group *RenderGroup, object_transform *Transform)
 {
     rectangle2 AttackSurface = RectCenterDim(V2(0, 0), V2(1.0f, 1.0f));
 //    PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
@@ -1032,7 +1035,7 @@ UpdateImmidiateSpell(entity *Entity)
 
 internal void
 MonsterAttack(sim_region *SimRegion, audio_state *AudioState, random_series *EffectsEntropy, entity *Entity,
-              render_group *RenderGroup, object_transform Transform, u32 Damage, v2 Dim)
+              render_group *RenderGroup, object_transform *Transform, u32 Damage, v2 Dim)
 {
     v2 AttackDirection = FacingDirectionToUnitVector(Entity->FacingDirection);
     v2 RectCenter = 1.5f*AttackDirection;
@@ -1282,7 +1285,7 @@ UpdateSkeletonGrunt(game_mode_world *WorldMode, sim_region *SimRegion, entity *E
 // NOTE(paul):====================================== Skeleton King Update ============================================
 
 internal void
-SkeletonKingDeathEvent(game_mode_world *WorldMode, game_assets *Assets, entity *Entity)
+SkeletonKingDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity *Entity)
 {
     skeleton_king_entity *SkeletonKingData = (skeleton_king_entity *)Entity->Data;
     AddItem(WorldMode, Assets, Entity->TileP, ItemName_MapToTheTrees);
@@ -1307,7 +1310,7 @@ SkeletonKingDeathEvent(game_mode_world *WorldMode, game_assets *Assets, entity *
 
 internal void
 SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
-                   render_group *RenderGroup, object_transform Transform)
+                   render_group *RenderGroup, object_transform *Transform)
 {
     if(Entity->State == EntityState_CastingSpell)
     {
@@ -1352,7 +1355,7 @@ SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_regi
 }
 
 internal updated_entity
-UpdateSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, sim_region *SimRegion, entity *Entity)
+UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1407,11 +1410,11 @@ UpdateSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, sim_region *
             {
 
                 asset_vector ObstacleMatchVector = {};
-                ObstacleMatchVector.E[Tag_BiomeType] = (r32)BiomeType_AncientForest;
-                ObstacleMatchVector.E[Tag_SizeLevel] = (r32)SizeLevel_0;
+                ObstacleMatchVector.E[Tag_BiomeType] = BiomeType_AncientForest;
+                ObstacleMatchVector.E[Tag_SizeLevel] = SizeLevel_0;
                 asset_vector ObstacleWeightVector = {};
-                ObstacleWeightVector.E[Tag_BiomeType] = 1.0f;
-                ObstacleWeightVector.E[Tag_SizeLevel] = 1.0f;
+                ObstacleWeightVector.E[Tag_BiomeType] = 1;
+                ObstacleWeightVector.E[Tag_SizeLevel] = 1;
 
                 SkeletonKingData->Obstacles[SkeletonKingData->ObstacleCount++] =
                     AddObstacle(WorldMode, Assets, 16, 15, Asset_Stone,
@@ -1441,7 +1444,7 @@ UpdateSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, sim_region *
 
 internal void
 CultistAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
-              render_group *RenderGroup, object_transform Transform, v3 LocalMouseP)
+              render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
 {
     cultist_entity *EntityData = (cultist_entity *)Entity->Data;
     entity *HeroEntity = GetEntityByID(SimRegion, EntityData->ClosestHeroID);
@@ -1542,7 +1545,7 @@ UpdateCultist(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 
 internal void
 SkeletonHunterAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
-                     render_group *RenderGroup, object_transform Transform)
+                     render_group *RenderGroup, object_transform *Transform)
 {
     skeleton_hunter_entity *EntityData = (skeleton_hunter_entity *)Entity->Data;
     entity *HeroEntity = GetEntityByID(SimRegion, EntityData->ClosestHeroID);

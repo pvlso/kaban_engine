@@ -122,7 +122,7 @@ DrawTitleScreen(editor_assets *Assets, render_group *RenderGroup, loaded_bitmap 
 }
 
 internal b32
-UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranState, render_group *RenderGroup,
+UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranState, transient_state *TranState_, render_group *RenderGroup,
                            loaded_bitmap *DrawBuffer, engine_input *Input, game_mode_title_screen *TitleScreen)
 {
     editor_assets *Assets = TranState->Assets;
@@ -141,7 +141,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 GameState->GameHaveStarted = true;
             }
@@ -150,7 +150,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 TitleScreen->Quit = true;
             }
@@ -158,9 +158,9 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
 
         if(GameState->GameHaveStarted && (GameState->CurrentAlpha == 1.0f))
         {
-            GameState->AudioState.MasterVolume = V2(0, 0);
-//            PlayWorld(GameState, TranState);
-            GameState->AudioState.MasterVolume = V2(0.5f, 0.5f);
+            GameState->AudioState->MasterVolume = V2(0, 0);
+            PlayWorld(GameState, TranState_);
+            GameState->AudioState->MasterVolume = V2(0.5f, 0.5f);
         }
         else if(TitleScreen->Quit && (GameState->CurrentAlpha == 1.0f))
         {

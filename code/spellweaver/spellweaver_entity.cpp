@@ -15,7 +15,7 @@
 #include "spellweaver_entity_quests.cpp"
 
 inline void
-DrawEntityHealthBar(render_group *RenderGroup, object_transform Transform, entity *Entity, text_config TextConfig)
+DrawEntityHealthBar(render_group *RenderGroup, object_transform *Transform, entity *Entity, text_config TextConfig)
 {
     u16 MaxHealth = (u16)(Entity->HealthMax_Health >> 16);
     u16 Health = (u16)(Entity->HealthMax_Health & 0xffff);
@@ -26,7 +26,7 @@ DrawEntityHealthBar(render_group *RenderGroup, object_transform Transform, entit
 
 
     PushRect(RenderGroup, Transform, V3(0, 2.0f, 0), V2(Len, 0.2f), V4(0.5f, 0.5f, 0.5f, 1));
-    Transform.SortBias = 1.0f;
+    Transform->ChunkZ = 1;
     PushRect(RenderGroup, Transform, V3(-0.5f*Len + HalfRatio, 2.0f, 0), V2(Len*Ratio, 0.2f), V4(1.0f, 0, 0, 1));
 
     char Buffer[16];
@@ -35,7 +35,7 @@ DrawEntityHealthBar(render_group *RenderGroup, object_transform Transform, entit
     rectangle2 TextRect = GetTextSize(RenderGroup, TextConfig, Buffer, 0);
     v2 TextDim = GetDim(TextRect);
     
-    TextConfig.TextTransform.OffsetP = Transform.OffsetP + V3(-0.5f*(TextDim.x) + 0.5f, 1.93f, 0);
+    TextConfig.TextTransform.OffsetP = Transform->OffsetP + V3(-0.5f*(TextDim.x) + 0.5f, 1.93f, 0);
     TextConfig.TextShadowTransform.OffsetP = TextConfig.TextTransform.OffsetP + V3(-1.975f, 1.975f, 0);
     TextConfig.FontScale = 0.0065;
     TextOutAt(RenderGroup, TextConfig, Buffer, 0);
@@ -67,7 +67,7 @@ UpdateSpriteIndex(entity *Entity, r32 Time, u32 SpriteCount, u32 Speed)
 
 internal void
 EntityAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
-             render_group *RenderGroup, object_transform Transform, v3 LocalMouseP)
+             render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
 {
     // TODO(paul): Add more different entities that can attack
     random_series *EffectsEntropy = &WorldMode->EffectsEntropy;
@@ -208,7 +208,7 @@ UpdateTimers(entity *Entity, r32 dt)
 
 internal void
 RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *RenderGroup,
-               object_transform EntityTransform, entity *Entity, r32 dt, render_entity *RenderEntity)
+               object_transform *EntityTransform, entity *Entity, r32 dt, render_entity *RenderEntity)
 {
     loaded_spritesheet *SpriteSheet = RenderEntity->SpriteSheet;
     u32 EntitySpriteIndex = RenderEntity->EntitySpriteIndex;
@@ -229,11 +229,11 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
             hero_entity *HeroData = (hero_entity *)Entity->Data;
             if(HeroData->ClosestNPC.Entity && (HeroData->ClosestNPC.DistanceSq < Square(2.5f)))
             {
-                EntityTransform.SortBias = 1000.0f;
+                EntityTransform->ChunkZ = 1000;
                 PushRect(RenderGroup, EntityTransform, V3(0.6f, 1.0f, 0), V2(0.5f, 0.5f), V4(0, 0, 0, 0.5f));
                 text_config TextConfig = WorldMode->GeneralTextConfig;
-                TextConfig.TextTransform.OffsetP = EntityTransform.OffsetP + V3(0.52f, 0.85f, 0); 
-                TextConfig.TextShadowTransform.OffsetP = EntityTransform.OffsetP + V3(-1.46f, 2.87f, 0); 
+                TextConfig.TextTransform.OffsetP = EntityTransform->OffsetP + V3(0.52f, 0.85f, 0); 
+                TextConfig.TextShadowTransform.OffsetP = EntityTransform->OffsetP + V3(-1.46f, 2.87f, 0); 
                 TextConfig.FontScale = 0.013f; 
                 TextOutAt(RenderGroup, TextConfig, "E", 0);
             }
@@ -244,9 +244,9 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
         {
             hero_sphere_entity *Data = (hero_sphere_entity *)Entity->Data;
 
-            EntityTransform.SortBias += Data->SortBias;
+            EntityTransform->ChunkZ += (s32)Data->SortBias;
             PushBitmap(RenderGroup, EntityTransform, Entity->BitmapID, Entity->RenderHeight, V3(0, 0, 0));
-            EntityTransform.SortBias -= Data->SortBias;
+            EntityTransform->ChunkZ -= (s32)Data->SortBias;
                     
         } break;
 
@@ -256,9 +256,9 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
             {
                 bitmap_id SpriteID = SpriteSheet->SpriteIDs[EntitySpriteIndex];
                 SpriteID.Value += SpriteSheet->BitmapIDOffset;
-                EntityTransform.SortBias += 1.0f;
+                EntityTransform->ChunkZ += 1;
                 PushBitmap(RenderGroup, EntityTransform, SpriteID, Entity->RenderHeight, V3(0, 0, 0), V4(1, 1, 1, 1));
-                EntityTransform.SortBias -= 1.0f;
+                EntityTransform->ChunkZ -= 1;
             }
         } break;
 
@@ -268,9 +268,9 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
             {
                 bitmap_id SpriteID = SpriteSheet->SpriteIDs[EntitySpriteIndex];
                 SpriteID.Value += SpriteSheet->BitmapIDOffset;
-                EntityTransform.SortBias += 1.0f;
+                EntityTransform->ChunkZ += 1;
                 PushBitmap(RenderGroup, EntityTransform, SpriteID, Entity->RenderHeight, V3(0, 0, 0), V4(1, 1, 1, 1));
-                EntityTransform.SortBias -= 1.0f;
+                EntityTransform->ChunkZ -= 1;
             }
         } break;
 
@@ -290,17 +290,17 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
                 rectangle2 TextRect = GetTextSize(RenderGroup, TextConfig, EntityData->NPCName, 0);
                 v2 TextDim = GetDim(TextRect);
 
-                TextConfig.TextTransform.OffsetP = EntityTransform.OffsetP + V3(-0.5f*TextDim.x, 1.6f, 0);
-                TextConfig.TextShadowTransform.OffsetP = EntityTransform.OffsetP + V3(-0.5f*TextDim.x - 1.98f, 3.57f, 0);
+                TextConfig.TextTransform.OffsetP = EntityTransform->OffsetP + V3(-0.5f*TextDim.x, 1.6f, 0);
+                TextConfig.TextShadowTransform.OffsetP = EntityTransform->OffsetP + V3(-0.5f*TextDim.x - 1.98f, 3.57f, 0);
                 TextOutAt(RenderGroup, TextConfig, EntityData->NPCName, 0);
 
                 bitmap_id QuestMarkID = EntityData->QuestMark[EntityData->TalkingState];
                 if(IsValid(QuestMarkID))
                 {
                     r32 Vp = 0.2f*Sin(EntityData->Count);
-                    EntityTransform.SortBias += 1000.0f;
+                    EntityTransform->ChunkZ += 1000;
                     PushBitmap(RenderGroup, EntityTransform, QuestMarkID, 0.8f, V3(0, 2.1f + Vp, 0), V4(1, 1, 1, 1));
-                    EntityTransform.SortBias -= 1000.0f;
+                    EntityTransform->ChunkZ -= 1000;
                     EntityData->Count += 2.0f*dt;
                 }
             }
@@ -392,9 +392,10 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, game_state *GameState, sim_r
 {
     TIMED_FUNCTION();
 
-    audio_state *AudioState = &GameState->AudioState;
+    audio_state *AudioState = GameState->AudioState;
 
-    object_transform EntityTransform = DefaultUprightTransform();
+    object_transform EntityTransform_ = DefaultUprightTransform();
+    object_transform *EntityTransform = &EntityTransform_;
     v3 LocalMouseP = Unproject(RenderGroup, EntityTransform, MouseP);
 
     for(uint32 EntityIndex = 0;
@@ -402,7 +403,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, game_state *GameState, sim_r
         ++EntityIndex)
     {
         entity *Entity = SimRegion->Entities + EntityIndex;
-        EntityTransform.OffsetP = GetEntityGroundPoint(Entity);
+        EntityTransform->OffsetP = GetEntityGroundPoint(Entity);
 
         if(Entity->Updatable)
         {
@@ -594,7 +595,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, game_state *GameState, sim_r
                 if((PlayMoveSound) && (Entity->dP.x != 0.0f) && (Entity->dP.y != 0.0f))
                 {
                     u32 RandomSound = RandomBetween(&WorldMode->EffectsEntropy, 0, 2);
-                    sound_id SoundID = Entity->AnimationSoundEffect[AnimationType_Walk][RandomSound];
+                    sound_id SoundID = Entity->AnimationSoundEffect[AnimationType_Move][RandomSound];
                     PlaySound(AudioState, SoundID);
                 }
             }

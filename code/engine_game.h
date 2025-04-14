@@ -9,7 +9,7 @@
 
 //#include "spellweaver_platform.h"
 //#include "spellweaver_config.h"
-//#include "spellweaver_shared.h"
+#include "spellweaver\spellweaver_shared.h"
 #include "spellweaver\spellweaver_cutscene.h"
 
 #define DLIST_INSERT(Sentinel, Element)         \
@@ -119,7 +119,7 @@ struct game_state
 
     controlled_hero ControlledHeroes[ArrayCount(((engine_input *)0)->Controllers)];
 
-    audio_state AudioState;
+    audio_state *AudioState;
     
     b32 GameHaveStarted;
     bitmap_id CursorBitmapHover;
@@ -133,7 +133,7 @@ struct game_state
     s32 MusicState;
     sound_id GameStartFX;
     sound_id GameEndDeathFX;
-    sound_id AmbientMusic[15];
+    sound_id AmbientMusic[2];
     sound_id DarkAmbientMusic[5];
     sound_id ActionMusic[5];
 

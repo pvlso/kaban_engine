@@ -8,7 +8,7 @@
    ======================================================================== */
 
 internal void
-UpdateAndRenderGroundTiles(game_mode_world *WorldMode, transient_state *TranState, rectangle2 CameraBoundsInMeters,
+UpdateAndRenderGroundTiles(game_mode_world *WorldMode, game_transient_state *TranState, rectangle2 CameraBoundsInMeters,
                             render_group *RenderGroup)
 {
     TIMED_FUNCTION();
@@ -38,8 +38,8 @@ UpdateAndRenderGroundTiles(game_mode_world *WorldMode, transient_state *TranStat
                     
                 bitmap_id ID = WorldTile->TileBitmapID;
 
-                Transform.SortBias = -1000.0f;
-                PushBitmap(RenderGroup, Transform, ID, WorldMode->World->TileSideInMeters, V3(Delta, 0.0f));// + V3(0.5f, 0.5f, 0.0f));
+                Transform.ChunkZ = -1000;
+                PushBitmap(RenderGroup, &Transform, ID, WorldMode->World->TileSideInMeters, V3(Delta, 0.0f));// + V3(0.5f, 0.5f, 0.0f));
 #if SPELLWEAVER_INTERNAL
                 PushRectOutline(RenderGroup, Transform, V3(Delta + V2(0.5f, 0.5f), 2.0f), V2(WorldMode->World->TileSideInMeters,
                                                                             WorldMode->World->TileSideInMeters),
@@ -244,19 +244,19 @@ UpdateMiniMap(game_mode_world *WorldMode, sim_region *SimRegion, loaded_bitmap *
     
     if(MapToShow->TextureHandle)
     {
-        Platform.DeallocateTexture(MapToShow->TextureHandle);
-        MapToShow->TextureHandle = 
-            Platform.AllocateTexture(MapToShow->Width, MapToShow->Height, MapToShow->Memory);
+//        Platform.DeallocateTexture(MapToShow->TextureHandle);
+//        MapToShow->TextureHandle = 
+//            Platform.AllocateTexture(MapToShow->Width, MapToShow->Height, MapToShow->Memory);
     }
     else
     {
-        MapToShow->TextureHandle = 
-            Platform.AllocateTexture(MapToShow->Width, MapToShow->Height, MapToShow->Memory);
+//        MapToShow->TextureHandle = 
+//            Platform.AllocateTexture(MapToShow->Width, MapToShow->Height, MapToShow->Memory);
     }
 }
 
 internal void
-DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2 CameraBoundsInMeters,
+DrawTileNodes(game_mode_world *WorldMode, game_transient_state *TranState, rectangle2 CameraBoundsInMeters,
               render_group *RenderGroup, as_tile_node *StartNode, as_tile_node *EndNode)
 {
     TIMED_FUNCTION();
@@ -316,7 +316,8 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
             v2 Delta = Subtract(WorldMode->World, &Node->TileP, &WorldMode->CameraP) - V2(0.125f, 0.125f);
             v2 NDelta = Subtract(WorldMode->World, &Node->Parent->TileP, &WorldMode->CameraP) - V2(0.125f, 0.125f);
 
-            PushLine(RenderGroup, DefaultFlatTransform(),
+            object_transform D = DefaultFlatTransform();
+            PushLine(RenderGroup, &D,
                      V3(NDelta + V2(0.125f, 0.125f), 4.0f), V3(Delta + V2(0.125f, 0.125f), 4.0f), V4(1, 1, 0, 1));
 
             Node = Node->Parent;
@@ -325,8 +326,9 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
 }
 
 internal b32
-UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transient_state *TranState,
-                     game_input *Input, render_group *RenderGroup, loaded_bitmap *DrawBuffer)
+UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transient_state *TranState_,
+                     game_transient_state *TranState, engine_input *Input, render_group *RenderGroup,
+                     loaded_bitmap *DrawBuffer)
 {
     TIMED_FUNCTION();
     
@@ -352,7 +354,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             Tile->TileBitmapID = GetBitmapForTile(TranState->Assets, TilesetInfo, Tileset, Tile->TileID);
         }
 
-        Platform.WriteLogFile(L"World tiles initialized", __FILE__, __LINE__);
+//        Platform.WriteLogFile(L"World tiles initialized", __FILE__, __LINE__);
         TranState->WorldTilesInitialized = true;
     }
 
@@ -363,7 +365,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
 
     real32 FocalLength = 0.5f;
     real32 DistanceAboveGround = 10.0f;
-    Perspective(RenderGroup, DrawBuffer->Width, DrawBuffer->Height, MetersToPixels, FocalLength, DistanceAboveGround);
+    Perspective(RenderGroup, MetersToPixels, FocalLength, DistanceAboveGround);
 
     Clear(RenderGroup, V4(0.25f, 0.25f, 0.25f, 0.0f));
     
@@ -375,8 +377,8 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
 
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
-    MatchVector.E[Tag_FontType] = (r32)FontType_Nice;
-    WeightVector.E[Tag_FontType] = 1.0f;
+    MatchVector.E[Tag_FontType] = FontType_Nice;
+    WeightVector.E[Tag_FontType] = 1;
 
     text_config TextConfig = {};
     font_id FontID = GetBestMatchFontFrom(TranState->Assets, Asset_Font, &MatchVector, &WeightVector);
@@ -396,7 +398,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
         ControllerIndex < ArrayCount(Input->Controllers);
         ++ControllerIndex)
     {
-        game_controller_input *Controller = GetController(Input, ControllerIndex);
+        engine_controller_input *Controller = GetController(Input, ControllerIndex);
         ConHero = GameState->ControlledHeroes + ControllerIndex;
         if(ConHero->EntityIndex.Value == 0)
         {
@@ -458,9 +460,10 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             if(WasPressed(Controller->RightShoulder))
             {
                 ConHero->Action = true;
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
             }
 
+#if 0
             if(WasPressed(Controller->ChangeSphereToWater))
             {
                 ConHero->SphereNewType = SphereType_Water;
@@ -473,7 +476,8 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             {
                 ConHero->SphereNewType = SphereType_Fire;
             }
-
+#endif
+            
             if(WasPressed(Controller->LeftShoulder))
             {
                 ConHero->InvokeAndCastSpell = true;
@@ -482,12 +486,12 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             if(WasPressed(Controller->Back) && (WorldMode->UpdateMode == UpdateMode_Conversation))
             {
                 WorldMode->UpdateMode = UpdateMode_Entities;
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
             }
             else if(WasPressed(Controller->Back))
             {
                 WorldMode->QuitRequested = !WorldMode->QuitRequested;
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
             }
         }
     }
@@ -521,17 +525,17 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
         bitmap_id SphereBar = GetFirstBitmapFrom(TranState->Assets, Asset_SphereBar);
         bitmap_id SpellBar = GetFirstBitmapFrom(TranState->Assets, Asset_SpellBar);
         bitmap_id QuestBorder = GetFirstBitmapFrom(TranState->Assets, Asset_QuestBorder);
-        BarsTransform.SortBias = 10000.0f;
-        PushBitmap(RenderGroup, BarsTransform, HealthBar, 1.8f, V3(-12.5f, 7.8f, 0));
-        PushBitmap(RenderGroup, BarsTransform, SphereBar, 1.0f, V3(0.0f, -8.0f, 0), V4(1, 1, 1, 0.95f));
-        PushBitmap(RenderGroup, BarsTransform, SpellBar, 6.75f, V3(-12.7f, -5.4f, 0), V4(1, 1, 1, 0.95f));
+        BarsTransform.ChunkZ = 10000;
+        PushBitmap(RenderGroup, &BarsTransform, HealthBar, 1.8f, V3(-12.5f, 7.8f, 0));
+        PushBitmap(RenderGroup, &BarsTransform, SphereBar, 1.0f, V3(0.0f, -8.0f, 0), V4(1, 1, 1, 0.95f));
+        PushBitmap(RenderGroup, &BarsTransform, SpellBar, 6.75f, V3(-12.7f, -5.4f, 0), V4(1, 1, 1, 0.95f));
 
         UpdateMiniMap(WorldMode, SimRegion, &TranState->MiniMap, &WorldMode->MiniMapBitmap, CameraBoundsInMeters);
 
-        PushRect(RenderGroup, BarsTransform, V3(13.0f, 6.1f, 1.0f), V2(5.3f, 5.3f), V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
-        PushRect(RenderGroup, BarsTransform, V3(13.0f, 6.1f, 2.0f), V2(5.2f, 5.2f), V4(0.725490196078f, 0.478431372549f, 0.341176470588f, 1));
-        PushRect(RenderGroup, BarsTransform, V3(13.0f, 6.1f, 3.0f), V2(5.1f, 5.1f), V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
-        PushBitmap(RenderGroup, BarsTransform, &WorldMode->MiniMapBitmap, 5.0f, V3(13.0f, 6.1f, 4.0f), V4(1, 1, 1, 1));
+        PushRect(RenderGroup, &BarsTransform, V3(13.0f, 6.1f, 1.0f), V2(5.3f, 5.3f), V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
+        PushRect(RenderGroup, &BarsTransform, V3(13.0f, 6.1f, 2.0f), V2(5.2f, 5.2f), V4(0.725490196078f, 0.478431372549f, 0.341176470588f, 1));
+        PushRect(RenderGroup, &BarsTransform, V3(13.0f, 6.1f, 3.0f), V2(5.1f, 5.1f), V4(0.301960784314f, 0.188235294118f, 0.125490196078f, 1));
+        PushBitmap(RenderGroup, &BarsTransform, &WorldMode->MiniMapBitmap, 5.0f, V3(13.0f, 6.1f, 4.0f), V4(1, 1, 1, 1));
         
         for(uint32 ControlIndex = 0;
             ControlIndex < ArrayCount(GameState->ControlledHeroes);
@@ -549,7 +553,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                     hero_entity *HeroData = (hero_entity *)HeroEntity->Data;
                     if((HeroData->QuestCount > 0) && (WorldMode->UpdateMode == UpdateMode_Entities))
                     {
-                        PushBitmap(RenderGroup, BarsTransform, QuestBorder, 2.3f, V3(13.0f, 2.2f, 0), V4(1, 1, 1, 0.95f));
+                        PushBitmap(RenderGroup, &BarsTransform, QuestBorder, 2.3f, V3(13.0f, 2.2f, 0), V4(1, 1, 1, 0.95f));
                     }
                 }
             }
@@ -610,7 +614,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             case UpdateMode_Conversation:
             {
                 object_transform EntityTransform = DefaultUprightTransform();
-                v3 LocalMouseP = Unproject(RenderGroup, EntityTransform, MouseP);
+                v3 LocalMouseP = Unproject(RenderGroup, &EntityTransform, MouseP);
 
                 for(uint32 EntityIndex = 0;
                     EntityIndex < SimRegion->EntityCount;
@@ -648,7 +652,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                             }
                         }
         
-                        RenderEntities(WorldMode, SimRegion, RenderGroup, EntityTransform, Entity,
+                        RenderEntities(WorldMode, SimRegion, RenderGroup, &EntityTransform, Entity,
                                        Input->dtForFrame, &RenderEntity);
                     }
                 }
@@ -657,7 +661,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 DialogueBorderTransform.OffsetP = V3(0.0f, -3.3f, 4.0f);
                 bitmap_id BorderID = GetFirstBitmapFrom(TranState->Assets, Asset_DialogueBorder);
 
-                PushBitmap(RenderGroup, DialogueBorderTransform, BorderID, 4.15f, V3(0, 0, 0), V4(1, 1, 1, 0.9f));
+                PushBitmap(RenderGroup, &DialogueBorderTransform, BorderID, 4.15f, V3(0, 0, 0), V4(1, 1, 1, 0.9f));
 
                 text_config TextConfig = WorldMode->GeneralTextConfig;
 
@@ -670,13 +674,13 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 talkingnpc_entity *NPCData = (talkingnpc_entity *)NPCEntity->Data;
 
                 text_id TextID = {};
-                ssa_quest *QuestTextInfo = 0;
+//                ssa_quest *QuestTextInfo = 0;
                 if(NPCData->TalkingState != TalkingState_General)
                 {
                     quest *Quest = WorldMode->Quests + NPCData->QuestID;
-                    loaded_quest *QuestText = PushQuest(RenderGroup, Quest->QuestTextID, true);
-                    QuestTextInfo = GetQuestInfo(TranState->Assets, Quest->QuestTextID);
-                    TextID = GetQuestTextIDForNPC(QuestText, QuestTextInfo, NPCData);
+//                    loaded_quest *QuestText = PushQuest(RenderGroup, Quest->QuestTextID, true);
+//                    QuestTextInfo = GetQuestInfo(TranState->Assets, Quest->QuestTextID);
+//                    TextID = GetQuestTextIDForNPC(QuestText, QuestTextInfo, NPCData);
                 }
                 else
                 {
@@ -699,7 +703,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                         if(ConHero->Action)
                         {
                             entity *HeroEntity = GetEntityByID(SimRegion, ConHero->EntityIndex);
-                            AdvanceParagraphIndexForNPC(WorldMode, SimRegion, QuestTextInfo, NPCData, HeroEntity);
+//                            AdvanceParagraphIndexForNPC(WorldMode, SimRegion, QuestTextInfo, NPCData, HeroEntity);
                         }
                     }
                 }
@@ -722,53 +726,53 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                     if(InsidePolygon(Point, &WorldMode->BirdSoundPolygon, &WorldMode->MathEntropy))
                     {
                         asset_vector MusicWeightVector = {};
-                        MusicWeightVector.E[Tag_MusicType] = 1.0f;
+                        MusicWeightVector.E[Tag_MusicType] = 1;
                         asset_vector MusicMatchVector = {};
-                        MusicMatchVector.E[Tag_MusicType] = (r32)MusicType_Forest;
+                        MusicMatchVector.E[Tag_MusicType] = MusicType_Forest;
                         sound_id BirdsSound = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
 
                         if(!WorldMode->BirdSound)
                         {
-                            WorldMode->BirdSound = PlaySound(&GameState->AudioState, BirdsSound);
+                            WorldMode->BirdSound = PlaySound(GameState->AudioState, BirdsSound);
                         }
                         else
                         {
                             if(!WorldMode->BirdSound->SoundIsPlaying)
                             {
-                                WorldMode->BirdSound = PlaySound(&GameState->AudioState, BirdsSound);
+                                WorldMode->BirdSound = PlaySound(GameState->AudioState, BirdsSound);
                             }
                         }
                     }
                     else
                     {
-                        MuteAndTerminateSound(&GameState->AudioState, WorldMode->BirdSound, 2.0f);
+                        MuteAndTerminateSound(GameState->AudioState, WorldMode->BirdSound, 2.0f);
                     }
 
                     if(InsidePolygon(Point, &WorldMode->RiverPolygon0, &WorldMode->MathEntropy) ||
                        InsidePolygon(Point, &WorldMode->RiverPolygon1, &WorldMode->MathEntropy))
                     {
                         asset_vector MusicWeightVector = {};
-                        MusicWeightVector.E[Tag_MusicType] = 1.0f;
+                        MusicWeightVector.E[Tag_MusicType] = 1;
                         asset_vector MusicMatchVector = {};
-                        MusicMatchVector.E[Tag_MusicType] = (r32)MusicType_WaterStream;
+                        MusicMatchVector.E[Tag_MusicType] = MusicType_WaterStream;
                         sound_id RiverSound = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
 
                         if(!WorldMode->RiverSound)
                         {
-                            WorldMode->RiverSound = PlaySound(&GameState->AudioState, RiverSound);
+                            WorldMode->RiverSound = PlaySound(GameState->AudioState, RiverSound);
                         }
                         else
                         {
                             if(!WorldMode->RiverSound->SoundIsPlaying)
                             {
-                                WorldMode->RiverSound = PlaySound(&GameState->AudioState, RiverSound);
+                                WorldMode->RiverSound = PlaySound(GameState->AudioState, RiverSound);
                             }
                         }
 
                     }
                     else
                     {
-                        MuteAndTerminateSound(&GameState->AudioState, WorldMode->RiverSound, 2.0f);
+                        MuteAndTerminateSound(GameState->AudioState, WorldMode->RiverSound, 2.0f);
                     }
                 }
             }
@@ -843,29 +847,29 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
     {
         b32 Hover = false;
         object_transform Transform = DefaultFlatTransform();
-        Transform.SortBias = 10000000.0f;
+        Transform.ChunkZ = 10000000;
         v4 RectColor = V4(0, 0, 0, 0.5f);
         if(WorldMode->GameFinished)
         {
             RectColor = V4(0, 0, 0, 0.1f);
         }
 
-        PushRect(RenderGroup, Transform, V3(0, 0, 0), V2i(DrawBuffer->Width, DrawBuffer->Height), RectColor);
-        Transform.SortBias = 10001000.0f;
+        PushRect(RenderGroup, &Transform, V3(0, 0, 0), V2i(DrawBuffer->Width, DrawBuffer->Height), RectColor);
+        Transform.ChunkZ = 10001000;
         Transform.OffsetP = V3(0, -4.0f, 0.0f);
             
         asset_vector MatchVector = {};
         asset_vector WeightVector = {};
-        MatchVector.E[Tag_Variety] = (r32)VarietyType_4;
-        WeightVector.E[Tag_Variety] = 1.0f;
+        MatchVector.E[Tag_Variety] = VarietyType_4;
+        WeightVector.E[Tag_Variety] = 1;
         bitmap_id TitleImage = GetBestMatchBitmapFrom(RenderGroup->Assets, Asset_TitleImage, &MatchVector, &WeightVector);
 
-        v3 LocalMouseP = Unproject(RenderGroup, Transform, MouseP);
+        v3 LocalMouseP = Unproject(RenderGroup, &Transform, MouseP);
         loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, TitleImage, RenderGroup->GenerationID);
         v3 AdditionalOffset = V3(0, 0, 0);
         if(Bitmap)
         {
-            used_bitmap_dim Dim = GetBitmapDim(RenderGroup, Transform, Bitmap, 2.0f, V3(0, 0, 0), 1.0f);
+            used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Transform, Bitmap, 2.0f, V3(0, 0, 0), 1.0f);
             rectangle2 HoverRect = RectCenterDim(Dim.P.xy + 0.5f*Dim.Size, Dim.Size);
             v4 Color = V4(0, 0, 1, 1);
             if(IsInRectangle(HoverRect, LocalMouseP.xy))
@@ -881,12 +885,12 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
         }
             
         Transform.OffsetP += AdditionalOffset;
-        PushBitmap(RenderGroup, Transform, TitleImage, 2.0f, V3(0, 0, 0));
+        PushBitmap(RenderGroup, &Transform, TitleImage, 2.0f, V3(0, 0, 0));
 
         text_config TextConfig = WorldMode->GeneralTextConfig;
         if(WorldMode->QuitRequested)
         {
-            TextConfig.TextTransform.SortBias = 10001000.0f;
+            TextConfig.TextTransform.ChunkZ = 10001000;
             TextConfig.TextTransform.OffsetP = V3(-7.4f, 0.0f, 0);
             TextConfig.TextShadowTransform.OffsetP = V3(-9.25f, 1.85f, 0);
             TextConfig.FontScale = 0.04f;
@@ -898,43 +902,43 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             if(!WorldMode->GameEndMusic)
             {
                 asset_vector MusicWeightVector = {};
-                MusicWeightVector.E[Tag_MusicType] = 1.0f;
-                MusicWeightVector.E[Tag_Variety] = 1.0f;
+                MusicWeightVector.E[Tag_MusicType] = 1;
+                MusicWeightVector.E[Tag_Variety] = 1;
                 asset_vector MusicMatchVector = {};
-                MusicMatchVector.E[Tag_MusicType] = (r32)MusicType_GameVictoryMusic;
-                MusicMatchVector.E[Tag_Variety] = (r32)VarietyType_None;
+                MusicMatchVector.E[Tag_MusicType] = MusicType_GameVictoryMusic;
+                MusicMatchVector.E[Tag_Variety] = VarietyType_None;
                 sound_id MusicID = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
 
-                WorldMode->GameEndMusic = PlaySound(&GameState->AudioState, MusicID);
-                ChangeVolume(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
+                WorldMode->GameEndMusic = PlaySound(GameState->AudioState, MusicID);
+                ChangeVolume(GameState->AudioState, WorldMode->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
             }
             else
             {
-                ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.0f, 0.0f));
+                ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.0f, 0.0f));
                 if(!WorldMode->GameEndMusic->SoundIsPlaying)
                 {
-                    ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+                    ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
                     GameState->FadeState = FadeState_FadeIn;
-                    ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
-                    MuteAndTerminateSound(&GameState->AudioState, WorldMode->BirdSound, 2.0f);
-                    MuteAndTerminateSound(&GameState->AudioState, WorldMode->RiverSound, 2.0f);
-                    MuteAndTerminateSound(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                    ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+                    MuteAndTerminateSound(GameState->AudioState, WorldMode->BirdSound, 2.0f);
+                    MuteAndTerminateSound(GameState->AudioState, WorldMode->RiverSound, 2.0f);
+                    MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
                 }
             }
 
             asset_vector MatchVector = {};
             asset_vector WeightVector = {};
-            MatchVector.E[Tag_Variety] = (r32)VarietyType_5;
-            WeightVector.E[Tag_Variety] = 1.0f;
+            MatchVector.E[Tag_Variety] = VarietyType_5;
+            WeightVector.E[Tag_Variety] = 1;
 
             Transform.OffsetP -= AdditionalOffset;
             bitmap_id TitleImage = GetBestMatchBitmapFrom(RenderGroup->Assets, Asset_TitleImage, &MatchVector, &WeightVector);
-            PushBitmap(RenderGroup, Transform, TitleImage, 5.0f, V3(0, 5.0f, 0));
+            PushBitmap(RenderGroup, &Transform, TitleImage, 5.0f, V3(0, 5.0f, 0));
             
         }
         else
         {
-            TextConfig.TextTransform.SortBias = 10001000.0f;
+            TextConfig.TextTransform.ChunkZ = 10001000;
             TextConfig.TextTransform.OffsetP = V3(-7.4f, 1.0f, 0);
             TextConfig.TextShadowTransform.OffsetP = V3(-9.25f, 2.85f, 0);
             TextConfig.FontScale = 0.08f;
@@ -944,20 +948,20 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             if(GameState->MusicState != MusicState_DarkAmbient)
             {
                 ChangeBackgroundMusic(GameState, MusicState_DarkAmbient);
-                ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(1.0f, 1.0f));
+                ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(1.0f, 1.0f));
             }
         }
 
         if(Hover && WasPressed(Input->MouseButtons[0]))
         {
-            PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+            PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
             GameState->FadeState = FadeState_FadeIn;
-            ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
-            MuteAndTerminateSound(&GameState->AudioState, WorldMode->BirdSound, 2.0f);
-            MuteAndTerminateSound(&GameState->AudioState, WorldMode->RiverSound, 2.0f);
+            ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+            MuteAndTerminateSound(GameState->AudioState, WorldMode->BirdSound, 2.0f);
+            MuteAndTerminateSound(GameState->AudioState, WorldMode->RiverSound, 2.0f);
             if(WorldMode->GameFinished)
             {
-                MuteAndTerminateSound(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
             }
         }
 
@@ -972,12 +976,12 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 ControllerIndex < ArrayCount(Input->Controllers);
                 ++ControllerIndex)
             {
-                game_controller_input *Controller = GetController(Input, ControllerIndex);
+                engine_controller_input *Controller = GetController(Input, ControllerIndex);
                 controlled_hero *ConHero = GameState->ControlledHeroes + ControllerIndex;
                 ZeroStruct(*ConHero);
             }
 
-            PlayTitleScreen(GameState, TranState);
+            PlayTitleScreen(GameState, TranState_);
         }
     }    
 

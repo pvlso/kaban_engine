@@ -517,25 +517,25 @@ CreateWorld(transient_state *TranState, v2 ChunkDimInMeters, r32 TileSideInMeter
 
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_DataType] = 1.0f;
+    WeightVector.E[Tag_DataType] = 1;
 
     World->TileCount = WORLD_TILE_COUNT_PER_DIM*WORLD_TILE_COUNT_PER_DIM;
 
-    MatchVector.E[Tag_DataType] = (r32)FileData_Decorations;
+    MatchVector.E[Tag_DataType] = FileData_Decorations;
     file_id FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
     loaded_file *BinaryFile = PushFile(TranState, FileID, true);
     Assert(BinaryFile->Data);
     World->Decorations = PushArray(&World->Arena, World->TileCount, decoration);
     World->Decorations = (decoration *)BinaryFile->Data;
 
-    MatchVector.E[Tag_DataType] = (r32)FileData_Tiles;
+    MatchVector.E[Tag_DataType] = FileData_Tiles;
     FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
     BinaryFile = PushFile(TranState, FileID, true);
     Assert(BinaryFile->Data);
     World->Tiles = PushArray(&World->Arena, World->TileCount, world_tile);
     World->Tiles = (world_tile *)BinaryFile->Data;
 
-    MatchVector.E[Tag_DataType] = (r32)FileData_Collisions;
+    MatchVector.E[Tag_DataType] = FileData_Collisions;
     FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
     BinaryFile = PushFile(TranState, FileID, true);
     Assert(BinaryFile->Data);

@@ -1181,7 +1181,6 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
         ++StoredAssetIndex)
     {
         stored_asset *StoredAsset = StoredAssets + StoredAssetIndex;
-        Assert(StoredAsset->Type != StoredAssetType_Font);
         switch(StoredAsset->Type)
         {
             case StoredAssetType_Bitmap:

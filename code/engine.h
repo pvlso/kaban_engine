@@ -88,6 +88,7 @@ struct editor_state
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
     audio_state AudioState;
 
+    b32 SimulationQuit;
     b32 Play;
     playing_sound *Sound;
 

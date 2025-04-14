@@ -123,13 +123,6 @@ struct sort_entry
     };
 };
 
-struct heap
-{
-    sort_entry *Nodes;
-    u32 MaxSize;
-    u32 Size;
-};
-
 inline void
 S32RemoveAt(s32 *Array, s32 Count, s32 Index)
 {

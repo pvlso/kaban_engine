@@ -54,16 +54,7 @@ internal void
 SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode EditorMode)
 {
     b32 NeedToWait = false;
-    for(u32 TaskIndex = 0;
-        TaskIndex < ArrayCount(TranState->Tasks);
-        ++TaskIndex)
-    {
-        NeedToWait = NeedToWait || TranState->Tasks[TaskIndex].DependsOnEditorMode;
-    }
-    if(NeedToWait)
-    {
-        Platform.CompleteAllWork(TranState->LowPriorityQueue);
-    }
+    Platform.CompleteAllWork(TranState->LowPriorityQueue);
 
     Clear(&EditorState->ModeArena);
     EditorState->EditorMode = EditorMode;
@@ -156,7 +147,7 @@ PlaySimulation(editor_state *EditorState, transient_state *TranState)
     
     simulate *Result = PushStruct(&EditorState->ModeArena, simulate);
     SubArena(&Result->GameArena,&EditorState->ModeArena, Megabytes(256));
-    SubArena(&Result->GameTranArena,&EditorState->ModeArena, Megabytes(128));
+    SubArena(&Result->GameTranArena,&EditorState->ModeArena, Megabytes(512));
 
     EditorState->Simulate = Result;
 }
@@ -262,6 +253,12 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         PlayTitleScreen(EditorState, TranState);
     }
 
+    if(EditorState->SimulationQuit)
+    {
+        PlayTitleScreen(EditorState, TranState);
+        EditorState->SimulationQuit = false;
+    }
+    
     if(EditorState->EditorMode == EditorMode_TitleScreen)
     {
         nk->style.window.fixed_background.data.color.a = 255;

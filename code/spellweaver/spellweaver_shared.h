@@ -8,122 +8,12 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
-#include "spellweaver_intrinsics.h"
-#include "spellweaver_math.h"
-#include "spellweaver_random.h"
-
-struct sort_entry
-{
-    r32 SortKey;
-    u32 Index;
-};
-
 struct heap
 {
     sort_entry *Nodes;
     u32 MaxSize;
     u32 Size;
 };
-
-inline void
-Swap(sort_entry *A, sort_entry *B)
-{
-    sort_entry Temp = *B;
-    *B = *A;
-    *A = Temp;
-}
-
-inline b32
-IsEndOfLine(char C)
-{
-    b32 Result = ((C == '\n') ||
-                  (C == '\r'));
-
-    return(Result);
-}
-
-inline b32
-IsWhitespace(char C)
-{
-    b32 Result = ((C == ' ') ||
-                  (C == '\t') ||
-                  (C == '\v') ||
-                  (C == '\f') ||
-                  IsEndOfLine(C));
-
-    return(Result);
-}
-
-inline b32
-StringsAreEqual(char *A, char *B)
-{
-    b32 Result = (A == B);
-
-    if(A && B)
-    {
-        while(*A && *B && (*A == *B))
-        {
-            ++A;
-            ++B;
-        }
-
-        Result = ((*A == 0) && (*B == 0));
-    }
-    
-    return(Result);
-}
-
-inline b32
-StringsAreEqual(umm ALength, char *A, char *B)
-{
-    b32 Result = false;
-    
-    if(B)
-    {
-        char *At = B;
-        for(umm Index = 0;
-            Index < ALength;
-            ++Index, ++At)
-        {
-            if((*At == 0) ||
-               (A[Index] != *At))
-            {
-               return(false);
-            }        
-        }
-            
-        Result = (*At == 0);
-    }
-    else
-    {
-        Result = (ALength == 0);
-    }
-    
-    return(Result);
-}
-
-inline b32
-StringsAreEqual(memory_index ALength, char *A, memory_index BLength, char *B)
-{
-    b32 Result = (ALength == BLength);
-
-    if(Result)
-    {
-        Result = true;
-        for(u32 Index = 0;
-            Index < ALength;
-            ++Index)
-        {
-            if(A[Index] != B[Index])
-            {
-                Result = false;
-                break;
-            }
-        }
-    }
-
-    return(Result);
-}
 
 internal void
 MinHeapifyDown(heap *Heap, u32 Index)
@@ -257,12 +147,12 @@ InsidePolygon(v2 Point, polygon2 *Polygon, random_series *Series, r32 Tolerance 
 
     // NOTE(paul): Check if point is on the edge
     b32 IsOnEdge = false;
-    for(u32 I = 0;
+    for(s32 I = 0;
          I < Polygon->VertexCount;
          I++)
     {
         u32 k = (I + 1) % Polygon->VertexCount;
-        min_x = Distance(Point, Polygon->Vertices[I], Polygon->Vertices[k], Tolerance);
+        min_x = Distance(Point, Polygon->Vertices[I], Polygon->Vertices[k]);
         if(min_x < 0.0f)
         {
             IsOnEdge = true;
@@ -276,7 +166,7 @@ InsidePolygon(v2 Point, polygon2 *Polygon, random_series *Series, r32 Tolerance 
 
         // NOTE(paul): Check if point is in poligon box
         /* calculate extent of polygon */
-        for(u32 I = 0;
+        for(s32 I = 0;
             I < Polygon->VertexCount;
             ++I)
         {
@@ -300,20 +190,20 @@ InsidePolygon(v2 Point, polygon2 *Polygon, random_series *Series, r32 Tolerance 
             v2 e;
             while(1)
             {
-                u32 Count = 0;
+                s32 Count = 0;
                 u32 Crosses = 0;
 
                 /* pick a rand point far enough to be outside polygon */
                 e.x = Point.x + (1.0f + RandomUnilateral(Series)) * max_x;
                 e.y = Point.y + (1.0f + RandomUnilateral(Series)) * max_y;
 
-                for (u32 I = 0;
+                for (s32 I = 0;
                      I < Polygon->VertexCount;
                      ++I, ++Count)
                 {
                     u32 k = (I + 1) % Polygon->VertexCount;
                     s32 Intersect = LineIntersect(Point, e, Polygon->Vertices[I],
-                                                  Polygon->Vertices[k], Tolerance, 0);
+                                                  Polygon->Vertices[k], 0);
                     
                     if(Intersect == 1)
                     {

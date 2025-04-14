@@ -51,7 +51,7 @@ BeginGroundedEntity(game_mode_world *WorldMode, entity_type Type, b32 DataNeeded
 }
 
 inline void
-AddEntitySpriteSheetsForType(game_assets *Assets, entity *Entity, u32 AnimationType,
+AddEntitySpriteSheetsForType(editor_assets *Assets, entity *Entity, u32 AnimationType,
                              asset_vector *MatchVector, asset_vector *WeightVector)
 {
     real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
@@ -61,15 +61,15 @@ AddEntitySpriteSheetsForType(game_assets *Assets, entity *Entity, u32 AnimationT
         ++AngleIndex)
     {
         real32 Angle = Angles[AngleIndex];
-        MatchVector->E[Tag_FacingDirection] = Angle;
-        MatchVector->E[Tag_AnimationType] = (r32)AnimationType;
+        MatchVector->E[Tag_FacingDirection] = (u32)Angle;
+        MatchVector->E[Tag_AnimationType] = AnimationType;
         Entity->SpriteSheets[AnimationType][AngleIndex] =
             GetBestMatchSpriteSheetFrom(Assets, Asset_SpriteSheet, MatchVector, WeightVector);
     }
 }
 
 inline void
-AddEntitySpriteSheets(game_assets *Assets, entity *Entity, asset_vector *MatchVector, asset_vector *WeightVector)
+AddEntitySpriteSheets(editor_assets *Assets, entity *Entity, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     for(u32 SheetIndex = 0;
         SheetIndex < AnimationType_Count;
@@ -80,7 +80,7 @@ AddEntitySpriteSheets(game_assets *Assets, entity *Entity, asset_vector *MatchVe
 }
 
 internal void
-AddCollisionEntity(game_mode_world *WorldMode, game_assets *Assets, collision *Collision)
+AddCollisionEntity(game_mode_world *WorldMode, editor_assets *Assets, collision *Collision)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_Collision, false);
     Entity->GeneralType = GeneralType_Object;
@@ -96,7 +96,7 @@ AddCollisionEntity(game_mode_world *WorldMode, game_assets *Assets, collision *C
 }
 
 internal void
-AddDecorationEntity(game_mode_world *WorldMode, game_assets *Assets, decoration *Decoration)
+AddDecorationEntity(game_mode_world *WorldMode, editor_assets *Assets, decoration *Decoration)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_Decoration, false);
     Entity->GeneralType = GeneralType_Object;
@@ -111,7 +111,7 @@ AddDecorationEntity(game_mode_world *WorldMode, game_assets *Assets, decoration 
 }
 
 internal void
-AddAnimatedDecorationEntity(game_mode_world *WorldMode, game_assets *Assets, decoration *Decoration)
+AddAnimatedDecorationEntity(game_mode_world *WorldMode, editor_assets *Assets, decoration *Decoration)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_AnimatedDecoration, false);
     Entity->GeneralType = GeneralType_Object;
@@ -126,7 +126,7 @@ AddAnimatedDecorationEntity(game_mode_world *WorldMode, game_assets *Assets, dec
 }
 
 internal entity_id
-AddItem(game_mode_world *WorldMode, game_assets *Assets, world_position P, item_name ItemName)
+AddItem(game_mode_world *WorldMode, editor_assets *Assets, world_position P, item_name ItemName)
 {
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Item, true, WorldMode->ItemCollision);
     Entity->FacingDirection = 0;
@@ -137,14 +137,14 @@ AddItem(game_mode_world *WorldMode, game_assets *Assets, world_position P, item_
     Data->Name = ItemName;
 
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_ItemName] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_ItemName] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Item;
-    MatchVector.E[Tag_ItemName] = (r32)ItemName;
+    MatchVector.E[Tag_AssetType] = Asset_Item;
+    MatchVector.E[Tag_ItemName] = ItemName;
 
     AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
     
@@ -157,7 +157,7 @@ AddItem(game_mode_world *WorldMode, game_assets *Assets, world_position P, item_
 }
 
 internal entity_id
-AddObstacle(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY,
+AddObstacle(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY,
             asset_type_id AssetType, asset_vector *MatchVector, asset_vector *WeightVector,
             r32 RenderHeight, v2 CollisionDim, v3 CollisionOffset = V3(0, 0, 0))
 {
@@ -180,7 +180,7 @@ AddObstacle(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, ui
 }
 
 internal entity_id
-AddObelisk(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddObelisk(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginEntity(WorldMode, EntityType_Obelisk, false);
@@ -190,12 +190,12 @@ AddObelisk(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uin
     Entity->GeneralType = GeneralType_Object;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Obelisk;
+    MatchVector.E[Tag_AssetType] = Asset_Obelisk;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -208,7 +208,7 @@ AddObelisk(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uin
 }
 
 internal entity_id
-AddElderTavor(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddElderTavor(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
@@ -219,40 +219,40 @@ AddElderTavor(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, 
     Entity->GeneralType = GeneralType_Allay;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_Sex] = 1.0f;
-    WeightVector.E[Tag_Age] = 1.0f;
-    WeightVector.E[Tag_HairColor] = 1.0f;
-    WeightVector.E[Tag_Beard] = 1.0f;
-    WeightVector.E[Tag_Accessories] = 1.0f;
-    WeightVector.E[Tag_TopOutfit] = 1.0f;
-    WeightVector.E[Tag_TopOutfitColor] = 1.0f;
-    WeightVector.E[Tag_BottomOutFit] = 1.0f;
-    WeightVector.E[Tag_BottomOutFitColor] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_Sex] = 1;
+    WeightVector.E[Tag_Age] = 1;
+    WeightVector.E[Tag_HairColor] = 1;
+    WeightVector.E[Tag_Beard] = 1;
+    WeightVector.E[Tag_Accessories] = 1;
+    WeightVector.E[Tag_TopOutfit] = 1;
+    WeightVector.E[Tag_TopOutfitColor] = 1;
+    WeightVector.E[Tag_BottomOutFit] = 1;
+    WeightVector.E[Tag_BottomOutFitColor] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = (r32)Sex_Male;
-    MatchVector.E[Tag_Age] = (r32)Age_Old;
-    MatchVector.E[Tag_HairColor] = (r32)Color_LightBlack;
-    MatchVector.E[Tag_Beard] = (r32)Beard_Thick;
-    MatchVector.E[Tag_Accessories] = (r32)Accessories_Hat;
-    MatchVector.E[Tag_TopOutfit] = (r32)TopOutfit_CoatNoSleeves;
-    MatchVector.E[Tag_TopOutfitColor] = (r32)Color_Brown;
-    MatchVector.E[Tag_BottomOutFit] = (r32)BottomOutfit_Pans;
-    MatchVector.E[Tag_BottomOutFitColor] = (r32)Color_Brown;
+    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
+    MatchVector.E[Tag_Sex] = Sex_Male;
+    MatchVector.E[Tag_Age] = Age_Old;
+    MatchVector.E[Tag_HairColor] = Color_LightBlack;
+    MatchVector.E[Tag_Beard] = Beard_Thick;
+    MatchVector.E[Tag_Accessories] = Accessories_Hat;
+    MatchVector.E[Tag_TopOutfit] = TopOutfit_CoatNoSleeves;
+    MatchVector.E[Tag_TopOutfitColor] = Color_Brown;
+    MatchVector.E[Tag_BottomOutFit] = BottomOutfit_Pans;
+    MatchVector.E[Tag_BottomOutFitColor] = Color_Brown;
 
     AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
 
     asset_vector GeneralTextMatchVector = {};
     asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = (r32)NPCName_ElderTavor;
-    GeneralTextMatchVector.E[Tag_ConversationType] = (r32)ConType_GeneralDialogue;
+    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_ElderTavor;
+    //GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
 
-    GeneralTextWeightVector.E[Tag_NPCName] = 1.0f;
-    GeneralTextWeightVector.E[Tag_ConversationType] = 1.0f;
+    GeneralTextWeightVector.E[Tag_NPCName] = 1;
+//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
 
     EntityData->TalkingState = TalkingState_QuestGiver;
     EntityData->ParagraphIndex = 0;
@@ -265,15 +265,15 @@ AddElderTavor(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, 
 
     asset_vector QuestMarkMatchVector = {};
     asset_vector QuestMarkWeightVector = {};
-    QuestMarkWeightVector.E[Tag_QuestRelated] = 1.0f;
+//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
 
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Giver;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
     EntityData->QuestMark[TalkingState_QuestGiver] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Objective;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
     EntityData->QuestMark[TalkingState_QuestObjective] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_ComplitionDialogue;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
     EntityData->QuestMark[TalkingState_QuestComleted] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
     
@@ -287,7 +287,7 @@ AddElderTavor(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, 
 }
 
 internal entity_id
-AddHerbalistElara(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddHerbalistElara(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
@@ -300,36 +300,36 @@ AddHerbalistElara(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
     real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_Sex] = 1.0f;
-    WeightVector.E[Tag_Age] = 1.0f;
-    WeightVector.E[Tag_HairColor] = 1.0f;
-    WeightVector.E[Tag_Haircut] = 1.0f;
-    WeightVector.E[Tag_Accessories] = 1.0f;
-    WeightVector.E[Tag_TopOutfit] = 1.0f;
-    WeightVector.E[Tag_TopOutfitColor] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_Sex] = 1;
+    WeightVector.E[Tag_Age] = 1;
+    WeightVector.E[Tag_HairColor] = 1;
+    WeightVector.E[Tag_Haircut] = 1;
+    WeightVector.E[Tag_Accessories] = 1;
+    WeightVector.E[Tag_TopOutfit] = 1;
+    WeightVector.E[Tag_TopOutfitColor] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = (r32)Sex_Female;
-    MatchVector.E[Tag_Age] = (r32)Age_Young;
-    MatchVector.E[Tag_HairColor] = (r32)Color_LightBrown;
-    MatchVector.E[Tag_Haircut] = (r32)Haircut_Tuft;
-    MatchVector.E[Tag_Accessories] = (r32)Accessories_None;
-    MatchVector.E[Tag_TopOutfit] = (r32)TopOutfit_Drass;
-    MatchVector.E[Tag_TopOutfitColor] = (r32)Color_Green;
+    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
+    MatchVector.E[Tag_Sex] = Sex_Female;
+    MatchVector.E[Tag_Age] = Age_Young;
+    MatchVector.E[Tag_HairColor] = Color_LightBrown;
+    MatchVector.E[Tag_Haircut] = Haircut_Tuft;
+    MatchVector.E[Tag_Accessories] = Accessories_None;
+    MatchVector.E[Tag_TopOutfit] = TopOutfit_Drass;
+    MatchVector.E[Tag_TopOutfitColor] = Color_Green;
 
     AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
 
     asset_vector GeneralTextMatchVector = {};
     asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = (r32)NPCName_Elara;
-    GeneralTextMatchVector.E[Tag_ConversationType] = (r32)ConType_GeneralDialogue;
+    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_Elara;
+//    GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
 
-    GeneralTextWeightVector.E[Tag_NPCName] = 1.0f;
-    GeneralTextWeightVector.E[Tag_ConversationType] = 1.0f;
+    GeneralTextWeightVector.E[Tag_NPCName] = 1;
+//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
 
     EntityData->TalkingState = TalkingState_General;
     EntityData->ParagraphIndex = 0;
@@ -342,15 +342,15 @@ AddHerbalistElara(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
 
     asset_vector QuestMarkMatchVector = {};
     asset_vector QuestMarkWeightVector = {};
-    QuestMarkWeightVector.E[Tag_QuestRelated] = 1.0f;
+//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
 
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Giver;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
     EntityData->QuestMark[TalkingState_QuestGiver] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Objective;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
     EntityData->QuestMark[TalkingState_QuestObjective] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_ComplitionDialogue;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
     EntityData->QuestMark[TalkingState_QuestComleted] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
     
@@ -364,7 +364,7 @@ AddHerbalistElara(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
 }
 
 internal entity_id
-AddJacob(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddJacob(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
@@ -377,40 +377,40 @@ AddJacob(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint3
     real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_Sex] = 1.0f;
-    WeightVector.E[Tag_Age] = 1.0f;
-    WeightVector.E[Tag_HairColor] = 1.0f;
-    WeightVector.E[Tag_Beard] = 1.0f;
-    WeightVector.E[Tag_Accessories] = 1.0f;
-    WeightVector.E[Tag_TopOutfit] = 1.0f;
-    WeightVector.E[Tag_TopOutfitColor] = 1.0f;
-    WeightVector.E[Tag_BottomOutFit] = 1.0f;
-    WeightVector.E[Tag_BottomOutFitColor] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_Sex] = 1;
+    WeightVector.E[Tag_Age] = 1;
+    WeightVector.E[Tag_HairColor] = 1;
+    WeightVector.E[Tag_Beard] = 1;
+    WeightVector.E[Tag_Accessories] = 1;
+    WeightVector.E[Tag_TopOutfit] = 1;
+    WeightVector.E[Tag_TopOutfitColor] = 1;
+    WeightVector.E[Tag_BottomOutFit] = 1;
+    WeightVector.E[Tag_BottomOutFitColor] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = (r32)Sex_Male;
-    MatchVector.E[Tag_Age] = (r32)Age_Old;
-    MatchVector.E[Tag_HairColor] = (r32)Color_Gray;
-    MatchVector.E[Tag_Beard] = (r32)Beard_Thick;
-    MatchVector.E[Tag_Accessories] = (r32)Accessories_None;
-    MatchVector.E[Tag_TopOutfit] = (r32)TopOutfit_CoatNoSleeves;
-    MatchVector.E[Tag_TopOutfitColor] = (r32)Color_Brown;
-    MatchVector.E[Tag_BottomOutFit] = (r32)BottomOutfit_Pans;
-    MatchVector.E[Tag_BottomOutFitColor] = (r32)Color_Brown;
+    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
+    MatchVector.E[Tag_Sex] = Sex_Male;
+    MatchVector.E[Tag_Age] = Age_Old;
+    MatchVector.E[Tag_HairColor] = Color_Gray;
+    MatchVector.E[Tag_Beard] = Beard_Thick;
+    MatchVector.E[Tag_Accessories] = Accessories_None;
+    MatchVector.E[Tag_TopOutfit] = TopOutfit_CoatNoSleeves;
+    MatchVector.E[Tag_TopOutfitColor] = Color_Brown;
+    MatchVector.E[Tag_BottomOutFit] = BottomOutfit_Pans;
+    MatchVector.E[Tag_BottomOutFitColor] = Color_Brown;
 
     AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
 
     asset_vector GeneralTextMatchVector = {};
     asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = (r32)NPCName_Jacob;
-    GeneralTextMatchVector.E[Tag_ConversationType] = (r32)ConType_GeneralDialogue;
+    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_Jacob;
+//    GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
 
-    GeneralTextWeightVector.E[Tag_NPCName] = 1.0f;
-    GeneralTextWeightVector.E[Tag_ConversationType] = 1.0f;
+    GeneralTextWeightVector.E[Tag_NPCName] = 1;
+//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
 
     EntityData->TalkingState = TalkingState_General;
     EntityData->ParagraphIndex = 0;
@@ -423,15 +423,15 @@ AddJacob(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint3
 
     asset_vector QuestMarkMatchVector = {};
     asset_vector QuestMarkWeightVector = {};
-    QuestMarkWeightVector.E[Tag_QuestRelated] = 1.0f;
+//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
 
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Giver;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
     EntityData->QuestMark[TalkingState_QuestGiver] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_Objective;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
     EntityData->QuestMark[TalkingState_QuestObjective] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    QuestMarkMatchVector.E[Tag_QuestRelated] = (r32)Quest_ComplitionDialogue;
+//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
     EntityData->QuestMark[TalkingState_QuestComleted] =
         GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
     
@@ -445,7 +445,7 @@ AddJacob(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint3
 }
 
 internal entity_id
-AddGolem(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddGolem(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Golem, false,
@@ -458,12 +458,12 @@ AddGolem(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint3
     Entity->GeneralType = GeneralType_Enemy;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Golem;
+    MatchVector.E[Tag_AssetType] = Asset_Golem;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
@@ -477,7 +477,7 @@ AddGolem(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint3
 }
 
 internal entity_id
-AddCultist(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddCultist(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Cultist, true,
@@ -493,23 +493,23 @@ AddCultist(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uin
     AddTimerForCast(Entity, 3.0f, CastSpellType_0);
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Cultist;
+    MatchVector.E[Tag_AssetType] = Asset_Cultist;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -520,7 +520,7 @@ AddCultist(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uin
 }
 
 internal entity_id
-AddNecromancer(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddNecromancer(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Necromancer, true,
@@ -540,23 +540,23 @@ AddNecromancer(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
     AddTimerForCast(Entity, 6.0f, CastSpellType_2);
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Necromancer;
+    MatchVector.E[Tag_AssetType] = Asset_Necromancer;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -567,7 +567,7 @@ AddNecromancer(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
 }
 
 internal entity_id
-AddPossesed(game_mode_world *WorldMode, game_assets *Assets, world_position BaseP, v2 OffsetP)
+AddPossesed(game_mode_world *WorldMode, editor_assets *Assets, world_position BaseP, v2 OffsetP)
 {
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Possesed, true,
                                          WorldMode->MonsterCollision);
@@ -582,12 +582,12 @@ AddPossesed(game_mode_world *WorldMode, game_assets *Assets, world_position Base
     AddTimerForAttack(Entity, 2.0f, AttackType_0);
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Possesed;
+    MatchVector.E[Tag_AssetType] = Asset_Possesed;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -610,11 +610,11 @@ AddPossesed(game_mode_world *WorldMode, game_assets *Assets, world_position Base
         GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -626,7 +626,7 @@ AddPossesed(game_mode_world *WorldMode, game_assets *Assets, world_position Base
 }
 
 internal entity_id
-AddGoblinBeast(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddGoblinBeast(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinBeast, true,
@@ -641,12 +641,12 @@ AddGoblinBeast(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
     Entity->GeneralType = GeneralType_Enemy;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_GoblinBeast;
+    MatchVector.E[Tag_AssetType] = Asset_GoblinBeast;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -676,11 +676,11 @@ AddGoblinBeast(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
         GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -691,7 +691,7 @@ AddGoblinBeast(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
 }
 
 internal entity_id
-AddGoblinBerserker(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddGoblinBerserker(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinBerserker, true,
@@ -705,12 +705,12 @@ AddGoblinBerserker(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTi
     Entity->GeneralType = GeneralType_Enemy;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_GoblinBerserker;
+    MatchVector.E[Tag_AssetType] = Asset_GoblinBerserker;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -733,11 +733,11 @@ AddGoblinBerserker(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTi
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -748,7 +748,7 @@ AddGoblinBerserker(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTi
 }
 
 internal entity_id
-AddGoblinRider(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddGoblinRider(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinRider, true,
@@ -764,12 +764,12 @@ AddGoblinRider(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
     Entity->GeneralType = GeneralType_Enemy;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_GoblinRider;
+    MatchVector.E[Tag_AssetType] = Asset_GoblinRider;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -806,11 +806,11 @@ AddGoblinRider(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
         GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Whoosh);
 
     entity_id Result = Entity->ID;
@@ -821,7 +821,7 @@ AddGoblinRider(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX,
 }
 
 internal entity_id
-AddSkeletonGrunt(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddSkeletonGrunt(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonGrunt, true,
@@ -835,12 +835,12 @@ AddSkeletonGrunt(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTile
     Entity->GeneralType = GeneralType_Enemy;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_SkeletonWithSword;
+    MatchVector.E[Tag_AssetType] = Asset_SkeletonWithSword;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -863,11 +863,11 @@ AddSkeletonGrunt(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTile
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -878,7 +878,7 @@ AddSkeletonGrunt(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTile
 }
 
 internal entity_id
-AddArrowProjectile(game_mode_world *WorldMode, game_assets *Assets, casted_spell Spell)
+AddArrowProjectile(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_FlyingSpell, true);
     Entity->RenderHeight = Spell.RenderHeight;
@@ -897,14 +897,14 @@ AddArrowProjectile(game_mode_world *WorldMode, game_assets *Assets, casted_spell
     Data->Direction = Spell.Direction;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_SpellName] = 1.0f;
-    WeightVector.E[Tag_MagicElement] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_SpellName] = 1;
+    WeightVector.E[Tag_MagicElement] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Arrow;
+    MatchVector.E[Tag_AssetType] = Asset_Arrow;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
@@ -917,7 +917,7 @@ AddArrowProjectile(game_mode_world *WorldMode, game_assets *Assets, casted_spell
 }
 
 internal entity_id
-AddSkeletonHunter(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddSkeletonHunter(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonHunter, true,
@@ -933,12 +933,12 @@ AddSkeletonHunter(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
     AddTimerForAttack(Entity, 2.0f, AttackType_0);
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_SkeletonWithBow;
+    MatchVector.E[Tag_AssetType] = Asset_SkeletonWithBow;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
     
@@ -953,11 +953,11 @@ AddSkeletonHunter(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
         GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_0);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -968,7 +968,7 @@ AddSkeletonHunter(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTil
 }
 
 internal entity_id
-AddSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
 {
     world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonKing, true,
@@ -987,12 +987,12 @@ AddSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX
     AddTimerForCast(Entity, 10.0f, CastSpellType_0);
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_SkeletonKing;
+    MatchVector.E[Tag_AssetType] = Asset_SkeletonKing;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
@@ -1025,11 +1025,11 @@ AddSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
 
     entity_id Result = Entity->ID;
@@ -1040,7 +1040,7 @@ AddSkeletonKing(game_mode_world *WorldMode, game_assets *Assets, uint32 AbsTileX
 }
 
 internal entity_id
-AddFlyingSpell(game_mode_world *WorldMode, game_assets *Assets, casted_spell Spell)
+AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_FlyingSpell, true);
     Entity->RenderHeight = Spell.RenderHeight;
@@ -1059,23 +1059,23 @@ AddFlyingSpell(game_mode_world *WorldMode, game_assets *Assets, casted_spell Spe
     Data->Direction = Spell.Direction;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_SpellName] = 1.0f;
-    WeightVector.E[Tag_MagicElement] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_SpellName] = 1;
+    WeightVector.E[Tag_MagicElement] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Spell;
-    MatchVector.E[Tag_SpellName] = Spell.SpellName;
-    MatchVector.E[Tag_MagicElement] = Spell.MagicElement;
+    MatchVector.E[Tag_AssetType] = (u32)Asset_Spell;
+    MatchVector.E[Tag_SpellName] = (u32)Spell.SpellName;
+    MatchVector.E[Tag_MagicElement] = (u32)Spell.MagicElement;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
-    Entity->SpriteSheetSpeed[AnimationType_Walk][0] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][1] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][2] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][3] = Spell.ProjectileAnimationSpeed;
+    Entity->SpriteSheetSpeed[AnimationType_Move][0] = Spell.ProjectileAnimationSpeed;
+    Entity->SpriteSheetSpeed[AnimationType_Move][1] = Spell.ProjectileAnimationSpeed;
+    Entity->SpriteSheetSpeed[AnimationType_Move][2] = Spell.ProjectileAnimationSpeed;
+    Entity->SpriteSheetSpeed[AnimationType_Move][3] = Spell.ProjectileAnimationSpeed;
 
     Entity->SpriteSheetSpeed[AnimationType_Death][0] = Spell.DeathAnimationSpeed;
     Entity->SpriteSheetSpeed[AnimationType_Death][1] = Spell.DeathAnimationSpeed;
@@ -1095,7 +1095,7 @@ AddFlyingSpell(game_mode_world *WorldMode, game_assets *Assets, casted_spell Spe
 }
 
 internal entity_id
-AddImmidiateSpell(game_mode_world *WorldMode, game_assets *Assets, casted_spell Spell)
+AddImmidiateSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
 {
     entity *Entity = BeginEntity(WorldMode, EntityType_ImmidiateSpell, true);
     Entity->Collision = WorldMode->SpellCollision;
@@ -1110,16 +1110,16 @@ AddImmidiateSpell(game_mode_world *WorldMode, game_assets *Assets, casted_spell 
     Data->Damage_Heal = Spell.Damage;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
-    WeightVector.E[Tag_SpellName] = 1.0f;
-    WeightVector.E[Tag_MagicElement] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
+    WeightVector.E[Tag_SpellName] = 1;
+    WeightVector.E[Tag_MagicElement] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Spell;
-    MatchVector.E[Tag_SpellName] = Spell.SpellName;
-    MatchVector.E[Tag_MagicElement] = Spell.MagicElement;
+    MatchVector.E[Tag_AssetType] = (u32)Asset_Spell;
+    MatchVector.E[Tag_SpellName] = (u32)Spell.SpellName;
+    MatchVector.E[Tag_MagicElement] = (u32)Spell.MagicElement;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
@@ -1197,7 +1197,7 @@ AddHeroSpell(hero_spell *Spell, spell_type Type, r32 TimerDurationSeconds, effec
 }
 
 internal entity_id
-AddPlayer(game_mode_world *WorldMode, game_assets *Assets)
+AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
 {
     world_position P = WorldMode->CameraP;
     entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Hero, true,
@@ -1218,18 +1218,18 @@ AddPlayer(game_mode_world *WorldMode, game_assets *Assets)
 
     asset_vector SphereMatchVector = {};
     asset_vector SphereWeightVector = {};
-    SphereWeightVector.E[Tag_MagicElement] = 1.0f;
+    SphereWeightVector.E[Tag_MagicElement] = 1;
     
     u32 MagicElements[3] = {MagicElement_Water, MagicElement_Wind, MagicElement_Fire};
     real32 CircleOffset = (2.0f*Pi32) / 3.0f;
     real32 Radius = 0.5f;
-    v3 OffsetP = V3(0.0f, 1.0f, 0.0f);
+    v3 OffsetP = V3(0.0f, 1, 0.0f);
 
     for(uint32 SphereIndex = 0;
         SphereIndex < 3;
         ++SphereIndex)
     {
-        SphereMatchVector.E[Tag_MagicElement] = (r32)MagicElements[SphereIndex];
+        SphereMatchVector.E[Tag_MagicElement] = MagicElements[SphereIndex];
         bitmap_id SphereBitmapID = GetBestMatchBitmapFrom(Assets, Asset_MagicSphere,
                                                           &SphereMatchVector, &SphereWeightVector);
         
@@ -1255,12 +1255,12 @@ AddPlayer(game_mode_world *WorldMode, game_assets *Assets)
     Assert(Entity->RefCount < ArrayCount(Entity->References));
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1.0f;
-    WeightVector.E[Tag_FacingDirection] = 1.0f;
-    WeightVector.E[Tag_AnimationType] = 1.0f;
+    WeightVector.E[Tag_AssetType] = 1;
+    WeightVector.E[Tag_FacingDirection] = 1;
+    WeightVector.E[Tag_AnimationType] = 1;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (r32)Asset_Hero;
+    MatchVector.E[Tag_AssetType] = Asset_Hero;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
@@ -1274,10 +1274,10 @@ AddPlayer(game_mode_world *WorldMode, game_assets *Assets)
     Entity->SpriteSheetSpeed[AnimationType_CastSpell0][2] = 16;
     Entity->SpriteSheetSpeed[AnimationType_CastSpell0][3] = 16;
 
-    Entity->SpriteSheetSpeed[AnimationType_Walk][0] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][1] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][2] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Walk][3] = 16;
+    Entity->SpriteSheetSpeed[AnimationType_Move][0] = 16;
+    Entity->SpriteSheetSpeed[AnimationType_Move][1] = 16;
+    Entity->SpriteSheetSpeed[AnimationType_Move][2] = 16;
+    Entity->SpriteSheetSpeed[AnimationType_Move][3] = 16;
 
     hero_spell *Spell = Data->Spells;
     sound_id NullSoundID = {};
@@ -1348,11 +1348,11 @@ AddPlayer(game_mode_world *WorldMode, game_assets *Assets)
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
 
     // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Walk][0] =
+    Entity->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Walk][1] =
+    Entity->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Walk][2] =
+    Entity->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
     
     if(WorldMode->CameraFollowingEntityIndex.Value == 0)

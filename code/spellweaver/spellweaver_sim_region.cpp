@@ -738,9 +738,9 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
         }
         else if(AbsoluteValue(Entity->dP.x) > AbsoluteValue(Entity->dP.y))
         {
-            if(Entity->AnimationType != AnimationType_Walk)
+            if(Entity->AnimationType != AnimationType_Move)
             {
-                ChangeAnimationType(Entity, AnimationType_Walk);
+                ChangeAnimationType(Entity, AnimationType_Move);
             }
 
             if(Entity->dP.x > 0)
@@ -754,9 +754,9 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
         }
         else
         {
-            if(Entity->AnimationType != AnimationType_Walk)
+            if(Entity->AnimationType != AnimationType_Move)
             {
-                ChangeAnimationType(Entity, AnimationType_Walk);
+                ChangeAnimationType(Entity, AnimationType_Move);
             }
 
             if(Entity->dP.y > 0)
