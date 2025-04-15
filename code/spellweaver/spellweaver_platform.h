@@ -99,12 +99,28 @@ typedef uint64 u64;
 
 typedef real32 r32;
 typedef real64 r64;
+typedef real32 f32;
+typedef real64 f64;
 
 typedef uintptr_t umm;
+typedef intptr_t  smm;
+
+struct memory_arena
+{
+    umm Size;
+    u8 *Base;
+    umm Used;
+
+    umm MinimumBlockSize;
+    
+    u32 BlockCount;
+    s32 TempCount;
+};
 
 #define U32FromPointer(Pointer) ((u32)(memory_index)(Pointer))
 #define PointerFromU32(type, Value) (type *)((memory_index)Value)
-#include "spellweaver_file_formats.h"
+
+#define OffsetOf(type, Member) (umm)&(((type *)0)->Member)
 
 union v2
 {
@@ -205,18 +221,20 @@ union v4
     real32 E[4];
 };
 
-introspect(category:"math") struct rectangle2
+struct rectangle2
 {
     v2 Min;
     v2 Max;
 };
 
-introspect(category:"math") struct rectangle3
+struct rectangle3
 {
     v3 Min;
     v3 Max;
 };
     
+#define U16Maximum 0x0000FFFF
+
 #define Real32Maximum FLT_MAX
 #define Real32Minimum -FLT_MAX
 
@@ -228,6 +246,8 @@ introspect(category:"math") struct rectangle3
 
 #define Pi32 3.14159265359f
 #define Tau32 6.28318530717958647692f
+
+#include "d:/paul/kaban_engine/code/engine_file_formats.h"
     
 #if SPELLWEAVER_SLOW
 // TODO(casey): Complete assertion macro - don't worry everyone!
@@ -245,6 +265,9 @@ introspect(category:"math") struct rectangle3
 #define Terabytes(Value) (Gigabytes(Value)*1024LL)
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
+
+#define Minimum(A, B) ((A < B) ? (A) : (B))
+#define Maximum(A, B) ((A > B) ? (A) : (B))
 // TODO(casey): swap, min, max ... macros???
 
 #define AlignPow2(Value, Alignment) ((Value + ((Alignment) - 1)) & ~((Alignment) - 1))
@@ -268,6 +291,97 @@ SafeTruncateToU16(uint32 Value)
     Assert(Value <= 0xFFFF);
     u16 Result = (u16)Value;
     return(Result);
+}
+
+#if COMPILER_MSVC
+#define CompletePreviousReadsBeforeFutureReads _ReadBarrier()
+#define CompletePreviousWritesBeforeFutureWrites _WriteBarrier()
+inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+{
+    uint32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
+
+    return(Result);
+}
+inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
+{
+    u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
+
+    return(Result);
+}
+inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
+{
+    // NOTE(casey): Returns the original value _prior_ to adding
+    u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
+
+    return(Result);
+}    
+inline u32 GetThreadID(void)
+{
+    u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
+    u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
+
+    return(ThreadID);
+}
+
+#elif COMPILER_LLVM
+// TODO(casey): Does LLVM have real read-specific barriers yet?
+#define CompletePreviousReadsBeforeFutureReads asm volatile("" ::: "memory")
+#define CompletePreviousWritesBeforeFutureWrites asm volatile("" ::: "memory")
+inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+{
+    uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
+
+    return(Result);
+}
+inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
+{
+    u64 Result = __sync_lock_test_and_set(Value, New);
+
+    return(Result);
+}
+inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
+{
+    // NOTE(casey): Returns the original value _prior_ to adding
+    u64 Result = __sync_fetch_and_add(Value, Addend);
+
+    return(Result);
+}    
+inline u32 GetThreadID(void)
+{
+    u32 ThreadID;
+#if defined(__APPLE__) && defined(__x86_64__)
+    asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
+#elif defined(__i386__)
+    asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
+#elif defined(__x86_64__)
+    asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
+#else
+#error Unsupported architecture
+#endif
+
+    return(ThreadID);
+}
+#else
+// TODO(casey): Other compilers/platforms??
+#endif
+
+struct ticket_mutex
+{
+    u64 volatile Ticket;
+    u64 volatile Serving;
+};
+
+inline void
+BeginTicketMutex(ticket_mutex *Mutex)
+{
+    u64 Ticket = AtomicAddU64(&Mutex->Ticket, 1);
+    while(Ticket != Mutex->Serving) {_mm_pause();};
+}
+
+inline void
+EndTicketMutex(ticket_mutex *Mutex)
+{
+    AtomicAddU64(&Mutex->Serving, 1);
 }
 
 /*
@@ -344,16 +458,32 @@ typedef struct game_render_commands
     
     u32 PushBufferElementCount;
     u32 SortEntryAt;
+
+    v4 ClearColor;
     
     u32 ClipRectCount;
-    struct render_entry_cliprect *ClipRects;
-    
-    render_entry_cliprect *FirstRect;
-    render_entry_cliprect *LastRect;
+
+    u32 MaxRenderTargetIndex;
+
+    struct render_entry_cliprect *FirstRect;
+    struct render_entry_cliprect *LastRect;
 } game_render_commands;
 
 #define RenderCommandStruct(MaxPushBufferSize, PushBuffer, Width, Height) \
     {Width, Height, MaxPushBufferSize, 0, (u8 *)PushBuffer, 0, MaxPushBufferSize};
+
+inline struct sort_sprite_bound *
+GetSortEntries(game_render_commands *Commands)
+{
+    sort_sprite_bound *Result = (sort_sprite_bound *)Commands->PushBufferBase;
+
+    return(Result);
+}
+
+typedef struct game_render_prep
+{
+    struct render_entry_cliprect *ClipRects;
+} game_rende_prep;
 
 typedef struct game_sound_output_buffer
 {
@@ -494,12 +624,6 @@ struct platform_work_queue;
 #define PLATFORM_WORK_QUEUE_CALLBACK(name) void name(platform_work_queue *Queue, void *Data)
 typedef PLATFORM_WORK_QUEUE_CALLBACK(platform_work_queue_callback);
 
-#define PLATFORM_ALLOCATE_TEXTURE(name) void *name(u32 Width, u32 Height, void *Data)
-typedef PLATFORM_ALLOCATE_TEXTURE(platform_allocate_texture);
-
-#define PLATFORM_DEALLOCATE_TEXTURE(name) void name(void *Texture)
-typedef PLATFORM_DEALLOCATE_TEXTURE(platform_deallocate_texture);
-
 #define PLATFORM_ALLOCATE_MEMORY(name) void *name(memory_index Size)
 typedef PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory);
 
@@ -509,21 +633,23 @@ typedef PLATFORM_DEALLOCATE_MEMORY(platform_deallocate_memory);
 typedef void platform_add_entry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data);
 typedef void platform_complete_all_work(platform_work_queue *Queue);
 
-typedef void platform_sort_render_entries(game_render_commands *Commands, void *SortMemory);
-typedef void platform_linearize_render_clip_rects(game_render_commands *Commands, void *ClipMemory);
-typedef void platform_software_render_commands(platform_work_queue *RenderQueue, game_render_commands *Commands,
-                                               struct loaded_bitmap *OutputTarget);
-
 #define PLATFORM_WRITE_LOG_FILE(name) void name(wchar_t *Data, char *File, int Line)
 typedef PLATFORM_WRITE_LOG_FILE(platform_write_log_file);
+
+
+struct platform_texture_op_queue
+{
+    ticket_mutex Mutex;
+
+    struct texture_op *First;
+    texture_op *Last;
+    texture_op *FirstFree;
+};
 
 typedef struct platform_api
 {
     platform_add_entry *AddEntry;
     platform_complete_all_work *CompleteAllWork;
-    
-    platform_allocate_texture *AllocateTexture;
-    platform_deallocate_texture *DeallocateTexture;
 
     platform_get_all_files_of_type_begin *GetAllFilesOfTypeBegin;
     platform_get_all_files_of_type_end *GetAllFilesOfTypeEnd;
@@ -533,10 +659,6 @@ typedef struct platform_api
 
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
-
-    platform_sort_render_entries *SortRenderEntries;
-    platform_linearize_render_clip_rects *LinearizeRenderClipRects;
-    platform_software_render_commands *SoftwareRenderCommands;
 
     platform_write_log_file *WriteLogFile;
     
@@ -549,6 +671,7 @@ typedef struct platform_api
 #endif
 
 } platform_api;
+extern platform_api Platform;
 
 typedef struct game_memory
 {
@@ -567,7 +690,8 @@ typedef struct game_memory
 
     platform_work_queue *HighPriorityQueue;
     platform_work_queue *LowPriorityQueue;
-
+    platform_texture_op_queue TextureOpQueue;
+    
     b32 ExecutableReloaded;
     platform_api PlatformAPI;
 } game_memory;
@@ -581,78 +705,6 @@ typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
 // or asking about it, etc.
 #define GAME_GET_SOUND_SAMPLES(name) void name(game_memory *Memory, game_sound_output_buffer *SoundBuffer)
 typedef GAME_GET_SOUND_SAMPLES(game_get_sound_samples);
-
-#if COMPILER_MSVC
-#define CompletePreviousReadsBeforeFutureReads _ReadBarrier()
-#define CompletePreviousWritesBeforeFutureWrites _WriteBarrier()
-inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
-{
-    uint32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
-
-    return(Result);
-}
-inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
-
-    return(Result);
-}
-inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
-
-    return(Result);
-}    
-inline u32 GetThreadID(void)
-{
-    u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
-    u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
-
-    return(ThreadID);
-}
-
-#elif COMPILER_LLVM
-// TODO(casey): Does LLVM have real read-specific barriers yet?
-#define CompletePreviousReadsBeforeFutureReads asm volatile("" ::: "memory")
-#define CompletePreviousWritesBeforeFutureWrites asm volatile("" ::: "memory")
-inline uint32 AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
-{
-    uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
-
-    return(Result);
-}
-inline u64 AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = __sync_lock_test_and_set(Value, New);
-
-    return(Result);
-}
-inline u64 AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = __sync_fetch_and_add(Value, Addend);
-
-    return(Result);
-}    
-inline u32 GetThreadID(void)
-{
-    u32 ThreadID;
-#if defined(__APPLE__) && defined(__x86_64__)
-    asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
-#elif defined(__i386__)
-    asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
-#elif defined(__x86_64__)
-    asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
-#else
-#error Unsupported architecture
-#endif
-
-    return(ThreadID);
-}
-#else
-// TODO(casey): Other compilers/platforms??
-#endif
     
 #include "spellweaver_debug_interface.h"
 

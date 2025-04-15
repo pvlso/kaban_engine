@@ -14,5 +14,7 @@ struct game_mode_title_screen
     r32 t;
 };
 
+internal void PlayTitleScreen(game_state *GameState, transient_state *TranState);
+
 #define SPELLWEAVER_TITLE_MODE_H
 #endif

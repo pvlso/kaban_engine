@@ -74,7 +74,7 @@ StoreEntityreference(entity_reference *Ref)
 }
 
 inline bool32
-EntityOverlapsRectangle(v2 P, entity_collision_volume *Collision, rectangle2 Rect)
+EntityOverlapsRectangle(v2 P, entity_collision *Collision, rectangle2 Rect)
 {
     rectangle2 Grown = AddRadiusTo(Rect, 0.5f*GetDim(Collision->CollisionRect).xy);
     bool32 Result = IsInRectangle(Grown, (P + Collision->OffsetP.xy));
@@ -125,12 +125,16 @@ ConnectEntityPointers(sim_region *SimRegion)
         ++EntityIndex)
     {
         entity *Entity = SimRegion->Entities + EntityIndex;
-        for(uint32 RefIndex = 0;
-            RefIndex < Entity->RefCount;
-            ++RefIndex)
+        if(IsCreationFlagSet(Entity, CreationFlag_HaveReferences))
         {
-            entity_reference *Ref = Entity->References + RefIndex;
-            LoadEntityreference(SimRegion, Ref);
+            entity_references *Refs = Entity->References;
+            for(uint32 RefIndex = 0;
+                RefIndex < Refs->RefCount;
+                ++RefIndex)
+            {
+                entity_reference *Ref = Refs->References + RefIndex;
+                LoadEntityreference(SimRegion, Ref);
+            }
         }
     }
 }
@@ -227,12 +231,16 @@ EndSim(game_mode_world *WorldMode, sim_region *Region, rectangle2 CameraBoundsIn
         {
             world_position TileP = MapIntoTileSpace(WorldMode->World, Region->Origin, Entity->P.xy);
 
-            for(uint32 RefIndex = 0;
-                RefIndex < Entity->RefCount;
-                ++RefIndex)
+            if(IsCreationFlagSet(Entity, CreationFlag_HaveReferences))
             {
-                entity_reference *Ref = Entity->References + RefIndex;
-                StoreEntityreference(Ref);
+                entity_references *Refs = Entity->References;
+                for(uint32 RefIndex = 0;
+                    RefIndex < Refs->RefCount;
+                    ++RefIndex)
+                {
+                    entity_reference *Ref = Refs->References + RefIndex;
+                    StoreEntityreference(Ref);
+                }
             }
 
             if(Entity->ID.Value == WorldMode->CameraFollowingEntityIndex.Value)
@@ -360,15 +368,18 @@ HandleCollision(game_mode_world *WorldMode, entity *A, entity *B)
         {
             flyingspell_entity *SpellData = (flyingspell_entity *)B->Data;
 
-            A->HealthMax_Health -= SpellData->Damage;
-            if((s16)(A->HealthMax_Health & 0xffff) <= 0)
+            if(IsCreationFlagSet(A, CreationFlag_Stats))
             {
-                A->HealthMax_Health &= 0xffff0000;
+                entity_stats *AStats = A->Stats;
+                AStats->HealthMax_Health -= SpellData->Damage;
+                if((s16)(AStats->HealthMax_Health & 0xffff) <= 0)
+                {
+                    AStats->HealthMax_Health &= 0xffff0000;
+                }
             }
 
             ClearCollisionRulesFor(WorldMode, B->ID);
             ChangeEntityState(B, EntityState_Dieing);
-            ChangeAnimationType(B, AnimationType_Death);
         }
     }
     else if((A->GeneralType == GeneralType_Spell) &&
@@ -376,18 +387,15 @@ HandleCollision(game_mode_world *WorldMode, entity *A, entity *B)
     {
         ClearCollisionRulesFor(WorldMode, A->ID);
         ChangeEntityState(A, EntityState_Dieing);
-        ChangeAnimationType(A, AnimationType_Death);
     }
     else if((A->GeneralType == GeneralType_Spell) &&
             (B->GeneralType == GeneralType_Spell))
     {
         ClearCollisionRulesFor(WorldMode, A->ID);
         ChangeEntityState(A, EntityState_Dieing);
-        ChangeAnimationType(A, AnimationType_Death);
 
         ClearCollisionRulesFor(WorldMode, B->ID);
         ChangeEntityState(B, EntityState_Dieing);
-        ChangeAnimationType(B, AnimationType_Death);
     }
     
     // TODO(casey): Stairs
@@ -427,26 +435,26 @@ HandleOverlap(game_mode_world *WorldMode, entity *Mover, entity *Region, real32 
         {
             u32 HealAmount = 15;
             
-            u32 MaxHealth = Mover->HealthMax_Health >> 16;
-            u32 Health = Mover->HealthMax_Health & 0xffff;
+            u32 MaxHealth = Mover->Stats->HealthMax_Health >> 16;
+            u32 Health = Mover->Stats->HealthMax_Health & 0xffff;
             if((Health + HealAmount) > MaxHealth)
             {
-                Mover->HealthMax_Health = (u32)((MaxHealth << 16) | MaxHealth);
+                Mover->Stats->HealthMax_Health = (u32)((MaxHealth << 16) | MaxHealth);
             }
             else
             {
-                Mover->HealthMax_Health += HealAmount;
+                Mover->Stats->HealthMax_Health += HealAmount;
             }
 
-            u32 MaxMana = Mover->ManaMax_Mana >> 16;
-            u32 Mana = Mover->ManaMax_Mana & 0xffff;
+            u32 MaxMana = Mover->Stats->ManaMax_Mana >> 16;
+            u32 Mana = Mover->Stats->ManaMax_Mana & 0xffff;
             if((Mana + HealAmount) > MaxMana)
             {
-                Mover->ManaMax_Mana = (u32)((MaxMana << 16) | MaxMana);
+                Mover->Stats->ManaMax_Mana = (u32)((MaxMana << 16) | MaxMana);
             }
             else
             {
-                Mover->ManaMax_Mana += HealAmount;
+                Mover->Stats->ManaMax_Mana += HealAmount;
             }
         }
 
@@ -479,8 +487,8 @@ EntitiesOverlap(entity *Entity, entity *TestEntity, v3 Epsilon = V3(0, 0, 0))
 {
     bool32 Result = false;
     
-    entity_collision_volume *EntityCollision = Entity->Collision;
-    entity_collision_volume *TestCollision = TestEntity->Collision;
+    entity_collision *EntityCollision = Entity->Collision;
+    entity_collision *TestCollision = TestEntity->Collision;
 
     rectangle3 EntityRect = RectCenterDim(Entity->P + EntityCollision->OffsetP,
                                           GetDim(EntityCollision->CollisionRect) + Epsilon);
@@ -492,6 +500,7 @@ EntitiesOverlap(entity *Entity, entity *TestEntity, v3 Epsilon = V3(0, 0, 0))
     return(Result);
 }
 
+#if 0
 internal void
 MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, real32 dt,
            move_spec *MoveSpec, v3 ddP)
@@ -511,23 +520,18 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
     ddP *= MoveSpec->Speed;
 
     // TODO(casey): ODE here!
-    v3 Drag = -MoveSpec->Drag * Entity->dP;
+    v3 Drag = -MoveSpec->Drag * Entity->MoveState->dP;
     Drag.z = 0.0f;
     ddP += Drag;
-
-    if(!IsSet(Entity, EntityFlag_ZSupported))
-    {
-        ddP += V3(0, 0, -9.8f); // NOTE(casey): Gravity!
-    }
     
     v3 PlayerDelta = (0.5f * ddP * Square(dt) +
-                      Entity->dP * dt);
-    Entity->dP = ddP * dt + Entity->dP;
+                      Entity->MoveState->dP * dt);
+    Entity->MoveState->dP = ddP * dt + Entity->MoveState->dP;
     // TODO(casey): Upgrade physical motion routines to handle capping the
     // maximum velocity?
-    Assert(LengthSq(Entity->dP) <= Square(SimRegion->MaxEntityVelocity));
+    Assert(LengthSq(Entity->MoveState->dP) <= Square(SimRegion->MaxEntityVelocity));
 
-    real32 DistanceRemaining = Entity->DistanceLimit;
+    real32 DistanceRemaining = Entity->MoveState->DistanceLimit;
     if(DistanceRemaining == 0.0f)
     {
         DistanceRemaining = 10000.0f;
@@ -563,12 +567,10 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
                     break;
                 }
 
-                if((IsSet(TestEntity, EntityFlag_Traversable) &&
-                    EntitiesOverlap(Entity, TestEntity, V3(1, 1, 1))) ||
-                   CanCollide(WorldMode, Entity, TestEntity))
+                if(CanCollide(WorldMode, Entity, TestEntity))
                 {
-                    entity_collision_volume *EntityCollision = Entity->Collision;
-                    entity_collision_volume *TestCollision = TestEntity->Collision;
+                    entity_collision *EntityCollision = Entity->Collision;
+                    entity_collision *TestCollision = TestEntity->Collision;
 
                     v2 EntityVolumeDim = GetDim(EntityCollision->CollisionRect).xy;
                     v2 TestVolumeDim = GetDim(TestCollision->CollisionRect).xy;
@@ -671,7 +673,7 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
                 if(StopsOnCollision)
                 {
                     PlayerDelta = PlayerDelta - 1*Inner(PlayerDelta, WallNormal)*WallNormal;
-                    Entity->dP = Entity->dP - 1*Inner(Entity->dP, WallNormal)*WallNormal;
+                    Entity->MoveState->dP = Entity->MoveState->dP - 1*Inner(Entity->MoveState->dP, WallNormal)*WallNormal;
                 }
             }
             else
@@ -704,46 +706,30 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
         }
     }    
 
-#if 0
-    Ground += Entity->P.z - GetEntityGroundPoint(Entity).z;
-    if((Entity->P.z <= Ground) ||
-       (IsSet(Entity, EntityFlag_ZSupported) &&
-        (Entity->dP.z == 0.0f)))
+    if(Entity->MoveState->DistanceLimit != 0.0f)
     {
-        Entity->P.z = Ground;
-        Entity->dP.z = 0;
-        AddFlags(Entity, EntityFlag_ZSupported);
-    }
-    else
-    {
-        ClearFlags(Entity, EntityFlag_ZSupported);
-    }
-#endif
-
-    if(Entity->DistanceLimit != 0.0f)
-    {
-        Entity->DistanceLimit = DistanceRemaining;
+        Entity->MoveState->DistanceLimit = DistanceRemaining;
     }
 
-    if(Entity->AnimationType != AnimationType_Death)
+    if(Entity->Animation->AnimationType != AnimationType_Death)
     {
         // TODO(casey): Change to use acceleration vector
-        if((AbsoluteValue(Entity->dP.x) <= 0.5f) && (AbsoluteValue(Entity->dP.y) <= 0.5f))
+        if((AbsoluteValue(Entity->MoveState->dP.x) <= 0.5f) && (AbsoluteValue(Entity->MoveState->dP.y) <= 0.5f))
         {
             // NOTE(casey): Leave FacingDirection whatever it was
-            if((Entity->AnimationType != AnimationType_Idle))
+            if((Entity->Animation->AnimationType != AnimationType_Idle))
             {
                 ChangeAnimationType(Entity, AnimationType_Idle);
             }
         }
-        else if(AbsoluteValue(Entity->dP.x) > AbsoluteValue(Entity->dP.y))
+        else if(AbsoluteValue(Entity->MoveState->dP.x) > AbsoluteValue(Entity->MoveState->dP.y))
         {
-            if(Entity->AnimationType != AnimationType_Move)
+            if(Entity->Animation->AnimationType != AnimationType_Walk)
             {
-                ChangeAnimationType(Entity, AnimationType_Move);
+                ChangeAnimationType(Entity, AnimationType_Walk);
             }
 
-            if(Entity->dP.x > 0)
+            if(Entity->MoveState->dP.x > 0)
             {
                 Entity->FacingDirection = 0;
             }
@@ -754,12 +740,12 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
         }
         else
         {
-            if(Entity->AnimationType != AnimationType_Move)
+            if(Entity->Animation->AnimationType != AnimationType_Walk)
             {
-                ChangeAnimationType(Entity, AnimationType_Move);
+                ChangeAnimationType(Entity, AnimationType_Walk);
             }
 
-            if(Entity->dP.y > 0)
+            if(Entity->MoveState->dP.y > 0)
             {
                 Entity->FacingDirection = 1;
             }
@@ -770,6 +756,206 @@ MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, re
         }
     }
 }
+#else
 
+internal void
+MoveEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, real32 dt,
+           move_spec *MoveSpec, v3 ddP)
+{
+    TIMED_FUNCTION();
+    
+    world *World = SimRegion->World;
+    
+    if(MoveSpec->UnitMaxAccelVector)
+    {
+        real32 ddPLength = LengthSq(ddP);
+        if(ddPLength > 1.0f)
+        {
+            ddP *= (1.0f / SquareRoot(ddPLength));
+        }
+    }
+    
+    ddP *= MoveSpec->Speed;
+
+    // TODO(casey): ODE here!
+    v3 Drag = -MoveSpec->Drag*Entity->MoveState->dP;
+    Drag.z = 0.0f;
+    ddP += Drag;
+
+    v3 PlayerDelta = (0.5f*ddP*Square(dt) + Entity->MoveState->dP*dt);
+    Entity->MoveState->dP = ddP*dt + Entity->MoveState->dP;
+    // TODO(casey): Upgrade physical motion routines to handle capping the
+    // maximum velocity?
+    Assert(LengthSq(Entity->MoveState->dP) <= Square(SimRegion->MaxEntityVelocity));
+    
+    real32 DistanceRemaining = Entity->MoveState->DistanceLimit;
+    if(DistanceRemaining == 0.0f)
+    {
+        // TODO(casey): Do we want to formalize this number?
+        DistanceRemaining = 10000.0f;
+    }
+    
+    for(uint32 Iteration = 0;
+        Iteration < 4;
+        ++Iteration)
+    {
+        real32 tMin = 1.0f;
+        real32 tMax = 1.0f;
+
+        real32 PlayerDeltaLength = Length(PlayerDelta);
+        // TODO(casey): What do we want to do for epsilons here?
+        // Think this through for the final collision code
+        if(PlayerDeltaLength > 0.0f)
+        {
+            if(PlayerDeltaLength > DistanceRemaining)
+            {
+                tMin = (DistanceRemaining / PlayerDeltaLength);
+            }
+        
+            v3 WallNormalMin = {};
+            v3 WallNormalMax = {};
+            entity *HitEntityMin = 0;
+            entity *HitEntityMax = 0;
+
+            v3 DesiredPosition = Entity->P + PlayerDelta;
+
+            // NOTE(casey): This is just an optimization to avoid enterring the
+            // loop in the case where the test entity is non-spatial!
+            for(uint32 TestHighEntityIndex = 0;
+                TestHighEntityIndex < SimRegion->EntityCount;
+                ++TestHighEntityIndex)
+            {
+                entity *TestEntity = SimRegion->Entities + TestHighEntityIndex;
+
+                // TODO(casey): Robustness!
+                real32 OverlapEpsilon = 0.001f;
+                    
+                if(CanCollide(WorldMode, Entity, TestEntity))
+                {
+                    entity_collision *Volume = Entity->Collision;
+                    entity_collision *TestVolume = TestEntity->Collision;
+
+                    v3 Dim = GetDim(Volume->CollisionRect);
+                    v3 TestDim = GetDim(TestVolume->CollisionRect);
+
+                    v3 MinkowskiDiameter = V3(TestDim.x + Dim.x, TestDim.y + Dim.y, TestDim.z + Dim.z);
+
+                    v3 MinCorner = -0.5f*MinkowskiDiameter;
+                    v3 MaxCorner = 0.5f*MinkowskiDiameter;
+
+                    v3 Rel = ((Entity->P + Volume->OffsetP) -
+                              (TestEntity->P + TestVolume->OffsetP));
+
+                    // TODO(casey): Do we want an open inclusion at the MaxCorner?
+                    if((Rel.z >= MinCorner.z) && (Rel.z < MaxCorner.z))
+                    {
+                        test_wall Walls[] =
+                            {
+                                {MinCorner.x, Rel.x, Rel.y, PlayerDelta.x, PlayerDelta.y, MinCorner.y, MaxCorner.y, V3(-1, 0, 0)},
+                                {MaxCorner.x, Rel.x, Rel.y, PlayerDelta.x, PlayerDelta.y, MinCorner.y, MaxCorner.y, V3(1, 0, 0)},
+                                {MinCorner.y, Rel.y, Rel.x, PlayerDelta.y, PlayerDelta.x, MinCorner.x, MaxCorner.x, V3(0, -1, 0)},
+                                {MaxCorner.y, Rel.y, Rel.x, PlayerDelta.y, PlayerDelta.x, MinCorner.x, MaxCorner.x, V3(0, 1, 0)},
+                            };
+
+                        real32 tMinTest = tMin;
+                        bool32 HitThis = false;
+
+                        v3 TestWallNormal = {};
+                        for(uint32 WallIndex = 0;
+                            WallIndex < ArrayCount(Walls);
+                            ++WallIndex)
+                        {
+                            test_wall *Wall = Walls + WallIndex;
+
+                            real32 tEpsilon = 0.001f;
+                            if(Wall->DeltaX != 0.0f)
+                            {
+                                real32 tResult = (Wall->X - Wall->RelX) / Wall->DeltaX;
+                                real32 Y = Wall->RelY + tResult*Wall->DeltaY;
+                                if((tResult >= 0.0f) && (tMinTest > tResult))
+                                {
+                                    if((Y >= Wall->MinY) && (Y <= Wall->MaxY))
+                                    {
+                                        tMinTest = Maximum(0.0f, tResult - tEpsilon);
+                                        TestWallNormal = Wall->Normal;
+                                        HitThis = true;
+                                    }
+                                }
+                            }
+                        }
+                                        
+                        // TODO(casey): We need a concept of stepping onto vs. stepping
+                        // off of here so that we can prevent you from _leaving_
+                        // stairs instead of just preventing you from getting onto them.
+                        if(HitThis)
+                        {
+                            v3 TestP = Entity->P + tMinTest*PlayerDelta;
+                            if(SpeculativeCollide(Entity, TestEntity, TestP))
+                            {
+                                tMin = tMinTest;
+                                WallNormalMin = TestWallNormal;
+                                HitEntityMin = TestEntity;
+                            }
+                        }
+                    }
+                }
+            }
+
+            v3 WallNormal;
+            entity *HitEntity;
+            real32 tStop;
+            if(tMin < tMax)
+            {
+                tStop = tMin;
+                HitEntity = HitEntityMin;
+                WallNormal = WallNormalMin;
+            }
+            else
+            {
+                tStop = tMax;
+                HitEntity = HitEntityMax;
+                WallNormal = WallNormalMax;
+            }
+            
+            Entity->P += tStop*PlayerDelta;
+            DistanceRemaining -= tStop*PlayerDeltaLength;            
+            if(HitEntity)
+            {
+                PlayerDelta = DesiredPosition - Entity->P;                
+
+                bool32 StopsOnCollision = HandleCollision(WorldMode, Entity, HitEntity);
+                if(StopsOnCollision)
+                {
+                    PlayerDelta = PlayerDelta - 1*Inner(PlayerDelta, WallNormal)*WallNormal;
+                    Entity->MoveState->dP = Entity->MoveState->dP - 1*Inner(Entity->MoveState->dP, WallNormal)*WallNormal;
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }    
+
+    if(Entity->MoveState->DistanceLimit != 0.0f)
+    {
+        Entity->MoveState->DistanceLimit = DistanceRemaining;
+    }
+
+    // TODO(casey): Change to using the acceleration vector
+    if((Entity->MoveState->dP.x == 0.0f) && (Entity->MoveState->dP.y == 0.0f))
+    {
+        // NOTE(casey): Leave FacingDirection whatever it was
+    }
+    else
+    {
+//        Entity->FacingDirection = ATan2(Entity->MoveState->dP.y, Entity->MoveState->dP.x);
+    }
+}
+#endif
 
 

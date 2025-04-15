@@ -225,6 +225,7 @@ OutputPlayingSounds(audio_state *AudioState,
                                                       LoadedSound->Samples[0][((int32 *)&SampleIndex)[1]],
                                                       LoadedSound->Samples[0][((int32 *)&SampleIndex)[2]],
                                                       LoadedSound->Samples[0][((int32 *)&SampleIndex)[3]]);
+
                     __m128 SampleValueC = _mm_setr_ps(LoadedSound->Samples[0][((int32 *)&SampleIndex)[0] + 1],
                                                       LoadedSound->Samples[0][((int32 *)&SampleIndex)[1] + 1],
                                                       LoadedSound->Samples[0][((int32 *)&SampleIndex)[2] + 1],

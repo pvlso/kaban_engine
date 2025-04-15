@@ -21,6 +21,7 @@ SortKeyToU32(r32 SortKey)
     {
         Result |= 0x80000000;
     }
+
     return(Result);
 }
 
@@ -173,3 +174,5 @@ RadixSort(u32 Count, sort_entry *First, sort_entry *Temp)
         Source = SwapTemp;
     }
 }
+
+

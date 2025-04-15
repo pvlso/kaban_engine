@@ -27,6 +27,7 @@ struct particle_cel
     real32 Density;
     v3 VelocityTimesDensity;
 };
+
 struct particle
 {
     bitmap_id BitmapID;
@@ -37,22 +38,14 @@ struct particle
     v4 dColor;
 };
 
-enum world_update_mode
-{
-    UpdateMode_Entities,
-    UpdateMode_Conversation,
-};
-
 struct game_mode_world
 {
     world *World;
-    real32 TypicalFloorHeight;
-
-    text_config GeneralTextConfig;
     
     b32 HeroExist;
     b32 QuitRequested;
     b32 GameFinished;
+
     entity_id CameraFollowingEntityIndex;
     world_position CameraP;
     world_position LastCameraP;
@@ -60,53 +53,30 @@ struct game_mode_world
     world_position CameraBoundsMin;
     world_position CameraBoundsMax;
 
-    entity_id TalkingEntityID;
-    world_update_mode UpdateMode;
-
     loaded_bitmap MiniMapBitmap;
-    
-    u32 QuestCount;
-    quest Quests[16];
 
     entity_id EntitiesToDestroy[64];
-
-    as_tile_node *StartNode;
-    as_tile_node *EndNode;
-
-//    u32 MoveNodeCount;
-//    move_point MovePoints[256];
-
-    heap MovePointMaxHeap;
     
     // TODO(casey): Must be power of two
     pairwise_collision_rule *CollisionRuleHash[256];
     pairwise_collision_rule *FirstFreeCollisionRule;
 
-    entity_collision_volume *NullCollision;
-    entity_collision_volume *SphereCollision;
-    entity_collision_volume *ItemCollision;
-    entity_collision_volume *SwordCollision;
-    entity_collision_volume *PlayerCollision;
-    entity_collision_volume *MonsterCollision;
-    entity_collision_volume *FamiliarCollision;
-    entity_collision_volume *WallCollision;
-    entity_collision_volume *NPCCollision;
-
-    entity_collision_volume *SpellCollision;
-    entity_collision_volume *MagicSwordCollision;
-
+    entity_collision *NullCollision;
+    entity_collision *SphereCollision;
+    entity_collision *PlayerCollision;
+    entity_collision *TileCollision;
+    entity_collision *SpellCollision;
+    entity_collision *GolemCollision;
+    
     u32 CreationBufferIndex;
     entity CreationBuffers[16];
     u32 LastUsedEntityStorageIndex;
 
+    entity_id *TileMap;
+
     real32 Time;
 
     playing_sound *GameEndMusic;
-    playing_sound *BirdSound;
-    playing_sound *RiverSound;
-    polygon2 BirdSoundPolygon;
-    polygon2 RiverPolygon0;
-    polygon2 RiverPolygon1;
 
     random_series EffectsEntropy; // NOTE(casey): This is entropy that doesn't affect the gameplay
     random_series MathEntropy;

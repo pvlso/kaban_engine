@@ -291,6 +291,8 @@ struct debug_state
 
     // NOTE(casey): Per-frame storage management
     debug_stored_event *FirstFreeStoredEvent;
+
+    u32 RenderTarget;
     
     u32 RootInfoSize;
     char *RootInfo;

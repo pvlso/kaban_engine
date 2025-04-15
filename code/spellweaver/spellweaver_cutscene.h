@@ -62,9 +62,8 @@ struct game_mode_cutscene
 };
 
 struct game_state;
-struct game_transient_state;
+struct transient_state;
 internal void PlayIntroCutscene(game_state *GameState, transient_state *TranState);
-internal void PlayTitleScreen(game_state *GameState, transient_state *TranState);
 
 #define SPELLWEAVER_CUTSCENE_H
 #endif

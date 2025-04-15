@@ -1,3 +1,4 @@
+#if !defined(SPELLWEAVER_RENDER_H)
 /* ========================================================================
    $File: $
    $Date: 2024 $
@@ -7,13 +8,13 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
-inline void
-InitWeightVector(asset_vector *Vector)
+struct tile_render_work
 {
-    for(u32 I = 0;
-        I < Tag_Count;
-        ++I)
-    {
-        Vector->E[I] = 1;
-    }
-}
+    editor_render_commands *Commands;
+    editor_render_prep *Prep;
+    struct loaded_bitmap *RenderTargets;
+    rectangle2i ClipRect;
+};
+
+#define SPELLWEAVER_RENDER_H
+#endif

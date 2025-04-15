@@ -125,9 +125,9 @@ TextOp(debug_state *DebugState, debug_text_op Op, v2 P, char *String, v4 Color =
                     v3 BitmapOffset = V3(AtX, AtY, AtZ);
                     if(Op == DEBUGTextOp_DrawText)
                     {
-                        PushBitmap(RenderGroup, DebugState->TextTransform, BitmapID, BitmapScale,
+                        PushBitmap(RenderGroup, &DebugState->TextTransform, BitmapID, BitmapScale,
                             BitmapOffset, Color, 1.0f);
-                        PushBitmap(RenderGroup, DebugState->ShadowTransform, BitmapID, BitmapScale,
+                        PushBitmap(RenderGroup, &DebugState->ShadowTransform, BitmapID, BitmapScale,
                             BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
                     }
                     else                    
@@ -137,7 +137,8 @@ TextOp(debug_state *DebugState, debug_text_op Op, v2 P, char *String, v4 Color =
                         loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, BitmapID, RenderGroup->GenerationID);
                         if(Bitmap)
                         {
-                            used_bitmap_dim Dim = GetBitmapDim(RenderGroup, DefaultFlatTransform(), Bitmap, BitmapScale, BitmapOffset, 1.0f);
+                            object_transform Flat = DefaultFlatTransform();
+                            used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Flat, Bitmap, BitmapScale, BitmapOffset, 1.0f);
                             rectangle2 GlyphDim = RectMinDim(Dim.P.xy, Dim.Size);
                             Result = Union(Result, GlyphDim);
                         }
@@ -308,16 +309,16 @@ EndElement(layout_element *Element)
 
     if(Element->Size)
     {
-        PushRect(&DebugState->RenderGroup, NoTransform, RectMinMax(V2(TotalMinCorner.x, InteriorMinCorner.y),
+        PushRect(&DebugState->RenderGroup, &NoTransform, RectMinMax(V2(TotalMinCorner.x, InteriorMinCorner.y),
                 V2(InteriorMinCorner.x, InteriorMaxCorner.y)), 0.0f,
                  V4(0, 0, 0, 1));
-        PushRect(&DebugState->RenderGroup, NoTransform, RectMinMax(V2(InteriorMaxCorner.x, InteriorMinCorner.y),
+        PushRect(&DebugState->RenderGroup, &NoTransform, RectMinMax(V2(InteriorMaxCorner.x, InteriorMinCorner.y),
                                                      V2(TotalMaxCorner.x, InteriorMaxCorner.y)), 0.0f,
                  V4(0, 0, 0, 1));
-        PushRect(&DebugState->RenderGroup, NoTransform, RectMinMax(V2(InteriorMinCorner.x, TotalMinCorner.y),
+        PushRect(&DebugState->RenderGroup, &NoTransform, RectMinMax(V2(InteriorMinCorner.x, TotalMinCorner.y),
                                                      V2(InteriorMaxCorner.x, InteriorMinCorner.y)), 0.0f,
                  V4(0, 0, 0, 1));
-        PushRect(&DebugState->RenderGroup, NoTransform, RectMinMax(V2(InteriorMinCorner.x, InteriorMaxCorner.y),
+        PushRect(&DebugState->RenderGroup, &NoTransform, RectMinMax(V2(InteriorMinCorner.x, InteriorMaxCorner.y),
                                                      V2(InteriorMaxCorner.x, TotalMaxCorner.y)), 0.0f,
                  V4(0, 0, 0, 1));
 
@@ -328,7 +329,7 @@ EndElement(layout_element *Element)
         rectangle2 SizeBox = AddRadiusTo(
             RectMinMax(V2(InteriorMaxCorner.x, TotalMinCorner.y),
                 V2(TotalMaxCorner.x, InteriorMinCorner.y)), V2(4.0f, 4.0f));
-        PushRect(&DebugState->RenderGroup, NoTransform, SizeBox, 0.0f,
+        PushRect(&DebugState->RenderGroup, &NoTransform, SizeBox, 0.0f,
                  (InteractionIsHot(DebugState, SizeInteraction) ? V4(1, 1, 0, 1) : V4(1, 1, 1, 1)));
         if(IsInRectangle(SizeBox, Layout->MouseP))
         {
@@ -362,7 +363,7 @@ BasicTextElement(layout *Layout, char *Text, debug_interaction ItemInteraction,
     if(BackdropColor.w > 0.0f)
     {
         PushRect(&DebugState->RenderGroup, 
-                 DebugState->BackingTransform, Element.Bounds, 0.0f, BackdropColor);
+                 &DebugState->BackingTransform, Element.Bounds, 0.0f, BackdropColor);
     }
     
     return(Dim);

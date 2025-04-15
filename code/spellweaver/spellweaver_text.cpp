@@ -69,8 +69,8 @@ TextOp(render_group *RenderGroup, text_config TextConfig, char *String, u32 Leng
                     loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, BitmapID, RenderGroup->GenerationID);
                     if(Bitmap)
                     {
-                        object_transform D = DefaultFlatTransform();
-                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &D, Bitmap,
+                        object_transform Flat = DefaultFlatTransform();
+                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Flat, Bitmap,
                                                            BitmapScale, BitmapOffset, 1.0f);
                         rectangle2 GlyphDim = RectMinDim(Dim.P.xy, Dim.Size);
                         Result = Union(Result, GlyphDim);

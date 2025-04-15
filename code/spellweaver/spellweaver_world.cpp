@@ -38,8 +38,8 @@ IsCanonical(real32 TileDim, real32 TileRel)
 inline bool32
 IsCanonical(world *World, v2 Offset)
 {
-    bool32 Result = (IsCanonical(World->TileSideInMeters, Offset.x) &&
-                     IsCanonical(World->TileSideInMeters, Offset.y));
+    bool32 Result = (IsCanonical(World->TileDimInMeters.x, Offset.x) &&
+                     IsCanonical(World->TileDimInMeters.y, Offset.y));
 
     return(Result);
 }
@@ -67,8 +67,6 @@ ClearWorldEntityBlock(world_entity_block *Block)
 inline world_chunk **
 GetWorldChunkInternal(world *World, int32 ChunkX, int32 ChunkY)
 {
-    TIMED_FUNCTION();
-
     Assert(ChunkX > -TILE_CHUNK_SAFE_MARGIN);
     Assert(ChunkY > -TILE_CHUNK_SAFE_MARGIN);
     Assert(ChunkX < TILE_CHUNK_SAFE_MARGIN);
@@ -94,8 +92,6 @@ GetWorldChunkInternal(world *World, int32 ChunkX, int32 ChunkY)
 inline world_chunk *
 GetWorldChunk(world *World, int32 TileX, int32 TileY, memory_arena *Arena = 0)
 {
-    TIMED_FUNCTION();
-
     int32 ChunkX = TileX / TILES_PER_CHUNK_DIM;
     int32 ChunkY = TileY / TILES_PER_CHUNK_DIM;
     
@@ -126,8 +122,6 @@ GetWorldChunk(world *World, int32 TileX, int32 TileY, memory_arena *Arena = 0)
 internal world_chunk *
 RemoveWorldChunk(world *World, int32 ChunkX, int32 ChunkY)
 {
-    TIMED_FUNCTION();
-
     world_chunk **ChunkPtr = GetWorldChunkInternal(World, ChunkX, ChunkY);
     world_chunk *Result = *ChunkPtr;
     if(Result)
@@ -139,7 +133,7 @@ RemoveWorldChunk(world *World, int32 ChunkX, int32 ChunkY)
 }
 
 inline void
-RecanonicalizeCoord(real32 ChunkDim, int32 *Tile, real32 *TileRel)
+RecanonicalizeCoord(real32 TileDim, int32 *Tile, real32 *TileRel)
 {
     // TODO(casey): Need to do something that doesn't use the divide/multiply method
     // for recanonicalizing because this can end up rounding back on to the tile
@@ -149,11 +143,11 @@ RecanonicalizeCoord(real32 ChunkDim, int32 *Tile, real32 *TileRel)
     // within the safe margin!
     // TODO(casey): Assert that we are nowhere near the edges of the world.
     
-    int32 Offset = RoundReal32ToInt32(*TileRel / ChunkDim);
+    int32 Offset = RoundReal32ToInt32(*TileRel / TileDim);
     *Tile += Offset;
-    *TileRel -= Offset*ChunkDim;
+    *TileRel -= Offset*TileDim;
 
-    Assert(IsCanonical(ChunkDim, *TileRel));
+    Assert(IsCanonical(TileDim, *TileRel));
 }
 
 inline world_position
@@ -162,8 +156,8 @@ MapIntoTileSpace(world *World, world_position BasePos, v2 Offset)
     world_position Result = BasePos;
 
     Result.Offset += Offset;
-    RecanonicalizeCoord(World->TileSideInMeters, &Result.TileX, &Result.Offset.x);
-    RecanonicalizeCoord(World->TileSideInMeters, &Result.TileY, &Result.Offset.y);
+    RecanonicalizeCoord(World->TileDimInMeters.x, &Result.TileX, &Result.Offset.x);
+    RecanonicalizeCoord(World->TileDimInMeters.y, &Result.TileY, &Result.Offset.y);
     
     return(Result);
 }
@@ -193,7 +187,7 @@ ChunkPositionFromTilePosition(world *World, int32 AbsTileX, int32 AbsTileY)
 {
     world_position BasePos = {};
     
-    v2 TileDim = V2(World->TileSideInMeters, World->TileSideInMeters);
+    v2 TileDim = World->TileDimInMeters.xy;
     v2 Offset = Hadamard(TileDim, V2((real32)AbsTileX, (real32)AbsTileY));
     world_position Result = MapIntoTileSpace(World, BasePos, Offset);
     
@@ -208,45 +202,21 @@ Subtract(world *World, world_position *A, world_position *B)
     v2 dTile = {(real32)A->TileX - (real32)B->TileX,
                 (real32)A->TileY - (real32)B->TileY};
     
-    v2 Result = World->TileSideInMeters*dTile + (A->Offset - B->Offset);
+    v2 Result = Hadamard(World->TileDimInMeters.xy, dTile) + (A->Offset - B->Offset);
 
     return(Result);
 }
-
-#if 0 
-inline v2
-Subtract(world *World, world_tile_position *A, world_tile_position *B)
-{
-    v2 dTile = {(real32)A->TileX - (real32)B->TileX,
-                (real32)A->TileY - (real32)B->TileY};
-    
-    v2 Result = World->TileSideInMeters*dTile + (A->Offset - B->Offset);
-
-    return(Result);
-}
-#endif
 
 inline world_position
-CenteredTilePoint(uint32 TileX, uint32 TileY)
+CenteredTilePoint(world *World, uint32 TileX, uint32 TileY)
 {
     world_position Result = {};
 
-    Result.TileX = TileX;
-    Result.TileY = TileY;
+    Result.TileX = (TileX > World->TileWidth) ? (World->TileWidth - 1) : TileX;
+    Result.TileY = (TileY > World->TileHeight) ? (World->TileHeight - 1) : TileY;
 
     return(Result);
 }
-
-#if 0
-inline world_position
-CenteredChunkPoint(world_chunk *Chunk)
-
-{
-    world_position Result = CenteredChunkPoint(Chunk->ChunkX, Chunk->ChunkY);
-
-    return(Result);
-}
-#endif
 
 inline b32
 HasRoomFor(world_entity_block *Block, u32 Size)
@@ -259,7 +229,6 @@ HasRoomFor(world_entity_block *Block, u32 Size)
 inline void
 PackEntityIntoChunk(memory_arena *Arena, world *World, entity *Source, world_chunk *Chunk)
 {
-    TIMED_FUNCTION();
     u32 PackSize = sizeof(*Source);
 
     if(!Chunk->FirstBlock || !HasRoomFor(Chunk->FirstBlock, PackSize))
@@ -270,10 +239,13 @@ PackEntityIntoChunk(memory_arena *Arena, world *World, entity *Source, world_chu
             World->FirstFreeBlock->Next = 0;
         }
 
-        Chunk->FirstBlock = World->FirstFreeBlock;
-        World->FirstFreeBlock = Chunk->FirstBlock->Next;
+        world_entity_block *NewBlock = World->FirstFreeBlock;
+        World->FirstFreeBlock = NewBlock->Next;
 
-        ClearWorldEntityBlock(Chunk->FirstBlock);
+        ClearWorldEntityBlock(NewBlock);
+
+        NewBlock->Next = Chunk->FirstBlock;
+        Chunk->FirstBlock = NewBlock;
     }
 
     world_entity_block *Block = Chunk->FirstBlock;
@@ -289,7 +261,6 @@ PackEntityIntoChunk(memory_arena *Arena, world *World, entity *Source, world_chu
 internal void
 PackEntityIntoWorld(memory_arena *Arena, world *World, entity *Source, world_position At)
 {
-    TIMED_FUNCTION();
     world_chunk *Chunk = GetWorldChunk(World, At.TileX, At.TileY, Arena);
     
     Source->TileP = At;
@@ -345,26 +316,16 @@ FindTileNodeNeighbors(world *World, as_tile_node *Node)
         I < ArrayCount(Indecies);
         ++I)
     {
-        s32 IndexX = Indecies[I][1];
-        s32 IndexY = Indecies[I][0];
+        u32 IndexX = Indecies[I][1];
+        u32 IndexY = Indecies[I][0];
 
-        if((IndexX >= 0) && (IndexX < WORLD_TILE_NODE_COUNT_PER_DIM) &&
-           (IndexY >= 0) && (IndexY < WORLD_TILE_NODE_COUNT_PER_DIM))
+        if((IndexX >= 0) && (IndexX < World->TileNodeWidth) &&
+           (IndexY >= 0) && (IndexY < World->TileNodeHeight))
         {
-            s32 Index = IndexY*WORLD_TILE_NODE_COUNT_PER_DIM + IndexX;
+            s32 Index = IndexY*World->TileNodeWidth + IndexX;
             Node->Neighbours[I] = World->TileNodes + Index;
         }
     }
-}
-
-internal as_tile_node *
-GetTileNode(world *World, s32 NodeX, s32 NodeY)
-{
-    as_tile_node *Result = 0;
-
-    Result = World->TileNodes + NodeY*WORLD_TILE_NODE_COUNT_PER_DIM + NodeX;
-
-    return(Result);
 }
 
 internal as_tile_node *
@@ -372,16 +333,27 @@ GetTileNode(world *World, world_position TileP)
 {
     as_tile_node *Result = 0;
 
-    r32 a = 1.0f / 0.25f;
-
-    r32 X = (r32)TileP.TileX*4.0f + 2.0f;
-    r32 Y = (r32)TileP.TileY*4.0f + 2.0f; 
-    r32 OffsetX = X + (TileP.Offset.x*4.0f);
-    r32 OffsetY = Y + (TileP.Offset.y*4.0f);
+    r32 NodeCount = (r32)World->NodesPerTile;
+    r32 HalfNodeCount = (r32)World->NodesPerTile / 2.0f;
+    
+    r32 X = (r32)TileP.TileX*NodeCount + HalfNodeCount;
+    r32 Y = (r32)TileP.TileY*NodeCount + HalfNodeCount; 
+    r32 OffsetX = X + (TileP.Offset.x*NodeCount);
+    r32 OffsetY = Y + (TileP.Offset.y*NodeCount);
     s32 IndexX = (s32)OffsetX;
     s32 IndexY = (s32)OffsetY;
 
-    Result = World->TileNodes + IndexY*WORLD_TILE_NODE_COUNT_PER_DIM + IndexX;
+    Result = World->TileNodes + IndexY*World->TileNodeWidth + IndexX;
+
+    return(Result);
+}
+
+internal as_tile_node *
+GetTileNode(world *World, s32 NodeX, s32 NodeY)
+{
+    as_tile_node *Result = 0;
+
+    Result = World->TileNodes + NodeY*World->TileNodeWidth + NodeX;
 
     return(Result);
 }
@@ -390,178 +362,48 @@ inline r32
 DistanceBetween(world *World, as_tile_node *NodeA, as_tile_node *NodeB)
 {
     v2 Delta = Subtract(World, &NodeA->TileP, &NodeB->TileP);
-//    r32 X = (r32)(NodeA->TileP.TileX - NodeB->TileP.TileX);
-//    r32 Y = (r32)(NodeA->TileP.TileY - NodeB->TileP.TileY);
 
     r32 Result = SquareRoot(Square(Delta.x) + Square(Delta.y));
 
     return(Result);
 }
 
-internal void
-SolveAStarForTileNodes(world *World, rectangle2 SimBounds, world_position Origin,
-                       as_tile_node *StartNode, as_tile_node *EndNode)
-{
-    TIMED_FUNCTION();
-
-    if(StartNode && EndNode)
-    {
-        if(!EndNode->Obstacle)
-        {
-            world_position MinTileP = MapIntoTileSpace(World, Origin, GetMinCorner(SimBounds));
-            world_position MaxTileP = MapIntoTileSpace(World, Origin, GetMaxCorner(SimBounds));
-
-            for(int32 NodeY = MinTileP.TileY*TILE_NODE_PER_TILE;
-                NodeY <= MaxTileP.TileY*TILE_NODE_PER_TILE;
-                ++NodeY)
-            {
-                for(int32 NodeX = MinTileP.TileX*TILE_NODE_PER_TILE;
-                    NodeX <= MaxTileP.TileX*TILE_NODE_PER_TILE;
-                    ++NodeX)
-                {
-                    if((NodeX < WORLD_TILE_NODE_COUNT_PER_DIM) && (NodeY < WORLD_TILE_NODE_COUNT_PER_DIM))
-                    {
-                        as_tile_node *Node = GetTileNode(World, NodeX, NodeY);
-
-                        Node->Visited = false;
-                        Node->GlobalGoal = Real32Maximum;
-                        Node->LocalGoal = Real32Maximum;
-                        Node->Parent = 0;
-                    }
-                }
-            }
-
-            heap *Heap = &World->MinTileNodeHeap;
-            
-            as_tile_node *CurrentNode = StartNode;
-            CurrentNode->LocalGoal = 0.0f;
-            CurrentNode->GlobalGoal = DistanceBetween(World, StartNode, EndNode);
-
-            sort_entry Key = {};
-            Key.Index = StartNode->Y*WORLD_TILE_NODE_COUNT_PER_DIM + StartNode->X;
-            Key.SortKey = StartNode->GlobalGoal;
-            MinHeapInsertNode(Heap, Key);
-
-            while((Heap->Size != 0) && (CurrentNode != EndNode) && (Heap->Size != Heap->MaxSize))
-            {
-                as_tile_node *TestNode = World->TileNodes + Heap->Nodes[0].Index;
-                while((Heap->Size != 0) && (TestNode->Visited))
-                {
-                    MinHeapExtractNode(Heap);
-                    TestNode = World->TileNodes + Heap->Nodes[0].Index;
-                }
-            
-                if(Heap->Size == 0)
-                {
-                    break;
-                }
-
-                CurrentNode = World->TileNodes + Heap->Nodes[0].Index; 
-                CurrentNode->Visited = true;
-
-                for(u32 NeighbourIndex = 0;
-                    NeighbourIndex < ArrayCount(CurrentNode->Neighbours);
-                    ++NeighbourIndex)
-                {
-                    as_tile_node *NeighbourNode = CurrentNode->Neighbours[NeighbourIndex];
-                    if(NeighbourNode)
-                    {
-                        if((!NeighbourNode->Visited) && (!NeighbourNode->Obstacle))
-                        {
-                            sort_entry NeighbourKey = {};
-                            NeighbourKey.Index = NeighbourNode->Y*WORLD_TILE_NODE_COUNT_PER_DIM + NeighbourNode->X;
-                            NeighbourKey.SortKey = NeighbourNode->GlobalGoal;
-
-                            r32 LowerGoal = (CurrentNode->LocalGoal +
-                                             DistanceBetween(World, CurrentNode, NeighbourNode));
-                            if(LowerGoal < NeighbourNode->LocalGoal)
-                            {
-                                NeighbourNode->Parent = CurrentNode;
-                                NeighbourNode->LocalGoal = LowerGoal;
-
-                                NeighbourNode->GlobalGoal = (NeighbourNode->LocalGoal +
-                                                             DistanceBetween(World, NeighbourNode, EndNode));
-                                NeighbourKey.SortKey = NeighbourNode->GlobalGoal;
-                            }
-
-                            if(Heap->Size != Heap->MaxSize)
-                            {
-                                MinHeapInsertNode(Heap, NeighbourKey);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if(Heap->Size == Heap->MaxSize)
-            {
-                EndNode = 0;
-            }
-            
-            ZeroArray(Heap->MaxSize, Heap->Nodes);
-            Heap->Size = 0;
-        }
-    }
-}
-
 internal world *
-CreateWorld(transient_state *TranState, v2 ChunkDimInMeters, r32 TileSideInMeters, memory_arena *ParentArena)
+CreateWorld(transient_state *TranState, r32 TileSideInMeters, loaded_world_map *Map)
 {
-    world *World = PushStruct(ParentArena, world);
+    world *World = BootstrapPushStruct(world, Arena);
     
-    World->ChunkDimInMeters = ChunkDimInMeters;
     World->FirstFree = 0;
-    World->TileSideInMeters = TileSideInMeters;
-    World->TileDepthInMeters = TileSideInMeters;
-    SubArena(&World->Arena, ParentArena, GetArenaSizeRemaining(ParentArena));
+    World->TileDimInMeters = V3(TileSideInMeters, TileSideInMeters, TileSideInMeters);
 
-    asset_vector MatchVector = {};
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_DataType] = 1;
+    World->TileWidth = Map->Header->MapWidth;
+    World->TileHeight = Map->Header->MapHeight;
+    World->TileCount = World->TileWidth*World->TileHeight;
 
-    World->TileCount = WORLD_TILE_COUNT_PER_DIM*WORLD_TILE_COUNT_PER_DIM;
+    World->NodesPerTile = 1;
+    World->TileNodeWidth = World->NodesPerTile*World->TileWidth;
+    World->TileNodeHeight = World->NodesPerTile*World->TileHeight;
+    World->TileNodeCount = World->NodesPerTile*World->TileCount;
 
-    MatchVector.E[Tag_DataType] = FileData_Decorations;
-    file_id FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
-    loaded_file *BinaryFile = PushFile(TranState, FileID, true);
-    Assert(BinaryFile->Data);
-    World->Decorations = PushArray(&World->Arena, World->TileCount, decoration);
-    World->Decorations = (decoration *)BinaryFile->Data;
-
-    MatchVector.E[Tag_DataType] = FileData_Tiles;
-    FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
-    BinaryFile = PushFile(TranState, FileID, true);
-    Assert(BinaryFile->Data);
-    World->Tiles = PushArray(&World->Arena, World->TileCount, world_tile);
-    World->Tiles = (world_tile *)BinaryFile->Data;
-
-    MatchVector.E[Tag_DataType] = FileData_Collisions;
-    FileID = GetBestMatchFileFrom(TranState->Assets, Asset_BinaryFile, &MatchVector, &WeightVector);
-    BinaryFile = PushFile(TranState, FileID, true);
-    Assert(BinaryFile->Data);
-    World->Collisions = PushArray(&World->Arena, World->TileCount, collision);
-    World->Collisions = (collision *)BinaryFile->Data;
-
-    World->TileNodeCount = WORLD_TILE_NODE_COUNT_PER_DIM*WORLD_TILE_NODE_COUNT_PER_DIM;
     World->TileNodes = PushArray(&World->Arena, World->TileNodeCount, as_tile_node);
     World->MinTileNodeHeap.MaxSize = World->TileNodeCount / 4;
     World->MinTileNodeHeap.Size = 0;
     World->MinTileNodeHeap.Nodes = PushArray(&World->Arena, World->MinTileNodeHeap.MaxSize, sort_entry);
-    v2 P = {};//V2(0.125f, 0.125f);
-    for(s32 Y = 0;
-        Y < WORLD_TILE_NODE_COUNT_PER_DIM;
+
+    for(u32 Y = 0;
+        Y < World->TileNodeHeight;
         ++Y)
     {
-        for(s32 X = 0;
-            X < WORLD_TILE_NODE_COUNT_PER_DIM;
+        for(u32 X = 0;
+            X < World->TileNodeWidth;
             ++X)
         {
-            P = V2(-0.375f, -0.375f) + 0.25f*V2i(X, Y);
-            as_tile_node *Node = World->TileNodes + Y*WORLD_TILE_NODE_COUNT_PER_DIM + X;
+            v2 P = V2i(X, Y);
+            as_tile_node *Node = World->TileNodes + Y*World->TileNodeWidth + X;
             InitASTileNode(World, Node, P, X, Y);
             FindTileNodeNeighbors(World, Node);
         }
     }
-
+    
     return(World);
 }

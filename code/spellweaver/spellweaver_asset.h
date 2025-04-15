@@ -35,12 +35,6 @@ struct loaded_spritesheet
     u32 BitmapIDOffset;
 };
 
-struct loaded_quest
-{
-    text_id *TextIDs;
-    u32 TextIDOffset;
-};
-
 struct loaded_text
 {
     char *String;
@@ -50,6 +44,13 @@ struct loaded_file
 {
     u32 Size;
     void *Data;
+};
+
+struct loaded_world_map
+{
+    sswm_header *Header;
+    sswm_ground_tile *GroundTiles;
+    sswm_entity *Entities;
 };
 
 enum asset_state
@@ -68,8 +69,8 @@ enum asset_header_type
     AssetType_Tileset,
     AssetType_SpriteSheet,
     AssetType_Text,
-    AssetType_Quest,
     AssetType_BinaryFile,
+    AssetType_SSWM,
 };
 
 struct asset_memory_header
@@ -89,8 +90,8 @@ struct asset_memory_header
         loaded_tileset Tileset;
         loaded_spritesheet SpriteSheet;
         loaded_text Text;
-        loaded_quest Quest;
         loaded_file BinaryFile;
+        loaded_world_map SSWM;
     };
 };
 
@@ -105,7 +106,7 @@ struct asset
 
 struct asset_vector
 {
-    real32 E[Tag_Count];
+    u32 E[Tag_Count];
 };
 
 struct asset_type
@@ -141,13 +142,13 @@ struct asset_memory_block
 
 struct game_assets
 {
+    platform_texture_op_queue *TextureOpQueue;
     u32 NextGenerationID;
     
     // TODO(casey): Not thrilled about this back-pointer
     struct transient_state *TranState;
 
     asset_memory_block MemorySentinel;
-    
     asset_memory_header LoadedAssetSentinel;
     
     real32 TagRange[Tag_Count];
@@ -235,6 +236,16 @@ GetAsset(game_assets *Assets, u32 ID, u32 GenerationID)
 
     EndAssetLock(Assets);
     
+    return(Result);
+}
+
+inline loaded_world_map *
+GetSSWM(game_assets *Assets, sswm_id ID, u32 GenerationID)
+{
+    asset_memory_header *Header = GetAsset(Assets, ID.Value, GenerationID);
+
+    loaded_world_map *Result = Header ? &Header->SSWM : 0;
+
     return(Result);
 }
 
@@ -352,25 +363,6 @@ GetTextInfo(game_assets *Assets, text_id ID)
     return(Result);
 }
 
-inline loaded_quest *
-GetQuest(game_assets *Assets, quest_id ID, u32 GenerationID)
-{
-    asset_memory_header *Header = GetAsset(Assets, ID.Value, GenerationID);
-
-    loaded_quest *Result = Header ? &Header->Quest : 0;
-
-    return(Result);
-}
-
-inline ssa_quest *
-GetQuestInfo(game_assets *Assets, quest_id ID)
-{
-    Assert(ID.Value <= Assets->AssetCount);
-    ssa_quest *Result = &Assets->Assets[ID.Value].SSA.Quest;
-
-    return(Result);
-}
-
 inline loaded_file *
 GetBinaryFile(game_assets *Assets, file_id ID, u32 GenerationID)
 {
@@ -429,14 +421,14 @@ inline void PrefetchTileset(game_assets *Assets, tileset_id ID) {LoadTileset(Ass
 internal void LoadSpriteSheet(game_assets *Assets, spritesheet_id ID, b32 Immediate);
 inline void PrefetchSpriteSheet(game_assets *Assets, spritesheet_id ID) {LoadSpriteSheet(Assets, ID, false);}
 
-internal void LoadQuest(game_assets *Assets, quest_id ID, b32 Immediate);
-inline void PrefetchQuest(game_assets *Assets, quest_id ID) {LoadQuest(Assets, ID, false);}
-
 internal void LoadText(game_assets *Assets, text_id ID, b32 Immediate);
 inline void PrefetchText(game_assets *Assets, text_id ID) {LoadText(Assets, ID, false);}
 
 internal void LoadBinaryFile(game_assets *Assets, file_id ID, b32 Immediate);
 inline void PrefetchBinaryFile(game_assets *Assets, file_id ID) {LoadBinaryFile(Assets, ID, false);}
+
+internal void LoadSSWM(game_assets *Assets, sswm_id ID, b32 Immediate);
+inline void PrefetchSSWM(game_assets *Assets, sswm_id ID) {LoadSSWM(Assets, ID, false);}
 
 inline sound_id GetNextSoundInChain(game_assets *Assets, sound_id ID)
 {

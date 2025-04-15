@@ -9,6 +9,19 @@
 
 #define CUTSCENE_WARMUP_SECONDS 2.0f
 
+internal void
+PlayIntroCutscene(game_state *GameState, transient_state *TranState)
+{
+    SetGameMode(GameState, TranState, GameMode_CutScene);
+        
+    game_mode_cutscene *Result = PushStruct(&GameState->ModeArena, game_mode_cutscene);
+
+    Result->ID = CutsceneID_Intro;
+    Result->t = 0;
+
+    GameState->CutScene = Result;
+}
+
 #if 0
 internal void
 RenderLayeredScene(game_assets *Assets, render_group *RenderGroup, loaded_bitmap *DrawBuffer,

@@ -1,49 +1,24 @@
-#if !defined(SPELLWEAVER_H)
+#if !defined(ENGINE_GAME_SIMULATE_H)
 /* ========================================================================
    $File: $
    $Date: 2024 $
    $Revision: $
-   $Creator: Paul Solodrai  $
-   $Notice: A large part of the code is borrowed from Handmade Hero series 
-            that was created by Casey Muratori $
+   $Creator: BabyKaban $
+   $Notice: $
    ======================================================================== */
 
-#include "spellweaver_platform.h"
-#include "spellweaver_config.h"
-#include "spellweaver_shared.h"
-#include "spellweaver_cutscene.h"
+//#include "spellweaver\spellweaver_platform.h"
+//#include "spellweaver\spellweaver_config.h"
+#include "spellweaver\spellweaver_shared.h"
+#include "spellweaver\spellweaver_cutscene.h"
 
-#define DLIST_INSERT(Sentinel, Element)         \
-    (Element)->Next = (Sentinel)->Next;         \
-    (Element)->Prev = (Sentinel);               \
-    (Element)->Next->Prev = (Element);          \
-    (Element)->Prev->Next = (Element); 
-#define DLIST_INSERT_AS_LAST(Sentinel, Element)         \
-    (Element)->Next = (Sentinel);               \
-    (Element)->Prev = (Sentinel)->Prev;         \
-    (Element)->Next->Prev = (Element);          \
-    (Element)->Prev->Next = (Element); 
-
-#define DLIST_INIT(Sentinel) \
-    (Sentinel)->Next = (Sentinel); \
-    (Sentinel)->Prev = (Sentinel);
-
-#define FREELIST_ALLOCATE(Result, FreeListPointer, AllocationCode)             \
-    (Result) = (FreeListPointer); \
-    if(Result) {FreeListPointer = (Result)->NextFree;} else {Result = AllocationCode;}
-#define FREELIST_DEALLOCATE(Pointer, FreeListPointer) \
-    if(Pointer) {(Pointer)->NextFree = (FreeListPointer); (FreeListPointer) = (Pointer);}
-
-#define Minimum(A, B) ((A < B) ? (A) : (B))
-#define Maximum(A, B) ((A > B) ? (A) : (B))
-
-#include "spellweaver_render.h"
-#include "spellweaver_render_group.h"
-#include "spellweaver_asset.h"
-#include "spellweaver_audio.h"
-#include "spellweaver_world.h"
-#include "spellweaver_entity.h"
-#include "spellweaver_sim_region.h"
+#include "spellweaver\spellweaver_render.h"
+//#include "spellweaver\spellweaver_render_group.h"
+//#include "spellweaver\spellweaver_asset.h"
+//#include "spellweaver_audio.h"
+#include "spellweaver\spellweaver_world.h"
+#include "spellweaver\spellweaver_entity.h"
+#include "spellweaver\spellweaver_sim_region.h"
 
 struct text_config
 {
@@ -66,8 +41,8 @@ enum text_op
     TextOp_SizeText,
 };
 
-#include "spellweaver_world_mode.h"
-#include "spellweaver_title_mode.h"
+#include "spellweaver\spellweaver_world_mode.h"
+#include "spellweaver\spellweaver_title_mode.h"
 
 struct controlled_hero
 {
@@ -124,9 +99,9 @@ struct game_state
     memory_arena ModeArena;
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
 
-    controlled_hero ControlledHeroes[ArrayCount(((game_input *)0)->Controllers)];
+    controlled_hero ControlledHeroes[ArrayCount(((engine_input *)0)->Controllers)];
 
-    audio_state AudioState;
+    audio_state *AudioState;
     
     b32 GameHaveStarted;
     bitmap_id CursorBitmapHover;
@@ -156,7 +131,7 @@ struct game_state
     };
 };
 
-struct task_with_memory
+struct game_task_with_memory
 {
     b32 BeingUsed;
     b32 DependsOnGameMode;
@@ -165,14 +140,14 @@ struct task_with_memory
     temporary_memory MemoryFlush;
 };
 
-struct transient_state
+struct game_transient_state
 {
     bool32 IsInitialized;
     memory_arena TranArena;    
 
-    task_with_memory Tasks[4];
+    game_task_with_memory Tasks[4];
 
-    game_assets *Assets;
+    editor_assets *Assets;
     u32 MainGenerationID;
 
     loaded_bitmap MiniMap;
@@ -181,9 +156,17 @@ struct transient_state
     platform_work_queue *LowPriorityQueue;
 };
 
-internal task_with_memory *BeginTaskWithMemory(transient_state *TranState, b32 DependsOnGameMode);
-internal void EndTaskWithMemory(task_with_memory *Task);
-internal void SetGameMode(game_state *GameState, transient_state *TranState, game_mode GameMode);
+internal game_task_with_memory *BeginTaskWithMemory(game_transient_state *TranState, b32 DependsOnGameMode);
+internal void EndTaskWithMemory(game_task_with_memory *Task);
+internal void SetGameMode(game_state *GameState, game_transient_state *TranState, game_mode GameMode);
 
-#define SPELLWEAVER_H
+struct editor_game_simulate_mode
+{
+    memory_arena GameArena;
+    memory_arena GameTranArena;
+};
+
+internal void PlaySimulation(editor_state *EditorState, transient_state *TranState);
+
+#define ENGINE_GAME_SIMULATE_H
 #endif

@@ -7,10 +7,6 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
-// TODO(casey): Stop using stdio!
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "spellweaver_debug.h"
 #include "spellweaver_debug_ui.cpp"
 
@@ -40,7 +36,7 @@ DebugParseName(char *GUID)
             if(PipeCount == 0)
             {
                 Result.FileNameCount = (u32)(Scan - GUID);
-                Result.LineNumber = atoi(Scan + 1);
+                Result.LineNumber = S32FromZ(Scan + 1);
             }
             else if(PipeCount == 1)
             {
@@ -208,8 +204,7 @@ DEBUGEventToText(char *Buffer, char *End, debug_element *Element, debug_event *E
 
     if(Flags & DEBUGVarToText_AddDebugUI)
     {
-        At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                          "#define DEBUGUI_");
+        At += FormatString(End - At, At, "#define DEBUGUI_");
     }
 
     if(Flags & DEBUGVarToText_AddName)
@@ -229,8 +224,7 @@ DEBUGEventToText(char *Buffer, char *End, debug_element *Element, debug_event *E
             }
         }
 
-        At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                          "%s%s ", UseName, (Flags & DEBUGVarToText_Colon) ? ":" : "");
+        At += FormatString(End - At, At, "%s%s ", UseName, (Flags & DEBUGVarToText_Colon) ? ":" : "");
     }
 
     if(Flags & DEBUGVarToText_AddValue)
@@ -239,8 +233,7 @@ DEBUGEventToText(char *Buffer, char *End, debug_element *Element, debug_event *E
         {
             case DebugType_r32:                
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "%f", Event->Value_r32);
+                At += FormatString(End - At, At, "%f", Event->Value_r32);
                 if(Flags & DEBUGVarToText_FloatSuffix)
                 {
                     *At++ = 'f';
@@ -251,71 +244,60 @@ DEBUGEventToText(char *Buffer, char *End, debug_element *Element, debug_event *E
             {
                 if(Flags & DEBUGVarToText_PrettyBools)
                 {
-                    At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                        "%s",
-                        Event->Value_b32 ? "true" : "false");
+                    At += FormatString(End - At, At, "%s", Event->Value_b32 ? "true" : "false");
                 }
                 else
                 {
-                    At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                        "%d", Event->Value_b32);
+                    At += FormatString(End - At, At, "%d", Event->Value_b32);
                 }
             } break;
 
             case DebugType_s32:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "%d", Event->Value_s32);
+                At += FormatString(End - At, At, "%d", Event->Value_s32);
             } break;
 
             case DebugType_u32:   
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "%u", Event->Value_u32);
+                At += FormatString(End - At, At, "%u", Event->Value_u32);
             } break;
 
             case DebugType_v2:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "V2(%f, %f)",
-                    Event->Value_v2.x, Event->Value_v2.y);
+                At += FormatString(End - At, At, "V2(%f, %f)", Event->Value_v2.x, Event->Value_v2.y);
             } break;
 
             case DebugType_v3:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "V3(%f, %f, %f)",
-                    Event->Value_v3.x, Event->Value_v3.y, Event->Value_v3.z);
+                At += FormatString(End - At, At, "V3(%f, %f, %f)",
+                                   Event->Value_v3.x, Event->Value_v3.y, Event->Value_v3.z);
             } break;
 
             case DebugType_v4:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "V4(%f, %f, %f, %f)",
-                    Event->Value_v4.x, Event->Value_v4.y,
-                    Event->Value_v4.z, Event->Value_v4.w);
+                At += FormatString(End - At, At, "V4(%f, %f, %f, %f)",
+                                   Event->Value_v4.x, Event->Value_v4.y,
+                                   Event->Value_v4.z, Event->Value_v4.w);
             } break;
 
             case DebugType_rectangle2:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "Rect2(%f, %f -> %f, %f)",
-                    Event->Value_rectangle2.Min.x,
-                    Event->Value_rectangle2.Min.y,
-                    Event->Value_rectangle2.Max.x,
-                    Event->Value_rectangle2.Max.y);
+                At += FormatString(End - At, At, "Rect2(%f, %f -> %f, %f)",
+                                   Event->Value_rectangle2.Min.x,
+                                   Event->Value_rectangle2.Min.y,
+                                   Event->Value_rectangle2.Max.x,
+                                   Event->Value_rectangle2.Max.y);
             } break;
 
             case DebugType_rectangle3:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "Rect2(%f, %f, %f -> %f, %f, %f)",
-                    Event->Value_rectangle3.Min.x,
-                    Event->Value_rectangle3.Min.y,
-                    Event->Value_rectangle3.Min.z,
-                    Event->Value_rectangle3.Max.x,
-                    Event->Value_rectangle3.Max.y,
-                    Event->Value_rectangle3.Max.z);
+                At += FormatString(End - At, At, "Rect2(%f, %f, %f -> %f, %f, %f)",
+                                   Event->Value_rectangle3.Min.x,
+                                   Event->Value_rectangle3.Min.y,
+                                   Event->Value_rectangle3.Min.z,
+                                   Event->Value_rectangle3.Max.x,
+                                   Event->Value_rectangle3.Max.y,
+                                   Event->Value_rectangle3.Max.z);
             } break;
 
             case DebugType_bitmap_id:
@@ -324,8 +306,7 @@ DEBUGEventToText(char *Buffer, char *End, debug_element *Element, debug_event *E
 
             default:
             {
-                At += _snprintf_s(At, (size_t)(End - At), (size_t)(End - At),
-                    "UNHANDLED: %s", Event->GUID);
+                At += FormatString(End - At, At, "UNHANDLED: %s", Event->GUID);
             } break;
         }
     }
@@ -502,22 +483,6 @@ GetTotalClocks(debug_element_frame *Frame)
     return(Result);
 }
 
-global_variable v3 DebugColorTable[] =
-{
-    {1, 0, 0},
-    {0, 1, 0},
-    {0, 0, 1},
-    {1, 1, 0},
-    {0, 1, 1},
-    {1, 0, 1},
-    {1, 0.5f, 0},
-    {1, 0, 0.5f},
-    {0.5f, 1, 0},
-    {0, 1, 0.5f},
-    {0.5f, 0, 1},
-    //    {0, 0.5f, 1},
-};
-
 internal void
 DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect, v2 MouseP,
                 debug_profile_node *RootNode, r32 LaneStride, r32 LaneHeight, u32 DepthRemaining)
@@ -550,18 +515,16 @@ DrawProfileBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRec
         rectangle2 RegionRect = RectMinMax(V2(ThisMinX, LaneY - LaneHeight),
                                            V2(ThisMaxX, LaneY));
 
-        PushRect(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
             BaseZ, V4(Color, 1));
-        PushRectOutline(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
             BaseZ+1.0f, V4(0,0,0, 1), 2.0f);
 
         // TODO(casey): Pull this out so all profilers share it.
         if(IsInRectangle(RegionRect, MouseP))
         {
             char TextBuffer[256];
-            _snprintf_s(TextBuffer, sizeof(TextBuffer),
-                "%s: %10llucy",
-                Element->GUID, Node->Duration);
+            FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
             AddTooltip(DebugState, TextBuffer);
             
             // TODO(casey): It would be better to generate a graph+element debug ID here!
@@ -595,14 +558,14 @@ DrawArenaOccupancy(debug_state *DebugState, debug_id GraphID, rectangle2 FrameRe
         rectangle2 UnusedRect = RectMinMax(V2(SplitPoint, FrameRect.Min.y),
                                            V2(FrameRect.Max.x, FrameRect.Max.y));
 
-        PushRect(&DebugState->RenderGroup, DebugState->UITransform, UsedRect,
+        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
             0.0f, V4(1,0.5f,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, DebugState->UITransform, UsedRect,
+        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UsedRect,
             1.0f, V4(0,0,0, 1), 2.0f);
         
-        PushRect(&DebugState->RenderGroup, DebugState->UITransform, UnusedRect,
+        PushRect(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
             0.0f, V4(0,1,0, 1));
-        PushRectOutline(&DebugState->RenderGroup, DebugState->UITransform, UnusedRect,
+        PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, UnusedRect,
             1.0f, V4(0,0,0, 1), 2.0f);
     }
 }
@@ -685,17 +648,15 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileRect,
                     
                     rectangle2 RegionRect = RectMinMax(V2(AtX, ThisMinY), V2(AtX + BarWidth, ThisMaxY));
 
-                    PushRect(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+                    PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                         0.0f, V4(HighDim*Color, 1));
-                    PushRectOutline(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+                    PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                         1.0f, V4(0, 0, 0, 1), 2.0f);
 
                     if(IsInRectangle(RegionRect, MouseP))
                     {
                         char TextBuffer[256];
-                        _snprintf_s(TextBuffer, sizeof(TextBuffer),
-                            "%s: %10llucy",
-                            Element->GUID, Node->Duration);
+                        FormatString(sizeof(TextBuffer), TextBuffer, "%s: %10llucy", Element->GUID, Node->Duration);
                         AddTooltip(DebugState, TextBuffer);
                         
                         debug_view *View = GetOrCreateDebugViewFor(DebugState, GraphID);
@@ -781,12 +742,8 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, rectangle2 ProfileR
         debug_element *Element = Entry->Element;
         
         char TextBuffer[256];
-        _snprintf_s(TextBuffer, sizeof(TextBuffer),
-            "%10ucy %02.02f%% %4d %s",
-            (u32)Stats->Sum,
-            (PC*Stats->Sum),
-            Stats->Count,
-            Element->GUID + Element->NameStartsAt);
+        FormatString(sizeof(TextBuffer), TextBuffer, "%10ucy %05.02f%% %4d %s", (u32)Stats->Sum,
+                     (PC*Stats->Sum), Stats->Count, Element->GUID + Element->NameStartsAt);
         TextOutAt(DebugState, At, TextBuffer);
         
         if(At.y < ProfileRect.Min.y)
@@ -810,7 +767,7 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, rectangle2 TotalRect
     if(FrameCount > 0)
     {
         object_transform NoTransform = DefaultFlatTransform();
-        PushRect(&DebugState->RenderGroup, DebugState->BackingTransform, TotalRect, 0.0f, V4(0, 0, 0, 0.25f));
+        PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, TotalRect, 0.0f, V4(0, 0, 0, 0.25f));
 
         r32 BarWidth = (GetDim(TotalRect).x / (r32)FrameCount);
         r32 AtX = TotalRect.Min.x;
@@ -850,16 +807,16 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, rectangle2 TotalRect
 
             if(Highlight)
             {
-                PushRect(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+                PushRect(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                     0.0f, HiColor);
             }
-            PushRectOutline(&DebugState->RenderGroup, DebugState->UITransform, RegionRect,
+            PushRectOutline(&DebugState->RenderGroup, &DebugState->UITransform, RegionRect,
                 1.0f, V4(0.5f,0.5f,0.5f, 1), 2.0f);
 
             if(IsInRectangle(RegionRect, MouseP))
             {
                 char TextBuffer[256];
-                _snprintf_s(TextBuffer, sizeof(TextBuffer), "%u", FrameIndex);
+                FormatString(sizeof(TextBuffer), TextBuffer, "%u", FrameIndex);
                 AddTooltip(DebugState, TextBuffer);
                 
                 DebugState->NextHotInteraction = 
@@ -902,7 +859,7 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
                 Bitmap = GetBitmap(RenderGroup->Assets, Event->Value_bitmap_id, RenderGroup->GenerationID);
                 if(Bitmap)
                 {
-                    used_bitmap_dim Dim = GetBitmapDim(RenderGroup, NoTransform, Bitmap, BitmapScale, V3(0.0f, 0.0f, 0.0f), 1.0f);
+                    used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &NoTransform, Bitmap, BitmapScale, V3(0.0f, 0.0f, 0.0f), 1.0f);
                     View->InlineBlock.Dim.x = Dim.Size.x;
                 }
             }
@@ -911,11 +868,11 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             MakeElementSizable(&LayEl);
             DefaultInteraction(&LayEl, ItemInteraction);
             EndElement(&LayEl);
-            PushRect(&DebugState->RenderGroup, DebugState->BackingTransform, LayEl.Bounds, 0.0f, V4(0, 0, 0, 1.0f));
+            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f, V4(0, 0, 0, 1.0f));
 
             if(Bitmap)
             {
-                PushBitmap(&DebugState->RenderGroup, DebugState->BackingTransform, Event->Value_bitmap_id, BitmapScale,
+                PushBitmap(&DebugState->RenderGroup, &DebugState->BackingTransform, Event->Value_bitmap_id, BitmapScale,
                     V3(GetMinCorner(LayEl.Bounds), 1.0f), V4(1, 1, 1, 1), 0.0f);
             }
         } break;
@@ -942,12 +899,13 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             //                DefaultInteraction(&LayEl, ItemInteraction);
             EndElement(&LayEl);
 
-            PushRect(&DebugState->RenderGroup, DebugState->BackingTransform,
+            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform,
                 LayEl.Bounds, 0.0f, V4(0, 0, 0, 0.75f));
             
             u32 OldClipRect = RenderGroup->CurrentClipRectIndex;
             RenderGroup->CurrentClipRectIndex = 
-                PushClipRect(RenderGroup, DebugState->BackingTransform, LayEl.Bounds, 0.0f);
+                PushClipRect(RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f,
+                             DebugState->RenderTarget);
                 
             switch(Element->Type)
             {
@@ -987,12 +945,13 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             //                DefaultInteraction(&LayEl, ItemInteraction);
             EndElement(&LayEl);
 
-            PushRect(&DebugState->RenderGroup, DebugState->BackingTransform,
+            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform,
                 LayEl.Bounds, 0.0f, V4(0, 0, 0, 0.75f));
             
             u32 OldClipRect = RenderGroup->CurrentClipRectIndex;
             RenderGroup->CurrentClipRectIndex = 
-                PushClipRect(RenderGroup, DebugState->BackingTransform, LayEl.Bounds, 0.0f);
+                PushClipRect(RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f,
+                             DebugState->RenderTarget);
                 
             debug_stored_event *RootNode = 0;
 
@@ -1056,12 +1015,9 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
             char Text[256];
             
             debug_frame *MostRecentFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
-            _snprintf_s(Text, sizeof(Text),
-                "Viewing frame time: %.02fms %de %dp %dd",
-                MostRecentFrame->WallSecondsElapsed * 1000.0f,
-                MostRecentFrame->StoredEventCount,
-                MostRecentFrame->ProfileBlockCount,
-                MostRecentFrame->DataBlockCount);
+            FormatString(sizeof(Text), Text, "Viewing frame time: %.02fms %de %dp %dd",
+                         MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
+                         MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
             BasicTextElement(Layout, Text, ItemInteraction);
         } break;
@@ -1069,9 +1025,8 @@ DEBUGDrawElement(layout *Layout, debug_tree *Tree, debug_element *Element, debug
         case DebugType_DebugMemoryInfo:
         {
             char Text[256];
-            _snprintf_s(Text, sizeof(Text),
-                "Per-frame arena space remaining: %ukb",
-                (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
+            FormatString(sizeof(Text), Text, "Per-frame arena space remaining: %ukb",
+                         (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
 
             BasicTextElement(Layout, Text, ItemInteraction);
         } break;
@@ -1171,7 +1126,7 @@ DrawTrees(debug_state *DebugState, v2 MouseP)
         MoveInteraction.P = &Tree->UIP;
         
         rectangle2 MoveBox = RectCenterHalfDim(Tree->UIP - V2(4.0f, 4.0f), V2(4.0f, 4.0f));
-        PushRect(RenderGroup, NoTransform, MoveBox, 0.0f,
+        PushRect(RenderGroup, &NoTransform, MoveBox, 0.0f,
             InteractionIsHot(DebugState, MoveInteraction) ? V4(1, 1, 0, 1) : V4(1, 1, 1, 1));
         
         if(IsInRectangle(MoveBox, MouseP))
@@ -1938,7 +1893,8 @@ DEBUGStart(debug_state *DebugState, game_render_commands *Commands, game_assets 
         AddTree(DebugState, DebugState->RootGroup, V2(-0.5f*Width, 0.5f*Height));
     }
 
-    DebugState->RenderGroup = BeginRenderGroup(Assets, Commands, MainGenerationID, false);
+    DebugState->RenderGroup = BeginRenderGroup(Assets, Commands, MainGenerationID, false,
+                                               Width, Height);
 
     DebugState->DebugFont = PushFont(&DebugState->RenderGroup, DebugState->FontID);
     DebugState->DebugFontInfo = GetFontInfo(DebugState->RenderGroup.Assets, DebugState->FontID);
@@ -1948,12 +1904,12 @@ DEBUGStart(debug_state *DebugState, game_render_commands *Commands, game_assets 
 
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
-    MatchVector.E[Tag_FontType] = (r32)FontType_Debug;
-    WeightVector.E[Tag_FontType] = 1.0f;
+    MatchVector.E[Tag_FontType] = FontType_Debug;
+    WeightVector.E[Tag_FontType] = 1;
     DebugState->FontID = GetBestMatchFontFrom(Assets, Asset_Font, &MatchVector, &WeightVector);
 
     DebugState->FontScale = 1.0f;
-    Orthographic(&DebugState->RenderGroup, Width, Height, 1.0f);
+    Orthographic(&DebugState->RenderGroup, 1.0f);
     DebugState->LeftEdge = -0.5f*Width;
     DebugState->RightEdge = 0.5f*Width;
 
@@ -1962,10 +1918,10 @@ DEBUGStart(debug_state *DebugState, game_render_commands *Commands, game_assets 
     DebugState->UITransform = DefaultFlatTransform();
     DebugState->BackingTransform = DefaultFlatTransform();
 
-    DebugState->BackingTransform.SortBias = 100000.0f;
-    DebugState->ShadowTransform.SortBias = 200000.0f;
-    DebugState->UITransform.SortBias = 300000.0f;
-    DebugState->TextTransform.SortBias = 400000.0f;
+    DebugState->BackingTransform.ChunkZ = 100000;
+    DebugState->ShadowTransform.ChunkZ = 200000;
+    DebugState->UITransform.ChunkZ = 300000;
+    DebugState->TextTransform.ChunkZ = 400000;
 
     DebugState->DefaultClipRect = DebugState->RenderGroup.CurrentClipRectIndex;
     
@@ -1985,15 +1941,14 @@ DEBUGEnd(debug_state *DebugState, game_input *Input)
     debug_event *HotEvent = 0;
 
     debug_frame *MostRecentFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
-    _snprintf_s(DebugState->RootInfo, DebugState->RootInfoSize, DebugState->RootInfoSize,
-        "%.02fms %de %dp %dd",
-        MostRecentFrame->WallSecondsElapsed * 1000.0f,
-        MostRecentFrame->StoredEventCount,
-        MostRecentFrame->ProfileBlockCount,
-        MostRecentFrame->DataBlockCount);
+    FormatString(DebugState->RootInfoSize, DebugState->RootInfo, "%.02fms %de %dp %dd",
+                 MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
+                 MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
     DebugState->AltUI = Input->MouseButtons[PlatformMouseButton_Right].EndedDown;
-    v2 MouseP = Unproject(RenderGroup, DefaultFlatTransform(), V2(Input->MouseX, Input->MouseY)).xy;
+
+    object_transform Flat = DefaultFlatTransform();
+    v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
     DebugState->MouseTextLayout = BeginLayout(DebugState, MouseP, MouseP);
     DrawTrees(DebugState, MouseP);
     EndLayout(&DebugState->MouseTextLayout);

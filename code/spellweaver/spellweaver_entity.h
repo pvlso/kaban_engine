@@ -12,126 +12,9 @@
 
 struct entity;
 
-// NOTE(paul): Entity General ========================================================================================
-struct move_spec
-{
-    bool32 UnitMaxAccelVector;
-    real32 Speed;
-    real32 Drag;
-};
-
 struct entity_id
 {
     u32 Value;
-};
-
-enum entity_type
-{
-    EntityType_Null,
-    
-    EntityType_Hero,
-    EntityType_NPC,
-
-    EntityType_Wall,
-    EntityType_Familiar,
-    EntityType_Golem,
-    EntityType_Cultist,
-    EntityType_Necromancer,
-    EntityType_Possesed,
-    EntityType_GoblinBeast,
-    EntityType_GoblinBerserker,
-    EntityType_GoblinRider,
-    EntityType_SkeletonGrunt,
-    EntityType_SkeletonHunter,
-    EntityType_SkeletonKing,
-    EntityType_MagicSphere,
-
-    EntityType_Item,
-    EntityType_Obstacle,
-    EntityType_Obelisk,
-
-    EntityType_FlyingSpell,
-    EntityType_ImmidiateSpell,
-
-    EntityType_Decoration,
-    EntityType_AnimatedDecoration,
-    EntityType_Collision,
-};
-
-enum entity_general_type
-{
-    GeneralType_Null,
-    
-    GeneralType_Hero,
-    GeneralType_Allay,
-    GeneralType_Enemy,
-    GeneralType_Object,
-    GeneralType_Item,
-    GeneralType_Spell,
-};
-
-enum entity_flags
-{
-    EntityFlag_Collides = (1 << 0),
-    EntityFlag_Moveable = (1 << 1),
-    EntityFlag_Deleted = (1 << 2),
-    EntityFlag_ZSupported = (1 << 3),
-    EntityFlag_Traversable = (1 << 4),
-};
-
-enum entity_state
-{
-    EntityState_None,
-    EntityState_Moving,
-    EntityState_Staying,
-    EntityState_Attacking,
-    EntityState_CastingSpell,
-    EntityState_Dieing,
-};
-
-enum attack_type
-{
-    AttackType_0,
-    AttackType_1,
-    AttackType_2,
-
-    AttackType_Count,
-};
-
-enum castspell_type
-{
-    CastSpellType_0,
-    CastSpellType_1,
-    CastSpellType_2,
-
-    CastSpellType_Count,
-};
-
-enum effect
-{
-    SpellEffect_Null,
-
-    SpellEffect_Fire,
-    SpellEffect_Wind,
-    SpellEffect_Water,
-    SpellEffect_Light,
-    SpellEffect_Ice,
-    SpellEffect_Dark,
-    SpellEffect_Heal,
-    SpellEffect_Energy,
-};
-
-union entity_reference
-{
-    entity_id ID;
-    entity *Ptr;
-};
-
-struct entity_collision_volume
-{
-    rectangle3 CollisionRect;
-    v3 OffsetP;
-    r32 Height;
 };
 
 struct timer
@@ -140,165 +23,6 @@ struct timer
     r32 DurationSeconds;
     r32 CurrentTime;
 };
-
-struct entity
-{
-    // NOTE(casey): This are only for the sim region
-    world_position TileP;
-
-    entity_id ID;
-    bool32 Updatable;
-    
-    // NOTE (paul): General
-
-    u32 HealthMax_Health;
-    u32 ManaMax_Mana;
-    
-    entity_general_type GeneralType;
-    entity_type Type;
-
-    u32 Flags;
-    entity_state State;
-
-    as_tile_node *StartNode;
-    as_tile_node *EndNode;
-    heap MovePointMaxHeap;
-    
-    real32 DistanceLimit;
-    entity_collision_volume *Collision;
-
-    u32 RefCount;
-    entity_reference References[8];
-    
-    v3 P;
-    v3 dP;
-
-    r32 RenderHeight;
-    u32 FacingDirection;
-
-    bitmap_id BitmapID;
-    
-    b32 AnimationTypeHaveChanged;
-    u32 SpriteSheetOffset;
-    u32 AnimationType;
-    
-    // NOTE(paul): For each facing direction
-    u8 SpriteSheetSpeed[AnimationType_Count][4];
-    spritesheet_id SpriteSheets[AnimationType_Count][4];
-
-    // NOTE(paul): Fighting, effects and spells
-    attack_type AttackType;
-    u32 AttackTimerIndex[AttackType_Count];
-    u32 AttackSpriteFinishIndex[AttackType_Count];
-
-    castspell_type CastSpellType;
-    u32 CastSpellTimerIndex[AttackType_Count];
-    u32 CastSpellSpriteFinishIndex[AttackType_Count];
-
-    u32 TimerCount;
-    timer Timers[8];
-
-    // NOTE(paul): Three similar sounds
-    sound_id AnimationSoundEffect[AnimationType_Count][3];
-    sound_id AttackImpactSound[3];
-    
-    void *Data;
-};
-// ===================================================================================================================
-
-// NOTE(paul): Quests ================================================================================================
-struct quest;
-struct kill_monsters
-{
-    u32 MonsterCount;
-    entity_id MonstersToKill[16];
-};
-
-struct find_item
-{
-    u32 Name;
-};
-
-struct talk_to_npc
-{
-    entity_id NPCToTalk;
-};
-
-struct finished_quest
-{
-    u32 QuestID;
-};
-
-enum complition_type
-{
-    ComplitionType_Kill,
-    ComplitionType_Find,
-    ComplitionType_Talk,
-    ComplitionType_Quest,
-};
-
-union complition_requirements
-{
-    kill_monsters KillMonsters;
-    find_item FindItem;
-    talk_to_npc TalkToNPC;
-    finished_quest FinishedQuest;
-};
-
-enum reward_type
-{
-    RewardType_Quest,
-    RewardType_TalkingGiver,
-    RewardType_DestroyObstacle,
-    RewardType_GameEnd,
-};
-
-enum reward_condition
-{
-    RewardCondition_WhenCompleted,
-    RewardCondition_TalkToGiver,
-};
-
-union reward
-{
-    u32 QuestID;
-    entity_id TalkingGiverID;
-    entity_id Obstacles[8];
-    // TODO(paul): Add others rewards.
-};
-
-struct quest_id
-{
-    u32 Value;
-};
-
-struct quest
-{
-    quest_type Type;
-    quest_name QuestName;
-    char *UnCompletedText;
-    char *CompletedText;
-
-    world_position Location;
-    world_position GiverLocation;
-
-    quest_id QuestTextID;
-    b32 FullyComleted;
-    
-    entity_id QuestGiverNPC;
-
-    u32 RequirementsCount;
-    b32 Completed;
-    b32 IsCompleted[8];
-    complition_type ComplitionType[8];
-    complition_requirements CompRequirements[8];
-
-    reward_condition RewardCondition;
-    u32 RewardCount;
-    reward_type RewardType[8];
-    reward Reward[8];
-};
-// ===================================================================================================================
 
 // NOTE(paul): NPC ===================================================================================================
 struct item_entity
@@ -390,12 +114,26 @@ enum spell_type
     SpellType_BirdStrike = 0x24,
 };
 
+enum effect
+{
+    SpellEffect_Null,
+
+    SpellEffect_Fire,
+    SpellEffect_Wind,
+    SpellEffect_Water,
+    SpellEffect_Light,
+    SpellEffect_Ice,
+    SpellEffect_Dark,
+    SpellEffect_Heal,
+    SpellEffect_Energy,
+};
+
 struct casted_spell
 {
     spell_type Type;
 
-    r32 SpellName;
-    r32 MagicElement;
+    u32 SpellName;
+    u32 MagicElement;
 
     effect Effect;
     u32 ManaCost;
@@ -506,14 +244,265 @@ struct hero_entity
     u32 ItemCount;
     u32 Inventory[8];
 
+    world_position MoveP;
+};
+// ===================================================================================================================
+
+struct tile_entity
+{
+    b32 Occupied;
+    bitmap_id BitmapID[16];
+};
+
+// NOTE(paul): Entity General ========================================================================================
+struct move_spec
+{
+    bool32 UnitMaxAccelVector;
+    real32 Speed;
+    real32 Drag;
+};
+
+enum entity_type
+{
+    EntityType_Null,
+    
+    EntityType_Hero,
+    EntityType_NPC,
+    EntityType_Golem,
+
+    EntityType_Cultist,
+    EntityType_Necromancer,
+    EntityType_Possesed,
+    EntityType_GoblinBeast,
+    EntityType_GoblinBerserker,
+    EntityType_GoblinRider,
+    EntityType_SkeletonGrunt,
+    EntityType_SkeletonHunter,
+    EntityType_SkeletonKing,
+    EntityType_MagicSphere,
+
+    EntityType_Item,
+    EntityType_Obelisk,
+
+    EntityType_FlyingSpell,
+    EntityType_ImmidiateSpell,
+
+    EntityType_Decoration,
+    EntityType_AnimatedDecoration,
+    EntityType_Collision,
+
+
+    EntityType_Tile,
+};
+
+enum entity_general_type
+{
+    GeneralType_Null,
+    
+    GeneralType_Hero,
+    GeneralType_Allay,
+    GeneralType_Enemy,
+    GeneralType_Object,
+    GeneralType_Item,
+    GeneralType_Spell,
+};
+
+enum entity_state
+{
+    EntityState_None,
+    EntityState_Moving,
+    EntityState_Staying,
+    EntityState_Attacking,
+    EntityState_CastingSpell,
+    EntityState_Dieing,
+};
+
+enum attack_type
+{
+    AttackType_0,
+    AttackType_1,
+    AttackType_2,
+
+    AttackType_Count,
+};
+
+enum castspell_type
+{
+    CastSpellType_0,
+    CastSpellType_1,
+    CastSpellType_2,
+
+    CastSpellType_Count,
+};
+
+union entity_reference
+{
+    entity_id ID;
+    entity *Ptr;
+};
+
+struct entity_collision
+{
+    rectangle3 CollisionRect;
+    r32 Height;
+    v3 OffsetP;
+};
+
+struct entity_stats
+{
+    u32 HealthMax_Health;
+    u32 ManaMax_Mana;
+
+    u32 Bufs;
+    u32 Debufs;
+
+    u32 Vulnerability;
+    u32 Invulnerability;
+};
+
+struct entity_move_state
+{
+    as_tile_node *StartNode;
+    as_tile_node *EndNode;
+    heap MovePointMinHeap;
+
+    u32 PointCount;
+    v2 *Points;
+    world_position *TilePoints;
+    
+    real32 DistanceLimit;
+    
+    v3 dP;
+};
+
+struct entity_animation
+{
+
+    b32 AnimationTypeHaveChanged;
+    u32 SpriteSheetOffset;
+    u32 AnimationType;
+    
+    // NOTE(paul): For each facing direction
+    u8 SpriteSheetSpeed[AnimationType_Count][4];
+    spritesheet_id SpriteSheets[AnimationType_Count][4];
+
+    // NOTE(paul): Fighting, effects and spells
+    attack_type AttackType;
+    u32 AttackSpriteFinishIndex[AttackType_Count];
+
+    castspell_type CastSpellType;
+    u32 CastSpellSpriteFinishIndex[AttackType_Count];
+};
+
+struct entity_references
+{
+    u32 RefCount;
+    entity_reference References[8];
+};
+
+struct entity_timers
+{
+    u32 TimerCount;
+    timer Timers[8];
+
+    u32 CastSpellTimerIndex[AttackType_Count];
+    u32 AttackTimerIndex[AttackType_Count];
+};
+
+struct entity_sound_effects
+{
+    // NOTE(paul): Three similar sounds
+    sound_id AnimationSoundEffect[AnimationType_Count][3];
+    sound_id AttackImpactSound[3];
+};
+
+enum entity_flags
+{
+    EntityFlag_Collides = (1 << 0),
+    EntityFlag_Moveable = (1 << 1),
+    EntityFlag_Deleted = (1 << 2),
+    EntityFlag_OnTheGround = (1 << 3),
+};
+
+enum entity_creation_flags
+{
+    CreationFlag_Stats = (1 << 0),
+    CreationFlag_Movable = (1 << 1),
+    CreationFlag_Animated = (1 << 2),
+    CreationFlag_HaveReferences = (1 << 3),
+    CreationFlag_NeedsTimers = (1 << 4),
+    CreationFlag_SoundEffects = (1 << 5),
+    CreationFlag_DataNeeded = (1 << 6),
+};
+
+struct entity
+{
+    bool32 Updatable;
+    entity_id ID;
+    
+    u32 CreationFlags;
+    entity_general_type GeneralType;
+    entity_type Type;
+
+    world_position TileP;
+
+    b32 StandardZUpdate;
+    s32 ZLayer;
+
+    u32 Flags;
+    entity_state PrevState;
+    entity_state State;
+    entity_collision *Collision;
+
+    v3 P;
+
+    bitmap_id BitmapID;
+    r32 RenderHeight;
+    u32 FacingDirection;
+
+    attack_type AttackType;
+    castspell_type CastType;
+    
+    entity_stats *Stats;
+    entity_move_state *MoveState;
+    entity_animation *Animation;
+    entity_references *References;
+    entity_timers *Timers;
+    entity_sound_effects *SoundEffects;
+
+    void *Data;
 };
 // ===================================================================================================================
 
 struct render_entity
 {
     u32 EntitySpriteIndex;
+    b32 AnimationFinished;
+    u32 AnimationSpeed;
+
+    ssa_spritesheet *SpriteSheetInfo;
     loaded_spritesheet *SpriteSheet;
 };
+
+inline bool32
+IsCreationFlagSet(entity *Entity, u32 Flag)
+{
+    bool32 Result = Entity->CreationFlags & Flag;
+
+    return(Result);
+}
+
+inline void
+AddCreationFlags(entity *Entity, uint32 Flag)
+{
+    Entity->CreationFlags |= Flag;
+}
+
+inline void
+ClearCreationFlags(entity *Entity, uint32 Flag)
+{
+    Entity->CreationFlags &= ~Flag;
+}
 
 inline bool32
 IsSet(entity *Entity, uint32 Flag)
@@ -535,13 +524,6 @@ ClearFlags(entity *Entity, uint32 Flag)
     Entity->Flags &= ~Flag;
 }
 
-inline void
-MakeEntitySpatial(entity *Entity, v3 P, v3 dP)
-{
-    Entity->P = P;
-    Entity->dP = dP;
-}
-
 inline v3
 GetEntityGroundPoint(entity *Entity, v3 ForEntityP)
 {
@@ -558,20 +540,97 @@ GetEntityGroundPoint(entity *Entity)
     return(Result);
 }
 
-inline void
-ChangeAnimationType(entity *Entity, u32 DesiredAnimationType)
+inline u32
+GetAnimationTypeForCastType(castspell_type Type)
 {
-    if(Entity->AnimationType != DesiredAnimationType)
+    u32 Result = 0;
+    switch(Type)
     {
-        Entity->AnimationType = DesiredAnimationType;
-        Entity->AnimationTypeHaveChanged = true;
+        case CastSpellType_0: {Result = AnimationType_CastSpell0;} break;
+        case CastSpellType_1: {Result = AnimationType_CastSpell1;} break;
+        case CastSpellType_2: {Result = AnimationType_CastSpell2;} break;
+
+            InvalidDefaultCase;
     }
+
+    return(Result);
 }
 
+inline u32
+GetAnimationTypeForAttackType(attack_type Type)
+{
+    u32 Result = 0;
+    switch(Type)
+    {
+        case AttackType_0: {Result = AnimationType_Attack0;} break;
+        case AttackType_1: {Result = AnimationType_Attack1;} break;
+        case AttackType_2: {Result = AnimationType_Attack2;} break;
+
+            InvalidDefaultCase;
+    }
+
+    return(Result);
+}
+
+inline u32
+EntityStateToAnimationType(entity *Entity, u32 DesiredState)
+{
+    u32 Result = 0;
+    switch(DesiredState)
+    {
+        case EntityState_None:
+        {
+            Assert(!"State should always be asigned!");
+        } break;
+
+        case EntityState_Moving:
+        {
+            // TODO(paul): If weapon pull in and out will be allowed should be modified to accout on that
+            Result = AnimationType_Move;
+        } break;
+
+        case EntityState_Staying:
+        {
+            // TODO(paul): If weapon pull in and out will be allowed should be modified to accout on that
+            Result = AnimationType_Idle;
+        } break;
+
+        case EntityState_Attacking:
+        {
+            Result = GetAnimationTypeForAttackType(Entity->AttackType);
+        } break;
+
+        case EntityState_CastingSpell:
+        {
+            Result = GetAnimationTypeForCastType(Entity->CastType);
+        } break;
+
+        case EntityState_Dieing:
+        {
+            Result = AnimationType_Death;
+        } break;
+
+        InvalidDefaultCase;
+    }
+
+    return(Result);
+}
+    
 inline void
 ChangeEntityState(entity *Entity, entity_state DesiredState)
 {
+    Entity->PrevState = Entity->State;
     Entity->State = DesiredState;
+
+    if(IsCreationFlagSet(Entity, CreationFlag_Animated))
+    {
+        u32 DesiredAnimationType = EntityStateToAnimationType(Entity, DesiredState);
+        if(Entity->Animation->AnimationType != DesiredAnimationType)
+        {
+            Entity->Animation->AnimationType = DesiredAnimationType;
+            Entity->Animation->AnimationTypeHaveChanged = true;
+        }
+    }
 }
 
 #define SPELLWEAVER_ENTITY_H

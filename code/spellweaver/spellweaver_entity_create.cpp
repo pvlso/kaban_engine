@@ -7,8 +7,15 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
+inline void
+SetMaxHealthAndMana(entity_stats *Stats, u16 Health, u16 Mana)
+{
+    Stats->HealthMax_Health = (u32)((Health << 16) | Health);
+    Stats->ManaMax_Mana = (u32)((Mana << 16) | Mana);
+}
+
 internal entity *
-BeginEntity(game_mode_world *WorldMode, entity_type Type, b32 DataNeeded)
+BeginEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_type Type, u32 CreationFlags)
 {
     Assert(WorldMode->CreationBufferIndex < ArrayCount(WorldMode->CreationBuffers));
     entity *Entity = WorldMode->CreationBuffers + WorldMode->CreationBufferIndex++;
@@ -16,17 +23,86 @@ BeginEntity(game_mode_world *WorldMode, entity_type Type, b32 DataNeeded)
     ZeroStruct(*Entity);
     Entity->ID.Value = ++WorldMode->LastUsedEntityStorageIndex;
 
+    Entity->CreationFlags = CreationFlags;
+    Entity->GeneralType = GeneralType;
     Entity->Type = Type;
-    Entity->AnimationType = AnimationType_Idle;
+    
+    Entity->State = EntityState_Staying;
     Entity->Collision = WorldMode->NullCollision;
-    Entity->MovePointMaxHeap.MaxSize = 8;
-    Entity->MovePointMaxHeap.Size = 0;
-    Entity->MovePointMaxHeap.Nodes = PushArray(&WorldMode->World->Arena, Entity->MovePointMaxHeap.MaxSize, sort_entry);
-    Entity->Data = 0;
 
-    if(DataNeeded)
+    Entity->RenderHeight = WorldMode->World->TileDimInMeters.y;
+    Entity->StandardZUpdate = true;
+
+
+    if(CreationFlags & CreationFlag_Stats)
     {
-        Entity->Data = PushSize(&WorldMode->World->Arena, Kilobytes(2));
+        Entity->Stats = PushStruct(&WorldMode->World->Arena, entity_stats);
+        Entity->Stats->HealthMax_Health = (u32)((100 << 16) | 100);
+        Entity->Stats->ManaMax_Mana = (u32)((100 << 16) | 100);
+    }
+
+    if(CreationFlags & CreationFlag_Movable)
+    {
+        Entity->MoveState = PushStruct(&WorldMode->World->Arena, entity_move_state);
+        Entity->MoveState->MovePointMinHeap.MaxSize = 64;
+        Entity->MoveState->MovePointMinHeap.Size = 0;
+        Entity->MoveState->MovePointMinHeap.Nodes =
+            PushArray(&WorldMode->World->Arena, Entity->MoveState->MovePointMinHeap.MaxSize, sort_entry);
+    }
+
+    if(CreationFlags & CreationFlag_Animated)
+    {
+        Entity->Animation = PushStruct(&WorldMode->World->Arena, entity_animation);
+        Entity->Animation->AnimationType = AnimationType_Idle;
+        Entity->Animation->AnimationTypeHaveChanged = true;
+    }
+
+    if(CreationFlags & CreationFlag_HaveReferences)
+    {
+        Entity->References = PushStruct(&WorldMode->World->Arena, entity_references);
+    }
+
+    if(CreationFlags & CreationFlag_NeedsTimers)
+    {
+        Entity->Timers = PushStruct(&WorldMode->World->Arena, entity_timers);
+    }
+
+    if(CreationFlags & CreationFlag_SoundEffects)
+    {
+        Entity->SoundEffects = PushStruct(&WorldMode->World->Arena, entity_sound_effects);
+    }
+
+    if(CreationFlags & CreationFlag_DataNeeded)
+    {
+        switch(Entity->Type)
+        {
+            case EntityType_Hero:
+            {
+                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(hero_entity));
+            } break;
+
+            case EntityType_FlyingSpell:
+            {
+                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(flyingspell_entity));
+            } break;
+
+            case EntityType_ImmidiateSpell:
+            {
+                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(immidiatespell_entity));
+            } break;
+
+            case EntityType_MagicSphere:
+            {
+                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(hero_sphere_entity));
+            } break;
+
+            case EntityType_Tile:
+            {
+                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(tile_entity));
+            } break;
+
+            InvalidDefaultCase;
+        }
     }
     
     return(Entity);
@@ -42,28 +118,44 @@ EndEntity(game_mode_world *WorldMode, entity *Entity, world_position P)
 }
 
 internal entity *
-BeginGroundedEntity(game_mode_world *WorldMode, entity_type Type, b32 DataNeeded,
-                    entity_collision_volume *Collision)
+BeginGroundedEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_type Type, u32 CreationFlags,
+                    entity_collision *Collision)
 {
-    entity *Entity = BeginEntity(WorldMode, Type, DataNeeded);
+    entity *Entity = BeginEntity(WorldMode, GeneralType, Type, CreationFlags);
     Entity->Collision = Collision;
     return(Entity);
+}
+
+internal entity_id
+AddTile(game_mode_world *WorldMode, entity_collision *Collision, b32 Occupied, sswm_ground_tile *Source, s32 ZLayer)
+{
+    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Object, EntityType_Tile, CreationFlag_DataNeeded, Collision);
+    Entity->ZLayer = ZLayer;
+
+    tile_entity *Tile = (tile_entity *)Entity->Data;
+    Tile->Occupied = Occupied;
+    Copy(sizeof(bitmap_id)*16, Source->BitmapID, Tile->BitmapID);
+    
+    entity_id Result = Entity->ID;
+    EndEntity(WorldMode, Entity, CenteredTilePoint(WorldMode->World, Source->TileX, Source->TileY));
+
+    return(Result);
 }
 
 inline void
 AddEntitySpriteSheetsForType(editor_assets *Assets, entity *Entity, u32 AnimationType,
                              asset_vector *MatchVector, asset_vector *WeightVector)
 {
-    real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
+    u32 Angles[4] = {0, 1, 2, 3};
 
     for(u32 AngleIndex = 0;
         AngleIndex < ArrayCount(Angles);
         ++AngleIndex)
     {
-        real32 Angle = Angles[AngleIndex];
-        MatchVector->E[Tag_FacingDirection] = (u32)Angle;
+        u32 Angle = Angles[AngleIndex];
+        MatchVector->E[Tag_FacingDirection] = Angle;
         MatchVector->E[Tag_AnimationType] = AnimationType;
-        Entity->SpriteSheets[AnimationType][AngleIndex] =
+        Entity->Animation->SpriteSheets[AnimationType][AngleIndex] =
             GetBestMatchSpriteSheetFrom(Assets, Asset_SpriteSheet, MatchVector, WeightVector);
     }
 }
@@ -79,814 +171,37 @@ AddEntitySpriteSheets(editor_assets *Assets, entity *Entity, asset_vector *Match
     }
 }
 
-internal void
-AddCollisionEntity(game_mode_world *WorldMode, editor_assets *Assets, collision *Collision)
-{
-    entity *Entity = BeginEntity(WorldMode, EntityType_Collision, false);
-    Entity->GeneralType = GeneralType_Object;
-    
-    v2 CollisionDim = GetDim(Collision->Rect);
-    Entity->Collision = MakeSimpleGroundedCollision(WorldMode, CollisionDim.x,
-                                                    CollisionDim.y, 0.0f);
-    Entity->Collision->OffsetP -= V3(1.5f, 1.5f, 0.0f);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-    world_position P = TilePositionFromChunkPosition(&Collision->P);
-    EndEntity(WorldMode, Entity, P);
-}
-
-internal void
-AddDecorationEntity(game_mode_world *WorldMode, editor_assets *Assets, decoration *Decoration)
-{
-    entity *Entity = BeginEntity(WorldMode, EntityType_Decoration, false);
-    Entity->GeneralType = GeneralType_Object;
-                        
-    Entity->BitmapID = Decoration->BitmapID;
-
-    Entity->Collision = MakeSimpleGroundedCollision(WorldMode, 1.0f, 1.0f, Decoration->Height);
-    Entity->Collision->OffsetP -= V3(1.5f, 1.5f, 0.0f);
-    
-    world_position P = TilePositionFromChunkPosition(&Decoration->P);
-    EndEntity(WorldMode, Entity, P);
-}
-
-internal void
-AddAnimatedDecorationEntity(game_mode_world *WorldMode, editor_assets *Assets, decoration *Decoration)
-{
-    entity *Entity = BeginEntity(WorldMode, EntityType_AnimatedDecoration, false);
-    Entity->GeneralType = GeneralType_Object;
-
-    Entity->SpriteSheets[AnimationType_Idle][0] = Decoration->SpriteSheetID;
-
-    Entity->Collision = MakeSimpleGroundedCollision(WorldMode, 1.0f, 1.0f, Decoration->Height);
-    Entity->Collision->OffsetP -= V3(1.5f, 1.5f, 0.0f);
-    
-    world_position P = TilePositionFromChunkPosition(&Decoration->P);
-    EndEntity(WorldMode, Entity, P);
-}
-
 internal entity_id
-AddItem(game_mode_world *WorldMode, editor_assets *Assets, world_position P, item_name ItemName)
+AddGolem(game_mode_world *WorldMode, editor_assets *Assets, world_position P)
 {
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Item, true, WorldMode->ItemCollision);
-    Entity->FacingDirection = 0;
-    Entity->RenderHeight = 0.8f;
-    Entity->GeneralType = GeneralType_Item;
+    u32 CreationFlags = CreationFlag_Stats|CreationFlag_Animated|CreationFlag_Movable;
+    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Enemy, EntityType_Golem,
+                                         CreationFlags, WorldMode->GolemCollision);
+    Entity->RenderHeight = 1.5f;
 
-    item_entity *Data = (item_entity *)Entity->Data;
-    Data->Name = ItemName;
-
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_ItemName] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Item;
-    MatchVector.E[Tag_ItemName] = ItemName;
-
-    AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddObstacle(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY,
-            asset_type_id AssetType, asset_vector *MatchVector, asset_vector *WeightVector,
-            r32 RenderHeight, v2 CollisionDim, v3 CollisionOffset = V3(0, 0, 0))
-{
-    world_position P = CenteredTilePoint(AbsTileX, AbsTileY);
-    entity *Entity = BeginEntity(WorldMode, EntityType_Obstacle, false);
-
-    Entity->Collision = MakeSimpleGroundedCollision(WorldMode, CollisionDim.x, CollisionDim.y, 0.0f);
-    Entity->Collision->OffsetP = CollisionOffset;
-    Entity->RenderHeight = RenderHeight;
-    Entity->GeneralType = GeneralType_Object;
-
-    Entity->BitmapID = GetBestMatchBitmapFrom(Assets, AssetType, MatchVector, WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddObelisk(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginEntity(WorldMode, EntityType_Obelisk, false);
-
-    Entity->Collision = MakeSimpleGroundedCollision(WorldMode, 1.0f, 1.0f, 0.0f);
-    Entity->RenderHeight = 10.0f;
-    Entity->GeneralType = GeneralType_Object;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Obelisk;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddElderTavor(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
-    talkingnpc_entity *EntityData = (talkingnpc_entity *)Entity->Data;
-    
-    Entity->RenderHeight = 2.2f;
-    Entity->FacingDirection = 3;
-    Entity->GeneralType = GeneralType_Allay;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_Sex] = 1;
-    WeightVector.E[Tag_Age] = 1;
-    WeightVector.E[Tag_HairColor] = 1;
-    WeightVector.E[Tag_Beard] = 1;
-    WeightVector.E[Tag_Accessories] = 1;
-    WeightVector.E[Tag_TopOutfit] = 1;
-    WeightVector.E[Tag_TopOutfitColor] = 1;
-    WeightVector.E[Tag_BottomOutFit] = 1;
-    WeightVector.E[Tag_BottomOutFitColor] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = Sex_Male;
-    MatchVector.E[Tag_Age] = Age_Old;
-    MatchVector.E[Tag_HairColor] = Color_LightBlack;
-    MatchVector.E[Tag_Beard] = Beard_Thick;
-    MatchVector.E[Tag_Accessories] = Accessories_Hat;
-    MatchVector.E[Tag_TopOutfit] = TopOutfit_CoatNoSleeves;
-    MatchVector.E[Tag_TopOutfitColor] = Color_Brown;
-    MatchVector.E[Tag_BottomOutFit] = BottomOutfit_Pans;
-    MatchVector.E[Tag_BottomOutFitColor] = Color_Brown;
-
-    AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
-
-    asset_vector GeneralTextMatchVector = {};
-    asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_ElderTavor;
-    //GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
-
-    GeneralTextWeightVector.E[Tag_NPCName] = 1;
-//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
-
-    EntityData->TalkingState = TalkingState_QuestGiver;
-    EntityData->ParagraphIndex = 0;
-    EntityData->GeneralText.Value = 0;
-    EntityData->GeneralText = GetBestMatchTextFrom(Assets, Asset_Text,
-                                                   &GeneralTextMatchVector, &GeneralTextWeightVector);
-    EntityData->QuestID = QuestName_TheLostTome;
-
-    EntityData->NPCName = PushString(&WorldMode->World->Arena, "Tavor");
-
-    asset_vector QuestMarkMatchVector = {};
-    asset_vector QuestMarkWeightVector = {};
-//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
-
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
-    EntityData->QuestMark[TalkingState_QuestGiver] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
-    EntityData->QuestMark[TalkingState_QuestObjective] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
-    EntityData->QuestMark[TalkingState_QuestComleted] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddHerbalistElara(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
-    talkingnpc_entity *EntityData = (talkingnpc_entity *)Entity->Data;
-    
-    Entity->RenderHeight = 2.2f;
-    Entity->FacingDirection = 3;
-    Entity->GeneralType = GeneralType_Allay;
-    
-    real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_Sex] = 1;
-    WeightVector.E[Tag_Age] = 1;
-    WeightVector.E[Tag_HairColor] = 1;
-    WeightVector.E[Tag_Haircut] = 1;
-    WeightVector.E[Tag_Accessories] = 1;
-    WeightVector.E[Tag_TopOutfit] = 1;
-    WeightVector.E[Tag_TopOutfitColor] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = Sex_Female;
-    MatchVector.E[Tag_Age] = Age_Young;
-    MatchVector.E[Tag_HairColor] = Color_LightBrown;
-    MatchVector.E[Tag_Haircut] = Haircut_Tuft;
-    MatchVector.E[Tag_Accessories] = Accessories_None;
-    MatchVector.E[Tag_TopOutfit] = TopOutfit_Drass;
-    MatchVector.E[Tag_TopOutfitColor] = Color_Green;
-
-    AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
-
-    asset_vector GeneralTextMatchVector = {};
-    asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_Elara;
-//    GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
-
-    GeneralTextWeightVector.E[Tag_NPCName] = 1;
-//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
-
-    EntityData->TalkingState = TalkingState_General;
-    EntityData->ParagraphIndex = 0;
-    EntityData->GeneralText.Value = 0;
-    EntityData->GeneralText = GetBestMatchTextFrom(Assets, Asset_Text,
-                                                   &GeneralTextMatchVector, &GeneralTextWeightVector);
-    EntityData->QuestID = QuestName_HerbalistsPlea;
-
-    EntityData->NPCName = PushString(&WorldMode->World->Arena, "Elara");
-
-    asset_vector QuestMarkMatchVector = {};
-    asset_vector QuestMarkWeightVector = {};
-//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
-
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
-    EntityData->QuestMark[TalkingState_QuestGiver] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
-    EntityData->QuestMark[TalkingState_QuestObjective] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
-    EntityData->QuestMark[TalkingState_QuestComleted] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddJacob(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_NPC, true, WorldMode->NPCCollision);
-    talkingnpc_entity *EntityData = (talkingnpc_entity *)Entity->Data;
-    
-    Entity->RenderHeight = 2.2f;
-    Entity->FacingDirection = 3;
-    Entity->GeneralType = GeneralType_Allay;
-    
-    real32 Angles[4] = {1.0f*Pi32, 1.5f*Pi32, 0.5f*Pi32, 0.0f*Pi32};
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_Sex] = 1;
-    WeightVector.E[Tag_Age] = 1;
-    WeightVector.E[Tag_HairColor] = 1;
-    WeightVector.E[Tag_Beard] = 1;
-    WeightVector.E[Tag_Accessories] = 1;
-    WeightVector.E[Tag_TopOutfit] = 1;
-    WeightVector.E[Tag_TopOutfitColor] = 1;
-    WeightVector.E[Tag_BottomOutFit] = 1;
-    WeightVector.E[Tag_BottomOutFitColor] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_NPCCharecter;
-    MatchVector.E[Tag_Sex] = Sex_Male;
-    MatchVector.E[Tag_Age] = Age_Old;
-    MatchVector.E[Tag_HairColor] = Color_Gray;
-    MatchVector.E[Tag_Beard] = Beard_Thick;
-    MatchVector.E[Tag_Accessories] = Accessories_None;
-    MatchVector.E[Tag_TopOutfit] = TopOutfit_CoatNoSleeves;
-    MatchVector.E[Tag_TopOutfitColor] = Color_Brown;
-    MatchVector.E[Tag_BottomOutFit] = BottomOutfit_Pans;
-    MatchVector.E[Tag_BottomOutFitColor] = Color_Brown;
-
-    AddEntitySpriteSheetsForType(Assets, Entity, AnimationType_Idle, &MatchVector, &WeightVector);
-
-    asset_vector GeneralTextMatchVector = {};
-    asset_vector GeneralTextWeightVector = {};
-    GeneralTextMatchVector.E[Tag_NPCName] = NPCName_Jacob;
-//    GeneralTextMatchVector.E[Tag_ConversationType] = ConType_GeneralDialogue;
-
-    GeneralTextWeightVector.E[Tag_NPCName] = 1;
-//    GeneralTextWeightVector.E[Tag_ConversationType] = 1;
-
-    EntityData->TalkingState = TalkingState_General;
-    EntityData->ParagraphIndex = 0;
-    EntityData->GeneralText.Value = 0;
-    EntityData->GeneralText = GetBestMatchTextFrom(Assets, Asset_Text,
-                                                   &GeneralTextMatchVector, &GeneralTextWeightVector);
-    EntityData->QuestID = QuestName_JacobTalk;
-
-    EntityData->NPCName = PushString(&WorldMode->World->Arena, "Jacob");
-
-    asset_vector QuestMarkMatchVector = {};
-    asset_vector QuestMarkWeightVector = {};
-//    QuestMarkWeightVector.E[Tag_QuestRelated] = 1;
-
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Giver;
-    EntityData->QuestMark[TalkingState_QuestGiver] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_Objective;
-    EntityData->QuestMark[TalkingState_QuestObjective] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-//    QuestMarkMatchVector.E[Tag_QuestRelated] = Quest_ComplitionDialogue;
-    EntityData->QuestMark[TalkingState_QuestComleted] =
-        GetBestMatchBitmapFrom(Assets, Asset_QuestMark, &QuestMarkMatchVector, &QuestMarkWeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddGolem(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Golem, false,
-                                             WorldMode->MonsterCollision);
-    Entity->RenderHeight = 4.5f;
-    Entity->HealthMax_Health = (u32)((80 << 16) | 80);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[0] = 5;
-    Entity->GeneralType = GeneralType_Enemy;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Golem;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    entity_id Result = Entity->ID;
-    
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddCultist(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Cultist, true,
-                                             WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.5f;
-    Entity->HealthMax_Health = (u32)((60 << 16) | 60);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->GeneralType = GeneralType_Enemy;
-
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_0] = 9;
-    AddTimerForCast(Entity, 3.0f, CastSpellType_0);
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Cultist;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddNecromancer(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Necromancer, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.5f;
-    Entity->HealthMax_Health = (u32)((60 << 16) | 60);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_0] = 6;
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_1] = 6;
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_2] = 10;
-    Entity->GeneralType = GeneralType_Enemy;
-
-    AddTimerForCast(Entity, 3.0f, CastSpellType_0);
-    AddTimerForCast(Entity, 40.0f, CastSpellType_1);
-    AddTimerForCast(Entity, 6.0f, CastSpellType_2);
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Necromancer;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddPossesed(game_mode_world *WorldMode, editor_assets *Assets, world_position BaseP, v2 OffsetP)
-{
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Possesed, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.5f;
-    Entity->HealthMax_Health = (u32)((40 << 16) | 40);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 10;
-    Entity->GeneralType = GeneralType_Enemy;
-
-    AddTimerForAttack(Entity, 2.0f, AttackType_0);
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Possesed;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    world_position Pos = MapIntoTileSpace(WorldMode->World, BaseP, OffsetP);
-    EndEntity(WorldMode, Entity, Pos);
-
-    return(Result);
-}
-
-internal entity_id
-AddGoblinBeast(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinBeast, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.8f;
-    Entity->HealthMax_Health = (u32)((100 << 16) | 100);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 6;
-    Entity->AttackSpriteFinishIndex[AttackType_1] = 8;
-    Entity->GeneralType = GeneralType_Enemy;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_GoblinBeast;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-
-    Entity->AnimationSoundEffect[AnimationType_Attack1][0] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack1][1] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack1][2] =
-        GetSoundEffectForType(Assets, SoundEffect_BeastPossesedAttack);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddGoblinBerserker(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinBerserker, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.2f;
-    Entity->HealthMax_Health = (u32)((80 << 16) | 80);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 8;
-    Entity->GeneralType = GeneralType_Enemy;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_GoblinBerserker;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_2);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddGoblinRider(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_GoblinRider, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 3.0f;
-    Entity->HealthMax_Health = (u32)((70 << 16) | 70);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 4;
-    Entity->AttackSpriteFinishIndex[AttackType_1] = 3;
-    Entity->AttackSpriteFinishIndex[AttackType_2] = 4;
-    Entity->GeneralType = GeneralType_Enemy;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_GoblinRider;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable);
 
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_SmallMonsterAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_SmallMonsterAttack);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_SmallMonsterAttack);
-
-    Entity->AnimationSoundEffect[AnimationType_Attack1][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Attack1][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Attack1][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-
-    Entity->AnimationSoundEffect[AnimationType_Attack2][0] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack2][1] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack2][2] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_0);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_Hit, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Whoosh);
+    Entity->BitmapID = GetFirstBitmapFrom(Assets, Asset_Golem);
 
     entity_id Result = Entity->ID;
-
     EndEntity(WorldMode, Entity, P);
 
     return(Result);
 }
 
 internal entity_id
-AddSkeletonGrunt(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
+AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell, s32 ZLayer = 0)
 {
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonGrunt, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.2f;
-    Entity->HealthMax_Health = (u32)((50 << 16) | 50);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 7;
-    Entity->GeneralType = GeneralType_Enemy;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_SkeletonWithSword;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_2);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddArrowProjectile(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
-{
-    entity *Entity = BeginEntity(WorldMode, EntityType_FlyingSpell, true);
+    entity *Entity = BeginEntity(WorldMode, GeneralType_Spell, EntityType_FlyingSpell,
+                                 CreationFlag_Animated|CreationFlag_Movable|CreationFlag_SoundEffects|
+                                 CreationFlag_DataNeeded);
+    Entity->ZLayer = ZLayer;
+    Entity->StandardZUpdate = false;
     Entity->RenderHeight = Spell.RenderHeight;
-    Entity->AnimationTypeHaveChanged = true;
     Entity->Collision = WorldMode->SpellCollision;
-    Entity->DistanceLimit = Spell.Distance;
-    Entity->dP = Spell.dP;
-    Entity->GeneralType = GeneralType_Spell;
+
+    Entity->MoveState->DistanceLimit = Spell.Distance;
+    Entity->MoveState->dP = Spell.dP;
 
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable);
 
@@ -897,194 +212,33 @@ AddArrowProjectile(game_mode_world *WorldMode, editor_assets *Assets, casted_spe
     Data->Direction = Spell.Direction;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_SpellName] = 1;
-    WeightVector.E[Tag_MagicElement] = 1;
+    InitWeightVector(&WeightVector);
+    WeightVector.E[Tag_AssetType] = 2;
+    WeightVector.E[Tag_FacingDirection] = 2;
+    WeightVector.E[Tag_AnimationType] = 2;
+    WeightVector.E[Tag_SpellName] = 2;
+    WeightVector.E[Tag_MagicElement] = 2;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_Arrow;
+    MatchVector.E[Tag_AssetType] = Asset_Spell;
+    MatchVector.E[Tag_SpellName] = Spell.SpellName;
+    MatchVector.E[Tag_MagicElement] = Spell.MagicElement;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
-    entity_id Result = Entity->ID;
-    
-    world_position Pos = MapIntoTileSpace(WorldMode->World, Spell.BaseP, Spell.OffsetP.xy);
-    EndEntity(WorldMode, Entity, Pos);
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][0] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][1] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][2] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][3] = Spell.ProjectileAnimationSpeed;
 
-    return(Result);
-}
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][0] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][1] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][2] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][3] = Spell.DeathAnimationSpeed;
 
-internal entity_id
-AddSkeletonHunter(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonHunter, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 2.2f;
-    Entity->HealthMax_Health = (u32)((50 << 16) | 50);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->GeneralType = GeneralType_Enemy;
-
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 9;
-    AddTimerForAttack(Entity, 2.0f, AttackType_0);
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_SkeletonWithBow;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_BowAttack, VarietyType_0);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, uint32 AbsTileX, uint32 AbsTileY)
-{
-    world_position P = ChunkPositionFromTilePosition(WorldMode->World, AbsTileX, AbsTileY);
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_SkeletonKing, true,
-                                         WorldMode->MonsterCollision);
-
-    Entity->RenderHeight = 6.0f;
-    Entity->HealthMax_Health = (u32)((120 << 16) | 120);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->GeneralType = GeneralType_Enemy;
-
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 4;
-    Entity->AttackSpriteFinishIndex[AttackType_1] = 5;
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_0] = 10;
-    AddTimerForAttack(Entity, 2.0f, AttackType_0);
-    AddTimerForCast(Entity, 10.0f, CastSpellType_0);
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = Asset_SkeletonKing;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][0] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][1] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][2] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][3] = 10;
-
-    Entity->SpriteSheetSpeed[AnimationType_Attack1][0] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack1][1] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack1][2] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack1][3] = 10;
-    
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
-
-    // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_2);
-
-    // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_0);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_1);
-    Entity->AttackImpactSound[0] =
-        GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
-
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
-        GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
-
-    entity_id Result = Entity->ID;
-
-    EndEntity(WorldMode, Entity, P);
-
-    return(Result);
-}
-
-internal entity_id
-AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
-{
-    entity *Entity = BeginEntity(WorldMode, EntityType_FlyingSpell, true);
-    Entity->RenderHeight = Spell.RenderHeight;
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->Collision = WorldMode->SpellCollision;
-    Entity->DistanceLimit = Spell.Distance;
-    Entity->dP = Spell.dP;
-    Entity->GeneralType = GeneralType_Spell;
-
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable);
-
-    flyingspell_entity *Data = (flyingspell_entity *)Entity->Data;
-    Data->Type = Spell.Type;
-    Data->Effect = Spell.Effect;
-    Data->Damage = Spell.Damage;
-    Data->Direction = Spell.Direction;
-    
-    asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_SpellName] = 1;
-    WeightVector.E[Tag_MagicElement] = 1;
-
-    asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (u32)Asset_Spell;
-    MatchVector.E[Tag_SpellName] = (u32)Spell.SpellName;
-    MatchVector.E[Tag_MagicElement] = (u32)Spell.MagicElement;
-
-    AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
-
-    Entity->SpriteSheetSpeed[AnimationType_Move][0] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Move][1] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Move][2] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Move][3] = Spell.ProjectileAnimationSpeed;
-
-    Entity->SpriteSheetSpeed[AnimationType_Death][0] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][1] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][2] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][3] = Spell.DeathAnimationSpeed;
-
-    Entity->AnimationSoundEffect[AnimationType_Death][0] = Spell.ImpactEffect;
-    Entity->AnimationSoundEffect[AnimationType_Death][1] = Spell.ImpactEffect;
-    Entity->AnimationSoundEffect[AnimationType_Death][2] = Spell.ImpactEffect;
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Death][0] = Spell.ImpactEffect;
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Death][1] = Spell.ImpactEffect;
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Death][2] = Spell.ImpactEffect;
 
     entity_id Result = Entity->ID;
     
@@ -1097,41 +251,42 @@ AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell S
 internal entity_id
 AddImmidiateSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
 {
-    entity *Entity = BeginEntity(WorldMode, EntityType_ImmidiateSpell, true);
+    entity *Entity = BeginEntity(WorldMode, GeneralType_Spell, EntityType_ImmidiateSpell, CreationFlag_Animated|
+                                 CreationFlag_SoundEffects|CreationFlag_DataNeeded);
+
     Entity->Collision = WorldMode->SpellCollision;
     Entity->RenderHeight = Spell.RenderHeight;
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->dP = Spell.dP;
-    Entity->AttackSpriteFinishIndex[0] = Spell.ImmidiateAnimationFinishIndex; //6
-    Entity->GeneralType = GeneralType_Spell;
+
+    Entity->Animation->AttackSpriteFinishIndex[0] = Spell.ImmidiateAnimationFinishIndex;
 
     immidiatespell_entity *Data = (immidiatespell_entity *)Entity->Data;
     Data->Type = Spell.Type;
     Data->Damage_Heal = Spell.Damage;
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
-    WeightVector.E[Tag_SpellName] = 1;
-    WeightVector.E[Tag_MagicElement] = 1;
+    InitWeightVector(&WeightVector);
+    WeightVector.E[Tag_AssetType] = 2;
+    WeightVector.E[Tag_FacingDirection] = 2;
+    WeightVector.E[Tag_AnimationType] = 2;
+    WeightVector.E[Tag_SpellName] = 2;
+    WeightVector.E[Tag_MagicElement] = 2;
 
     asset_vector MatchVector = {};
-    MatchVector.E[Tag_AssetType] = (u32)Asset_Spell;
-    MatchVector.E[Tag_SpellName] = (u32)Spell.SpellName;
-    MatchVector.E[Tag_MagicElement] = (u32)Spell.MagicElement;
+    MatchVector.E[Tag_AssetType] = Asset_Spell;
+    MatchVector.E[Tag_SpellName] = Spell.SpellName;
+    MatchVector.E[Tag_MagicElement] = Spell.MagicElement;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][0] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][1] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][2] = Spell.ProjectileAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][3] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][0] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][1] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][2] = Spell.ProjectileAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][3] = Spell.ProjectileAnimationSpeed;
 
-    Entity->SpriteSheetSpeed[AnimationType_Death][0] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][1] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][2] = Spell.DeathAnimationSpeed;
-    Entity->SpriteSheetSpeed[AnimationType_Death][3] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][0] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][1] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][2] = Spell.DeathAnimationSpeed;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Death][3] = Spell.DeathAnimationSpeed;
 
     entity_id Result = Entity->ID;
     
@@ -1145,10 +300,9 @@ internal entity *
 AddSphere(game_mode_world *WorldMode, v3 P, world_position BasePos)
 {
     world_position Pos = MapIntoTileSpace(WorldMode->World, BasePos, P.xy);
-    entity *Entity = BeginEntity(WorldMode, EntityType_MagicSphere, true);
+    entity *Entity = BeginEntity(WorldMode, GeneralType_Object, EntityType_MagicSphere, CreationFlag_DataNeeded);
     Entity->Collision = WorldMode->SphereCollision;
     Entity->RenderHeight = 0.7f;
-    Entity->GeneralType = GeneralType_Object;
 
     hero_sphere_entity *Data = (hero_sphere_entity *)Entity->Data;
     Data->Type = SphereType_Null;
@@ -1173,8 +327,8 @@ AddHeroSpell(hero_spell *Spell, spell_type Type, r32 TimerDurationSeconds, effec
     Spell->Timer.CurrentTime = TimerDurationSeconds;
 
     Spell->Config.Type = Type;
-    Spell->Config.SpellName = (r32)SpellName;
-    Spell->Config.MagicElement = (r32)MagicElement;
+    Spell->Config.SpellName = SpellName;
+    Spell->Config.MagicElement = MagicElement;
 
     Spell->Config.Effect = SpellEffect;
     Spell->Config.ManaCost = ManaCost;
@@ -1200,21 +354,22 @@ internal entity_id
 AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
 {
     world_position P = WorldMode->CameraP;
-    entity *Entity = BeginGroundedEntity(WorldMode, EntityType_Hero, true,
+
+    u32 CreationFlags = (CreationFlag_Stats|CreationFlag_Movable|CreationFlag_Animated|
+                         CreationFlag_HaveReferences|CreationFlag_NeedsTimers|CreationFlag_SoundEffects|
+                         CreationFlag_DataNeeded);
+
+    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Hero, EntityType_Hero, CreationFlags,
                                              WorldMode->PlayerCollision);
-    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_ZSupported);
+    AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_OnTheGround);
 
     hero_entity *Data = (hero_entity *)Entity->Data;
 
     Entity->RenderHeight = 2.2f;
-    Entity->RefCount = 0;
-    Entity->HealthMax_Health = (u32)((100 << 16) | 100);
-    Entity->ManaMax_Mana = (u32)((150 << 16) | 150);
-    Entity->AnimationTypeHaveChanged = true;
-    Entity->SpriteSheetOffset = 0;
-    Entity->AttackSpriteFinishIndex[AttackType_0] = 4;
-    Entity->CastSpellSpriteFinishIndex[CastSpellType_0] = 9;
-    Entity->GeneralType = GeneralType_Hero;
+    SetMaxHealthAndMana(Entity->Stats, 100, 150);
+
+    Entity->Animation->AttackSpriteFinishIndex[AttackType_0] = 4;
+    Entity->Animation->CastSpellSpriteFinishIndex[CastSpellType_0] = 9;
 
     asset_vector SphereMatchVector = {};
     asset_vector SphereWeightVector = {};
@@ -1223,7 +378,7 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
     u32 MagicElements[3] = {MagicElement_Water, MagicElement_Wind, MagicElement_Fire};
     real32 CircleOffset = (2.0f*Pi32) / 3.0f;
     real32 Radius = 0.5f;
-    v3 OffsetP = V3(0.0f, 1, 0.0f);
+    v3 OffsetP = V3(0.0f, 1.0f, 0.0f);
 
     for(uint32 SphereIndex = 0;
         SphereIndex < 3;
@@ -1239,9 +394,9 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
                     0.0f);
 
         entity *Sphere = AddSphere(WorldMode, Pos + OffsetP, P);
-        Entity->References[Entity->RefCount].ID = Sphere->ID;
-        Data->SpheresRefIndex[SphereIndex] = Entity->RefCount;
-        ++Entity->RefCount;
+        Entity->References->References[Entity->References->RefCount].ID = Sphere->ID;
+        Data->SpheresRefIndex[SphereIndex] = Entity->References->RefCount;
+        ++Entity->References->RefCount;
 
         hero_sphere_entity *SphereData = (hero_sphere_entity *)Sphere->Data;
         SphereData->CircleCenter = Entity->P + OffsetP;
@@ -1252,32 +407,33 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
         ++Data->Combination[SphereIndex];
     }
     
-    Assert(Entity->RefCount < ArrayCount(Entity->References));
+    Assert(Entity->References->RefCount < ArrayCount(Entity->References->References));
     
     asset_vector WeightVector = {};
-    WeightVector.E[Tag_AssetType] = 1;
-    WeightVector.E[Tag_FacingDirection] = 1;
-    WeightVector.E[Tag_AnimationType] = 1;
+    InitWeightVector(&WeightVector);
+    WeightVector.E[Tag_AssetType] = 2;
+    WeightVector.E[Tag_FacingDirection] = 2;
+    WeightVector.E[Tag_AnimationType] = 2;
 
     asset_vector MatchVector = {};
     MatchVector.E[Tag_AssetType] = Asset_Hero;
 
     AddEntitySpriteSheets(Assets, Entity, &MatchVector, &WeightVector);
 
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][0] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][1] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][2] = 10;
-    Entity->SpriteSheetSpeed[AnimationType_Attack0][3] = 10;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][0] = 10;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][1] = 10;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][2] = 10;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Attack0][3] = 10;
 
-    Entity->SpriteSheetSpeed[AnimationType_CastSpell0][0] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_CastSpell0][1] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_CastSpell0][2] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_CastSpell0][3] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_CastSpell0][0] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_CastSpell0][1] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_CastSpell0][2] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_CastSpell0][3] = 16;
 
-    Entity->SpriteSheetSpeed[AnimationType_Move][0] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Move][1] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Move][2] = 16;
-    Entity->SpriteSheetSpeed[AnimationType_Move][3] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][0] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][1] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][2] = 16;
+    Entity->Animation->SpriteSheetSpeed[AnimationType_Move][3] = 16;
 
     hero_spell *Spell = Data->Spells;
     sound_id NullSoundID = {};
@@ -1332,27 +488,27 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
     Data->CurrentQuests[Data->QuestCount++] = QuestName_FindTavor;
 
     // NOTE(paul): Attack
-    Entity->AnimationSoundEffect[AnimationType_Attack0][0] =
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Attack0][0] =
         GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][1] =
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Attack0][1] =
         GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Attack0][2] =
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Attack0][2] =
         GetSoundEffectForType(Assets, SoundEffect_SwordAttack, VarietyType_2);
 
     // NOTE(paul): Impact
-    Entity->AttackImpactSound[0] =
+    Entity->SoundEffects->AttackImpactSound[0] =
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_0);
-    Entity->AttackImpactSound[0] =
+    Entity->SoundEffects->AttackImpactSound[0] =
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_1);
-    Entity->AttackImpactSound[0] =
+    Entity->SoundEffects->AttackImpactSound[0] =
         GetSoundEffectForType(Assets, SoundEffect_SwordImpact, VarietyType_2);
 
-    // NOTE(paul): Walk
-    Entity->AnimationSoundEffect[AnimationType_Move][0] =
+    // NOTE(paul): Move
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Move][0] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_0);
-    Entity->AnimationSoundEffect[AnimationType_Move][1] =
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Move][1] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_1);
-    Entity->AnimationSoundEffect[AnimationType_Move][2] =
+    Entity->SoundEffects->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
     
     if(WorldMode->CameraFollowingEntityIndex.Value == 0)

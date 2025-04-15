@@ -17,14 +17,16 @@ inline void
 HitEntitiesInRectangle(sim_region *SimRegion, audio_state *AudioState, random_series *EffectsEntropy,
                        object_transform *Transform, entity *AttackingEntity, rectangle2 AttackSurface, u32 Damage)
 {
+#if 0
     for(u32 TestEntityIndex = 0;
         TestEntityIndex < SimRegion->EntityCount;
         ++TestEntityIndex)
     {
         entity *TestEntity = SimRegion->Entities + TestEntityIndex;
+        entity_stats *TestEntityStats = TestEntity->Stats;
         if(!(AttackingEntity->GeneralType == GeneralType_Enemy && TestEntity->GeneralType == GeneralType_Enemy))
         {
-            if((TestEntity->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
+            if((TestEntityStats->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
             {
                 rectangle2 TestEntityRect = RectCenterDim((TestEntity->P + TestEntity->Collision->OffsetP -
                                                            Transform->OffsetP).xy,
@@ -32,17 +34,18 @@ HitEntitiesInRectangle(sim_region *SimRegion, audio_state *AudioState, random_se
                 if(RectanglesIntersect(AttackSurface, TestEntityRect))
                 {
                     u32 RandomSound = RandomBetween(EffectsEntropy, 0, 2);
-                    sound_id SoundID = AttackingEntity->AttackImpactSound[RandomSound];
+                    sound_id SoundID = AttackingEntity->SoundEffects->AttackImpactSound[RandomSound];
                     PlaySound(AudioState, SoundID);
-                    TestEntity->HealthMax_Health -= Damage;
-                    if((s16)(TestEntity->HealthMax_Health & 0xffff) <= 0)
+                    TestEntityStats->HealthMax_Health -= Damage;
+                    if((s16)(TestEntityStats->HealthMax_Health & 0xffff) <= 0)
                     {
-                        TestEntity->HealthMax_Health &= 0xffff0000;
+                        TestEntityStats->HealthMax_Health &= 0xffff0000;
                     }
                 }
             }
         }
     }
+#endif
 }
 
 inline void
@@ -54,33 +57,34 @@ HealEntitiesInRectangle(sim_region *SimRegion, object_transform *Transform, enti
         ++TestEntityIndex)
     {
         entity *TestEntity = SimRegion->Entities + TestEntityIndex;
-        if((TestEntity->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
+        entity_stats *TestEntityStats = TestEntity->Stats;
+        if((TestEntityStats->HealthMax_Health >> 16) && (TestEntity->ID.Value != AttackingEntity->ID.Value))
         {
             rectangle2 TestEntityRect = RectCenterDim((TestEntity->P + TestEntity->Collision->OffsetP -
                                                        Transform->OffsetP).xy,
                                                       GetDim(TestEntity->Collision->CollisionRect).xy);
             if(RectanglesIntersect(AttackSurface, TestEntityRect))
             {
-                u32 MaxHealth = TestEntity->HealthMax_Health >> 16;
-                u32 Health = TestEntity->HealthMax_Health & 0xffff;
+                u32 MaxHealth = TestEntityStats->HealthMax_Health >> 16;
+                u32 Health = TestEntityStats->HealthMax_Health & 0xffff;
                 if((Health + HealAmount) > MaxHealth)
                 {
-                    TestEntity->HealthMax_Health = (u32)((MaxHealth << 16) | MaxHealth);
+                    TestEntityStats->HealthMax_Health = (u32)((MaxHealth << 16) | MaxHealth);
                 }
                 else
                 {
-                    TestEntity->HealthMax_Health += HealAmount;
+                    TestEntityStats->HealthMax_Health += HealAmount;
                 }
 
-                u32 MaxMana = TestEntity->ManaMax_Mana >> 16;
-                u32 Mana = TestEntity->ManaMax_Mana & 0xffff;
+                u32 MaxMana = TestEntityStats->ManaMax_Mana >> 16;
+                u32 Mana = TestEntityStats->ManaMax_Mana & 0xffff;
                 if((Mana + HealAmount) > MaxMana)
                 {
-                    TestEntity->ManaMax_Mana = (u32)((MaxMana << 16) | MaxMana);
+                    TestEntityStats->ManaMax_Mana = (u32)((MaxMana << 16) | MaxMana);
                 }
                 else
                 {
-                    TestEntity->ManaMax_Mana += HealAmount;
+                    TestEntityStats->ManaMax_Mana += HealAmount;
                 }
             }
         }
@@ -98,7 +102,7 @@ CheckSpellCombination(entity *Entity, hero_entity *HeroData, sphere_type SphereN
         ++SphereIndex)
     {
         uint32 RefIndex = HeroData->SpheresRefIndex[SphereIndex];
-        entity *Sphere = Entity->References[RefIndex].Ptr;
+        entity *Sphere = Entity->References->References[RefIndex].Ptr;
         hero_sphere_entity *SphereData = (hero_sphere_entity *)Sphere->Data;
         SphereData->CircleCenter = Entity->P + V3(0.0f, 1.0f, 0.0f);
                                         
@@ -167,258 +171,6 @@ SpellTypeToSpellIndex(u8 SpellType)
 }
 
 inline void
-DrawHeroHealthBar(render_group *RenderGroup, entity *Entity, text_config TextConfig)
-{
-    object_transform BarTransform_ = DefaultFlatTransform();
-    object_transform *BarTransform = &BarTransform_;
-    
-    u16 MaxHealth = (u16)(Entity->HealthMax_Health >> 16);
-    u16 Health = (u16)(Entity->HealthMax_Health & 0xffff);
-
-    u16 MaxMana = (u16)(Entity->ManaMax_Mana >> 16);
-    u16 Mana = (u16)(Entity->ManaMax_Mana & 0xffff);
-
-    r32 Len = 5.5f;
-    r32 HealthRatio = (r32)Health / (r32)MaxHealth;
-    r32 HealthHalfRatio = 0.5f*HealthRatio*Len;
-
-    r32 ManaRatio = (r32)Mana / (r32)MaxMana;
-    r32 ManaHalfRatio = 0.5f*ManaRatio*Len;
-
-    char Buffer[16];
-    _snprintf_s(Buffer, sizeof(Buffer), "%u/%u", Health, MaxHealth);
-    TextConfig.TextTransform.OffsetP = V3(-13.5f, 8.17f, 0.0f);
-    TextConfig.TextShadowTransform.OffsetP = V3(-15.465f, 10.178f, 0.0f);
-    TextConfig.FontScale = 0.014;
-    TextConfig.Color = V4(1, 1, 1, 1);
-    TextOutAt(RenderGroup, TextConfig, Buffer, 0);
-
-    BarTransform->OffsetP = V3(-11.24f, 7.48f, 1.0f);
-    BarTransform->ChunkZ = 10100;
-    PushRectOutline(RenderGroup, BarTransform, V3(-0.5f*Len + HealthHalfRatio, 0, 0),
-                    V2(Len*HealthRatio, 0.5f), V4(0.13f, 0.69f, 0.298f, 0.9f), 0.15f);
-    BarTransform->ChunkZ = 10110;
-    PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + HealthHalfRatio, 0, 0),
-             V2(Len*HealthRatio, 0.5f), V4(0.71f, 0.9f, 0.11f, 0.8f));
-
-    if(Mana == 0)
-    {
-        BarTransform->ChunkZ = 10110;
-        PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
-                 V2(Len*ManaRatio, 0.5f), V4(0.25f, 0.28f, 0.8f, 1));
-
-        TextConfig.TextTransform.OffsetP = V3(-13.5f, 7.12f, 0.0f);
-        TextConfig.TextShadowTransform.OffsetP = V3(-15.465f, 9.128f, 0.0f);
-        TextConfig.FontScale = 0.016;
-        TextConfig.Color = V4(1, 1, 1, 1);
-        TextOutAt(RenderGroup, TextConfig, "No Mana", 0);
-    }
-    else
-    {
-
-        _snprintf_s(Buffer, sizeof(Buffer), "%u/%u", Mana, MaxMana);
-        TextConfig.TextTransform.OffsetP = V3(-13.5f, 7.22f, 0.0f);
-        TextConfig.TextShadowTransform.OffsetP = V3(-15.465f, 9.228f, 0.0f);
-        TextConfig.FontScale = 0.014;
-        TextConfig.Color = V4(1, 1, 1, 1);
-        TextOutAt(RenderGroup, TextConfig, Buffer, 0);
-
-        BarTransform->OffsetP = V3(-11.24f, 6.625f, 1.0f);
-        BarTransform->ChunkZ = 10100;
-        PushRectOutline(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
-                        V2(Len*ManaRatio, 0.5f), V4(0.0f, 0.16f, 0.91f, 0.9f), 0.15f);
-
-        BarTransform->ChunkZ = 10110;
-        PushRect(RenderGroup, BarTransform, V3(-0.5f*Len + ManaHalfRatio, 0, 0),
-                 V2(Len*ManaRatio, 0.5f), V4(0.25f, 0.28f, 0.8f, 0.8f));
-    }
-}
-
-inline void
-DrawHeroSpellBar(render_group *RenderGroup, entity *Entity, text_config TextConfig)
-{
-    object_transform Transform_ = DefaultFlatTransform();
-    Transform_.ChunkZ = 900;
-
-    object_transform *Transform = &Transform_;
-    
-    hero_entity *HeroData = (hero_entity *)Entity->Data;
-    Transform->OffsetP = V3(-0.6f, -6.4f, 1.0f);
-    Transform->ChunkZ = 10000;
-
-    for(u32 SphereIndex = 0;
-        SphereIndex < ArrayCount(HeroData->SpheresRefIndex);
-        ++SphereIndex)
-    {
-        uint32 RefIndex = HeroData->SpheresRefIndex[SphereIndex];
-        entity *Sphere = Entity->References[RefIndex].Ptr;
-        hero_sphere_entity *SphereData = (hero_sphere_entity *)Sphere->Data;
-                    
-        bitmap_id BitmapID = HeroData->SphereBitmapIDs[0];
-        if(SphereData->Type == SphereType_Water)
-        {
-            BitmapID = HeroData->SphereBitmapIDs[0];
-        }
-        else if(SphereData->Type == SphereType_Wind)
-        {
-            BitmapID = HeroData->SphereBitmapIDs[1];
-        }
-        else if(SphereData->Type == SphereType_Fire)
-        {
-            BitmapID = HeroData->SphereBitmapIDs[2];
-        }
-
-        PushBitmap(RenderGroup, Transform, BitmapID, 0.5f, V3(0, 0, 0));
-        Transform->OffsetP.x += 0.6f;
-    }
-
-    Transform->OffsetP = V3(-1.35f, -7.2f, 1.0f);
-    PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[0], 0.75f, V3(0, 0, 0));
-    PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[1], 0.75f, V3(0.9f, 0, 0));
-    PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[2], 0.75f, V3(1.8f, 0, 0));
-
-    TextConfig.TextTransform.OffsetP = Transform->OffsetP + V3(-0.45f, 0.3f, 0);
-    TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-2.43f, 2.28f, 0.0f);
-    TextConfig.Color = V4(1, 1, 1, 1);
-    TextConfig.FontScale = 0.008f;
-    TextConfig.TextTransform.ChunkZ = 10010;
-    TextConfig.TextShadowTransform.ChunkZ = 10000;
-
-    object_transform RectTransform = DefaultFlatTransform();
-    RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    RectTransform.ChunkZ = TextConfig.TextTransform.ChunkZ - 1000;
-    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
-    TextOutAt(RenderGroup, TextConfig, "1", 0);
-
-    TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
-    TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
-    RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
-    TextOutAt(RenderGroup, TextConfig, "2", 0);
-
-    TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
-    TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
-    RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
-    TextOutAt(RenderGroup, TextConfig, "3", 0);
-
-    TextConfig.TextTransform.OffsetP += V3(0.9f, 0, 0);
-    TextConfig.TextShadowTransform.OffsetP += V3(0.9f, 0, 0);
-    RectTransform.OffsetP = TextConfig.TextTransform.OffsetP;
-    PushRect(RenderGroup, &RectTransform, V3(0.06f, 0.0725f, 0), V2(0.3f, 0.3f), V4(0, 0, 0, 0.4f));
-    TextOutAt(RenderGroup, TextConfig, "Q", 0);
-    
-    Transform->OffsetP = V3(-13.65f, -2.35f, 1.0f);
-    TextConfig.FontScale = 0.008f;
-    for(u32 SpellIndex = 0;
-        SpellIndex < ArrayCount(HeroData->Spells);
-        ++SpellIndex)
-    {
-        hero_spell *Spell = HeroData->Spells + SpellIndex;
-        u8 WaterSphereCount = (u8)(Spell->Type & 0x3);
-        u8 WindSphereCount = (u8)(Spell->Type & 0x0c) >> 2;
-        u8 FireSphereCount = (u8)(Spell->Type & 0x30) >> 4;
-
-        v4 Color = V4(1, 1, 1, 1);
-        if(!CheckTimer(&Spell->Timer))
-        {
-            Color = V4(0.5f, 0.5f, 0.5f, 1);
-        }
-        
-        for(u32 WaterSphere = 0;
-            WaterSphere < WaterSphereCount;
-            ++WaterSphere)
-        {
-            PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[0], 0.4f, V3(0, 0, 0), Color);
-            Transform->OffsetP.x += 0.5f;
-        }
-
-        for(u32 WindSphere = 0;
-            WindSphere < WindSphereCount;
-            ++WindSphere)
-        {
-            PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[1], 0.4f, V3(0, 0, 0), Color);
-            Transform->OffsetP.x += 0.5f;
-        }
-
-        for(u32 FireSphere = 0;
-            FireSphere < FireSphereCount;
-            ++FireSphere)
-        {
-            PushBitmap(RenderGroup, Transform, HeroData->SphereBitmapIDs[2], 0.4f, V3(0, 0, 0), Color);
-            Transform->OffsetP.x += 0.5f;
-        }
-
-        TextConfig.TextTransform.OffsetP = Transform->OffsetP - V3(0.15f, 0.1f, 0);
-        TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-2.12f, 1.88f, 0.0f);
-        TextConfig.Color = Color;
-        
-        switch(Spell->Type)
-        {
-            case SpellType_FireBall:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Fire Ball", 0);
-            } break;
-
-            case SpellType_WaterBall:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Water Ball", 0);
-            } break;
-
-            case SpellType_IceBall:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Ice Ball", 0);
-            } break;
-
-            case SpellType_LightBall:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Light Ball", 0);
-            } break;
-
-            case SpellType_EnergyBall:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Energy Ball", 0);
-            } break;
-
-            case SpellType_BirdStrike:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Bird Strike", 0);
-            } break;
-
-            case SpellType_Heal:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Heal", 0);
-            } break;
-        
-            case SpellType_MagicSword:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Sword Charm Magic", 0);
-            } break;
-
-            case SpellType_IceSword:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Sword Charm Ice", 0);
-            } break;
-
-            case SpellType_FireSword:
-            {
-                TextOutAt(RenderGroup, TextConfig, "Sword Charm Fire", 0);
-            } break;
-        }
-
-        Transform->OffsetP.x -= 3.0f*0.5f;
-        Transform->OffsetP.y -= 0.5f;
-    }
-
-    bitmap_id MouseLeftButton = GetFirstBitmapFrom(RenderGroup->Assets, Asset_MouseLeftButton);
-    TextConfig.TextTransform.OffsetP = Transform->OffsetP + V3(0.45f, -0.1f, 0);
-    TextConfig.TextShadowTransform.OffsetP = Transform->OffsetP + V3(-1.52f, 1.88f, 0.0f);
-    PushBitmap(RenderGroup, Transform, MouseLeftButton, 0.45f, V3(0, 0, 0));
-    TextOutAt(RenderGroup, TextConfig, "Melee Attack", 0);
-    
-}
-
-inline void
 HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets *Assets, entity *Entity,
               hero_entity *HeroData, v2 MouseP, render_group *RenderGroup)
 {
@@ -434,9 +186,9 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
         case SpellType_BirdStrike:
         {
 
-            if((s16)((Entity->ManaMax_Mana & 0xffff) - Spell->Config.ManaCost) >= 0)
+            if((s16)((Entity->Stats->ManaMax_Mana & 0xffff) - Spell->Config.ManaCost) >= 0)
             {
-                Entity->ManaMax_Mana -= Spell->Config.ManaCost;
+                Entity->Stats->ManaMax_Mana -= Spell->Config.ManaCost;
 
                 casted_spell CastedSpell = Spell->Config;
                 CastedSpell.Direction = V3(Normalize(HeroData->CastMouseP - Entity->P.xy - V2(0, 0.5f)), 0.0f);
@@ -444,7 +196,7 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
                 CastedSpell.OffsetP = V3(0, 0.5f, 0);
                 CastedSpell.dP = V3(0, 0, 0);
             
-                entity_id SpellID = AddFlyingSpell(WorldMode, Assets, CastedSpell);
+                entity_id SpellID = AddFlyingSpell(WorldMode, Assets, CastedSpell, Entity->ZLayer);
                 AddCollisionRule(WorldMode, SpellID, Entity->ID, false);
 
                 ResetTimer(&Spell->Timer);
@@ -453,9 +205,9 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
 
         case SpellType_Heal:
         {
-            if((s16)((Entity->ManaMax_Mana & 0xffff) - Spell->Config.ManaCost) >= 0)
+            if((s16)((Entity->Stats->ManaMax_Mana & 0xffff) - Spell->Config.ManaCost) >= 0)
             {
-                Entity->ManaMax_Mana -= Spell->Config.ManaCost;
+                Entity->Stats->ManaMax_Mana -= Spell->Config.ManaCost;
 
                 casted_spell CastedSpell = Spell->Config;
                 CastedSpell.BaseP = Entity->TileP;
@@ -503,13 +255,15 @@ HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *Audio
     {
         HeroCastSpell(WorldMode, AudioState, RenderGroup->Assets, Entity, HeroData, LocalMouseP.xy,
                       RenderGroup);
-        ChangeAnimationType(Entity, AnimationType_Idle);
         ChangeEntityState(Entity, EntityState_Staying);
     }
     else
     {
         rectangle2 AttackSurface = RectCenterDim(Normalize(LocalMouseP.xy - Entity->P.xy), V2(1.0f, 1.0f));
-//        PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
+
+#if SPELLWEAVER_INTERNAL
+        PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
+#endif
 
         u32 Damage = 10;
         switch(HeroData->SwordType)
@@ -522,7 +276,6 @@ HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *Audio
         HitEntitiesInRectangle(SimRegion, AudioState, &WorldMode->EffectsEntropy, Transform,
                                Entity, AttackSurface, Damage);
 
-        ChangeAnimationType(Entity, AnimationType_Idle);
         ChangeEntityState(Entity, EntityState_Staying);
     }
 }
@@ -577,71 +330,284 @@ FindClosestOpenNode(as_tile_node *Node)
     return(Result);
 }
 
-internal v3
-UpdateEntityMovement(world *World, sim_region *SimRegion, entity *Entity, render_group *RenderGroup = 0)
+inline b32
+IsDiagonalNeighbor(s32 X1, s32 Y1, s32 X2, s32 Y2)
 {
-    v3 Result = {};
+    b32 Result = false;
+    s32 Dx = AbsoluteValue(X2 - X1);
+    s32 Dy = AbsoluteValue(Y2 - Y1);
 
-    heap *MovePointMaxHeap = &Entity->MovePointMaxHeap;
-    if((Entity->State == EntityState_Moving) && (Entity->EndNode))
+    if((Dx == 1) && (Dy == 1))
     {
-        Entity->StartNode = GetTileNode(World, Entity->TileP);
-        Entity->StartNode = FindClosestOpenNode(Entity->StartNode);
-
-        SolveAStarForTileNodes(World, SimRegion->Bounds, SimRegion->Origin,
-                               Entity->EndNode, Entity->StartNode);
-
-        if(Entity->EndNode)
-        {
-            ZeroArray(MovePointMaxHeap->MaxSize, MovePointMaxHeap->Nodes);
-            MovePointMaxHeap->Size = 0;
-
-            as_tile_node *Node = Entity->StartNode;
-            while((Node->Parent) && (MovePointMaxHeap->Size != MovePointMaxHeap->MaxSize))
-            {
-                as_tile_node *ParentNode = Node->Parent;
-                sort_entry Key = {};
-                Key.Index = ParentNode->Y*WORLD_TILE_NODE_COUNT_PER_DIM + ParentNode->X;
-                Key.SortKey = ParentNode->LocalGoal;
-                MaxHeapInsertNode(MovePointMaxHeap, Key);
-
-                Node = ParentNode;
-            }
-        }
+        Result = true;
     }
 
-    if(Entity->EndNode && MovePointMaxHeap->Size)
-    {
-        sort_entry NodeKey = MovePointMaxHeap->Nodes[0];
-        as_tile_node *NextNode = World->TileNodes + NodeKey.Index;
-        
-        v2 Delta = Subtract(World, &NextNode->TileP, &SimRegion->Origin);
-        rectangle2 NodeRect = RectCenterDim(Delta, V2(0.25f, 0.25f));
+    return(Result);
+}
 
-#if SPELLWEAVER_INTERNAL
-        if(RenderGroup)
+enum diagonal_direction
+{
+    Direction_None,
+    Direction_TopLeft,
+    Direction_TopRight,
+    Direction_BottomLeft,
+    Direction_BottomRight,
+};
+
+inline diagonal_direction
+GetDiagonalDirection(s32 X1, s32 Y1, s32 X2, s32 Y2)
+{
+    diagonal_direction Result = Direction_None;
+    s32 Dx = X2 - X1;
+    s32 Dy = Y2 - Y1;
+
+    if(IsDiagonalNeighbor(X1, Y1, X2, Y2))
+    {
+        if((Dx == 1) && (Dy == 1))        {Result = Direction_TopRight;}
+        else if((Dx == -1) && (Dy == 1))  {Result = Direction_TopLeft;}
+        else if((Dx == 1) && (Dy == -1))  {Result = Direction_BottomRight;}
+        else if((Dx == -1) && (Dy == -1)) {Result = Direction_BottomLeft;}
+    }
+
+    return(Result);
+}
+
+internal void
+SolveAStar(world *World, entity_move_state *MoveState, sim_region *SimRegion)
+{
+    TIMED_FUNCTION();
+
+    if(MoveState->StartNode && MoveState->EndNode)
+    {
+        for(u32 NodeIndex = 0;
+            NodeIndex < World->TileNodeCount;
+            ++NodeIndex)
         {
-            PushRect(RenderGroup, DefaultFlatTransform(), NodeRect, 3.0f);
+            as_tile_node *Node = World->TileNodes + NodeIndex;
+            Node->Visited = false;
+            Node->GlobalGoal = Real32Maximum;
+            Node->LocalGoal = Real32Maximum;
+            Node->Parent = 0;
         }
-#endif       
-        if(IsInRectangle(NodeRect, Entity->P.xy))
-//        if(RectanglesIntersect(EntityRect, NodeRect))
+
+        as_tile_node *CurrentNode = MoveState->StartNode;
+        CurrentNode->LocalGoal = 0.0f;
+        CurrentNode->GlobalGoal = DistanceBetween(World, MoveState->StartNode, MoveState->EndNode);
+
+        heap *Heap = &World->MinTileNodeHeap;
+
+        sort_entry Key = {};
+        Key.Index = MoveState->StartNode->Y*World->TileNodeWidth + MoveState->StartNode->X;
+        Key.SortKey = MoveState->StartNode->GlobalGoal;
+        MinHeapInsertNode(Heap, Key);
+
+        while((Heap->Size != 0) && (CurrentNode != MoveState->EndNode))
         {
-            MaxHeapExtractNode(MovePointMaxHeap);
+            as_tile_node *TestNode = World->TileNodes + Heap->Nodes[0].Index;
+            while((TestNode->Visited) && (Heap->Size != 0))
+            {
+                MinHeapExtractNode(Heap);
+                TestNode = World->TileNodes + Heap->Nodes[0].Index;
+            }
+
+            if(Heap->Size == 0)
+            {
+                break;
+            }
+
+            CurrentNode = World->TileNodes + Heap->Nodes[0].Index; 
+            CurrentNode->Visited = true;
+
+            for(u32 NeighbourIndex = 0;
+                NeighbourIndex < ArrayCount(CurrentNode->Neighbours);
+                ++NeighbourIndex)
+            {
+                as_tile_node *NeighbourNode = CurrentNode->Neighbours[NeighbourIndex];
+                if(NeighbourNode)
+                {
+                    b32 Avaliable = true;
+                    diagonal_direction Direction = GetDiagonalDirection(CurrentNode->X, CurrentNode->Y, NeighbourNode->X, NeighbourNode->Y);
+                    if(Direction)
+                    {
+                        as_tile_node *FirstAdjacent = 0;
+                        as_tile_node *SecondAdjacent = 0;
+                        switch(Direction)
+                        {
+                            case Direction_TopLeft:
+                            case Direction_BottomLeft:
+                            {
+                                FirstAdjacent = World->TileNodes + NeighbourNode->Y*World->TileNodeWidth + (NeighbourNode->X + 1);
+                                SecondAdjacent = World->TileNodes + CurrentNode->Y*World->TileNodeWidth + (CurrentNode->X - 1);
+                            } break;
+
+                            case Direction_BottomRight:
+                            case Direction_TopRight:
+                            {
+                                FirstAdjacent = World->TileNodes + NeighbourNode->Y*World->TileNodeWidth + (NeighbourNode->X - 1);
+                                SecondAdjacent = World->TileNodes + CurrentNode->Y*World->TileNodeWidth + (CurrentNode->X + 1);
+                            } break;
+
+                            InvalidDefaultCase;
+                        }
+
+                        v2 TileCollisionDim = World->TileDimInMeters.xy;
+
+                        v2 EntityCollisionSimP = Subtract(World, &CurrentNode->TileP, &SimRegion->Origin); 
+                        v2 NeighborCollisionSimP = Subtract(World, &NeighbourNode->TileP, &SimRegion->Origin); 
+
+                        if(FirstAdjacent->Obstacle)
+                        {
+                            v2 TileCollisionSimP0 = Subtract(World, &FirstAdjacent->TileP, &SimRegion->Origin); 
+                            rectangle2 TileRect0 = RectCenterDim(TileCollisionSimP0, TileCollisionDim);
+                            Avaliable = !LineIntersectsRectangle(EntityCollisionSimP, NeighborCollisionSimP, TileRect0);
+                        }
+
+                        if(SecondAdjacent->Obstacle)
+                        {
+                            v2 TileCollisionSimP1 = Subtract(World, &SecondAdjacent->TileP, &SimRegion->Origin); 
+                            rectangle2 TileRect1 = RectCenterDim(TileCollisionSimP1, TileCollisionDim);
+                            Avaliable = !LineIntersectsRectangle(EntityCollisionSimP, NeighborCollisionSimP, TileRect1);
+                        }
+                    }
+                        
+                    if((!NeighbourNode->Visited) && (!NeighbourNode->Obstacle) && Avaliable)
+                    {
+                        sort_entry Key = {};
+                        Key.Index = NeighbourNode->Y*World->TileNodeWidth + NeighbourNode->X;
+                        Key.SortKey = NeighbourNode->GlobalGoal;
+
+                        r32 LowerGoal = CurrentNode->LocalGoal + DistanceBetween(World, CurrentNode, NeighbourNode);
+                        if(LowerGoal < NeighbourNode->LocalGoal)
+                        {
+                            NeighbourNode->Parent = CurrentNode;
+                            NeighbourNode->LocalGoal = LowerGoal;
+
+                            NeighbourNode->GlobalGoal = (NeighbourNode->LocalGoal +
+                                                         DistanceBetween(World, NeighbourNode, MoveState->EndNode));
+                            Key.SortKey = NeighbourNode->GlobalGoal;
+                        }
+
+                        MinHeapInsertNode(Heap, Key);
+                    }
+                }
+            }
         }
-        else
+
+        ZeroArray(Heap->MaxSize, Heap->Nodes);
+        Heap->Size = 0;
+    }
+    
+}
+
+internal void
+Chaikin(v2* InputPoints, s32 InputPointCount, v2** OutputPoints, s32* OutputPointCount)
+{
+    TIMED_FUNCTION();
+
+    if(InputPointCount < 2)
+    {
+        *OutputPointCount = InputPointCount;
+        *OutputPoints = (v2 *)Platform.AllocateMemory(InputPointCount * sizeof(v2));
+        if(*OutputPoints)
         {
-            v2 ddP = Normalize(Subtract(World, &NextNode->TileP, &Entity->TileP));
-            Result = V3(ddP, 0);
+            for (s32 I = 0;
+                 I < InputPointCount;
+                 I++)
+            {
+                (*OutputPoints)[I] = InputPoints[I];
+            }
         }
     }
     else
     {
-        Entity->dP = V3(0, 0, 0);
-        Entity->EndNode = 0;
+        *OutputPointCount = (2*(InputPointCount - 1)) + 1;
+        *OutputPoints = (v2*)Platform.AllocateMemory(*OutputPointCount * sizeof(v2));
+
+        if(*OutputPoints)
+        {
+            s32 J = 0;
+            for(s32 I = 0;
+                I < (InputPointCount - 1);
+                I++)
+
+            {
+                v2 P0 = InputPoints[I];
+                v2 P1 = InputPoints[I + 1];
+
+                (*OutputPoints)[J++] = V2((0.75f*P0.x) + (0.25f*P1.x), (0.75f*P0.y) + (0.25f*P1.y));
+                (*OutputPoints)[J++] = V2((0.25f*P0.x) + (0.75f*P1.x), (0.25f*P0.y) + (0.75f*P1.y));
+            }
+
+            (*OutputPoints)[*OutputPointCount - 1] = InputPoints[InputPointCount - 1];
+        }
+        else
+        {
+            *OutputPointCount = 0;
+        }
     }
-    
-    return(Result);
+}
+
+internal void
+CalculatePath(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+{
+    world *World = WorldMode->World;
+    entity_move_state *MoveState = Entity->MoveState;    
+    heap *MovePointMinHeap = &MoveState->MovePointMinHeap;
+
+    MinHeapExtractNode(MovePointMinHeap);
+    MoveState->PointCount = MovePointMinHeap->Size + 1;
+    MoveState->Points = (v2 *)Platform.AllocateMemory(MoveState->PointCount*sizeof(v2));
+    for(u32 Index = 0;
+        Index < MoveState->PointCount;
+        ++Index)
+    {
+        if(Index)
+        {
+            sort_entry Key = MinHeapExtractNode(MovePointMinHeap);
+            as_tile_node *Node = World->TileNodes + Key.Index;
+            MoveState->Points[Index] = Subtract(World, &Node->TileP, &SimRegion->Origin);             
+        }
+        else
+        {
+            MoveState->Points[Index] = Entity->P.xy;             
+        }
+    }
+
+    v2 *SmoothedPoints = 0;
+    s32 SmoothedPointCount;
+
+    Chaikin(MoveState->Points, MoveState->PointCount, &SmoothedPoints, &SmoothedPointCount);
+    Platform.DeallocateMemory(MoveState->Points);
+    MoveState->Points = SmoothedPoints;
+    MoveState->PointCount = SmoothedPointCount;
+
+    Chaikin(MoveState->Points, MoveState->PointCount, &SmoothedPoints, &SmoothedPointCount);
+    Platform.DeallocateMemory(MoveState->Points);
+    MoveState->Points = SmoothedPoints;
+    MoveState->PointCount = SmoothedPointCount;
+
+    Chaikin(MoveState->Points, MoveState->PointCount, &SmoothedPoints, &SmoothedPointCount);
+    Platform.DeallocateMemory(MoveState->Points);
+    MoveState->Points = SmoothedPoints;
+    MoveState->PointCount = SmoothedPointCount;
+
+    if(MoveState->TilePoints)
+    {
+        Platform.DeallocateMemory(MoveState->TilePoints);
+        MoveState->TilePoints = (world_position *)Platform.AllocateMemory(MoveState->PointCount * sizeof(world_position));
+    }
+    else
+    {
+        MoveState->TilePoints = (world_position *)Platform.AllocateMemory(MoveState->PointCount * sizeof(world_position));
+    }
+
+    for(u32 Index = 0;
+        Index < MoveState->PointCount;
+        ++Index)
+    {
+        v2 Point = MoveState->Points[Index];
+        MoveState->TilePoints[Index] = MapIntoTileSpace(World, SimRegion->Origin, Point);
+    }
 }
 
 internal updated_entity
@@ -651,37 +617,151 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
     updated_entity Result = {};
     hero_entity *HeroData = (hero_entity *)Entity->Data;
 
+    heap *MovePointMinHeap = &Entity->MoveState->MovePointMinHeap;
     if(ConHero->Move)
     {
-        Entity->EndNode = GetTileNode(WorldMode->World, MapIntoTileSpace(WorldMode->World, WorldMode->CameraP, LocalMouseP.xy));
-        Entity->EndNode = FindClosestOpenNode(Entity->EndNode);
+        world_position MouseP = MapIntoTileSpace(WorldMode->World, SimRegion->Origin, LocalMouseP.xy);
+        Entity->MoveState->EndNode = GetTileNode(WorldMode->World, MouseP);
+        Entity->MoveState->StartNode = GetTileNode(WorldMode->World, Entity->TileP);
+
+        SolveAStar(WorldMode->World, Entity->MoveState, SimRegion);
+
+        if(Entity->MoveState->EndNode)
+        {
+            ZeroArray(MovePointMinHeap->MaxSize, MovePointMinHeap->Nodes);
+            MovePointMinHeap->Size = 0;
+
+            as_tile_node *Node = Entity->MoveState->EndNode;
+            while((Node) && (MovePointMinHeap->Size != MovePointMinHeap->MaxSize))
+            {
+                as_tile_node *ParentNode = Node;
+                sort_entry Key = {};
+                Key.Index = ParentNode->Y*WorldMode->World->TileNodeWidth + ParentNode->X;
+                Key.SortKey = ParentNode->LocalGoal;
+                MinHeapInsertNode(MovePointMinHeap, Key);
+
+                Node = Node->Parent;
+            }
+        }
+        
+        CalculatePath(WorldMode, SimRegion, Entity);
         
         ChangeEntityState(Entity, EntityState_Moving);
-        ConHero->Move = false;
     }
 
-//    rectangle2 EntityRect = RectCenterDim(Entity->P.xy, V2(0.25f, 0.25f));
-//    PushRect(RenderGroup, DefaultFlatTransform(), EntityRect, 3.0f, V4(0, 1, 0, 1));
-
-    Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity, RenderGroup);
-    
-    Result.MoveSpec.UnitMaxAccelVector = true;
-    Result.MoveSpec.Speed = 40.0f;
-    Result.MoveSpec.Drag = 5.8f;
-
-    if(ConHero->Attack || ConHero->InvokeAndCastSpell)
+    entity_move_state *MoveState = Entity->MoveState;
+    if(Entity->State == EntityState_Moving)
     {
-        Result.ddP = V3(0, 0, 0);
-        Entity->EndNode = 0;
+#if 1
+        object_transform Flat = DefaultFlatTransform();
+        Flat.ChunkZ = 10;
+        for(u32 Index = 0;
+            Index < MoveState->PointCount;
+            ++Index)
+        {
+            world_position Point = MoveState->TilePoints[Index];
+            PushRect(RenderGroup, &Flat, V3(Subtract(WorldMode->World, &Point, &SimRegion->Origin), 0.0f), V2(0.2f, 0.2f), V4(0, 0, 1, 1));
+        }
+#endif
+    
+        if(MoveState->PointCount)
+        {
+            world_position ClosestP = MoveState->TilePoints[0];
+
+            v2 Delta = Subtract(WorldMode->World, &ClosestP, &Entity->TileP);
+
+            if(MoveState->PointCount < 8)
+            {
+                Result.ddP = V3(Delta, 0);
+            }
+            else
+            {
+                Result.ddP = V3(Normalize(Delta), 0);
+            }
+
+            Result.MoveSpec.UnitMaxAccelVector = true;
+            Result.MoveSpec.Speed = 50.0f;
+            Result.MoveSpec.Drag = 12.0f;
+
+            v2 OffsetDifference = ClosestP.Offset - Entity->TileP.Offset;
+            if((ClosestP.TileX == Entity->TileP.TileX) && (ClosestP.TileY == Entity->TileP.TileY))
+            {
+                OffsetDifference.x = (OffsetDifference.x < 0) ? -OffsetDifference.x : OffsetDifference.x;
+                OffsetDifference.y = (OffsetDifference.y < 0) ? -OffsetDifference.y : OffsetDifference.y;
+
+                if((OffsetDifference.x < 0.08f) && (OffsetDifference.y < 0.08f))
+                {
+                    for(u32 Index = 0;
+                        Index < MoveState->PointCount - 1;
+                        ++Index)
+                    {
+                        MoveState->TilePoints[Index] = MoveState->TilePoints[Index + 1];
+                    }
+                    --MoveState->PointCount;
+
+                    ClosestP = MoveState->TilePoints[0];
+                    Delta = Subtract(WorldMode->World, &ClosestP, &Entity->TileP);
+                    Result.ddP = V3(Normalize(Delta), 0);
+                }
+            }
+        }
+        else
+        {
+            MoveState->dP = {};
+            ChangeEntityState(Entity, EntityState_Staying);
+        }
     }
 
+    if(ConHero->Attack)
+    {
+        ChangeEntityState(Entity, EntityState_Attacking);
+        if(Entity->PrevState == EntityState_Moving)
+        {
+            MoveState->dP = {};
+        }
+    }
+                                
+    CheckSpellCombination(Entity, HeroData, ConHero->SphereNewType);
+    ClearCombination(HeroData);
+
+    if(ConHero->InvokeAndCastSpell)
+    {
+        hero_spell *Spell = HeroData->Spells + SpellTypeToSpellIndex(HeroData->CurrentSpell);
+        if(CheckTimer(&Spell->Timer))
+        {
+            HeroData->CastMouseP = LocalMouseP.xy;
+            ChangeEntityState(Entity, EntityState_CastingSpell);
+            if(Entity->PrevState == EntityState_Moving)
+            {
+                MoveState->dP = {};
+            }
+        }
+    }
+    
+    s32 NewFacingDirection = 0;
+    if(Entity->State == EntityState_Moving)
+    {
+        NewFacingDirection = FacingDirectionFromVector(Result.ddP.xy);
+    }
+    else
+    {
+        NewFacingDirection = FacingDirectionFromVector(Normalize(LocalMouseP.xy - Entity->P.xy));
+    }
+
+    if(NewFacingDirection >= 0)
+    {
+        Entity->FacingDirection = NewFacingDirection;
+    }
+
+    // TODO(paul): Find out how to make it better
+#if 0
     if(Entity->FacingDirection == 1)
     {
         for(u32 SphereIndex = 0;
             SphereIndex < ArrayCount(HeroData->SpheresRefIndex);
             ++SphereIndex)
         {
-            entity *SphereEntity = Entity->References[HeroData->SpheresRefIndex[SphereIndex]].Ptr;
+            entity *SphereEntity = Entity->References->References[HeroData->SpheresRefIndex[SphereIndex]].Ptr;
             hero_sphere_entity *SphereData = (hero_sphere_entity *)SphereEntity->Data;
             SphereData->SortBias = 2.0f;
         }
@@ -692,70 +772,26 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
             SphereIndex < ArrayCount(HeroData->SpheresRefIndex);
             ++SphereIndex)
         {
-            entity *SphereEntity = Entity->References[HeroData->SpheresRefIndex[SphereIndex]].Ptr;
+            entity *SphereEntity = Entity->References->References[HeroData->SpheresRefIndex[SphereIndex]].Ptr;
             hero_sphere_entity *SphereData = (hero_sphere_entity *)SphereEntity->Data;
             SphereData->SortBias = 0.0f;
         }
-    }
-
-    CheckSpellCombination(Entity, HeroData, ConHero->SphereNewType);
-    ClearCombination(HeroData);
-                                
-    if(ConHero->InvokeAndCastSpell)
-    {
-        hero_spell *Spell =
-            HeroData->Spells + SpellTypeToSpellIndex(HeroData->CurrentSpell);
-
-        if(CheckTimer(&Spell->Timer))
-        {
-            HeroData->CastMouseP = LocalMouseP.xy;
-            ChangeAnimationType(Entity, AnimationType_CastSpell0);
-            ChangeEntityState(Entity, EntityState_CastingSpell);
-        }
-    }
-
-    if(ConHero->Attack)
-    {
-        ChangeAnimationType(Entity, AnimationType_Attack0);
-        ChangeEntityState(Entity, EntityState_Attacking);
-    }
-
-    found_entity FoundNPC = FindClosestEntityOfType(SimRegion, Entity, EntityType_NPC, 5.0f);
-                    
-    if(FoundNPC.Entity)
-    {
-        HeroData->ClosestNPC = FoundNPC;
-        if(ConHero->Action)
-        {
-            WorldMode->TalkingEntityID = FoundNPC.Entity->ID;
-            WorldMode->UpdateMode = UpdateMode_Conversation;
-        }
-    }
-    else
-    {
-        HeroData->ClosestNPC = {};
-    }
-    
-    
-    s32 NewFacingDirection = FacingDirectionFromVector(Normalize(LocalMouseP.xy - Entity->P.xy));
-    if(NewFacingDirection >= 0)
-    {
-        Entity->FacingDirection = NewFacingDirection;
     }
 
     if(WorldMode->GameFinished)
     {
         Entity->FacingDirection = 3;
         Entity->State = EntityState_Staying;
-        Entity->AnimationType = AnimationType_Idle;
+        Entity->Animation->AnimationType = AnimationType_Idle;
         Result.ddP = V3(0, 0, 0);
     }
-    
+#endif    
     
     return(Result);
 }
 // ===================================================================================================================
 
+#if 0
 internal void
 MonsterDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity *Entity)
 {
@@ -963,6 +999,7 @@ UpdateNecromancer(game_mode_world *WorldMode, editor_assets *Assets, audio_state
 }
 
 // ===================================================================================================================
+#endif
 
 // NOTE(paul):====================================== FlyingSpell Update ==============================================
 internal updated_entity
@@ -976,14 +1013,23 @@ UpdateFlyingSpell(game_mode_world *WorldMode, entity *Entity)
     Result.MoveSpec.Drag = 0.0f;
 
     Result.ddP = SpellData->Direction;
-    if(Entity->DistanceLimit == 0.0f)
+    if(Entity->MoveState->DistanceLimit == 0.0f)
     {
         ClearCollisionRulesFor(WorldMode, Entity->ID);
         ChangeEntityState(Entity, EntityState_Dieing);
-        ChangeAnimationType(Entity, AnimationType_Death);
-        Result.ddP = V3(0, 0, 0);
+        Result.ddP = {};
     }
-
+    else
+    {
+        ChangeEntityState(Entity, EntityState_Moving);
+    }
+    
+    s32 NewFacingDirection = FacingDirectionFromVector(Result.ddP.xy);
+    if(NewFacingDirection >= 0)
+    {
+        Entity->FacingDirection = NewFacingDirection;
+    }
+    
     return(Result);
 }
 
@@ -996,21 +1042,20 @@ ImmidiateSpellAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_st
                      entity *Entity, render_group *RenderGroup, object_transform *Transform)
 {
     rectangle2 AttackSurface = RectCenterDim(V2(0, 0), V2(1.0f, 1.0f));
-//    PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
+    PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
 
     immidiatespell_entity *EntityData = (immidiatespell_entity *)Entity->Data;
     if(EntityData->Type == SpellType_Heal)
     {
-        HealEntitiesInRectangle(SimRegion, Transform, Entity, AttackSurface, EntityData->Damage_Heal);
+//        HealEntitiesInRectangle(SimRegion, Transform, Entity, AttackSurface, EntityData->Damage_Heal);
     }
     else
     {
-        HitEntitiesInRectangle(SimRegion, AudioState, &WorldMode->EffectsEntropy, Transform,
-                               Entity, AttackSurface, EntityData->Damage_Heal);
+//        HitEntitiesInRectangle(SimRegion, AudioState, &WorldMode->EffectsEntropy, Transform,
+//                               Entity, AttackSurface, EntityData->Damage_Heal);
     }
     
     ChangeEntityState(Entity, EntityState_Dieing);
-    ChangeAnimationType(Entity, AnimationType_Death);
 }
 
 internal updated_entity
@@ -1024,7 +1069,6 @@ UpdateImmidiateSpell(entity *Entity)
     Result.MoveSpec.Drag = 0.0f;
 
     ChangeEntityState(Entity, EntityState_Attacking);
-    ChangeAnimationType(Entity, AnimationType_Attack0);
 
     return(Result);
 }
@@ -1032,10 +1076,10 @@ UpdateImmidiateSpell(entity *Entity)
 // ===================================================================================================================
 
 // NOTE(paul):====================================== Golem Update ====================================================
-
+#if 0
 internal void
 MonsterAttack(sim_region *SimRegion, audio_state *AudioState, random_series *EffectsEntropy, entity *Entity,
-              render_group *RenderGroup, object_transform *Transform, u32 Damage, v2 Dim)
+              render_group *RenderGroup, object_transform Transform, u32 Damage, v2 Dim)
 {
     v2 AttackDirection = FacingDirectionToUnitVector(Entity->FacingDirection);
     v2 RectCenter = 1.5f*AttackDirection;
@@ -1082,11 +1126,11 @@ UpdateGolem(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 
     return(Result);
 }
-
+#endif
 // ===================================================================================================================
 
 // NOTE(paul):====================================== Goblin Beast Update =============================================
-
+#if 0
 internal updated_entity
 UpdateGoblinBeast(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, random_series *Series)
 {
@@ -1310,7 +1354,7 @@ SkeletonKingDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity
 
 internal void
 SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
-                   render_group *RenderGroup, object_transform *Transform)
+                   render_group *RenderGroup, object_transform Transform)
 {
     if(Entity->State == EntityState_CastingSpell)
     {
@@ -1410,11 +1454,11 @@ UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region
             {
 
                 asset_vector ObstacleMatchVector = {};
-                ObstacleMatchVector.E[Tag_BiomeType] = BiomeType_AncientForest;
-                ObstacleMatchVector.E[Tag_SizeLevel] = SizeLevel_0;
+                ObstacleMatchVector.E[Tag_BiomeType] = (r32)BiomeType_AncientForest;
+                ObstacleMatchVector.E[Tag_SizeLevel] = (r32)SizeLevel_0;
                 asset_vector ObstacleWeightVector = {};
-                ObstacleWeightVector.E[Tag_BiomeType] = 1;
-                ObstacleWeightVector.E[Tag_SizeLevel] = 1;
+                ObstacleWeightVector.E[Tag_BiomeType] = 1.0f;
+                ObstacleWeightVector.E[Tag_SizeLevel] = 1.0f;
 
                 SkeletonKingData->Obstacles[SkeletonKingData->ObstacleCount++] =
                     AddObstacle(WorldMode, Assets, 16, 15, Asset_Stone,
@@ -1444,7 +1488,7 @@ UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region
 
 internal void
 CultistAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
-              render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
+              render_group *RenderGroup, object_transform Transform, v3 LocalMouseP)
 {
     cultist_entity *EntityData = (cultist_entity *)Entity->Data;
     entity *HeroEntity = GetEntityByID(SimRegion, EntityData->ClosestHeroID);
@@ -1545,7 +1589,7 @@ UpdateCultist(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 
 internal void
 SkeletonHunterAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
-                     render_group *RenderGroup, object_transform *Transform)
+                     render_group *RenderGroup, object_transform Transform)
 {
     skeleton_hunter_entity *EntityData = (skeleton_hunter_entity *)Entity->Data;
     entity *HeroEntity = GetEntityByID(SimRegion, EntityData->ClosestHeroID);
@@ -1677,7 +1721,7 @@ UpdatePossesed(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity
 }
 
 // ===================================================================================================================
-
+#endif
 // NOTE(paul):====================================== MagicSphere Update ==============================================
 internal updated_entity
 UpdateMagicSphere(entity *Entity, r32 dt)

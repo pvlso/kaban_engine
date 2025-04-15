@@ -7,6 +7,7 @@
    $Notice: A large part of the code is borrowed from Handmade Hero series 
             that was created by Casey Muratori $
    ======================================================================== */
+#include "spellweaver_math.h"
 
 struct heap
 {

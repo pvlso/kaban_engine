@@ -45,6 +45,7 @@
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 //#include "engine_game_mode.h"
+#include "engine_game_simulate.h"
 #include "editor_ssa_file_builder.h"
 
 enum editor_mode
@@ -53,7 +54,7 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_GameMode,
-    EditorMode_Simulate,
+    EditorMode_SimulateGame,
 };
 
 struct working_version
@@ -73,12 +74,6 @@ struct world_map_startup
 
     working_version MapVersion;
     sswm_id ID;
-};
-
-struct simulate
-{
-    memory_arena GameArena;
-    memory_arena GameTranArena;
 };
 
 struct editor_state
@@ -105,7 +100,7 @@ struct editor_state
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
 //        editor_mode_game *GameMode;
-        simulate *Simulate;
+        editor_game_simulate_mode *SimulateGame;
     };
 };
 

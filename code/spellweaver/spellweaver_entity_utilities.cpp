@@ -18,38 +18,6 @@ DefaultMoveSpec(void)
     return(Result);
 }
 
-inline u32
-GetAnimationTypeForCastType(castspell_type Type)
-{
-    u32 Result = 0;
-    switch(Type)
-    {
-        case CastSpellType_0: {Result = AnimationType_CastSpell0;} break;
-        case CastSpellType_1: {Result = AnimationType_CastSpell1;} break;
-        case CastSpellType_2: {Result = AnimationType_CastSpell2;} break;
-
-            InvalidDefaultCase;
-    }
-
-    return(Result);
-}
-
-inline u32
-GetAnimationTypeForAttackType(attack_type Type)
-{
-    u32 Result = 0;
-    switch(Type)
-    {
-        case AttackType_0: {Result = AnimationType_Attack0;} break;
-        case AttackType_1: {Result = AnimationType_Attack1;} break;
-        case AttackType_2: {Result = AnimationType_Attack2;} break;
-
-            InvalidDefaultCase;
-    }
-
-    return(Result);
-}
-
 inline s32
 GetSpriteIndex(r32 Time, u32 SpriteCount, u32 Offset, u32 Speed = 0)
 {
@@ -206,44 +174,44 @@ FindClosestEntityOfGeneralType(sim_region *SimRegion, entity *Entity, entity_gen
 inline void
 AddTimerForAttack(entity *Entity, r32 Duration, attack_type Type)
 {
-    timer *Timer = Entity->Timers + Entity->TimerCount;
+    timer *Timer = Entity->Timers->Timers + Entity->Timers->TimerCount;
     Timer->Finished = true;
     Timer->DurationSeconds = Duration;
     Timer->CurrentTime = Duration;
-    Entity->AttackTimerIndex[Type] = Entity->TimerCount;
-    ++Entity->TimerCount;
+    Entity->Timers->AttackTimerIndex[Type] = Entity->Timers->TimerCount;
+    ++Entity->Timers->TimerCount;
 }
 
 inline void
 AddTimerForCast(entity *Entity, r32 DurationSeconds, castspell_type Type)
 {
-    timer *Timer = Entity->Timers + Entity->TimerCount;
+    timer *Timer = Entity->Timers->Timers + Entity->Timers->TimerCount;
     Timer->Finished = true;
     Timer->DurationSeconds = DurationSeconds;
     Timer->CurrentTime = DurationSeconds;
-    Entity->CastSpellTimerIndex[Type] = Entity->TimerCount;
-    ++Entity->TimerCount;
+    Entity->Timers->CastSpellTimerIndex[Type] = Entity->Timers->TimerCount;
+    ++Entity->Timers->TimerCount;
 }
 
 inline u32
 GetTimerIndexForCastType(entity *Entity)
 {
-    u32 Result = Entity->CastSpellTimerIndex[Entity->CastSpellType];
+    u32 Result = Entity->Timers->CastSpellTimerIndex[Entity->Animation->CastSpellType];
     return(Result);
 }
 
 inline u32
 GetTimerIndexForAttackType(entity *Entity)
 {
-    u32 Result = Entity->AttackTimerIndex[Entity->CastSpellType];
+    u32 Result = Entity->Timers->AttackTimerIndex[Entity->Animation->CastSpellType];
     return(Result);
 }
 
 inline b32
 CheckTimerForAttack(entity *Entity)
 {
-    u32 AttackTimerIndex = Entity->AttackTimerIndex[Entity->AttackType];
-    b32 Result = Entity->Timers[AttackTimerIndex].Finished;
+    u32 AttackTimerIndex = Entity->Timers->AttackTimerIndex[Entity->Animation->AttackType];
+    b32 Result = Entity->Timers->Timers[AttackTimerIndex].Finished;
 
     return(Result);
 }
@@ -251,8 +219,8 @@ CheckTimerForAttack(entity *Entity)
 inline b32
 CheckTimerForCastspell(entity *Entity)
 {
-    u32 CastspellTimerIndex = Entity->CastSpellTimerIndex[Entity->CastSpellType];
-    b32 Result = Entity->Timers[CastspellTimerIndex].Finished;
+    u32 CastspellTimerIndex = Entity->Timers->CastSpellTimerIndex[Entity->Animation->CastSpellType];
+    b32 Result = Entity->Timers->Timers[CastspellTimerIndex].Finished;
 
     return(Result);
 }

@@ -7,15 +7,32 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
+internal void
+PlayTitleScreen(game_state *GameState, transient_state *TranState)
+{
+    SetGameMode(GameState, TranState, GameMode_TitleScreen);
+
+    GameState->FadeState = FadeState_FadeOut;
+    if(GameState->MusicState != MusicState_Ambient)
+    {
+        ChangeBackgroundMusic(GameState, MusicState_Ambient);
+    }
+    
+    game_mode_title_screen *Result = PushStruct(&GameState->ModeArena, game_mode_title_screen);
+    Result->t = 0;
+
+    GameState->TitleScreen = Result;
+}
+
 inline v3
-CheckForInput(render_group *RenderGroup, object_transform Transform, r32 Height, v3 Offset, r32 CAlign,
-              engine_input *Input, v3 MouseP, bitmap_id ID)
+CheckForInput(render_group *RenderGroup, object_transform *Transform, r32 Height, v3 Offset, r32 CAlign,
+              game_input *Input, v3 MouseP, bitmap_id ID)
 {
     v3 Result = {};
     loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, ID, RenderGroup->GenerationID);
     if(Bitmap)
     {
-        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Transform, Bitmap, Height, Offset, CAlign);
+        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, Transform, Bitmap, Height, Offset, CAlign);
         rectangle2 HoverRect = RectCenterDim(Dim.P.xy + 0.5f*Dim.Size, Dim.Size);
         v4 Color = V4(0, 0, 1, 1);
         if(IsInRectangle(HoverRect, MouseP.xy))
@@ -31,7 +48,7 @@ CheckForInput(render_group *RenderGroup, object_transform Transform, r32 Height,
 }
 
 internal b32
-DrawStartButton(editor_assets *Assets, render_group *RenderGroup, engine_input *Input)
+DrawStartButton(game_assets *Assets, render_group *RenderGroup, game_input *Input)
 {
     b32 Result = false;
     if(RenderGroup)
@@ -47,7 +64,7 @@ DrawStartButton(editor_assets *Assets, render_group *RenderGroup, engine_input *
         Transform.OffsetP = V3(-8.0f, -3.0f, -9.0f);
         v2 MouseP = V2(Input->MouseX, Input->MouseY);
         v3 LocalMouseP = Unproject(RenderGroup, &Transform, MouseP);
-        v3 AdditionalOffset = CheckForInput(RenderGroup, Transform, 1.0f, V3(0, 0, 0), 1.0f,
+        v3 AdditionalOffset = CheckForInput(RenderGroup, &Transform, 1.0f, V3(0, 0, 0), 1.0f,
                                             Input, LocalMouseP, TitleImage);
         if(AdditionalOffset.x || AdditionalOffset.y || AdditionalOffset.z)
         {
@@ -62,7 +79,7 @@ DrawStartButton(editor_assets *Assets, render_group *RenderGroup, engine_input *
 }
 
 internal b32
-DrawExitButton(editor_assets *Assets, render_group *RenderGroup, engine_input *Input)
+DrawExitButton(game_assets *Assets, render_group *RenderGroup, game_input *Input)
 {
     b32 Result = false;
     if(RenderGroup)
@@ -78,7 +95,7 @@ DrawExitButton(editor_assets *Assets, render_group *RenderGroup, engine_input *I
         Transform.OffsetP = V3(-8.0f, -4.0f, -9.0f);
         v2 MouseP = V2(Input->MouseX, Input->MouseY);
         v3 LocalMouseP = Unproject(RenderGroup, &Transform, MouseP);
-        v3 AdditionalOffset = CheckForInput(RenderGroup, Transform, 1.0f, V3(0, 0, 0), 1.0f,
+        v3 AdditionalOffset = CheckForInput(RenderGroup, &Transform, 1.0f, V3(0, 0, 0), 1.0f,
                                             Input, LocalMouseP, TitleImage);
         if(AdditionalOffset.x || AdditionalOffset.y || AdditionalOffset.z)
         {
@@ -93,7 +110,7 @@ DrawExitButton(editor_assets *Assets, render_group *RenderGroup, engine_input *I
 }
 
 internal void
-DrawTitleScreen(editor_assets *Assets, render_group *RenderGroup, loaded_bitmap *Test)
+DrawTitleScreen(game_assets *Assets, render_group *RenderGroup, loaded_bitmap *Test)
 {
     if(RenderGroup)
     {
@@ -122,11 +139,11 @@ DrawTitleScreen(editor_assets *Assets, render_group *RenderGroup, loaded_bitmap 
 }
 
 internal b32
-UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranState, transient_state *TranState_, render_group *RenderGroup,
-                           loaded_bitmap *DrawBuffer, engine_input *Input, game_mode_title_screen *TitleScreen)
+UpdateAndRenderTitleScreen(game_state *GameState, transient_state *TranState, render_group *RenderGroup,
+                           loaded_bitmap *DrawBuffer, game_input *Input, game_mode_title_screen *TitleScreen)
 {
-    editor_assets *Assets = TranState->Assets;
-    b32 Result = false;//CheckForMetaInput(GameState, TranState, Input);
+    game_assets *Assets = TranState->Assets;
+    b32 Result = CheckForMetaInput(GameState, TranState, Input);
     if(!Result)
     {
         real32 WidthOfMonitor = 0.635f; // NOTE(casey): Horizontal measurement of monitor in meters
@@ -141,7 +158,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 GameState->GameHaveStarted = true;
             }
@@ -150,7 +167,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 TitleScreen->Quit = true;
             }
@@ -158,9 +175,9 @@ UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranStat
 
         if(GameState->GameHaveStarted && (GameState->CurrentAlpha == 1.0f))
         {
-            GameState->AudioState->MasterVolume = V2(0, 0);
-            PlayWorld(GameState, TranState_);
-            GameState->AudioState->MasterVolume = V2(0.5f, 0.5f);
+            GameState->AudioState.MasterVolume = V2(0, 0);
+            PlayWorld(GameState, TranState);
+            GameState->AudioState.MasterVolume = V2(0.5f, 0.5f);
         }
         else if(TitleScreen->Quit && (GameState->CurrentAlpha == 1.0f))
         {

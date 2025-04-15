@@ -224,8 +224,8 @@ DrawHeroQuests(game_mode_world *WorldMode, sim_region *SimRegion, entity *HeroEn
             {
                 quest *Quest = WorldMode->Quests + HeroQuestIndex;
 
-//                char *Buffer = (char *)QuestNames[Quest->QuestName];
-//                TextOutAt(RenderGroup, TextConfig, Buffer, 0);
+                char *Buffer = (char *)QuestNames[Quest->QuestName];
+                TextOutAt(RenderGroup, TextConfig, Buffer, 0);
                 TextConfig.TextTransform.OffsetP.y -=
                     GetLineAdvance(TextConfig.FontInfo, TextConfig.FontScale) + 0.2f;
                 TextConfig.TextShadowTransform.OffsetP.y -=
@@ -249,7 +249,6 @@ DrawHeroQuests(game_mode_world *WorldMode, sim_region *SimRegion, entity *HeroEn
     }
 }
 
-#if 0
 internal void
 AdvanceParagraphIndexForNPC(game_mode_world *WorldMode, sim_region *SimRegion, ssa_quest *QuestTextInfo,
                             talkingnpc_entity *NPCData, entity *HeroEntity)
@@ -329,7 +328,6 @@ AdvanceParagraphIndexForNPC(game_mode_world *WorldMode, sim_region *SimRegion, s
         InvalidDefaultCase;
     }
 }
-#endif
 
 internal void
 UpdateQuests(game_mode_world *WorldMode, sim_region *SimRegion, entity *HeroEntity)

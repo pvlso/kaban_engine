@@ -6,11 +6,11 @@
    $Notice: A large part of the code is borrowed from Handmade Hero series 
             that was created by Casey Muratori $
    ======================================================================== */
-entity_collision_volume *
+internal entity_collision *
 MakeSimpleGroundedCollision(game_mode_world *WorldMode, real32 DimX, real32 DimY, real32 DimZ)
 {
     // TODO(casey): NOT WORLD ARENA!  Change to using the fundamental types arena, etc.
-    entity_collision_volume *Collision = PushStruct(&WorldMode->World->Arena, entity_collision_volume);
+    entity_collision *Collision = PushStruct(&WorldMode->World->Arena, entity_collision);
     Collision->OffsetP = V3(0, 0, 0);
     Collision->CollisionRect = RectCenterDim(Collision->OffsetP, V3(DimX, DimY, DimZ));
     Collision->Height = DimZ;
@@ -18,11 +18,11 @@ MakeSimpleGroundedCollision(game_mode_world *WorldMode, real32 DimX, real32 DimY
     return(Collision);
 }
 
-entity_collision_volume *
+internal entity_collision *
 MakeNullCollision(game_mode_world *WorldMode)
 {
     // TODO(casey): NOT WORLD ARENA!  Change to using the fundamental types arena, etc.
-    entity_collision_volume *Collision = PushStruct(&WorldMode->World->Arena, entity_collision_volume);
+    entity_collision *Collision = PushStruct(&WorldMode->World->Arena, entity_collision);
     Collision->OffsetP = V3(0, 0, 0);
     Collision->CollisionRect = InvertedInfinityRectangle3();
     Collision->Height = 0;
