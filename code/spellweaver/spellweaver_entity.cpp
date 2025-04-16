@@ -256,7 +256,7 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
         } break;
     }
 
-#if SPELLWEAVER_INTERNAL
+#if EDITOR_INTERNAL
    if(Entity->Type != EntityType_Tile)
    {
        PushRectOutline(RenderGroup, EntityTransform, Entity->Collision->OffsetP,

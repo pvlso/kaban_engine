@@ -81,6 +81,7 @@ PlayBackGroundMusic(game_state *GameState)
 
         GameState->Music = PlaySound(GameState->AudioState, Music);
         GameState->MusicIsPlaying = true;
+        GameState->ChangeMusic = false;
     }
     else
     {
@@ -104,12 +105,12 @@ internal b32
 CheckForMetaInput(game_state *GameState, game_transient_state *TranState, engine_input *Input)
 {
     b32 Result = false;
-#if SPELLWEAVER_INTERNAL
+#if EDITOR_INTERNAL
     for(u32 ControllerIndex = 0;
         ControllerIndex < ArrayCount(Input->Controllers);
         ++ControllerIndex)
     {
-        game_controller_input *Controller = GetController(Input, ControllerIndex);
+        engine_controller_input *Controller = GetController(Input, ControllerIndex);
         if(WasPressed(Controller->Back))
         {
             Input->QuitRequested = true;
@@ -128,8 +129,8 @@ CheckForMetaInput(game_state *GameState, game_transient_state *TranState, engine
     return(Result);
 }
 
-//#include "spellweaver/spellweaver_world_mode.cpp"
-//#include "spellweaver/spellweaver_title_mode.cpp"
+#include "spellweaver/spellweaver_world_mode.cpp"
+#include "spellweaver/spellweaver_title_mode.cpp"
 //#include "spellweaver/spellweaver_cutscene.cpp"
 
 internal game_task_with_memory *
@@ -408,9 +409,9 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
         if(GameState->GameMode == GameMode_None)
         {
 //        PlayTest(GameState, TranState);
-//        PlayTitleScreen(GameState, TranState);
-            GameState->GameHaveStarted = true;
-//        PlayWorld(GameState, TranState);
+            PlayGameTitleScreen(GameState, TranState);
+//            GameState->GameHaveStarted = true;
+//            PlayWorld(GameState, TranState);
         }
     
         //
@@ -464,14 +465,14 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
                 case GameMode_None:
                 case GameMode_TitleScreen:
                 {
-//                Rerun = UpdateAndRenderTitleScreen(GameState, TranState, RenderGroup, &DrawBuffer,
-//                                                   Input, GameState->TitleScreen);
+                    Rerun = UpdateAndRenderTitleScreen(GameState, TranState, RenderGroup, &DrawBuffer,
+                                                       Input, GameState->TitleScreen);
                 } break;
 
                 case GameMode_World:
                 {
-//                Rerun = UpdateAndRenderWorld(GameState, GameState->WorldMode, TranState, Input, RenderGroup,
-//                                             &DrawBuffer);
+                    Rerun = UpdateAndRenderWorld(GameState, GameState->WorldMode, TranState, Input, RenderGroup,
+                                                 &DrawBuffer);
                 } break;
 
                 InvalidDefaultCase;
@@ -487,8 +488,15 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
         CheckArena(&TranState->TranArena);
 
 //    Platform.WriteLogFile(L"Game Update End", __FILE__, __LINE__);
-    }
 
+        if(Input->QuitRequested)
+        {
+            EditorState->SimulationQuit = true;
+            Input->QuitRequested = false;
+            MuteAndTerminateSound(GameState->AudioState, GameState->Music, 1.0f);
+        }
+    }
+    
     return(Result);
 }
 

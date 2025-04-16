@@ -8,7 +8,7 @@
    ======================================================================== */
 
 internal void
-PlayTitleScreen(game_state *GameState, transient_state *TranState)
+PlayGameTitleScreen(game_state *GameState, game_transient_state *TranState)
 {
     SetGameMode(GameState, TranState, GameMode_TitleScreen);
 
@@ -26,7 +26,7 @@ PlayTitleScreen(game_state *GameState, transient_state *TranState)
 
 inline v3
 CheckForInput(render_group *RenderGroup, object_transform *Transform, r32 Height, v3 Offset, r32 CAlign,
-              game_input *Input, v3 MouseP, bitmap_id ID)
+              engine_input *Input, v3 MouseP, bitmap_id ID)
 {
     v3 Result = {};
     loaded_bitmap *Bitmap = GetBitmap(RenderGroup->Assets, ID, RenderGroup->GenerationID);
@@ -48,7 +48,7 @@ CheckForInput(render_group *RenderGroup, object_transform *Transform, r32 Height
 }
 
 internal b32
-DrawStartButton(game_assets *Assets, render_group *RenderGroup, game_input *Input)
+DrawStartButton(editor_assets *Assets, render_group *RenderGroup, engine_input *Input)
 {
     b32 Result = false;
     if(RenderGroup)
@@ -79,7 +79,7 @@ DrawStartButton(game_assets *Assets, render_group *RenderGroup, game_input *Inpu
 }
 
 internal b32
-DrawExitButton(game_assets *Assets, render_group *RenderGroup, game_input *Input)
+DrawExitButton(editor_assets *Assets, render_group *RenderGroup, engine_input *Input)
 {
     b32 Result = false;
     if(RenderGroup)
@@ -110,7 +110,7 @@ DrawExitButton(game_assets *Assets, render_group *RenderGroup, game_input *Input
 }
 
 internal void
-DrawTitleScreen(game_assets *Assets, render_group *RenderGroup, loaded_bitmap *Test)
+DrawTitleScreen(editor_assets *Assets, render_group *RenderGroup, loaded_bitmap *Test)
 {
     if(RenderGroup)
     {
@@ -139,10 +139,10 @@ DrawTitleScreen(game_assets *Assets, render_group *RenderGroup, loaded_bitmap *T
 }
 
 internal b32
-UpdateAndRenderTitleScreen(game_state *GameState, transient_state *TranState, render_group *RenderGroup,
-                           loaded_bitmap *DrawBuffer, game_input *Input, game_mode_title_screen *TitleScreen)
+UpdateAndRenderTitleScreen(game_state *GameState, game_transient_state *TranState, render_group *RenderGroup,
+                           loaded_bitmap *DrawBuffer, engine_input *Input, game_mode_title_screen *TitleScreen)
 {
-    game_assets *Assets = TranState->Assets;
+    editor_assets *Assets = TranState->Assets;
     b32 Result = CheckForMetaInput(GameState, TranState, Input);
     if(!Result)
     {
@@ -158,7 +158,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, transient_state *TranState, re
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 GameState->GameHaveStarted = true;
             }
@@ -167,7 +167,7 @@ UpdateAndRenderTitleScreen(game_state *GameState, transient_state *TranState, re
         {
             if(WasPressed(Input->MouseButtons[0]))
             {
-                PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+                PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
                 GameState->FadeState = FadeState_FadeIn;
                 TitleScreen->Quit = true;
             }
@@ -175,9 +175,9 @@ UpdateAndRenderTitleScreen(game_state *GameState, transient_state *TranState, re
 
         if(GameState->GameHaveStarted && (GameState->CurrentAlpha == 1.0f))
         {
-            GameState->AudioState.MasterVolume = V2(0, 0);
+            GameState->AudioState->MasterVolume = V2(0, 0);
             PlayWorld(GameState, TranState);
-            GameState->AudioState.MasterVolume = V2(0.5f, 0.5f);
+            GameState->AudioState->MasterVolume = V2(0.5f, 0.5f);
         }
         else if(TitleScreen->Quit && (GameState->CurrentAlpha == 1.0f))
         {

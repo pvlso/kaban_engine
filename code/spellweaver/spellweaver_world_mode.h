@@ -89,7 +89,7 @@ struct game_mode_world
     particle_cel ParticleCels[PARTICLE_CEL_DIM][PARTICLE_CEL_DIM];
 };
 
-internal void PlayWorld(game_state *GameState, transient_state *TranState);
+internal void PlayWorld(game_state *GameState, struct game_transient_state *TranState);
 
 #define SPELLWEAVER_WORLD_MODE_H
 #endif

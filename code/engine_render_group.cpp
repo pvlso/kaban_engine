@@ -372,13 +372,13 @@ PushTileset(render_group *Group, tileset_id ID, b32 Immidiate = false)
 }
 
 inline loaded_world_map *
-PushSSWM(transient_state *TranState, sswm_id ID, b32 Immidiate = false)
+PushSSWM(editor_assets *Assets, u32 GenerationID, sswm_id ID, b32 Immidiate = false)
 {
-    loaded_world_map *SSWM = GetSSWM(TranState->Assets, ID, TranState->MainGenerationID);
+    loaded_world_map *SSWM = GetSSWM(Assets, ID, GenerationID);
     if(Immidiate && !SSWM)
     {
-        LoadSSWM(TranState->Assets, ID, true);
-        SSWM = GetSSWM(TranState->Assets, ID, TranState->MainGenerationID);
+        LoadSSWM(Assets, ID, true);
+        SSWM = GetSSWM(Assets, ID, GenerationID);
     }
     
     if(SSWM)
@@ -387,7 +387,7 @@ PushSSWM(transient_state *TranState, sswm_id ID, b32 Immidiate = false)
     }
     else
     {
-        LoadSSWM(TranState->Assets, ID, false);
+        LoadSSWM(Assets, ID, false);
     }
 
     return(SSWM);

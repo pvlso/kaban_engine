@@ -13,7 +13,7 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
     SetGameMode(GameState, TranState, GameMode_World);
     GameState->FadeState = FadeState_FadeOut;
 
-    PlaySound(&GameState->AudioState, GameState->GameStartFX);
+    PlaySound(GameState->AudioState, GameState->GameStartFX);
     ChangeBackgroundMusic(GameState, MusicState_Ambient);
         
     game_mode_world *WorldMode = PushStruct(&GameState->ModeArena, game_mode_world);
@@ -38,9 +38,9 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
 
     sswm_id SSWMID = GetBestMatchSSWMFrom(TranState->Assets, Asset_SSWM, &MatchVector, &WeightVector);
 
-    loaded_world_map *Map = PushSSWM(TranState, SSWMID, true);
+    loaded_world_map *Map = PushSSWM(TranState->Assets, TranState->MainGenerationID, SSWMID, true);
 
-    game_assets *Assets = TranState->Assets;
+    editor_assets *Assets = TranState->Assets;
 
     u32 ZLayerCount = Map->Header->GroundLayer_ZLayerCount & 0xFFFF;
     for(u32 TileIndex = 0;
@@ -58,7 +58,7 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
         }
     }
 
-    WorldMode->World = CreateWorld(TranState, TileSideInMeters, Map);
+    WorldMode->World = CreateWorld(TileSideInMeters, Map);
     world *World = WorldMode->World;
     
     WorldMode->MiniMapBitmap = MakeEmptyBitmap(&WorldMode->World->Arena, 720, 720, false);
@@ -257,8 +257,8 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
 }
 
 internal b32
-UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transient_state *TranState,
-                     game_input *Input, render_group *RenderGroup, loaded_bitmap *DrawBuffer)
+UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_transient_state *TranState,
+                     engine_input *Input, render_group *RenderGroup, loaded_bitmap *DrawBuffer)
 {
     TIMED_FUNCTION();
     
@@ -301,7 +301,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
         ControllerIndex < ArrayCount(Input->Controllers);
         ++ControllerIndex)
     {
-        game_controller_input *Controller = GetController(Input, ControllerIndex);
+        engine_controller_input *Controller = GetController(Input, ControllerIndex);
         if(Controller->IsConnected)
         {
             ConHero = GameState->ControlledHeroes + ControllerIndex;
@@ -335,48 +335,34 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 }
 
                 if(WasPressed(Input->MouseButtons[0]))
-                {
                     ConHero->Attack = true;
-                }
 
                 if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
-                {
                     ConHero->Move = true;
-                }
 
                 if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
-                {
                     ConHero->SetObstacle = true;
-                }
 
                 if(WasPressed(Controller->RightShoulder))
                 {
                     ConHero->Action = true;
-                    PlaySound(&GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
+                    PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
                 }
 
-                if(WasPressed(Controller->ChangeSphereToWater))
-                {
+                if(WasPressed(Controller->FirstMode))
                     ConHero->SphereNewType = SphereType_Water;
-                }
-                else if(WasPressed(Controller->ChangeSphereToWind))
-                {
+                else if(WasPressed(Controller->SecondMode))
                     ConHero->SphereNewType = SphereType_Wind;
-                }
-                else if(WasPressed(Controller->ChangeSphereToFire))
-                {
+                else if(WasPressed(Controller->ThirdMode))
                     ConHero->SphereNewType = SphereType_Fire;
-                }
 
                 if(WasPressed(Controller->LeftShoulder))
-                {
                     ConHero->InvokeAndCastSpell = true;
-                }
 
                 if(WasPressed(Controller->Back))
                 {
                     WorldMode->QuitRequested = !WorldMode->QuitRequested;
-                    PlaySound(&GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
+                    PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
                 }
             }
         }
@@ -426,7 +412,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
     
     {
         TIMED_BLOCK("EntityRender");
-        UpdateAndRenderEntities(WorldMode, SimRegion, &GameState->AudioState, ConHero, RenderGroup, Input->dtForFrame, MouseP);
+        UpdateAndRenderEntities(WorldMode, SimRegion, GameState->AudioState, ConHero, RenderGroup, Input->dtForFrame, MouseP);
                 
         DestroyEntities(WorldMode, SimRegion);
         WorldMode->Time += Input->dtForFrame;
@@ -441,6 +427,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
     {
         b32 Hover = false;
         object_transform Transform = DefaultFlatTransform();
+        Transform.ChunkZ = 100000;
         v4 RectColor = V4(0, 0, 0, 0.5f);
         if(WorldMode->GameFinished)
         {
@@ -494,18 +481,18 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 MusicMatchVector.E[Tag_Variety] = VarietyType_None;
                 sound_id MusicID = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
 
-                WorldMode->GameEndMusic = PlaySound(&GameState->AudioState, MusicID);
-                ChangeVolume(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
+                WorldMode->GameEndMusic = PlaySound(GameState->AudioState, MusicID);
+                ChangeVolume(GameState->AudioState, WorldMode->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
             }
             else
             {
-                ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.0f, 0.0f));
+                ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.0f, 0.0f));
                 if(!WorldMode->GameEndMusic->SoundIsPlaying)
                 {
-                    ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+                    ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
                     GameState->FadeState = FadeState_FadeIn;
-                    ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
-                    MuteAndTerminateSound(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                    ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+                    MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
                 }
             }
 
@@ -524,18 +511,18 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
             if(GameState->MusicState != MusicState_DarkAmbient)
             {
                 ChangeBackgroundMusic(GameState, MusicState_DarkAmbient);
-                ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(1.0f, 1.0f));
+                ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(1.0f, 1.0f));
             }
         }
 
         if(Hover && WasPressed(Input->MouseButtons[0]))
         {
-            PlaySound(&GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
+            PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
             GameState->FadeState = FadeState_FadeIn;
-            ChangeVolume(&GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
+            ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
             if(WorldMode->GameFinished)
             {
-                MuteAndTerminateSound(&GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
             }
         }
 
@@ -550,12 +537,12 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, transien
                 ControllerIndex < ArrayCount(Input->Controllers);
                 ++ControllerIndex)
             {
-                game_controller_input *Controller = GetController(Input, ControllerIndex);
+                engine_controller_input *Controller = GetController(Input, ControllerIndex);
                 controlled_hero *ConHero = GameState->ControlledHeroes + ControllerIndex;
                 ZeroStruct(*ConHero);
             }
 
-            PlayTitleScreen(GameState, TranState);
+            PlayGameTitleScreen(GameState, TranState);
         }
     }    
 

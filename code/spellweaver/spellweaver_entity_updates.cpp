@@ -261,7 +261,7 @@ HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *Audio
     {
         rectangle2 AttackSurface = RectCenterDim(Normalize(LocalMouseP.xy - Entity->P.xy), V2(1.0f, 1.0f));
 
-#if SPELLWEAVER_INTERNAL
+#if EDITOR_INTERNAL
         PushRectOutline(RenderGroup, Transform, AttackSurface, 0.0f, V4(0, 1, 0, 1), 0.03f);
 #endif
 
@@ -654,7 +654,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
     {
 #if 1
         object_transform Flat = DefaultFlatTransform();
-        Flat.ChunkZ = 10;
+        Flat.ChunkZ = 10000;
         for(u32 Index = 0;
             Index < MoveState->PointCount;
             ++Index)

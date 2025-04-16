@@ -369,7 +369,7 @@ DistanceBetween(world *World, as_tile_node *NodeA, as_tile_node *NodeB)
 }
 
 internal world *
-CreateWorld(transient_state *TranState, r32 TileSideInMeters, loaded_world_map *Map)
+CreateWorld(r32 TileSideInMeters, loaded_world_map *Map)
 {
     world *World = BootstrapPushStruct(world, Arena);
     
