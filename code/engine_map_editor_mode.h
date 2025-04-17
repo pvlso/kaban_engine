@@ -1,4 +1,4 @@
-#if !defined(EDITOR_GAME_MODE_H)
+#if !defined(ENGINE_MAP_EDITOR_MODE_H)
 /* ========================================================================
    $File: $
    $Date: 2024 $
@@ -6,20 +6,10 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
-
-#include "engine_game_mode_world.h"
-#include "engine_game_mode_entity.h"
-#include "engine_game_mode_sim_region.h"
-
 #include "engine_game_mode_undo.h"
 
 #include "engine_game_mode_tile.h"
 #include "engine_game_mode_navmesh.h"
-
-struct controlled_camera
-{
-    b32 SetObstacle;
-};
 
 enum edit_game_mode
 {
@@ -58,6 +48,11 @@ enum editor_game_mode_flags
     GMFlag_FillActive = (1 << 2),
 };
 
+struct controlled_camera
+{
+    entity_id EntityIndex;
+};
+
 struct editor_mode_game
 {
     u32 CurrentAction;
@@ -65,15 +60,8 @@ struct editor_mode_game
     
     edit_game_mode GameEditMode;
 
-    world *World;
-    controlled_camera ControlledCameras[ArrayCount(((engine_input *)0)->Controllers)];
-
     s32 CameraMoveStep;
-    world_position CameraP;
-
-    u32 CreationBufferIndex;
-    entity CreationBuffers[16];
-    u32 LastUsedEntityStorageIndex;
+    controlled_camera ControlledCameras[ArrayCount(((engine_input *)0)->Controllers)];
 
     tileset_id CurrentTileset;
     loaded_tileset *Tileset;
@@ -90,17 +78,9 @@ struct editor_mode_game
     u32 CurrentPolygonIndex;
     world_polygon *CurrentPolygon;
 
-//    r32 RunTestForSeconds;
-//    r32 NextTriangle;
-//    s32 NextIndex;
-//    u8 States[3];
-//    triangle ClipT;
-//    triangle SubjectT;
-
     u32 PolygonCount;
     b32 Triangulated;
     world_polygon *Polies;
-//    world_triangulated_poly *TPolies;
     world_position *ChosenVertex;
 
     s32 MeshTriangleCount;
@@ -108,11 +88,14 @@ struct editor_mode_game
     s32 FreeIndexCount;
     s32 *FreeTriangleIndices;
     
-    r32 Time;
-    r32 AutoWriteSeconds;
+    f32 AutoWriteSeconds;
+    f32 Zoom;
+    f32 Time;
     
     action_stack UndoStack;
     action_stack RedoStack;
+
+    game_mode_world *WorldState;
 };
 
 inline void
@@ -149,5 +132,5 @@ ToggleGMFlag(editor_mode_game *GameMode, u32 Flag)
 
 internal void PlayGameMode(editor_state *EditorState, transient_state *TranState);
 
-#define EDITOR_GAME_MODE_H
+#define ENGINE_MAP_EDITOR_MODE_H
 #endif

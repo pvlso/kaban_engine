@@ -9,7 +9,7 @@
 internal void
 AddGroundTile(action_stack *UndoStack, world *World, world_position P, ssa_tile Tile, u32 ZLayer, b32 FloodFill)
 {
-    sswm_ground_tile *GroundTile = GetWorldMapGroundTile(World, P.TileX, P.TileY);
+    sswm_ground_tile *GroundTile = EDITORGetWorldMapGroundTile(World, P.TileX, P.TileY);
     if(GroundTile)
     {
         if(!FloodFill)
@@ -34,7 +34,7 @@ AddGroundTile(editor_mode_game *GameMode, world *World, world_position MouseP, b
 inline void
 RemoveGroundTile(action_stack *UndoStack, editor_mode_game *GameMode, world *World, world_position MouseP)
 {
-    sswm_ground_tile *GroundTile = GetWorldMapGroundTile(World, MouseP.TileX, MouseP.TileY);
+    sswm_ground_tile *GroundTile = EDITORGetWorldMapGroundTile(World, MouseP.TileX, MouseP.TileY);
 
     if(GroundTile)
     {
@@ -74,7 +74,7 @@ IsEmpty(tile_queue *Queue)
 internal void
 TileFloodFill(action_stack *UndoStack, world *World, world_position StartP, ssa_tile NewTile, u32 ZLayer)
 {
-    sswm_ground_tile *TargetGroundTiles = GetWorldMapGroundTile(World, StartP);
+    sswm_ground_tile *TargetGroundTiles = EDITORGetWorldMapGroundTile(World, StartP);
     if(TargetGroundTiles)
     {
         u32 TargetChecksum = TargetGroundTiles->CheckSum[ZLayer];
@@ -94,7 +94,7 @@ TileFloodFill(action_stack *UndoStack, world *World, world_position StartP, ssa_
             {
                 world_position P = DeQueue(&Queue);
 
-                sswm_ground_tile *GroundTile = GetWorldMapGroundTile(World, P);
+                sswm_ground_tile *GroundTile = EDITORGetWorldMapGroundTile(World, P);
                 if(GroundTile)
                 {
                     if(GroundTile->CheckSum[ZLayer] == TargetChecksum)
@@ -103,22 +103,22 @@ TileFloodFill(action_stack *UndoStack, world *World, world_position StartP, ssa_
 
                         AddGroundTile(UndoStack, World, P, NewTile, ZLayer, true);
                         
-                        if(TileIsValid(World, P.TileX - 1, P.TileY))
+                        if(EDITORTileIsValid(World, P.TileX - 1, P.TileY))
                         {
                             EnQueue(&Queue, CenteredTilePoint(World, P.TileX - 1, P.TileY));
                         }
 
-                        if(TileIsValid(World, P.TileX + 1, P.TileY))
+                        if(EDITORTileIsValid(World, P.TileX + 1, P.TileY))
                         {
                             EnQueue(&Queue, CenteredTilePoint(World, P.TileX + 1, P.TileY));
                         }
 
-                        if(TileIsValid(World, P.TileX, P.TileY - 1))
+                        if(EDITORTileIsValid(World, P.TileX, P.TileY - 1))
                         {
                             EnQueue(&Queue, CenteredTilePoint(World, P.TileX, P.TileY - 1));
                         }
 
-                        if(TileIsValid(World, P.TileX, P.TileY + 1))
+                        if(EDITORTileIsValid(World, P.TileX, P.TileY + 1))
                         {
                             EnQueue(&Queue, CenteredTilePoint(World, P.TileX, P.TileY + 1));
                         }

@@ -822,7 +822,10 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                 if(Event)
                 {
                     memory_arena *Arena = Event->Event.Value_memory_arena_p;
-                    Platform.UI.NkProg(nk, Arena->Used, Arena->Size, nk_false);
+                    if(Arena->Base)
+                    {
+                        Platform.UI.NkProg(nk, Arena->Used, Arena->Size, nk_false);
+                    }
                 }
             }
             Platform.UI.NkLayoutRowEnd(nk);

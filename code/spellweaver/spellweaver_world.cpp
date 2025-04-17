@@ -407,3 +407,109 @@ CreateWorld(r32 TileSideInMeters, loaded_world_map *Map)
     
     return(World);
 }
+
+internal sswm_ground_tile *
+EDITORGetWorldMapGroundTile(world *World, u32 TileX, u32 TileY)
+{
+    sswm_ground_tile *Result = 0;
+    if((TileX < World->TileWidth) && (TileY < World->TileWidth) &&
+       (TileX >= 0) && (TileY >= 0))
+    {
+        u32 TileIndex = TileY*World->Map->Header->MapWidth + TileX;
+        Result = World->Map->GroundTiles + TileIndex;
+    }
+
+    return(Result);
+}
+
+inline sswm_ground_tile *
+EDITORGetWorldMapGroundTile(world *World, world_position P)
+{
+    sswm_ground_tile *Result = EDITORGetWorldMapGroundTile(World, P.TileX, P.TileY);
+    return(Result);
+}
+
+inline b32
+EDITORTileIsValid(world *World, u32 TileX, u32 TileY)
+{
+    b32 Result = EDITORGetWorldMapGroundTile(World, TileX, TileY) ? true : false;
+    return(Result);
+}
+
+internal world *
+EDITORCreateWorld(transient_state *TranState, r32 TileSideInMeters, u32 WorldTileWidth, u32 WorldTileHeight, u32 NodesPerTile, loaded_world_map *Map)
+{
+    world *World = BootstrapPushStruct(world, Arena);
+    
+    World->FirstFree = 0;
+    World->TileDimInMeters = V3(TileSideInMeters, TileSideInMeters, TileSideInMeters);
+
+    World->TileWidth = WorldTileWidth;
+    World->TileHeight = WorldTileHeight;
+    World->TileCount = World->TileWidth*World->TileHeight;
+
+    World->NodesPerTile = NodesPerTile;
+    World->TileNodeWidth = NodesPerTile*WorldTileWidth;
+    World->TileNodeHeight = NodesPerTile*WorldTileHeight;
+    World->TileNodeCount = NodesPerTile*World->TileCount;
+
+    if(Map)
+    {
+        World->Map = PushStruct(&World->Arena, loaded_world_map);
+        World->Map->Header = PushStruct(&World->Arena, sswm_header);
+        *World->Map->Header = *Map->Header;
+        World->Map->GroundTiles = PushArray(&World->Arena, World->Map->Header->MapWidth*World->Map->Header->MapHeight, sswm_ground_tile);
+        World->Map->Entities = PushArray(&World->Arena, World->Map->Header->EntityCount, sswm_entity);
+
+        u32 TilesSize = World->Map->Header->MapWidth*World->Map->Header->MapHeight*sizeof(sswm_ground_tile);
+        Copy(TilesSize, Map->GroundTiles, World->Map->GroundTiles);
+
+        u32 EntitiesSize = World->Map->Header->EntityCount*sizeof(sswm_entity);
+        Copy(EntitiesSize, Map->Entities, World->Map->Entities);
+
+        editor_assets *Assets = TranState->Assets;
+        u32 ZLayerCount = World->Map->Header->GroundLayer_ZLayerCount & 0xFFFF;
+        for(u32 TileIndex = 0;
+            TileIndex < World->Map->Header->MapWidth*World->Map->Header->MapHeight;
+            ++TileIndex)
+        {
+            sswm_ground_tile *Tile = World->Map->GroundTiles + TileIndex;
+            for(u32 BitmapIndex = 0;
+                BitmapIndex < ZLayerCount;
+                ++BitmapIndex)
+            {
+                u32 CheckSum = Tile->CheckSum[BitmapIndex];
+                bitmap_id ID = GetTileBitmapByChecksumTag(TranState->Assets, CheckSum);
+                Tile->BitmapID[BitmapIndex] = ID.Value;
+            }
+        }
+    }
+    else
+    {
+        World->Map = PushStruct(&World->Arena, loaded_world_map);
+        World->Map->Header = PushStruct(&World->Arena, sswm_header);
+        FormatString(ArrayCount(World->Map->Header->Name), World->Map->Header->Name, "sswm");
+        World->Map->Header->MapWidth = WorldTileWidth;        
+        World->Map->Header->MapHeight = WorldTileHeight;        
+        World->Map->Header->EntityCount = 0;        
+        
+        World->Map->GroundTiles = PushArray(&World->Arena, World->Map->Header->MapWidth*World->Map->Header->MapHeight, sswm_ground_tile);
+        World->Map->Entities = PushArray(&World->Arena, World->Map->Header->EntityCount, sswm_entity);
+    }
+
+    for(u32 Y = 0;
+        Y < World->TileHeight;
+        ++Y)
+    {
+        for(u32 X = 0;
+            X < World->TileWidth;
+            ++X)
+        {
+            sswm_ground_tile *Tile = World->Map->GroundTiles + Y*World->TileWidth + X;
+            Tile->TileX = X;
+            Tile->TileY = Y;
+        }
+    }
+    
+    return(World);
+}

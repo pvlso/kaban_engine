@@ -81,6 +81,8 @@ struct world
     u32 TileNodeHeight;
     u32 TileNodeCount;
 
+    loaded_world_map *Map;
+
     as_tile_node *TileNodes;
     heap MinTileNodeHeap;
     

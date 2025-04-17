@@ -448,6 +448,8 @@ internal void
 FindSubjectTris(editor_mode_game *GameMode, sim_region *SimRegion, rectangle2 SubBounds, triangle *SubjectTris,
                 s32 *SubjectIndices, s32 *SubjectCount)
 {
+    game_mode_world *WorldState = GameMode->WorldState;
+    
     for(s32 Index = 0;
         Index < GameMode->MeshTriangleCount;
         ++Index)
@@ -456,9 +458,9 @@ FindSubjectTris(editor_mode_game *GameMode, sim_region *SimRegion, rectangle2 Su
         r32 Z = 10.0f;
 
         triangle *ConvertedT = SubjectTris + (*SubjectCount);
-        ConvertedT->Vertices[0] = Subtract(GameMode->World, &T->V1, &SimRegion->Origin);
-        ConvertedT->Vertices[1] = Subtract(GameMode->World, &T->V2, &SimRegion->Origin);
-        ConvertedT->Vertices[2] = Subtract(GameMode->World, &T->V3, &SimRegion->Origin);
+        ConvertedT->Vertices[0] = Subtract(WorldState->World, &T->V1, &SimRegion->Origin);
+        ConvertedT->Vertices[1] = Subtract(WorldState->World, &T->V2, &SimRegion->Origin);
+        ConvertedT->Vertices[2] = Subtract(WorldState->World, &T->V3, &SimRegion->Origin);
         CalculateTriangleBoundingBox(ConvertedT);
 
         if(RectanglesIntersect(ConvertedT->Bounds, SubBounds))
@@ -518,9 +520,9 @@ SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2
                 }
             }
 
-            WorldT->Vertices[0] = MapIntoTileSpace(GameMode->World, SimRegion->Origin, ResultT->Vertices[0]);
-            WorldT->Vertices[1] = MapIntoTileSpace(GameMode->World, SimRegion->Origin, ResultT->Vertices[1]);
-            WorldT->Vertices[2] = MapIntoTileSpace(GameMode->World, SimRegion->Origin, ResultT->Vertices[2]);
+            WorldT->Vertices[0] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[0]);
+            WorldT->Vertices[1] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[1]);
+            WorldT->Vertices[2] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[2]);
         }
 
         if(ReplacedCount < SubjectCount)
@@ -568,9 +570,9 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
             triangle *T = Triangles + I;
             triangle_adjs *Adj = AdjArray + I;
 
-            T->Vertices[0] = Subtract(GameMode->World, &WorldT->V1, BaseP);
-            T->Vertices[1] = Subtract(GameMode->World, &WorldT->V2, BaseP);
-            T->Vertices[2] = Subtract(GameMode->World, &WorldT->V3, BaseP);
+            T->Vertices[0] = Subtract(GameMode->WorldState->World, &WorldT->V1, BaseP);
+            T->Vertices[1] = Subtract(GameMode->WorldState->World, &WorldT->V2, BaseP);
+            T->Vertices[2] = Subtract(GameMode->WorldState->World, &WorldT->V3, BaseP);
 
             Adj->AdjV1V2 = WorldT->Adj.AdjV1V2;
             Adj->AdjV2V3 = WorldT->Adj.AdjV2V3;
@@ -727,7 +729,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
             J < Poly->VertexCount;
             ++J)
         {
-            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->World, *BaseP, Poly->Vertices[J]);
+            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, Poly->Vertices[J]);
         }
     }
 
@@ -770,7 +772,7 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     {
         world_polygon *Poly = GameMode->Polies + Index;
 
-        ConvertWorldPolygonToPolygon2(GameMode->World, BaseP, Poly, &P);
+        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
         triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
         for(s32 TIndex = GameMode->MeshTriangleCount;
             TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
@@ -778,9 +780,9 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
         {
             triangle *T = TResult.Triangles + (TIndex - GameMode->MeshTriangleCount);
             world_triangle *WorldT = GameMode->MeshTriangles + TIndex;
-            WorldT->V1 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[0]);
-            WorldT->V2 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[1]);
-            WorldT->V3 = MapIntoTileSpace(GameMode->World, *BaseP, T->Vertices[2]);
+            WorldT->V1 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[0]);
+            WorldT->V2 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[1]);
+            WorldT->V3 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[2]);
         }
 
         GameMode->MeshTriangleCount += TResult.TriangleCount;

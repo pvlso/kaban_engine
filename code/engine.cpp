@@ -142,8 +142,8 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-//#include "engine_game_mode.cpp"
 #include "engine_game_simulate.cpp"
+#include "engine_map_editor_mode.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -298,8 +298,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_GameMode:
                 {
-//                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
-//                                                    Input, RenderWidth, RenderHeight);
+                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
+                                                    Input, RenderWidth, RenderHeight);
                 } break;
 
                 case EditorMode_SimulateGame:

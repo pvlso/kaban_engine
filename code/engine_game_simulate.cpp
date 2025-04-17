@@ -7,9 +7,7 @@
    ======================================================================== */
 
 //#include "spellweaver_sort.cpp"
-//#include "spellweaver\spellweaver_render_group.cpp"
 #include "spellweaver\spellweaver_asset.cpp"
-//#include "spellweaver_audio.cpp"
 #include "spellweaver\spellweaver_text.cpp"
 #include "spellweaver\spellweaver_world.cpp"
 #include "spellweaver\spellweaver_sim_region.cpp"
@@ -226,41 +224,13 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
     if(!Result)
     {
     
-#if 0
-        GlobalDebugTable = Memory->DebugTable;
-        DebugGlobalMemory = Memory;
-    
+#if 1
         {DEBUG_DATA_BLOCK("Renderer");
-            DEBUG_B32(Global_Renderer_TestWeirdDrawBufferSize);
             {DEBUG_DATA_BLOCK("Camera");
                 DEBUG_B32(Global_Renderer_Camera_UseDebug);
                 DEBUG_VALUE(Global_Renderer_Camera_DebugDistance);
-                DEBUG_B32(Global_Renderer_Camera_RoomBased);
             }
         }
-        {DEBUG_DATA_BLOCK("GroundChunks");
-            DEBUG_B32(Global_GroundChunks_Checkerboards);
-            DEBUG_B32(Global_GroundChunks_RecomputeOnEXEChange);
-            DEBUG_B32(Global_GroundChunks_Outlines);
-            DEBUG_B32(Global_GroundChunksOn);
-        }
-        {DEBUG_DATA_BLOCK("AI/Familiar");
-            DEBUG_B32(Global_AI_Familiar_FollowsHero); 
-        }
-        {DEBUG_DATA_BLOCK("Particles");
-            DEBUG_B32(Global_Particles_Test); 
-            DEBUG_B32(Global_Particles_ShowGrid);
-        }
-        {DEBUG_DATA_BLOCK("Simulation");
-            DEBUG_B32(Global_Simulation_UseSpaceOutlines);
-        }
-        {DEBUG_DATA_BLOCK("Profile");
-            DEBUG_UI_ELEMENT(DebugType_FrameSlider, FrameSlider);
-            DEBUG_UI_ELEMENT(DebugType_LastFrameInfo, LastFrame);
-            DEBUG_UI_ELEMENT(DebugType_DebugMemoryInfo, DebugMemory);
-            DEBUG_UI_ELEMENT(DebugType_TopClocksList, GameUpdateAndRender);
-        }
-
 #endif
 
         TIMED_FUNCTION();
@@ -278,6 +248,7 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
             SubArena(&GameState->ModeArena, &SimulateGame->GameArena, GetArenaSizeRemaining(&SimulateGame->GameArena));
 
             GameState->AudioState = &EditorState->AudioState;
+            GameState->AudioState->MasterVolume = V2(0, 0);
 
             GameState->MusicEntropy = RandomSeed(8902354); 
             GameState->CurrentAlpha = 1.0f;
@@ -383,22 +354,19 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
 
             MusicMatchVector.E[Tag_MusicType] = MusicType_GameEndDeathFX;
             GameState->GameEndDeathFX = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
-        
+            
 //        Platform.WriteLogFile(L"Transient State Initialized", __FILE__, __LINE__);
             TranState->IsInitialized = true;
         }
-
-        {DEBUG_DATA_BLOCK("Memory");
-            memory_arena *ModeArena = &GameState->ModeArena;
-            DEBUG_VALUE(ModeArena);
+#if 1
+        {DEBUG_DATA_BLOCK("Game Memory");
+            memory_arena *GameModeArena = &GameState->ModeArena;
+            DEBUG_VALUE(GameModeArena);
         
-            memory_arena *AudioArena = &GameState->AudioArena;
-            DEBUG_VALUE(AudioArena);
-        
-            memory_arena *TranArena = &TranState->TranArena;
-            DEBUG_VALUE(TranArena);
+            memory_arena *GameTranArena = &TranState->TranArena;
+            DEBUG_VALUE(GameTranArena);
         }
-
+#endif
         if(TranState->MainGenerationID)
         {
             EndGeneration(TranState->Assets, TranState->MainGenerationID);

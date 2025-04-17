@@ -6,10 +6,6 @@
    $Notice:  $
    ======================================================================== */
 
-#include "engine_game_mode_world.cpp"
-#include "engine_game_mode_entity.cpp"
-#include "engine_game_mode_sim_region.cpp"
-
 #include "engine_game_mode_undo.cpp"
 
 #include "engine_game_mode_tile.cpp"
@@ -156,30 +152,40 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         SetEditorMode(EditorState, TranState, EditorMode_GameMode);
     
         editor_mode_game *Result = PushStruct(&EditorState->ModeArena, editor_mode_game);
-
+        Result->WorldState = PushStruct(&EditorState->ModeArena, game_mode_world);
+        
         r32 PixelsToMeters = 1.0f / 32.0f;
         u32 TileSideInPixels = 32;
         r32 TileSideInMeters = TileSideInPixels * PixelsToMeters;
 
         if(EditorState->MapStartup.NewMap)
         {
-            Result->World = CreateWorld(TranState, TileSideInMeters, EditorState->MapStartup.MapWidth,
-                                        EditorState->MapStartup.MapHeight, 1, 0);
+            Result->WorldState->World = EDITORCreateWorld(TranState, TileSideInMeters, EditorState->MapStartup.MapWidth,
+                                              EditorState->MapStartup.MapHeight, 1, 0);
         }
         else
         {
-            loaded_world_map *Map = PushSSWM(TranState, EditorState->MapStartup.ID, true);
-            Result->World = CreateWorld(TranState, TileSideInMeters, Map->Header->MapWidth, Map->Header->MapHeight, 1, Map);
+            loaded_world_map *Map = PushSSWM(TranState->Assets, TranState->MainGenerationID,
+                                             EditorState->MapStartup.ID, true);
+            Result->WorldState->World = EDITORCreateWorld(TranState, TileSideInMeters, Map->Header->MapWidth, Map->Header->MapHeight, 1, Map);
 
             Result->LayerCount = Map->Header->GroundLayer_ZLayerCount & 0xFFFF;
             Result->MapGroundLayer = Map->Header->GroundLayer_ZLayerCount >> 16;
         }
 
         world_position NewCameraP = {};
-        uint32 CameraTileX = Result->World->TileWidth / 2;
-        uint32 CameraTileY = Result->World->TileHeight / 2;
-        NewCameraP = ChunkPositionFromTilePosition(Result->World, CameraTileX, CameraTileY);
-        Result->CameraP = NewCameraP;
+        uint32 CameraTileX = Result->WorldState->World->TileWidth / 2;
+        uint32 CameraTileY = Result->WorldState->World->TileHeight / 2;
+        NewCameraP = ChunkPositionFromTilePosition(Result->WorldState->World, CameraTileX, CameraTileY);
+
+        Result->WorldState->CameraBoundsMin.TileX = 0;
+        Result->WorldState->CameraBoundsMin.TileY = 0;
+        Result->WorldState->CameraBoundsMin.Offset = V2(-0.5f, -0.5f);
+    
+        Result->WorldState->CameraBoundsMax.TileX = Result->WorldState->World->TileWidth;
+        Result->WorldState->CameraBoundsMax.TileY = Result->WorldState->World->TileHeight;
+        Result->WorldState->CameraBoundsMax.Offset = V2(0.5f, 0.5f);
+        Result->WorldState->CameraP = NewCameraP;
         Result->CameraMoveStep = 2;
 
         InitializeCursor(&Result->TileCursor, 8);
@@ -281,7 +287,7 @@ RenderMapGroundTiles(render_group *RenderGroup, world *World, world_position Cam
             {
                 v2 Delta = Subtract(World, &TileP, &CameraP);
 
-                sswm_ground_tile *Tile = GetWorldMapGroundTile(World, TileX, TileY);
+                sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, TileX, TileY);
                 
                 u32 ZLayerCount = ZLayer;
                 if(!ShowOnly)
@@ -443,6 +449,7 @@ DrawMeshTriangles(ui_state *UIState, render_group *RenderGroup, world *World, wo
 
 //#include "subtruct_poly.cpp"
 
+#if 1
 inline controlled_camera *
 CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 {
@@ -489,17 +496,21 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                     }
                 }
 
+                GameMode->Zoom += (f32)-0.8f*Input->MouseZ;
+                if(WasPressed(Input->MouseButtons[PlatformMouseButton_Middle]))
+                    GameMode->Zoom = 0.0f;
+                
                 if(WasPressed(Controller->MoveUp))
-                    GameMode->CameraP.TileY += GameMode->CameraMoveStep;
+                    GameMode->WorldState->CameraP.TileY += GameMode->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveDown))
-                    GameMode->CameraP.TileY -= GameMode->CameraMoveStep;
+                    GameMode->WorldState->CameraP.TileY -= GameMode->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveLeft))
-                    GameMode->CameraP.TileX -= GameMode->CameraMoveStep;
+                    GameMode->WorldState->CameraP.TileX -= GameMode->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveRight))
-                    GameMode->CameraP.TileX += GameMode->CameraMoveStep;
+                    GameMode->WorldState->CameraP.TileX += GameMode->CameraMoveStep;
 
                 if(WasPressed(Controller->ActionLeft))
                 {
@@ -514,13 +525,13 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
                 if(Input->ShiftDown && Input->AltDown && WasPressed(Controller->Undo))
                 {
-                    RedoTileChanges(GameMode->World, &GameMode->UndoStack, &GameMode->RedoStack);
+                    RedoTileChanges(GameMode->WorldState->World, &GameMode->UndoStack, &GameMode->RedoStack);
                 }
                 else if(Input->AltDown && WasPressed(Controller->Undo))
                 {
-                    UndoTileChanges(GameMode->World, &GameMode->UndoStack, &GameMode->RedoStack);
+                    UndoTileChanges(GameMode->WorldState->World, &GameMode->UndoStack, &GameMode->RedoStack);
                 }
-
+                
                 switch(GameMode->GameEditMode)
                 {
                     case EditGameMode_None:
@@ -542,7 +553,7 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                             if(GameMode->CurrentZLayer >= 16)
                             {
                                 GameMode->CurrentZLayer = 15;
-                                GameMode->World->Map->Header->GroundLayer_ZLayerCount &= 0xFFFF0010;
+                                GameMode->WorldState->World->Map->Header->GroundLayer_ZLayerCount &= 0xFFFF0010;
                             }
                         }
 
@@ -568,6 +579,7 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
     return(Result);
 }
+#endif
 
 internal b32
 UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
@@ -619,7 +631,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                 if((GameMode->AutoWriteSeconds - Input->dtForFrame) > 0.0f)
                 {
                     u32 GroundLayer_ZLayerCount = (u32)((GameMode->MapGroundLayer << 16) | (GameMode->LayerCount & 0xFFFF));
-                    WriteSSWM(EditorState, GameMode->World, GroundLayer_ZLayerCount);
+                    WriteSSWM(EditorState, GameMode->WorldState->World, GroundLayer_ZLayerCount);
                     GameMode->AutoWriteSeconds = 300.0f;
                 }
             } break;
@@ -639,9 +651,12 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         {
             controlled_camera *ConCamera = CheckForInput(GameMode, Input);
 
+            RenderGroup->CameraTransform.DistanceAboveTarget += GameMode->Zoom;
+            MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
+            
             PushRect(RenderGroup, &Flat, V3(0, 0, 0), V2(0.25f, 0.25f), V4(0, 1, 0, 1.0f));
 
-            world *World = GameMode->World;
+            world *World = GameMode->WorldState->World;
             memory_arena *WorldArena = &World->Arena;
             {DEBUG_DATA_BLOCK("EditorGameMode");
                 {DEBUG_DATA_BLOCK("Memory");
@@ -649,11 +664,11 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                 }
             }
 
-            v2 SimBoundsExpansion = {3.0f, 3.0f};
+            v2 SimBoundsExpansion = {3.0f + GameMode->Zoom, 3.0f + GameMode->Zoom};
             rectangle2 SimBounds = AddRadiusTo(CameraBoundsInMeters, SimBoundsExpansion);
             temporary_memory SimMemory = BeginTemporaryMemory(&TranState->TranArena);
-            world_position SimCenterP = GameMode->CameraP;
-            sim_region *SimRegion = BeginSim(&TranState->TranArena, GameMode->World,
+            world_position SimCenterP = GameMode->WorldState->CameraP;
+            sim_region *SimRegion = BeginSim(&TranState->TranArena, GameMode->WorldState->World,
                                              SimCenterP, SimBounds, Input->dtForFrame);
 
 #if 0    
@@ -666,20 +681,20 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
             UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
             if(GameMode->ShowGrid)
             {
-                RenderMapGrid(RenderGroup, UIState, World, GameMode->CameraP, SimRegion->Bounds);
+                RenderMapGrid(RenderGroup, UIState, World, GameMode->WorldState->CameraP, SimRegion->Bounds);
             }
 
             world_position MouseWorldP = MapIntoTileSpace(World, SimRegion->Origin, MouseP);
-            v2 CameraP = Subtract(World, &GameMode->CameraP, &SimCenterP);
+            v2 CameraP = Subtract(World, &GameMode->WorldState->CameraP, &SimCenterP);
 
             
             if(IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer))
             {
-                RenderMapGroundTiles(RenderGroup, World, GameMode->CameraP, SimBounds, GameMode->CurrentZLayer, true);
+                RenderMapGroundTiles(RenderGroup, World, GameMode->WorldState->CameraP, SimBounds, GameMode->CurrentZLayer, true);
             }
             else
             {
-                RenderMapGroundTiles(RenderGroup, World, GameMode->CameraP, SimBounds, GameMode->LayerCount);
+                RenderMapGroundTiles(RenderGroup, World, GameMode->WorldState->CameraP, SimBounds, GameMode->LayerCount);
             }
         
 //            UpdateAndRenderEntities(GameMode, SimRegion, RenderGroup, Input->dtForFrame, MouseP);
@@ -852,7 +867,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
             // NOTE(babykaban): Clear action
             GameMode->CurrentAction = 0;
             
-            EndSim(SimRegion, CameraBoundsInMeters);
+            EndSim(GameMode->WorldState, SimRegion, CameraBoundsInMeters);
             EndTemporaryMemory(SimMemory);
         }
         else

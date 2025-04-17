@@ -44,8 +44,8 @@
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
-//#include "engine_game_mode.h"
 #include "engine_game_simulate.h"
+#include "engine_map_editor_mode.h"
 #include "editor_ssa_file_builder.h"
 
 enum editor_mode
@@ -99,7 +99,7 @@ struct editor_state
     {
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
-//        editor_mode_game *GameMode;
+        editor_mode_game *GameMode;
         editor_game_simulate_mode *SimulateGame;
     };
 };

@@ -83,7 +83,7 @@ EntityOverlapsRectangle(v2 P, entity_collision *Collision, rectangle2 Rect)
 }
 
 internal void
-AddEntity(game_mode_world *WorldMode, sim_region *SimRegion, entity *Source, v2 SimP)
+AddEntity(sim_region *SimRegion, entity *Source, v2 SimP)
 {
     TIMED_FUNCTION();
     entity_id ID = Source->ID;
@@ -140,7 +140,7 @@ ConnectEntityPointers(sim_region *SimRegion)
 }
 
 internal sim_region *
-BeginSim(memory_arena *SimArena, game_mode_world *WorldMode, world *World, world_position Origin,
+BeginSim(memory_arena *SimArena, world *World, world_position Origin,
          rectangle2 Bounds, real32 dt)
 {
     TIMED_FUNCTION();
@@ -199,7 +199,7 @@ BeginSim(memory_arena *SimArena, game_mode_world *WorldMode, world *World, world
                         entity *Entity = (entity *)Block->EntityData + EntityIndex;
 
                         v2 SimSpaceP = GetSimSpaceP(SimRegion, Entity);
-                        AddEntity(WorldMode, SimRegion, Entity, SimSpaceP);
+                        AddEntity(SimRegion, Entity, SimSpaceP);
                     }
 
                     world_entity_block *NextBlock = Block->Next;

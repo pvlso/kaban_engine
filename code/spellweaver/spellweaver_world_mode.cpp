@@ -374,7 +374,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     rectangle2 SimBounds = AddRadiusTo(CameraBoundsInMeters, SimBoundsExpansion);
     temporary_memory SimMemory = BeginTemporaryMemory(&TranState->TranArena);
     world_position SimCenterP = WorldMode->CameraP;
-    sim_region *SimRegion = BeginSim(&TranState->TranArena, WorldMode, WorldMode->World,
+    sim_region *SimRegion = BeginSim(&TranState->TranArena, WorldMode->World,
                                      SimCenterP, SimBounds, Input->dtForFrame);
     
     v2 CameraP = Subtract(World, &WorldMode->CameraP, &SimCenterP);

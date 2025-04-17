@@ -79,7 +79,7 @@ UndoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
             
             case Action_AddTile:
             {
-                sswm_ground_tile *Tile = GetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
+                sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
                 Copy(sizeof(sswm_ground_tile), Tile, &RedoAction.PrevTile);
 
                 Copy(sizeof(sswm_ground_tile), &Action->PrevTile, Tile);
@@ -87,7 +87,7 @@ UndoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
 
             case Action_RemoveTile:
             {
-                sswm_ground_tile *Tile = GetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
+                sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
                 Copy(sizeof(sswm_ground_tile), Tile, &RedoAction.PrevTile);
 
                 Copy(sizeof(sswm_ground_tile), &Action->PrevTile, Tile);
@@ -102,7 +102,7 @@ UndoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
                     PrevTileIndex < FloodFill->TileCount;
                     ++PrevTileIndex)
                 {
-                    sswm_ground_tile *Tile = GetWorldMapGroundTile(World, FloodFill->PrevTiles[PrevTileIndex].TileX,
+                    sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, FloodFill->PrevTiles[PrevTileIndex].TileX,
                                                                    FloodFill->PrevTiles[PrevTileIndex].TileY);
                     Copy(sizeof(sswm_ground_tile), Tile, RedoAction.FloodFill.PrevTiles + PrevTileIndex);
                     Copy(sizeof(sswm_ground_tile), FloodFill->PrevTiles + PrevTileIndex, Tile);
@@ -135,7 +135,7 @@ RedoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
             
             case Action_AddTile:
             {
-                sswm_ground_tile *Tile = GetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
+                sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
                 Copy(sizeof(sswm_ground_tile), Tile, &UndoAction.PrevTile);
 
                 Copy(sizeof(sswm_ground_tile), &Action->PrevTile, Tile);
@@ -143,7 +143,7 @@ RedoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
 
             case Action_RemoveTile:
             {
-                sswm_ground_tile *Tile = GetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
+                sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, Action->PrevTile.TileX, Action->PrevTile.TileY);
                 Copy(sizeof(sswm_ground_tile), Tile, &UndoAction.PrevTile);
 
                 Copy(sizeof(sswm_ground_tile), &Action->PrevTile, Tile);
@@ -158,7 +158,7 @@ RedoTileChanges(world *World, action_stack *UndoStack, action_stack *RedoStack)
                     PrevTileIndex < FloodFill->TileCount;
                     ++PrevTileIndex)
                 {
-                    sswm_ground_tile *Tile = GetWorldMapGroundTile(World, FloodFill->PrevTiles[PrevTileIndex].TileX,
+                    sswm_ground_tile *Tile = EDITORGetWorldMapGroundTile(World, FloodFill->PrevTiles[PrevTileIndex].TileX,
                                                                    FloodFill->PrevTiles[PrevTileIndex].TileY);
 
                     Copy(sizeof(sswm_ground_tile), Tile, UndoAction.FloodFill.PrevTiles + PrevTileIndex);
