@@ -30,7 +30,7 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
     MatchVector.E[Tag_VersionMajorHigh] = 0;
     MatchVector.E[Tag_VersionMajorLow] = 0;
     MatchVector.E[Tag_VersionMinorHigh] = 0;
-    MatchVector.E[Tag_VersionMinorLow] = 58;
+    MatchVector.E[Tag_VersionMinorLow] = 0;
     WeightVector.E[Tag_VersionMajorHigh] = 2;
     WeightVector.E[Tag_VersionMajorLow] = 2;
     WeightVector.E[Tag_VersionMinorHigh] = 2;
@@ -96,7 +96,7 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
         WorldMode->TileMap[TileIndex] = AddTile(WorldMode, WorldMode->TileCollision, false, SourceTile, HighestZ);
     }
 
-    AddGolem(WorldMode, TranState->Assets, CenteredTilePoint(World, 12, 12));
+//    AddGolem(WorldMode, TranState->Assets, CenteredTilePoint(World, 12, 12));
 
     //
     // NOTE(paul): Camera Setup
@@ -277,7 +277,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     real32 MetersToPixels = (real32)DrawBuffer->Width/WidthOfMonitor;
 
     real32 FocalLength = 0.2f;
-    real32 DistanceAboveGround = 9.0f;
+    real32 DistanceAboveGround = 7.2f;
     Perspective(RenderGroup, MetersToPixels, FocalLength, DistanceAboveGround);
 
     Clear(RenderGroup, V4(0.25f, 0.25f, 0.25f, 1.0f));

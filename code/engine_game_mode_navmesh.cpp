@@ -753,6 +753,36 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
 #endif    
     EndTemporaryMemory(TempMem);
 }
+ 
+inline void
+RemoveDublicatPoints(v2 *Vertices, s32 *Count)
+{
+    for(s32 I = 0;
+        I < (*Count);
+        ++I)
+    {
+        for(s32 J = I + 1;
+            J < (*Count);
+            ++J)
+        {
+            if(TRISUBPointsAreEqual(Vertices[I], Vertices[J]))
+            {
+                Vertices[J] = {};
+                for(s32 k = J;
+                    k < ((*Count) - 1);
+                    ++k)
+                {
+                    Vertices[k] = Vertices[k + 1]; 
+                }
+
+                (*Count)--;
+                --J;
+            }            
+        }
+    }
+
+    Vertices[(*Count)] = {};
+}
 
 internal void
 TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
@@ -766,13 +796,41 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     P.VertexCount = 0;
     P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
 
+    s32 VertexMaxCount = 0;
+    for(u32 I = 0;
+        I < GameMode->PolygonCount;
+        ++I)
+    {
+        world_polygon *Poly = GameMode->Polies + I;
+        VertexMaxCount += Poly->VertexCount;
+    }
+
+    v2 *Vertices = PushArray(TempMem.Arena, VertexMaxCount, v2);
+    v2 *At = Vertices;
+    
     for(u32 Index = 0;
         Index < GameMode->PolygonCount;
         ++Index)
     {
         world_polygon *Poly = GameMode->Polies + Index;
-
         ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
+
+        Copy(sizeof(v2)*Poly->VertexCount, P.Vertices, At);
+        At += Poly->VertexCount;
+    }
+
+    RemoveDublicatPoints(Vertices, &VertexMaxCount);
+    
+    int a = 0;
+
+#if 1    
+    for(u32 Index = 0;
+        Index < GameMode->PolygonCount;
+        ++Index)
+    {
+        world_polygon *Poly = GameMode->Polies + Index;
+        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
+
         triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
         for(s32 TIndex = GameMode->MeshTriangleCount;
             TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
@@ -790,6 +848,7 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
         Platform.DeallocateMemory(TResult.Triangles);
         Platform.DeallocateMemory(TResult.Adjacencies);
     }
-
+#endif
+    
     EndTemporaryMemory(TempMem);
 }

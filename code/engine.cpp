@@ -195,6 +195,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState->MapStartup.MapWidth = 48;
         EditorState->MapStartup.MapHeight = 48;
         EditorState->MapStartup.NewMap = false;
+
+        EditorState->UIEnable = true;
     }
 
     // NOTE(casey): Transient initialization
@@ -238,7 +240,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-        PlayTitleScreen(EditorState, TranState);
+        PlayGameMode(EditorState, TranState);
+//        PlayTitleScreen(EditorState, TranState);
     }
 
     if(EditorState->SimulationQuit)

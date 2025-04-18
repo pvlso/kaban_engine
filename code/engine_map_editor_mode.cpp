@@ -133,6 +133,7 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
 {
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
+#if 0
     MatchVector.E[Tag_VersionMajorHigh] =
         EditorState->MapStartup.MapVersion.MajorHigh;
     MatchVector.E[Tag_VersionMajorLow] =
@@ -141,6 +142,7 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         EditorState->MapStartup.MapVersion.MinorHigh;
     MatchVector.E[Tag_VersionMinorLow] =
         EditorState->MapStartup.MapVersion.MinorLow;
+#endif
     WeightVector.E[Tag_VersionMajorHigh] = 2;
     WeightVector.E[Tag_VersionMajorLow] = 2;
     WeightVector.E[Tag_VersionMinorHigh] = 2;
@@ -496,7 +498,9 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                     }
                 }
 
-                GameMode->Zoom += (f32)-0.8f*Input->MouseZ;
+                if(Input->ControlDown)
+                    GameMode->Zoom += (f32)-0.8f*Input->MouseZ;
+
                 if(WasPressed(Input->MouseButtons[PlatformMouseButton_Middle]))
                     GameMode->Zoom = 0.0f;
                 
@@ -769,7 +773,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                     Poly.Vertices[6] = V2(-2.0f, 1.0f);;
                     Poly.Vertices[7] = V2(-2.0f, -1.0f);;
-#endif
+
                     Poly.VertexCount = 4;
                     Poly.Vertices = PushArray(TempMem.Arena, 4, v2);
                     Poly.Vertices[0] = V2(-0.5f, -0.5f);
@@ -787,6 +791,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                     }
                     Platform.DeallocateMemory(TriangulatedPoly.Triangles);
                     Platform.DeallocateMemory(TriangulatedPoly.Adjacencies);
+#endif
 
                     switch(GameMode->CurrentAction)
                     {
