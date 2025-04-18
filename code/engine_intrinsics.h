@@ -28,10 +28,10 @@ SignOf(real32 Value)
     return(Result);
 }
 
-inline real32
+inline f32
 SquareRoot(real32 Real32)
 {
-    real32 Result = sqrtf(Real32);
+    f32 Result = sqrtf(Real32);
     return(Result);
 }
 
@@ -144,6 +144,27 @@ inline real32
 ATan2(real32 Y, real32 X)
 {
     real32 Result = atan2f(Y, X);
+    return(Result);
+}
+
+inline f64
+Sin(f64 Angle)
+{
+    f64 Result = sin(Angle);
+    return(Result);
+}
+
+inline f64
+Cos(f64 Angle)
+{
+    f64 Result = cos(Angle);
+    return(Result);
+}
+
+inline f64
+ATan2(f64 Y, f64 X)
+{
+    f64 Result = atan2(Y, X);
     return(Result);
 }
 

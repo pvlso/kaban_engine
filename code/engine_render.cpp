@@ -75,28 +75,28 @@ AspectRatioFit(u32 RenderWidth, u32 RenderHeight,
         if(OptimalWindowWidth > (r32)WindowWidth)
         {
             // NOTE(casey): Width-constrained display - top and bottom black bars
-            Result.MinX = 0;
-            Result.MaxX = WindowWidth;
+            Result.Min.x = 0;
+            Result.Max.x = WindowWidth;
 
             r32 Empty = (r32)WindowHeight - OptimalWindowHeight;
             s32 HalfEmpty = RoundReal32ToInt32(0.5f*Empty);
             s32 UseHeight = RoundReal32ToInt32(OptimalWindowHeight);
 
-            Result.MinY = HalfEmpty;
-            Result.MaxY = Result.MinY + UseHeight;
+            Result.Min.y = HalfEmpty;
+            Result.Max.y = Result.Min.y + UseHeight;
         }
         else
         {
             // NOTE(casey): Height-constrained display - left and right black bars
-            Result.MinY = 0;
-            Result.MaxY = WindowHeight;
+            Result.Min.y = 0;
+            Result.Max.y = WindowHeight;
 
             r32 Empty = (r32)WindowWidth - OptimalWindowWidth;
             s32 HalfEmpty = RoundReal32ToInt32(0.5f*Empty);
             s32 UseWidth = RoundReal32ToInt32(OptimalWindowWidth);
 
-            Result.MinX = HalfEmpty;
-            Result.MaxX = Result.MinX + UseWidth;
+            Result.Min.x = HalfEmpty;
+            Result.Max.x = Result.Min.x + UseWidth;
         }
     }
     

@@ -200,7 +200,7 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
     }
     else
     {
-        glViewport(DrawRegion.MinX, DrawRegion.MinY, WindowWidth, WindowHeight);
+        glViewport(DrawRegion.Min.x, DrawRegion.Min.y, WindowWidth, WindowHeight);
     }
 }
 
@@ -359,10 +359,10 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
 
                 if(!UseRenderTargets || (Clip->RenderTargetIndex == 0))
                 {
-                    ClipRect = Offset(ClipRect, DrawRegion.MinX, DrawRegion.MinY);
+                    ClipRect = Offset(ClipRect, DrawRegion.Min.x, DrawRegion.Min.y);
                 }
             
-                glScissor(ClipRect.MinX, ClipRect.MinY, ClipRect.MaxX - ClipRect.MinX, ClipRect.MaxY - ClipRect.MinY);
+                glScissor(ClipRect.Min.x, ClipRect.Min.y, ClipRect.Max.x - ClipRect.Min.x, ClipRect.Max.y - ClipRect.Min.y);
             }
             
             void *Data = (uint8 *)Header + sizeof(*Header);
@@ -509,7 +509,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
 
     /* setup viewport/project */
 //    glViewport(0,0,(GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
-    glViewport(DrawRegion.MinX, DrawRegion.MinY, (GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+    glViewport(DrawRegion.Min.x, DrawRegion.Min.y, (GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();

@@ -601,8 +601,8 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
 
     Win32GetCursorPos(State, &x, &y);
 
-    r32 MouseU = Clamp01MapToRange((r32)DrawRegion.MinX, (f32)x, (r32)DrawRegion.MaxX);
-    r32 MouseV = Clamp01MapToRange((r32)DrawRegion.MinY, (f32)y, (r32)DrawRegion.MaxY);
+    r32 MouseU = Clamp01MapToRange((r32)DrawRegion.Min.x, (f32)x, (r32)DrawRegion.Max.x);
+    r32 MouseV = Clamp01MapToRange((r32)DrawRegion.Min.y, (f32)y, (r32)DrawRegion.Max.y);
                             
     x = (r32)NkWin32->width*MouseU;
     y = (r32)NkWin32->height*MouseV;
@@ -3397,8 +3397,8 @@ WinMain(HINSTANCE Instance,
                         r32 MouseY = (r32)((Dimension.Height - 1) - MouseP.y);
                         NewInput->MouseZ = MouseZ / 120;
 
-                        r32 MouseU = Clamp01MapToRange((r32)DrawRegion.MinX, MouseX, (r32)DrawRegion.MaxX);
-                        r32 MouseV = Clamp01MapToRange((r32)DrawRegion.MinY, MouseY, (r32)DrawRegion.MaxY);
+                        r32 MouseU = Clamp01MapToRange((r32)DrawRegion.Min.x, MouseX, (r32)DrawRegion.Max.x);
+                        r32 MouseV = Clamp01MapToRange((r32)DrawRegion.Min.y, MouseY, (r32)DrawRegion.Max.y);
                             
                         NewInput->MouseX = (r32)RenderCommands.Width*MouseU;
                         NewInput->MouseY = (r32)RenderCommands.Height*MouseV;

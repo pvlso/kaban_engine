@@ -293,10 +293,10 @@ PushClipRect(render_group *Group, u32 X, u32 Y, u32 W, u32 H, u32 RenderTargetIn
         }
         Rect->Next = 0;
         
-        Rect->Rect.MinX = X;
-        Rect->Rect.MinY = Y;
-        Rect->Rect.MaxX = X + W;
-        Rect->Rect.MaxY = Y + H;
+        Rect->Rect.Min.x = X;
+        Rect->Rect.Min.y = Y;
+        Rect->Rect.Max.x = X + W;
+        Rect->Rect.Max.y = Y + H;
 
         Rect->RenderTargetIndex = RenderTargetIndex;
         if(Group->Commands->MaxRenderTargetIndex < RenderTargetIndex)

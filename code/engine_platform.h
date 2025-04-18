@@ -113,56 +113,218 @@ struct memory_arena
     s32 TempCount;
 };
 
+// NOTE(paul): V2 ============================================================================================================================================
 union v2
 {
     struct
     {
-        real32 x, y;
+        f32 x, y;
     };
     struct
     {
-        real32 u, v;
+        f32 u, v;
     };
-    real32 E[2];
+
+    f32 E[2];
+};
+    
+union v2d
+{
+    __m128d V;
+
+    struct
+    {
+        f64 x, y;
+    };
+
+    struct
+    {
+        f32 u, v;
+    };
+
+    f64 E[2];
 };
 
+union v2i
+{
+    struct
+    {
+        s32 x, y;
+    };
+
+    s32 E[2];
+};
+
+union v2di
+{
+    __m128i V;
+
+    struct
+    {
+        s64 x, y;
+    };
+
+    s64 E[2];
+};
+
+// ===========================================================================================================================================================
+
+// NOTE(paul): V3 ============================================================================================================================================
 union v3
 {
     struct
     {
-        real32 x, y, z;
+        f32 x, y, z;
     };
     struct
     {
-        real32 u, v, w;
+        f32 u, v, w;
     };
     struct
     {
-        real32 r, g, b;
+        f32 r, g, b;
     };
     struct
     {
         v2 xy;
-        real32 Ignored0_;
+        f32 Ignored0_;
     };
     struct
     {
-        real32 Ignored1_;
+        f32 Ignored1_;
         v2 yz;
     };
     struct
     {
         v2 uv;
-        real32 Ignored2_;
+        f32 Ignored2_;
     };
     struct
     {
-        real32 Ignored3_;
+        f32 Ignored3_;
         v2 vw;
     };
-    real32 E[3];
+
+    f32 E[3];
 };
 
+union v3d
+{
+    struct
+    {
+        f64 x, y, z;
+    };
+    struct
+    {
+        f64 u, v, w;
+    };
+    struct
+    {
+        f64 r, g, b;
+    };
+    struct
+    {
+        v2d xy;
+        f64 Ignored0_;
+    };
+    struct
+    {
+        f64 Ignored1_;
+        v2d yz;
+    };
+    struct
+    {
+        v2d uv;
+        f64 Ignored2_;
+    };
+    struct
+    {
+        f64 Ignored3_;
+        v2d vw;
+    };
+
+    f64 E[3];
+};
+
+union v3i
+{
+    struct
+    {
+        s32 x, y, z;
+    };
+    struct
+    {
+        s32 u, v, w;
+    };
+    struct
+    {
+        s32 r, g, b;
+    };
+    struct
+    {
+        v2i xy;
+        s32 Ignored0_;
+    };
+    struct
+    {
+        s32 Ignored1_;
+        v2i yz;
+    };
+    struct
+    {
+        v2i uv;
+        s32 Ignored2_;
+    };
+    struct
+    {
+        s32 Ignored3_;
+        v2i vw;
+    };
+
+    s32 E[3];
+};
+
+union v3di
+{
+    struct
+    {
+        s64 x, y, z;
+    };
+    struct
+    {
+        s64 u, v, w;
+    };
+    struct
+    {
+        s64 r, g, b;
+    };
+    struct
+    {
+        v2di xy;
+        s64 Ignored0_;
+    };
+    struct
+    {
+        s64 Ignored1_;
+        v2di yz;
+    };
+    struct
+    {
+        v2di uv;
+        s64 Ignored2_;
+    };
+    struct
+    {
+        s64 Ignored3_;
+        v2di vw;
+    };
+
+    s64 E[3];
+};
+
+// ===========================================================================================================================================================
+
+// NOTE(paul): V4 ============================================================================================================================================
 union v4
 {
     struct
@@ -172,12 +334,13 @@ union v4
             v3 xyz;
             struct
             {
-                real32 x, y, z;
+                f32 x, y, z;
             };
         };
         
-        real32 w;        
+        f32 w;        
     };
+
     struct
     {
         union
@@ -185,32 +348,199 @@ union v4
             v3 rgb;
             struct
             {
-                real32 r, g, b;
+                f32 r, g, b;
             };
         };
         
-        real32 a;        
+        f32 a;        
     };
     struct
     {
         v2 xy;
-        real32 Ignored0_;
-        real32 Ignored1_;
+        f32 Ignored0_;
+        f32 Ignored1_;
     };
     struct
     {
-        real32 Ignored2_;
+        f32 Ignored2_;
         v2 yz;
-        real32 Ignored3_;
+        f32 Ignored3_;
     };
     struct
     {
-        real32 Ignored4_;
-        real32 Ignored5_;
+        f32 Ignored4_;
+        f32 Ignored5_;
         v2 zw;
     };
-    real32 E[4];
+
+    __m128 V;
+    f32 E[4];
 };
+
+union v4d
+{
+    __m256d V;
+    struct
+    {
+        union
+        {
+            v3d xyz;
+            struct
+            {
+                f64 x, y, z;
+            };
+        };
+        
+        f64 w;        
+    };
+
+    struct
+    {
+        union
+        {
+            v3d rgb;
+            struct
+            {
+                f64 r, g, b;
+            };
+        };
+        
+        f64 a;        
+    };
+
+    struct
+    {
+        v2d xy;
+        f64 Ignored0_;
+        f64 Ignored1_;
+    };
+
+    struct
+    {
+        f64 Ignored2_;
+        v2d yz;
+        f64 Ignored3_;
+    };
+
+    struct
+    {
+        f64 Ignored4_;
+        f64 Ignored5_;
+        v2d zw;
+    };
+
+    f64 E[4];
+};
+
+union v4i
+{
+    struct
+    {
+        union
+        {
+            v3i xyz;
+            struct
+            {
+                s32 x, y, z;
+            };
+        };
+        
+        s32 w;        
+    };
+
+    struct
+    {
+        union
+        {
+            v3i rgb;
+            struct
+            {
+                s32 r, g, b;
+            };
+        };
+        
+        s32 a;        
+    };
+    struct
+    {
+        v2i xy;
+        s32 Ignored0_;
+        s32 Ignored1_;
+    };
+    struct
+    {
+        s32 Ignored2_;
+        v2i yz;
+        s32 Ignored3_;
+    };
+    struct
+    {
+        s32 Ignored4_;
+        s32 Ignored5_;
+        v2i zw;
+    };
+
+    __m128i V;
+    s32 E[4];
+};
+
+union v4di
+{
+    __m256i V;
+    struct
+    {
+        union
+        {
+            v3di xyz;
+            struct
+            {
+                s64 x, y, z;
+            };
+        };
+        
+        s64 w;        
+    };
+
+    struct
+    {
+        union
+        {
+            v3di rgb;
+            struct
+            {
+                s64 r, g, b;
+            };
+        };
+        
+        s64 a;        
+    };
+
+    struct
+    {
+        v2di xy;
+        s64 Ignored0_;
+        s64 Ignored1_;
+    };
+
+    struct
+    {
+        s64 Ignored2_;
+        v2di yz;
+        s64 Ignored3_;
+    };
+
+    struct
+    {
+        s64 Ignored4_;
+        s64 Ignored5_;
+        v2di zw;
+    };
+
+    s64 E[4];
+};
+// ===========================================================================================================================================================
+
+// NOTE(paul): RECT2 =========================================================================================================================================
 
 struct rectangle2
 {
@@ -218,21 +548,53 @@ struct rectangle2
     v2 Max;
 };
 
+struct rectangle2i
+{
+    v2i Min;
+    v2i Max;
+};
+
+struct rectangle2d
+{
+    v2d Min;
+    v2d Max;
+};
+
+struct rectangle2di
+{
+    v2di Min;
+    v2di Max;
+};
+
+// ===========================================================================================================================================================
+
+// NOTE(paul): RECT3 =========================================================================================================================================
+
 struct rectangle3
 {
     v3 Min;
     v3 Max;
 };
 
-union v2_s32
+struct rectangle3i
 {
-    struct
-    {
-        s32 x, y;
-    };
-
-    s32 E[2];
+    v3i Min;
+    v3i Max;
 };
+
+struct rectangle3d
+{
+    v3d Min;
+    v3d Max;
+};
+
+struct rectangle3di
+{
+    v3di Min;
+    v3di Max;
+};
+
+// ===========================================================================================================================================================
     
 union fp22_10_v2
 {
@@ -252,22 +614,6 @@ struct edgefp22_10
 {
     fp22_10_v2 a;
     fp22_10_v2 b;
-};
-    
-union v2d
-{
-    __m128d V;
-
-    struct
-    {
-        f64 x, y;
-    };
-};
-
-struct rectangle2d
-{
-    v2d Min;
-    v2d Max;
 };
 
 struct edge
