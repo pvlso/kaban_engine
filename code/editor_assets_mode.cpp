@@ -787,12 +787,12 @@ UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, engine_
         s32 Y = RoundReal32ToInt32(P.y);
 
         v2 CanvasCenter = GetCenter(BitmapRect);
-        v2 PointP = BitmapRect.Min + Scale*V2i(X, Y);
+        v2 PointP = BitmapRect.Min + Scale*V2(X, Y);
         PushRect(RenderGroup, Flat, V3(PointP + 0.5f*V2(Scale, Scale), 8.0f), V2(Scale, Scale));
 
         if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
         {
-            *Result = CalculateAlingment(V2i(X, Y), BitmapPixelWidth, BitmapPixelHeight);
+            *Result = CalculateAlingment(V2(X, Y), BitmapPixelWidth, BitmapPixelHeight);
         }
     }
 }

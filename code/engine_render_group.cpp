@@ -531,7 +531,7 @@ BeginRenderGroup(editor_assets *Assets, editor_render_commands *Commands, u32 Ge
     Result.MissingResourceCount = 0;
     Result.GenerationID = GenerationID;
     Result.Commands = Commands;
-    Result.ScreenArea = RectMinDim(V2(0, 0), V2i(PixelWidth, PixelHeight));
+    Result.ScreenArea = RectMinDim(V2(0, 0), V2(PixelWidth, PixelHeight));
     
     Result.CurrentClipRectIndex = PushClipRect(&Result, 0, 0, PixelWidth, PixelHeight, 0);
     

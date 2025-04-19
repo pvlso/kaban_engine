@@ -191,7 +191,7 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
                 Entity->Stats->ManaMax_Mana -= Spell->Config.ManaCost;
 
                 casted_spell CastedSpell = Spell->Config;
-                CastedSpell.Direction = V3(Normalize(HeroData->CastMouseP - Entity->P.xy - V2(0, 0.5f)), 0.0f);
+                CastedSpell.Direction = V3(Normalize(HeroData->CastMouseP - Entity->P.xy - V2(0.0f, 0.5f)), 0.0f);
                 CastedSpell.BaseP = Entity->TileP;
                 CastedSpell.OffsetP = V3(0, 0.5f, 0);
                 CastedSpell.dP = V3(0, 0, 0);

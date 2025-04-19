@@ -15,8 +15,7 @@
 #include "engine_asset.cpp"
 #include "editor_audio.cpp"
 #include "engine_ui.cpp"
-#include "engine_triangle.cpp"
-#include "engine_triangle_f64.cpp"
+#include "engine_math.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)

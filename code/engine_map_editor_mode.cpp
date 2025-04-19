@@ -751,7 +751,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                     s32 X = RoundReal32ToInt32(P.x);
                     s32 Y = RoundReal32ToInt32(P.y);
 
-                    v2 PointP = PointDim.x*V2i(X, Y) + 0.5f*PointDim;
+                    v2 PointP = PointDim.x*V2(X, Y) + 0.5f*PointDim;
                     world_position TestP = MapIntoTileSpace(World, SimRegion->Origin, PointP);
                     PushRect(RenderGroup, &Flat, V3(PointP, 8.0f), PointDim);
 

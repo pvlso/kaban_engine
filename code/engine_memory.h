@@ -26,8 +26,34 @@ struct temporary_memory
 inline void
 ZeroSize(umm Size, void *Ptr)
 {
-    // TODO(casey): Check this guy for performance
-    uint8 *Byte = (uint8 *)Ptr;
+    u8 *Byte = (u8 *)Ptr;
+
+    __m256i Zero_32x = _mm256_set1_epi8(0);
+    __m128i Zero_16x = _mm_set1_epi8(0);
+    if(Size >= 32)
+    {
+        umm AVXSize = Size / 32;
+        Size %= 32;
+
+        for(umm I = 0; I < AVXSize; ++I)
+        {
+            _mm256_store_si256((__m256i *)Byte, Zero_32x);
+            Byte += 32;
+        }
+    }
+
+    if(Size >= 16)
+    {
+        umm SSESize = Size / 16;
+        Size %= 16;
+
+        for(umm I = 0; I < SSESize; ++I)
+        {
+            _mm_store_si128((__m128i *)Byte, Zero_16x);
+            Byte += 16;
+        }
+    }
+
     while(Size--)
     {
         *Byte++ = 0;

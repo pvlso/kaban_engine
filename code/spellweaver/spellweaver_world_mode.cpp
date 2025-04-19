@@ -434,7 +434,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
             RectColor = V4(0, 0, 0, 0.1f);
         }
 
-        PushRect(RenderGroup, &Transform, V3(0, 0, 0), V2i(DrawBuffer->Width, DrawBuffer->Height), RectColor);
+        PushRect(RenderGroup, &Transform, V3(0, 0, 0), V2(DrawBuffer->Width, DrawBuffer->Height), RectColor);
         Transform.OffsetP = V3(0, -4.0f, 0.0f);
             
         asset_vector MatchVector = {};

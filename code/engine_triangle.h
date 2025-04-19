@@ -7,6 +7,90 @@
    $Notice: $
    ======================================================================== */
 
+// NOTE(babykaban): Triangulations ===========================================================================================================================
+
+/*
+  NOTE(babykaban): Points and adjacencies are structured in counterclockwise order shown below: 
+
+         V3
+        /  \
+       /    \
+      /      \
+ AdjV3V1   AdjV2V3
+    /          \
+   /            \
+  V1------------V2
+      AdjV1V2
+*/
+
+struct triangulate_triangle
+{
+    union
+    {
+        struct
+        {
+            s32 V1, V2, V3;
+        };
+
+        s32 Vertices[3];
+    };
+
+    union
+    {
+        struct
+        {
+            s32 AdjV1V2, AdjV2V3, AdjV3V1;
+        };
+
+        s32 Adjacencies[3];
+    };
+};
+
+union triangle_adjs
+{
+    struct
+    {
+        s32 AdjV1V2, AdjV2V3, AdjV3V1;
+    };
+
+    s32 Adjacencies[3];
+};
+
+struct triangulate_result
+{
+    s32 TriangleCount;
+    triangle *Triangles;
+    triangle_adjs *Adjacencies;
+};
+
+struct triangulate_resultd
+{
+    s32 TriangleCount;
+    triangled *Triangles;
+    triangle_adjs *Adjacencies;
+};
+
+inline void
+AdjacenciesFindWhichEqualAndSetTo(triangulate_triangle *Test, s32 Compare, s32 Set)
+{
+    /*
+      NOTE(babykaban):
+      The function checks all three adjacency entries (AdjV1V2, AdjV2V3, AdjV3V1) of the triangle it's called on.
+      It searches for the adjacency value that equals the old neighbor's index (Compare).
+      It replaces that old neighbor index with the new one (Set), reflecting the new connection after the flip.
+    */
+
+    for(s32 m = 0; m < 3; m++)
+    {
+        if(Test->Adjacencies[m] == Compare)
+        {
+            Test->Adjacencies[m] = Set;
+            break;
+        }
+    }
+}
+// ===========================================================================================================================================================
+
 // NOTE(babykaban): Triangle Subtraction =====================================================================================================================
 #define TRISUB_EPSILON_F32 0.00001f
 #define TRISUB_MINIMAL_POINT_DISTANCE 0.00008f
@@ -147,116 +231,6 @@ InsertPointBetween(polygon2d *A, v2d p, s32 Index)
     ++A->VertexCount;
     A->Vertices[Index] = p;
 }
-
-inline b32
-PointsAreEqual(v2 a, v2 b, f32 Epsilon)
-{
-    b32 Result = (AbsoluteValue(a.x - b.x) <= Epsilon) && (AbsoluteValue(a.y - b.y) <= Epsilon);
-    return(Result);
-}
-
-inline b32
-PointsAreEqual(v2d a, v2d b, f64 Epsilon)
-{
-    b32 Result = (AbsoluteValue(a.x - b.x) <= Epsilon) && (AbsoluteValue(a.y - b.y) <= Epsilon);
-    return(Result);
-}
-
-// NOTE(babykaban): Triangulations ===========================================================================================================================
-
-/*
-  NOTE(babykaban): Points and adjacencies are structured in counterclockwise order shown below: 
-
-         V3
-        /  \
-       /    \
-      /      \
- AdjV3V1   AdjV2V3
-    /          \
-   /            \
-  V1------------V2
-      AdjV1V2
-*/
-
-struct triangulate_triangle
-{
-    union
-    {
-        struct
-        {
-            s32 V1, V2, V3;
-        };
-
-        s32 Vertices[3];
-    };
-
-    union
-    {
-        struct
-        {
-            s32 AdjV1V2, AdjV2V3, AdjV3V1;
-        };
-
-        s32 Adjacencies[3];
-    };
-};
-
-union triangle_adjs
-{
-    struct
-    {
-        s32 AdjV1V2, AdjV2V3, AdjV3V1;
-    };
-
-    s32 Adjacencies[3];
-};
-
-struct triangulate_result
-{
-    s32 TriangleCount;
-    triangle *Triangles;
-    triangle_adjs *Adjacencies;
-};
-
-struct triangulate_resultd
-{
-    s32 TriangleCount;
-    triangled *Triangles;
-    triangle_adjs *Adjacencies;
-};
-
-inline void
-AdjacenciesFindWhichEqualAndSetTo(triangulate_triangle *Test, s32 Compare, s32 Set)
-{
-    /*
-      NOTE(babykaban):
-      The function checks all three adjacency entries (AdjV1V2, AdjV2V3, AdjV3V1) of the triangle it's called on.
-      It searches for the adjacency value that equals the old neighbor's index (Compare).
-      It replaces that old neighbor index with the new one (Set), reflecting the new connection after the flip.
-    */
-
-    for(s32 m = 0; m < 3; m++)
-    {
-        if(Test->Adjacencies[m] == Compare)
-        {
-            Test->Adjacencies[m] = Set;
-            break;
-        }
-    }
-}
-// ===========================================================================================================================================================
-
-struct lined
-{
-    v2d a;
-    v2d b;
-};
-
-struct line
-{
-    v2 a;
-    v2 b;
-};
 
 inline void
 RemoveAt(polygon2 *Poly, s32 Index)
