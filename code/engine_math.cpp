@@ -8,7 +8,6 @@
 #include "engine_triangle.cpp"
 #include "engine_triangle_f64.cpp"
 
-
 internal void
 SplitPolygon(polygon2 *ResultArray, s32 *ResultCount, s32 *NotConvexIndices, s32 *NotConvexCount, s32 SubjectIndex, memory_arena *TempArena)
 {

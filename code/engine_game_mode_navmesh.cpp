@@ -753,6 +753,187 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
 #endif    
     EndTemporaryMemory(TempMem);
 }
+
+internal void
+MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode,
+               triangle *Triangles, triangle_adjs *AdjArray, s32 TriangleCount,
+               world_position *BaseP, memory_arena *Arena)
+{
+    TIMED_FUNCTION();
+
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+
+    b32 *IsMerged = PushArray(TempMem.Arena, TriangleCount, b32);
+
+    s32 Count = 0;
+    t_adj_pair *ToCheckStack = PushArray(TempMem.Arena, 512, t_adj_pair);
+
+    s32 PolygonCount = 0;
+    polygon2 *ResultPolygons = PushArray(TempMem.Arena, 512, polygon2);
+    for(s32 I = 0;
+        I < 512;
+        ++I)
+    {
+        polygon2 *P = ResultPolygons + I;
+        P->Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+    }
+
+    polygon2 TempPoly = {};
+    TempPoly.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+
+    
+    for(s32 TIndex = 0;
+        TIndex < TriangleCount;
+        ++TIndex)
+    {
+        if(!IsMerged[TIndex])
+        {
+            IsMerged[TIndex] = true;
+            s32 CurrentTIndex = TIndex;
+            polygon2 *CurrentP = ResultPolygons + PolygonCount++;
+            CurrentP->VertexCount = 3;
+            CurrentP->Vertices[0] = Triangles[TIndex].Vertices[0];
+            CurrentP->Vertices[1] = Triangles[TIndex].Vertices[1];
+            CurrentP->Vertices[2] = Triangles[TIndex].Vertices[2];
+
+            ToCheckStack[Count++] = {CurrentTIndex, AdjArray[TIndex].AdjV1V2};
+            ToCheckStack[Count++] = {CurrentTIndex, AdjArray[TIndex].AdjV2V3};
+            ToCheckStack[Count++] = {CurrentTIndex, AdjArray[TIndex].AdjV3V1};
+
+            while(Count != 0)
+            {
+                t_adj_pair TAdjPair = ToCheckStack[--Count];
+                if(TAdjPair.Adj >= 0)
+                {
+                    TempPoly.VertexCount = CurrentP->VertexCount;
+                    Copy(sizeof(v2d)*CurrentP->VertexCount, CurrentP->Vertices, TempPoly.Vertices);
+
+                    triangle *TestT = Triangles + TAdjPair.Adj;
+                    s32 SharedCount = 0;
+                    s32 PolyEdgeVertices[2] = {-1, -1};
+                    s32 TriEdgeVertices[2] = {-1, -1};
+                    for(s32 I = 0; I < CurrentP->VertexCount; ++I)
+                    {
+                        for(s32 J = 0; J < 3; ++J)
+                        {
+                            if(PointsAreEqual(CurrentP->Vertices[I], TestT->Vertices[J], 0.0001f))
+                            {
+                                PolyEdgeVertices[SharedCount] = I;
+                                TriEdgeVertices[SharedCount++] = J;
+                                break;
+                            }
+                        }
+
+                        if(SharedCount == 2)
+                        {
+                            break;
+                        }
+                    }
+
+                    Assert(SharedCount == 2);
+                    
+                    v2 p = {};
+                    for(s32 I = 0; I < 3; ++I)
+                    {
+                        if((I != TriEdgeVertices[0]) && (I != TriEdgeVertices[1]))
+                        {
+                            p = TestT->Vertices[I];
+                            break;
+                        }
+                    }
+
+                    s32 Insert = (PolyEdgeVertices[0] > PolyEdgeVertices[1]) ? PolyEdgeVertices[0] : PolyEdgeVertices[1];
+                    if(((PolyEdgeVertices[0] == 0) && (PolyEdgeVertices[1] == (CurrentP->VertexCount - 1))) ||
+                       ((PolyEdgeVertices[1] == 0) && (PolyEdgeVertices[0] == (CurrentP->VertexCount - 1))))
+                    {
+                        Insert = CurrentP->VertexCount;
+                    }
+
+                    InsertPointBetween(&TempPoly, p, Insert);
+
+                    for(s32 I = 0; I < 3; ++I)
+                    {
+                        if(AdjArray[TAdjPair.T].Adjacencies[I] == TAdjPair.Adj)
+                        {
+                            AdjArray[TAdjPair.T].Adjacencies[I] = -1;
+                            break;
+                        }
+                    }
+
+                    for(s32 I = 0; I < 3; ++I)
+                    {
+                        if(AdjArray[TAdjPair.Adj].Adjacencies[I] == TAdjPair.T)
+                        {
+                            AdjArray[TAdjPair.Adj].Adjacencies[I] = -1;
+                            break;
+                        }
+                    }
+            
+                    if(IsConvex(&TempPoly))
+                    {
+                        CurrentP->VertexCount = TempPoly.VertexCount;
+                        Copy(sizeof(v2)*TempPoly.VertexCount, TempPoly.Vertices, CurrentP->Vertices);
+
+                        if(AdjArray[TAdjPair.Adj].AdjV1V2 > -1)
+                        {
+                            ToCheckStack[Count++] = {TAdjPair.Adj, AdjArray[TAdjPair.Adj].AdjV1V2};
+                        }
+
+                        if(AdjArray[TAdjPair.Adj].AdjV2V3 > -1)
+                        {
+                            ToCheckStack[Count++] = {TAdjPair.Adj, AdjArray[TAdjPair.Adj].AdjV2V3};
+                        }
+
+                        if(AdjArray[TAdjPair.Adj].AdjV3V1 > -1)
+                        {
+                            ToCheckStack[Count++] = {TAdjPair.Adj, AdjArray[TAdjPair.Adj].AdjV3V1};
+                        }
+
+                        IsMerged[TAdjPair.Adj] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    world_polygon *NewPolygons = PushArray(TempMem.Arena, PolygonCount, world_polygon);
+    for(s32 I = 0;
+        I < PolygonCount;
+        ++I)
+    {
+        polygon2 *Poly = ResultPolygons + I;
+        world_polygon *WorldPoly = NewPolygons + I;
+
+        WorldPoly->VertexCount = Poly->VertexCount;
+        WorldPoly->Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, world_position);
+        for(s32 J = 0;
+            J < Poly->VertexCount;
+            ++J)
+        {
+            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, Poly->Vertices[J]);
+        }
+    }
+
+#if 1
+    for(s32 I = 0;
+        I < PolygonCount;
+        ++I)
+    {
+        polygon2 *Poly = ResultPolygons + I;
+        triangulate_result TResult = ConstrainedDelaunayTriangulate(Poly, TempMem.Arena);
+        for(s32 J = 0;
+            J < TResult.TriangleCount;
+            ++J)
+        {
+            PushTriangle(RenderGroup, Flat, TResult.Triangles[J], 70.0f, V4(DebugColorTable[I % ArrayCount(DebugColorTable)], 1.0f));
+        }
+
+        Platform.DeallocateMemory(TResult.Triangles);
+        Platform.DeallocateMemory(TResult.Adjacencies);
+    }
+#endif    
+    EndTemporaryMemory(TempMem);
+}
  
 inline void
 RemoveDublicatPoints(v2 *Vertices, s32 *Count)
@@ -795,7 +976,7 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     polygon2 P = {};
     P.VertexCount = 0;
     P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
-
+#if 0
     s32 VertexMaxCount = 0;
     for(u32 I = 0;
         I < GameMode->PolygonCount;
@@ -822,7 +1003,8 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     RemoveDublicatPoints(Vertices, &VertexMaxCount);
     
     int a = 0;
-
+#endif
+    
 #if 1    
     for(u32 Index = 0;
         Index < GameMode->PolygonCount;
@@ -831,7 +1013,9 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
         world_polygon *Poly = GameMode->Polies + Index;
         ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
 
-        triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
+//        triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
+        triangulate_result TResult = DelaunayTriangulate(&P, Arena);
+
         for(s32 TIndex = GameMode->MeshTriangleCount;
             TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
             ++TIndex)
@@ -842,6 +1026,10 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
             WorldT->V2 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[1]);
             WorldT->V3 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[2]);
         }
+
+//        MergeTriangels(RenderGroup, Flat, GameMode,
+//                       TResult.Triangles, TResult.Adjacencies, TResult.TriangleCount,
+//                       BaseP, TempMem.Arena);
 
         GameMode->MeshTriangleCount += TResult.TriangleCount;
 

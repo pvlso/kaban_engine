@@ -6,8 +6,6 @@
    $Notice:  $
    ======================================================================== */
 
-#define TRIANGULATE_F64 1
-
 // NOTE(babykaban): Triangle Subtraction =====================================================================================================================
 
 internal b32
@@ -2608,27 +2606,67 @@ ConstrainedDelaunayTriangulate(polygon2 *Poly, memory_arena *Arena)
             Result.Triangles = (triangle *)Platform.AllocateMemory(sizeof(triangle)*FinalCount);
             Result.Adjacencies = (triangle_adjs *)Platform.AllocateMemory(sizeof(triangle_adjs)*FinalCount);
 
-            // NOTE(babykaban): Finilize result
-            s32 TIndex = 0;
-            for(s32 I = 0;
-                I < PreFinalTriangleCount;
-                ++I)
+            ZeroArray(TriangleCount, RenumberAdj);
+
+            s32 FinalTriangleCount = PreFinalTriangleCount;
+            for(s32 I = 0; I < PreFinalTriangleCount; I++)
+            {
+                if(IsOutside[I])
+                {
+                    RenumberAdj[I] = PreFinalTriangleCount - (FinalTriangleCount--);
+                }
+                else
+                {
+                    RenumberAdj[I] = PreFinalTriangleCount - FinalTriangleCount;
+                }
+            }
+
+            triangulate_triangle *FinalTriangles = PushArray(TempMem.Arena, FinalTriangleCount, triangulate_triangle);
+
+            CurrentIndex = 0;
+            for(s32 I = 0; I < PreFinalTriangleCount; I++)
             {
                 if(!IsOutside[I])
                 {
-                    triangulate_triangle Triangle = PreFinalTriangles[I];
-                    triangle *T = Result.Triangles + TIndex;
-                    triangle_adjs *Adjs = Result.Adjacencies + I;
+                    FinalTriangles[CurrentIndex] = PreFinalTriangles[I];
 
-                    T->Vertices[0] = Points[Triangle.V1];
-                    T->Vertices[1] = Points[Triangle.V2];
-                    T->Vertices[2] = Points[Triangle.V3];
-
-                    Adjs->Adjacencies[0] = Triangle.Adjacencies[0];
-                    Adjs->Adjacencies[1] = Triangle.Adjacencies[1];
-                    Adjs->Adjacencies[2] = Triangle.Adjacencies[2];
-                    ++TIndex;
+                    FinalTriangles[CurrentIndex].AdjV1V2 = (1 - IsOutside[PreFinalTriangles[I].AdjV1V2])*PreFinalTriangles[I].AdjV1V2 - IsOutside[PreFinalTriangles[I].AdjV1V2];
+                    FinalTriangles[CurrentIndex].AdjV2V3 = (1 - IsOutside[PreFinalTriangles[I].AdjV2V3])*PreFinalTriangles[I].AdjV2V3 - IsOutside[PreFinalTriangles[I].AdjV2V3];
+                    FinalTriangles[CurrentIndex].AdjV3V1 = (1 - IsOutside[PreFinalTriangles[I].AdjV3V1])*PreFinalTriangles[I].AdjV3V1 - IsOutside[PreFinalTriangles[I].AdjV3V1];
+                    ++CurrentIndex;
                 }
+
+            }
+
+            // NOTE(babykaban): Fix adjacencies of PreFinalTriangles
+            for(s32 i = 0; i < FinalTriangleCount; i++)
+            {
+                if (FinalTriangles[i].AdjV1V2 >= 0)
+                    FinalTriangles[i].AdjV1V2 -= RenumberAdj[FinalTriangles[i].AdjV1V2];
+                if (FinalTriangles[i].AdjV2V3 >= 0)
+                    FinalTriangles[i].AdjV2V3 -= RenumberAdj[FinalTriangles[i].AdjV2V3];
+                if (FinalTriangles[i].AdjV3V1 >= 0)
+                    FinalTriangles[i].AdjV3V1 -= RenumberAdj[FinalTriangles[i].AdjV3V1];
+            }
+
+            // NOTE(babykaban): Finilize result
+            s32 TIndex = 0;
+            for(s32 I = 0;
+                I < FinalCount;
+                ++I)
+            {
+                triangulate_triangle Triangle = FinalTriangles[I];
+                triangle *T = Result.Triangles + TIndex;
+                triangle_adjs *Adjs = Result.Adjacencies + TIndex;
+
+                T->Vertices[0] = Points[Triangle.V1];
+                T->Vertices[1] = Points[Triangle.V2];
+                T->Vertices[2] = Points[Triangle.V3];
+
+                Adjs->Adjacencies[0] = Triangle.Adjacencies[0];
+                Adjs->Adjacencies[1] = Triangle.Adjacencies[1];
+                Adjs->Adjacencies[2] = Triangle.Adjacencies[2];
+                ++TIndex;
             }
         }
     }

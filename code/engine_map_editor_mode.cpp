@@ -852,8 +852,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                     
                     if(GameMode->Triangulated)
                     {
-//                            BuildAdjacenciesArray(GameMode, SimRegion);
-//                            MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
+//                        BuildAdjacenciesArray(GameMode, SimRegion);
+//                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
                         DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
                     }
                 } break;
