@@ -11,6 +11,8 @@
 #include "engine_math.h"
 #include "engine_triangle.h"
 
+#include "polypartition.h"
+
 #include "engine_random.h"
 #include "engine_memory.h"
 #include "engine_string.h"

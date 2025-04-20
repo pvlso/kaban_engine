@@ -817,8 +817,9 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                         case GMAction_TriangulateAll:
                         {
-                            TriangulatePolygons(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
+//                            TriangulatePolygons(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                            BuildAdjacenciesArray(GameMode, SimRegion);
+
                             GameMode->Triangulated = true;
                         } break;
 
@@ -852,9 +853,71 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                     
                     if(GameMode->Triangulated)
                     {
+                        polygon2 P = {};
+                        P.VertexCount = 0;
+                        P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+
+                        TPPLPartition Partition = TPPLPartition();
+                        for(u32 Index = 0;
+                            Index < GameMode->PolygonCount;
+                            ++Index)
+                        {
+                            world_polygon *Poly = GameMode->Polies + Index;
+                            ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &P);
+
+                            TPPLPoly TPoly = {};
+                            TPoly.Init(Poly->VertexCount);
+                            for(s32 I = 0;
+                                I < Poly->VertexCount;
+                                ++I)
+                            {
+                                TPoly.points[I].x = P.Vertices[I].x;
+                                TPoly.points[I].y = P.Vertices[I].y;
+                            }
+
+                            TPoly.SetOrientation(TPPL_ORIENTATION_CCW);
+                            TPPLPolyList List;
+                            s32 R = Partition.ConvexPartition_HM(&TPoly, &List);
+
+                            TPPLPolyList::iterator iter;
+                            s32 PIn = 0;
+                            for (iter = List.begin(); iter != List.end(); iter++)
+                            {
+                                s32 Count = iter->GetNumPoints();
+                                TPPLPoint *Points = iter->GetPoints();
+
+                                polygon2 DrawP = {};
+                                DrawP.VertexCount = Count;
+                                DrawP.Vertices = PushArray(TempMem.Arena, Count, v2);
+                                for(s32 J = 0;
+                                    J < Count;
+                                    ++J)
+                                {
+                                    TPPLPoint P = iter->GetPoint(J);
+                                    DrawP.Vertices[J].x = (f32)round(P.x*10000.f) * 0.0001f;;
+                                    DrawP.Vertices[J].y = (f32)round(P.y*10000.f) * 0.0001f;;
+                                }
+
+                                triangulate_result TResult = DelaunayTriangulate(&DrawP, TempMem.Arena);
+                                for(s32 TIndex = 0;
+                                    TIndex < TResult.TriangleCount;
+                                    ++TIndex)
+                                {
+                                    triangle *T = TResult.Triangles + TIndex;
+                                    PushTriangle(RenderGroup, &Flat, *T, 20.0f, V4(DebugColorTable[(PIn + Index) % ArrayCount(DebugColorTable)], 1.0f));
+                                        
+                                }
+                                Platform.DeallocateMemory(TResult.Triangles);
+                                Platform.DeallocateMemory(TResult.Adjacencies);
+
+                                ++PIn;
+                            }
+                                
+                            int a = 0;
+                        }
 //                        BuildAdjacenciesArray(GameMode, SimRegion);
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
-                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
+//                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
                     }
                 } break;
 
