@@ -18,6 +18,8 @@
 #include "engine_math.cpp"
 #include "polypartition.cpp"
 
+#include "engine_poly_partition.cpp"
+
 internal task_with_memory *
 BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
 {
@@ -175,7 +177,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
-
+        
         FILE *VersionFile;
         fopen_s(&VersionFile, "editor_version_file.ssev", "rb");
         if(VersionFile)
