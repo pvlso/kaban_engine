@@ -153,6 +153,73 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     nk_ui UI = Platform.UI;
 
     GenerateCRC64Table();
+
+    TPPLPartition partition;
+    TPPLPolyList inpolys; // Input polygons (outer polygon + hole)
+    TPPLPolyList convexParts; // Output triangles
+
+    // NOTE(paul): RULES
+    // ALL POINTS OF THE HOLE POLYGON HAS TO BE INSIDE THE OUTER POLY
+    // OUTER POLY HAS TO BE COUNTER-CLOCKWISE
+    // INNER POLY HAS TO BE CLOCKWISE
+    
+    // Define the outer polygon (square, counter-clockwise)
+    TPPLPoly outer;
+    outer.Init(4);
+    outer.points[0] = {0, 0}; // Bottom-left
+    outer.points[1] = {4, 0}; // Bottom-right
+    outer.points[2] = {4, 4}; // Top-right
+    outer.points[3] = {0, 4}; // Top-left
+    outer.SetOrientation(TPPL_ORIENTATION_CCW); // Ensure counter-clockwise
+
+    // Define the hole (smaller square, clockwise)
+    TPPLPoly hole;
+    hole.Init(4);
+    hole.points[0] = {0, 0}; // Bottom-left
+    hole.points[1] = {0, 3}; // Top-left
+    hole.points[2] = {3, 3}; // Top-right
+    hole.points[3] = {3, 0}; // Bottom-right
+    hole.SetOrientation(TPPL_ORIENTATION_CW); // Ensure clockwise
+    hole.SetHole(true); // Mark as a hole
+
+    // Add both polygons to the input list
+    inpolys.push_back(outer);
+    inpolys.push_back(hole);
+
+    // Triangulate the polygon with the hole
+//    int result = partition.Triangulate_EC(&inpolys, &triangles);
+    int result = partition.ConvexPartition_HM(&inpolys, &convexParts);
+
+#if 0
+    TPPLPartition Partition = TPPLPartition();
+
+    TPPLPolyList PolyList;
+
+    TPPLPoly TPoly = {};
+    TPoly.Init(4);
+    TPoly.points[0] = {0.0, 0.0};
+    TPoly.points[1] = {0.0, 4.0};
+    TPoly.points[2] = {4.0, 4.0};
+    TPoly.points[3] = {4.0, 0.0};
+    TPoly.SetOrientation(TPPL_ORIENTATION_CCW);
+    PolyList.push_back(TPoly);
+
+    TPPLPoly TPoly0 = {};
+    TPoly0.Init(4);
+    TPoly0.points[0] = {0.0, 0.0};
+    TPoly0.points[1] = {0.0, 2.0};
+    TPoly0.points[2] = {2.0, 2.0};
+    TPoly0.points[3] = {2.0, 0.0};
+    TPoly0.hole = true;
+    TPoly0.SetOrientation(TPPL_ORIENTATION_CW);
+    PolyList.push_back(TPoly0);
+
+    TPPLPolyList List;
+    s32 Result = Partition.RemoveHoles(&PolyList, &List);
+
+    TPPLPolyList Res;
+    s32 R = Partition.ConvexPartition_HM(&PolyList, &Res);
+#endif
     
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;

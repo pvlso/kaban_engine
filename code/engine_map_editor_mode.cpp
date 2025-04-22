@@ -853,6 +853,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                     
                     if(GameMode->Triangulated)
                     {
+                        
+#if 0
                         polygon2 P = {};
                         P.VertexCount = 0;
                         P.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
@@ -915,6 +917,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                 
                             int a = 0;
                         }
+#endif
+                        
 //                        BuildAdjacenciesArray(GameMode, SimRegion);
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);

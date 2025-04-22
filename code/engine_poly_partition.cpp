@@ -79,7 +79,7 @@ EPPSetOrientation(epp_poly *P, epp_orientation Orientation)
       EPPInvert(P);
 }
 
-#if 1
+#if 0
 
 inline epp_point
 EPPNormalize(epp_point p)
@@ -141,50 +141,52 @@ EPPIntersects(epp_point p11, epp_point p12, epp_point p21, epp_point p22)
 }
 
 inline b32
-IsConvex(epp_point p1, epp_point p2, epp_point p3)
+EPPIsConvex(epp_point p1, epp_point p2, epp_point p3)
 {
-  tppl_float tmp;
-  tmp = (p3.y - p1.y) * (p2.x - p1.x) - (p3.x - p1.x) * (p2.y - p1.y);
-  if (tmp > 0) {
-    return 1;
-  } else {
-    return 0;
-  }
+    tppl_float tmp;
+    tmp = (p3.y - p1.y) * (p2.x - p1.x) - (p3.x - p1.x) * (p2.y - p1.y);
+    if(tmp > 0)
+        return 1;
+    else
+        return 0;
 }
 
 inline b32
-InCone(epp_point p1, epp_point p2, epp_point p3, epp_point p)
+EPPInCone(epp_point p1, epp_point p2, epp_point p3, epp_point p)
 {
-  b32 convex = false;
-  convex = IsConvex(p1, p2, p3);
+    b32 convex = false;
+    convex = EPPIsConvex(p1, p2, p3);
 
-  if (convex) {
-    if (!IsConvex(p1, p2, p)) {
-      return false;
+    if (convex)
+    {
+        if(!EPPIsConvex(p1, p2, p))
+            return false;
+
+        if(!EPPIsConvex(p2, p3, p))
+            return false;
+
+        return true;
     }
-    if (!IsConvex(p2, p3, p)) {
-      return false;
+    else
+    {
+        if(EPPIsConvex(p1, p2, p))
+            return true;
+
+        if(EPPIsConvex(p2, p3, p))
+            return true;
+
+        return false;
     }
-    return true;
-  } else {
-    if (IsConvex(p1, p2, p)) {
-      return true;
-    }
-    if (IsConvex(p2, p3, p)) {
-      return true;
-    }
-    return false;
-  }
 }
 
-bool TPPLPartition::InCone(PartitionVertex *v, TPPLPoint &p) {
-  TPPLPoint p1, p2, p3;
+inline b32
+EPPInCone(partition_vertex *v, epp_point p)
+{
+  epp_point p1 = v->previous->p;
+  epp_point p2 = v->p;
+  epp_point p3 = v->next->p;
 
-  p1 = v->previous->p;
-  p2 = v->p;
-  p3 = v->next->p;
-
-  return InCone(p1, p2, p3, p);
+  return EPPInCone(p1, p2, p3, p);
 }
 
 // Removes holes from inpolys by merging them with non-holes.
@@ -198,7 +200,6 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
     bool pointvisible;
     bool pointfound;
 
-    epp_poly *polyiter;
     epp_poly *iter;
     epp_poly *iter2;
     // Check for the trivial case of no holes.
@@ -233,6 +234,14 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
     epp_poly *polys = inpolys;
     s32 holepointindex = 0;
     epp_poly *holeiter = 0;
+    epp_point polypoint = {};
+    epp_point bestpolypoint = {};
+
+    epp_point linep1 = {};
+    epp_point linep2 = {};
+
+    epp_poly *polyiter = 0;
+
     while (1) {
         // Find the hole point with the largest x.
         hasholes = false;
@@ -276,62 +285,78 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
                 if(poly->points[i].x <= holepoint.x)
                     continue;
 
-                if(!InCone(iter->GetPoint((i + iter->GetNumPoints() - 1) % (iter->GetNumPoints())),
-                            iter->GetPoint(i),
-                            iter->GetPoint((i + 1) % (iter->GetNumPoints())),
-                            holepoint)) {
+                if(!EPPInCone(poly->points[(i + (poly->numpoints - 1)) % poly->numpoints],
+                              poly->points[i],
+                              poly->points[(i + 1) % poly->numpoints],
+                              holepoint)) {
                     continue;
                 }
-                polypoint = iter->GetPoint(i);
-                if (pointfound) {
-                    v1dist = Distance(holepoint, polypoint);
-                    v2dist = Distance(holepoint, bestpolypoint);
-                    if (v2dist < v1dist) {
+
+                polypoint = poly->points[i];
+                if(pointfound)
+                {
+                    v1dist = EPPDistance(holepoint, polypoint);
+                    v2dist = EPPDistance(holepoint, bestpolypoint);
+
+                    if(v2dist < v1dist)
                         continue;
-                    }
                 }
+
                 pointvisible = true;
-                for (iter2 = polys.begin(); iter2 != polys.end(); iter2++) {
-                    if (iter2->IsHole()) {
+                for(s32 J = 0; J < incount; ++J)
+                {
+                    epp_poly *poly2 = polys + J;
+
+                    if(poly2->hole)
                         continue;
-                    }
-                    for (i2 = 0; i2 < iter2->GetNumPoints(); i2++) {
-                        linep1 = iter2->GetPoint(i2);
-                        linep2 = iter2->GetPoint((i2 + 1) % (iter2->GetNumPoints()));
-                        if (Intersects(holepoint, polypoint, linep1, linep2)) {
+
+                    for(i2 = 0; i2 < poly2->numpoints; i2++)
+                    {
+                        linep1 = poly2->points[i2];
+                        linep2 = poly2->points[(i2 + 1) % (poly2->numpoints)];
+                        if(EPPIntersects(holepoint, polypoint, linep1, linep2))
+                        {
                             pointvisible = false;
                             break;
                         }
                     }
-                    if (!pointvisible) {
+
+                    if(!pointvisible)
                         break;
-                    }
                 }
-                if (pointvisible) {
+
+                if(pointvisible)
+                {
                     pointfound = true;
                     bestpolypoint = polypoint;
-                    polyiter = iter;
+                    polyiter = poly;
                     polypointindex = i;
                 }
             }
         }
 
-        if (!pointfound) {
+        if(!pointfound)
             return 0;
+
+        epp_poly newpoly = {};
+        newpoly.points = PushArray(Arena, holeiter->numpoints + polyiter->numpoints + 2, epp_point);
+
+        i2 = 0;
+        for(s32 i = 0; i <= polypointindex; i++)
+        {
+            newpoly.points[i2] = polyiter->points[i];
+            i2++;
         }
 
-        newpoly.Init(holeiter->GetNumPoints() + polyiter->GetNumPoints() + 2);
-        i2 = 0;
-        for (i = 0; i <= polypointindex; i++) {
-            newpoly[i2] = polyiter->GetPoint(i);
+        for(s32 i = 0; i <= holeiter->numpoints; i++)
+        {
+            newpoly.points[i2] = holeiter->points[(i + holepointindex) % holeiter->numpoints];
             i2++;
         }
-        for (i = 0; i <= holeiter->GetNumPoints(); i++) {
-            newpoly[i2] = holeiter->GetPoint((i + holepointindex) % holeiter->GetNumPoints());
-            i2++;
-        }
-        for (i = polypointindex; i < polyiter->GetNumPoints(); i++) {
-            newpoly[i2] = polyiter->GetPoint(i);
+
+        for(s32 i = polypointindex; i < polyiter->numpoints; i++)
+        {
+            newpoly.points[i2] = polyiter->points[i];
             i2++;
         }
 
