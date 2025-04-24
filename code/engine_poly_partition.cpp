@@ -79,8 +79,6 @@ EPPSetOrientation(epp_poly *P, epp_orientation Orientation)
       EPPInvert(P);
 }
 
-#if 0
-
 inline epp_point
 EPPNormalize(epp_point p)
 {
@@ -191,23 +189,40 @@ EPPInCone(partition_vertex *v, epp_point p)
 
 // Removes holes from inpolys by merging them with non-holes.
 internal int
-EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount, memory_arena *Arena)
+EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Arena)
 {
-    s32 i2, polypointindex = 0;
-    tppl_float v1dist, v2dist;
-    TPPLPoly newpoly;
-    bool hasholes;
-    bool pointvisible;
-    bool pointfound;
+    epp_poly_list *polys = 0;
+    epp_poly_list *holeiter = 0;
+    epp_poly_list *polyiter = 0;
+    epp_poly_list *iter = 0;
+    epp_poly_list *iter2 = 0;
 
-    epp_poly *iter;
-    epp_poly *iter2;
-    // Check for the trivial case of no holes.
-    hasholes = false;
-    for(s32 I = 0; I < incount; ++I)
+    s32 i = 0;
+    s32 i2 = 0;
+    s32 holepointindex = 0;
+    s32 polypointindex = 0;
+    epp_point holepoint = {};
+    epp_point polypoint = {};
+    epp_point bestpolypoint = {};
+
+    epp_point linep1 = {};
+    epp_point linep2 = {};
+
+    f64 v1dist = 0.0;
+    f64 v2dist = 0.0;
+
+    epp_poly newpoly = {};
+    b32 hasholes = false;
+    b32 pointvisible = false;
+    b32 pointfound = false;
+    
+    // NOTE(paul): Check if any of the in polygons is a hole.
+    for(iter = inpolys;
+        iter;
+        iter = iter->Next)
     {
-        epp_poly *P = inpolys + I;
-        if(P->hole)
+        epp_poly *p = &iter->Poly;
+        if(p->hole)
         {
             hasholes = true;
             break;
@@ -216,104 +231,101 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
 
     if(!hasholes)
     {
-        outpolys = PushArray(Arena, incount, epp_poly);
-        *outcount = incount;
-        for(s32 I = 0; I < incount; ++I)
+        // NOTE(paul): If no holes are found copy input to the output.
+//        outpolys = PushArray(Arena, incount, epp_poly);
+//        *outcount = incount;
+        outpolys = PushStruct(Arena, epp_poly_list);
+        epp_poly_list *dest = outpolys;
+        for(iter = inpolys;
+            iter;
+            iter = iter->Next)
         {
-            epp_poly *out = outpolys + I;
-            epp_poly *in = inpolys + I;
-            out->numpoints = in->numpoints;
-            out->hole = in->hole;
-            out->points = PushArray(Arena, out->numpoints, epp_point);
-            Copy(sizeof(epp_point)*out->numpoints, in->points, out->points);
+            epp_poly *s = &iter->Poly;
+            dest->Poly.numpoints = s->numpoints;
+            dest->Poly.points = PushArray(Arena, dest->Poly.numpoints, epp_point);
+            Copy(sizeof(epp_point)*s->numpoints, s->points, dest->Poly.points);
         }
 
         return 1;
     }
 
-    epp_poly *polys = inpolys;
-    s32 holepointindex = 0;
-    epp_poly *holeiter = 0;
-    epp_point polypoint = {};
-    epp_point bestpolypoint = {};
+    polys = inpolys;
 
-    epp_point linep1 = {};
-    epp_point linep2 = {};
-
-    epp_poly *polyiter = 0;
-
+    // NOTE(paul): Main Loop
     while (1) {
         // Find the hole point with the largest x.
         hasholes = false;
-        for(s32 I = 0; I < incount; ++I)
+        for(iter = polys;
+            iter;
+            iter = iter->Next)
         {
-            epp_poly *poly = polys + I;
-            if(!poly->hole)
+            if(!iter->Poly.hole)
                 continue;
 
             if(!hasholes)
             {
                 hasholes = true;
-                holeiter = poly;
+                holeiter = iter;
                 holepointindex = 0;
             }
 
-            for(s32 i = 0; i < poly->numpoints; i++)
+            for (i = 0; i < iter->Poly.numpoints; i++)
             {
-                if(poly->points[i].x > holeiter->points[holepointindex].x)
+                if(iter->Poly.points[i].x > holeiter->Poly.points[holepointindex].x)
                 {
-                    holeiter = poly;
+                    holeiter = iter;
                     holepointindex = i;
                 }
             }
         }
-        if (!hasholes) {
+
+        if(!hasholes)
             break;
-        }
 
-        epp_point holepoint = holeiter->points[holepointindex];
+        holepoint = holeiter->Poly.points[holepointindex];
+
         pointfound = false;
-        for(s32 I = 0; I < incount; ++I)
+        for(iter = polys;
+            iter;
+            iter = iter->Next)
         {
-            epp_poly *poly = polys + I;
-
-            if (poly->hole)
+            if(iter->Poly.hole)
                 continue;
 
-            for(s32 i = 0; i < poly->numpoints; i++)
+            for(i = 0; i < iter->Poly.numpoints; i++)
             {
-                if(poly->points[i].x <= holepoint.x)
+                if(iter->Poly.points[i].x <= holepoint.x)
                     continue;
 
-                if(!EPPInCone(poly->points[(i + (poly->numpoints - 1)) % poly->numpoints],
-                              poly->points[i],
-                              poly->points[(i + 1) % poly->numpoints],
+                if(!EPPInCone(iter->Poly.points[((i + iter->Poly.numpoints - 1) % (iter->Poly.numpoints))],
+                              iter->Poly.points[i],
+                              iter->Poly.points[(i + 1) % (iter->Poly.numpoints)],
                               holepoint)) {
                     continue;
                 }
 
-                polypoint = poly->points[i];
+                polypoint = iter->Poly.points[i];
+
                 if(pointfound)
                 {
                     v1dist = EPPDistance(holepoint, polypoint);
                     v2dist = EPPDistance(holepoint, bestpolypoint);
-
                     if(v2dist < v1dist)
                         continue;
                 }
 
                 pointvisible = true;
-                for(s32 J = 0; J < incount; ++J)
+                for(iter2 = polys;
+                    iter2;
+                    iter2 = iter2->Next)
                 {
-                    epp_poly *poly2 = polys + J;
-
-                    if(poly2->hole)
+                    if (iter2->Poly.hole)
                         continue;
 
-                    for(i2 = 0; i2 < poly2->numpoints; i2++)
+                    for(i2 = 0; i2 < iter2->Poly.numpoints; i2++)
                     {
-                        linep1 = poly2->points[i2];
-                        linep2 = poly2->points[(i2 + 1) % (poly2->numpoints)];
+                        linep1 = iter2->Poly.points[i2];
+                        linep2 = iter2->Poly.points[(i2 + 1) % (iter2->Poly.numpoints)];
                         if(EPPIntersects(holepoint, polypoint, linep1, linep2))
                         {
                             pointvisible = false;
@@ -329,7 +341,7 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
                 {
                     pointfound = true;
                     bestpolypoint = polypoint;
-                    polyiter = poly;
+                    polyiter = iter;
                     polypointindex = i;
                 }
             }
@@ -338,40 +350,60 @@ EPPRemoveHoles(epp_poly *inpolys, s32 incount, epp_poly *outpolys, s32 *outcount
         if(!pointfound)
             return 0;
 
-        epp_poly newpoly = {};
-        newpoly.points = PushArray(Arena, holeiter->numpoints + polyiter->numpoints + 2, epp_point);
+        newpoly = {};
+        newpoly.numpoints = (holeiter->Poly.numpoints +
+                             polyiter->Poly.numpoints + 2);
+        newpoly.points = PushArray(Arena, newpoly.numpoints, epp_point);
 
         i2 = 0;
-        for(s32 i = 0; i <= polypointindex; i++)
+        for(i = 0; i <= polypointindex; i++)
         {
-            newpoly.points[i2] = polyiter->points[i];
+            newpoly.points[i2] = polyiter->Poly.points[i];
             i2++;
         }
 
-        for(s32 i = 0; i <= holeiter->numpoints; i++)
+        for(i = 0; i <= holeiter->Poly.numpoints; i++)
         {
-            newpoly.points[i2] = holeiter->points[(i + holepointindex) % holeiter->numpoints];
+            newpoly.points[i2] =
+                holeiter->Poly.points[((i + holepointindex) %
+                                       holeiter->Poly.numpoints)];
             i2++;
         }
 
-        for(s32 i = polypointindex; i < polyiter->numpoints; i++)
+        for(i = polypointindex; i < polyiter->Poly.numpoints; i++)
         {
-            newpoly.points[i2] = polyiter->points[i];
+            newpoly.points[i2] = polyiter->Poly.points[i];
             i2++;
         }
 
-        polys.erase(holeiter);
-        polys.erase(polyiter);
-        polys.push_back(newpoly);
+//        polys.erase(holeiter);
+        epp_poly_list *T = holeiter->Prev;
+        T->Next = holeiter->Next;
+        T->Next->Prev = T;
+
+//        polys.erase(polyiter);
+        T = polyiter->Prev;
+        T->Next = polyiter->Next;
+        T->Next->Prev = T;
+
+        //polys.push_back(newpoly);
+        epp_poly_list *New = PushStruct(Arena, epp_poly_list);
+        T = polys->Prev;
+        polys->Prev = New;
+        T->Next = New;
+        New->Next = polys;
+        New->Prev = T;
     }
 
-    for (iter = polys.begin(); iter != polys.end(); iter++) {
-        outpolys->push_back(*iter);
-    }
+    // NOTE(paul): Copy result
+//    for (iter = polys.begin(); iter != polys.end(); iter++) {
+//        outpolys->push_back(*iter);
+//    }
 
     return 1;
 }
 
+#if 0
 bool TPPLPartition::IsReflex(TPPLPoint &p1, TPPLPoint &p2, TPPLPoint &p3) {
   tppl_float tmp;
   tmp = (p3.y - p1.y) * (p2.x - p1.x) - (p3.x - p1.x) * (p2.y - p1.y);

@@ -83,6 +83,13 @@ struct epp_poly
     b32 hole;
 };
 
+struct epp_poly_list
+{
+    epp_poly Poly;
+    epp_poly_list *Next;
+    epp_poly_list *Prev;
+};
+
 inline b32
 Valid(epp_poly P)
 {
