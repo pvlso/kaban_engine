@@ -16,7 +16,12 @@
     (Element)->Prev = (Sentinel);               \
     (Element)->Next->Prev = (Element);          \
     (Element)->Prev->Next = (Element); 
-#define DLIST_INSERT_AS_LAST(Sentinel, Element)         \
+
+#define DLIST_REMOVE(Element)                   \
+    (Element)->Prev->Next = (Element)->Next;    \
+    (Element)->Next->Prev = (Element)->Prev;
+
+#define DLIST_INSERT_AS_LAST(Sentinel, Element) \
     (Element)->Next = (Sentinel);               \
     (Element)->Prev = (Sentinel)->Prev;         \
     (Element)->Next->Prev = (Element);          \
@@ -26,10 +31,26 @@
     (Sentinel)->Next = (Sentinel); \
     (Sentinel)->Prev = (Sentinel);
 
-#define FREELIST_ALLOCATE(Result, FreeListPointer, AllocationCode)             \
-    (Result) = (FreeListPointer); \
+#define POLY_FREELIST_ALLOCATE(Result, FreeListPointer, AllocationCode) \
+    (Result) = (FreeListPointer);                                       \
+    if(Result) {                                                        \
+        FreeListPointer = (Result)->Next;                               \
+        (Result)->Next = 0;                                             \
+    } else {                                                            \
+        Result = AllocationCode;                                        \
+    }
+
+#define POLY_FREELIST_DEALLOCATE(Pointer, FreeListPointer)  \
+    if(Pointer) {                                           \
+        ZeroStruct(*(Pointer));                             \
+        (Pointer)->Next = (FreeListPointer);                \
+        (FreeListPointer) = (Pointer);                      \
+    }
+
+#define FREELIST_ALLOCATE(Result, FreeListPointer, AllocationCode)      \
+    (Result) = (FreeListPointer);                                       \
     if(Result) {FreeListPointer = (Result)->NextFree;} else {Result = AllocationCode;}
-#define FREELIST_DEALLOCATE(Pointer, FreeListPointer) \
+#define FREELIST_DEALLOCATE(Pointer, FreeListPointer)                   \
     if(Pointer) {(Pointer)->NextFree = (FreeListPointer); (FreeListPointer) = (Pointer);}
 
 #define Minimum(A, B) ((A < B) ? (A) : (B))

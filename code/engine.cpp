@@ -266,6 +266,41 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         // Triangulate the polygon with the hole
 //    int result = partition.Triangulate_EC(&inpolys, &triangles);
         int result = partition.ConvexPartition_HM(&inpolys, &convexParts);
+        epp_poly_list In = {};
+        In.Next = &In;
+        In.Prev = &In;
+        
+        epp_poly_list Outer = {};
+        Outer.Poly.points = PushArray(&EditorState->AudioArena, 4, epp_point);
+        Outer.Poly.numpoints = 4;
+        Outer.Poly.points[0] = {0, 0}; // Bottom-left
+        Outer.Poly.points[1] = {4, 0}; // Bottom-right
+        Outer.Poly.points[2] = {4, 4}; // Top-right
+        Outer.Poly.points[3] = {0, 4}; // Top-left
+        EPPSetOrientation(&Outer.Poly, EPP_ORIENTATION_CCW); // Ensure counter-clockwise
+
+        // Define the hole (smaller square, clockwise)
+        epp_poly_list Hole = {};
+        Hole.Poly.points = PushArray(&EditorState->AudioArena, 4, epp_point);
+        Hole.Poly.numpoints = 4;
+        Hole.Poly.points[0] = {1, 1}; // Bottom-left
+        Hole.Poly.points[1] = {1, 3}; // Top-left
+        Hole.Poly.points[2] = {3, 3}; // Top-right
+        Hole.Poly.points[3] = {3, 1}; // Bottom-right
+        Hole.Poly.hole = true;
+        EPPSetOrientation(&Hole.Poly, EPP_ORIENTATION_CW); // Ensure clockwise
+
+        In.Next = &Outer;
+        Outer.Next = &Hole;
+        Outer.Prev = &In;
+
+        Hole.Prev = &Outer;
+        Hole.Next = &In;
+
+        In.Prev = &Hole;
+        
+        epp_poly_list *Free = 0;
+        int r = EPPRemoveHoles(&In, Free, &EditorState->AudioArena);
     }
 
     // NOTE(casey): Transient initialization

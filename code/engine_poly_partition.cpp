@@ -189,8 +189,9 @@ EPPInCone(partition_vertex *v, epp_point p)
 
 // Removes holes from inpolys by merging them with non-holes.
 internal int
-EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Arena)
+EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list *freelist, memory_arena *Arena)
 {
+    epp_poly_list *inpolys = insentinal->Next;
     epp_poly_list *polys = 0;
     epp_poly_list *holeiter = 0;
     epp_poly_list *polyiter = 0;
@@ -218,7 +219,7 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
     
     // NOTE(paul): Check if any of the in polygons is a hole.
     for(iter = inpolys;
-        iter;
+        iter != insentinal;
         iter = iter->Next)
     {
         epp_poly *p = &iter->Poly;
@@ -230,24 +231,7 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
     }
 
     if(!hasholes)
-    {
-        // NOTE(paul): If no holes are found copy input to the output.
-//        outpolys = PushArray(Arena, incount, epp_poly);
-//        *outcount = incount;
-        outpolys = PushStruct(Arena, epp_poly_list);
-        epp_poly_list *dest = outpolys;
-        for(iter = inpolys;
-            iter;
-            iter = iter->Next)
-        {
-            epp_poly *s = &iter->Poly;
-            dest->Poly.numpoints = s->numpoints;
-            dest->Poly.points = PushArray(Arena, dest->Poly.numpoints, epp_point);
-            Copy(sizeof(epp_point)*s->numpoints, s->points, dest->Poly.points);
-        }
-
         return 1;
-    }
 
     polys = inpolys;
 
@@ -256,7 +240,7 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
         // Find the hole point with the largest x.
         hasholes = false;
         for(iter = polys;
-            iter;
+            iter != insentinal;
             iter = iter->Next)
         {
             if(!iter->Poly.hole)
@@ -286,7 +270,7 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
 
         pointfound = false;
         for(iter = polys;
-            iter;
+            iter != insentinal;
             iter = iter->Next)
         {
             if(iter->Poly.hole)
@@ -316,7 +300,7 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
 
                 pointvisible = true;
                 for(iter2 = polys;
-                    iter2;
+                    iter2 != insentinal;
                     iter2 = iter2->Next)
                 {
                     if (iter2->Poly.hole)
@@ -376,23 +360,17 @@ EPPRemoveHoles(epp_poly_list *inpolys, epp_poly_list *outpolys, memory_arena *Ar
             i2++;
         }
 
-//        polys.erase(holeiter);
-        epp_poly_list *T = holeiter->Prev;
-        T->Next = holeiter->Next;
-        T->Next->Prev = T;
+        DLIST_REMOVE(holeiter);
+        POLY_FREELIST_DEALLOCATE(holeiter, freelist);
+        DLIST_REMOVE(polyiter);
+        POLY_FREELIST_DEALLOCATE(polyiter, freelist);
 
-//        polys.erase(polyiter);
-        T = polyiter->Prev;
-        T->Next = polyiter->Next;
-        T->Next->Prev = T;
+        epp_poly_list *New;
+        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
 
-        //polys.push_back(newpoly);
-        epp_poly_list *New = PushStruct(Arena, epp_poly_list);
-        T = polys->Prev;
-        polys->Prev = New;
-        T->Next = New;
-        New->Next = polys;
-        New->Prev = T;
+        New->Poly = newpoly;
+
+        DLIST_INSERT_AS_LAST(insentinal, New);
     }
 
     // NOTE(paul): Copy result
