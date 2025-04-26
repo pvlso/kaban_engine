@@ -373,341 +373,388 @@ EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list *freelist, memory_arena 
         DLIST_INSERT_AS_LAST(insentinal, New);
     }
 
-    // NOTE(paul): Copy result
-//    for (iter = polys.begin(); iter != polys.end(); iter++) {
-//        outpolys->push_back(*iter);
-//    }
+    return 1;
+}
 
+inline b32
+EPPIsReflex(epp_point p1, epp_point p2, epp_point p3)
+{
+    f64 tmp = (p3.y - p1.y) * (p2.x - p1.x) - (p3.x - p1.x) * (p2.y - p1.y);
+
+    if(tmp < 0)
+        return 1;
+    else
+        return 0;
+}
+
+inline void
+EPPUpdateVertexReflexity(partition_vertex *v)
+{
+    partition_vertex *v1 = 0, *v3 = 0;
+    v1 = v->previous;
+    v3 = v->next;
+    v->isConvex = !EPPIsReflex(v1->p, v->p, v3->p);
+}
+
+inline b32
+EPPIsInside(epp_point p1, epp_point p2, epp_point p3, epp_point p)
+{
+    if(EPPIsConvex(p1, p, p2) ||
+       EPPIsConvex(p2, p, p3) ||
+       EPPIsConvex(p3, p, p1))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+inline void
+EPPUpdateVertex(partition_vertex *v, partition_vertex *vertices, s32 numvertices)
+{
+    s32 i = 0;
+    partition_vertex *v1 = 0, *v3 = 0;
+    epp_point vec1 = {}, vec3 = {};
+
+    v1 = v->previous;
+    v3 = v->next;
+
+    v->isConvex = EPPIsConvex(v1->p, v->p, v3->p);
+
+    vec1 = EPPNormalize(v1->p - v->p);
+    vec3 = EPPNormalize(v3->p - v->p);
+    v->angle = vec1.x * vec3.x + vec1.y * vec3.y;
+
+    if(v->isConvex)
+    {
+        v->isEar = true;
+        for(i = 0; i < numvertices; i++)
+        {
+            if(((vertices[i].p.x == v->p.x) && (vertices[i].p.y == v->p.y)) ||
+               ((vertices[i].p.x == v1->p.x) && (vertices[i].p.y == v1->p.y)) ||
+               ((vertices[i].p.x == v3->p.x) && (vertices[i].p.y == v3->p.y)))
+                continue;
+
+            if(EPPIsInside(v1->p, v->p, v3->p, vertices[i].p))
+            {
+                v->isEar = false;
+                break;
+            }
+        }
+    }
+    else
+    {
+        v->isEar = false;
+    }
+}
+
+// Triangulation by ear removal.
+internal int
+EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
+                 epp_poly_list *freelist, memory_arena *Arena)
+{
+    if(poly->numpoints < 3)
+        return 0;
+
+    s32 numvertices;
+    partition_vertex *vertices = 0;
+    partition_vertex *ear = 0;
+    epp_poly triangle = {};
+    s32 i = 0, j = 0;
+    b32 earfound = false;
+
+    if(poly->numpoints == 3)
+    {
+        epp_poly_list *New;
+        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        New->Poly = *poly;
+
+        DLIST_INSERT_AS_LAST(resultsentinal, New);
+        return 1;
+    }
+
+    numvertices = poly->numpoints;
+
+    vertices = PushArray(Arena, numvertices, partition_vertex);
+    for(i = 0; i < numvertices; i++)
+    {
+        vertices[i].isActive = true;
+        vertices[i].p = poly->points[i];
+
+        if(i == (numvertices - 1))
+            vertices[i].next = &(vertices[0]);
+        else
+            vertices[i].next = &(vertices[i + 1]);
+
+        if(i == 0)
+            vertices[i].previous = &(vertices[numvertices - 1]);
+        else
+            vertices[i].previous = &(vertices[i - 1]);
+    }
+
+    for(i = 0; i < numvertices; i++)
+        EPPUpdateVertex(&vertices[i], vertices, numvertices);
+
+    for(i = 0; i < numvertices - 3; i++)
+    {
+        earfound = false;
+        // Find the most extruded ear.
+        for(j = 0; j < numvertices; j++)
+        {
+            if((!vertices[j].isActive) ||
+               (!vertices[j].isEar))
+                continue;
+
+            if(!earfound)
+            {
+                earfound = true;
+                ear = &(vertices[j]);
+            }
+            else
+            {
+                if(vertices[j].angle > ear->angle)
+                    ear = &(vertices[j]);
+            }
+        }
+
+        if(!earfound)
+            return 0;
+
+        triangle.points = PushArray(Arena, 3, epp_point);
+        triangle.numpoints = 3;
+        triangle.points[0] = ear->previous->p;
+        triangle.points[1] = ear->p;
+        triangle.points[2] = ear->next->p;
+
+        epp_poly_list *New;
+        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        New->Poly = triangle;
+        DLIST_INSERT_AS_LAST(resultsentinal, New);
+
+        ear->isActive = false;
+        ear->previous->next = ear->next;
+        ear->next->previous = ear->previous;
+
+        if(i == (numvertices - 4))
+            break;
+
+        EPPUpdateVertex(ear->previous, vertices, numvertices);
+        EPPUpdateVertex(ear->next, vertices, numvertices);
+    }
+
+    for(i = 0; i < numvertices; i++)
+    {
+        if(vertices[i].isActive)
+        {
+            triangle.points = PushArray(Arena, 3, epp_point);
+            triangle.numpoints = 3;
+            triangle.points[0] = vertices[i].previous->p;
+            triangle.points[1] = vertices[i].p;
+            triangle.points[2] = vertices[i].next->p;
+
+            epp_poly_list *New;
+            POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+            New->Poly = triangle;
+            DLIST_INSERT_AS_LAST(resultsentinal, New);
+            break;
+        }
+    }
+
+    return 1;
+}
+
+inline int
+EPPTriangulateEC(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
+                 epp_poly_list *freelist, memory_arena *Arena)
+{
+    epp_poly_list *inpolys = insentinal->Next;
+    epp_poly_list *iter = 0;
+
+    if(!EPPRemoveHoles(insentinal, freelist, Arena))
+        return 0;
+
+    for(iter = inpolys;
+        iter != insentinal;
+        iter = iter->Next)
+    {
+        if(!EPPTriangulateEC(&iter->Poly, resultsentinal, freelist, Arena))
+            return 0;
+    }
     return 1;
 }
 
 #if 0
-bool TPPLPartition::IsReflex(TPPLPoint &p1, TPPLPoint &p2, TPPLPoint &p3) {
-  tppl_float tmp;
-  tmp = (p3.y - p1.y) * (p2.x - p1.x) - (p3.x - p1.x) * (p2.y - p1.y);
-  if (tmp < 0) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
+internal int
+EPPConvexPartitionHM(epp_poly *poly, epp_poly_list *resultsentinal,
+                     epp_poly_list *freelist, memory_arena *Arena)
+{
+    if(poly->numpoints < 3)
+        return 0;
 
-bool TPPLPartition::IsInside(TPPLPoint &p1, TPPLPoint &p2, TPPLPoint &p3, TPPLPoint &p) {
-  if (IsConvex(p1, p, p2)) {
-    return false;
-  }
-  if (IsConvex(p2, p, p3)) {
-    return false;
-  }
-  if (IsConvex(p3, p, p1)) {
-    return false;
-  }
-  return true;
-}
+    epp_poly_list TrianglesSentinal = {};
+    epp_poly_list *iter1 = 0;
+    epp_poly_list *iter2 = 0;
 
-void TPPLPartition::UpdateVertexReflexity(PartitionVertex *v) {
-  PartitionVertex *v1 = NULL, *v3 = NULL;
-  v1 = v->previous;
-  v3 = v->next;
-  v->isConvex = !IsReflex(v1->p, v->p, v3->p);
-}
+    epp_poly *poly1 = 0;
+    epp_poly *poly2 = 0;
 
-void TPPLPartition::UpdateVertex(PartitionVertex *v, PartitionVertex *vertices, long numvertices) {
-  long i;
-  PartitionVertex *v1 = NULL, *v3 = NULL;
-  TPPLPoint vec1, vec3;
+    epp_poly newpoly = {};
+    epp_point d1 = {}, d2 = {}, p1 = {};
+    epp_point p2 = {}, p3 = {};
+    s32 i11 = 0, i12 = 0, i21 = 0, i22 = 0;
+    s32 i13 = 0, i23 = 0, j = 0, k = 0;
 
-  v1 = v->previous;
-  v3 = v->next;
+    b32 isdiagonal = false;
+    s32 numreflex = 0;
 
-  v->isConvex = IsConvex(v1->p, v->p, v3->p);
+    // Check if the poly is already convex.
+    for(i11 = 0; i11 < poly->numpoints; i11++)
+    {
+        if(i11 == 0)
+            i12 = poly->numpoints - 1;
+        else
+            i12 = i11 - 1;
 
-  vec1 = Normalize(v1->p - v->p);
-  vec3 = Normalize(v3->p - v->p);
-  v->angle = vec1.x * vec3.x + vec1.y * vec3.y;
-
-  if (v->isConvex) {
-    v->isEar = true;
-    for (i = 0; i < numvertices; i++) {
-      if ((vertices[i].p.x == v->p.x) && (vertices[i].p.y == v->p.y)) {
-        continue;
-      }
-      if ((vertices[i].p.x == v1->p.x) && (vertices[i].p.y == v1->p.y)) {
-        continue;
-      }
-      if ((vertices[i].p.x == v3->p.x) && (vertices[i].p.y == v3->p.y)) {
-        continue;
-      }
-      if (IsInside(v1->p, v->p, v3->p, vertices[i].p)) {
-        v->isEar = false;
-        break;
-      }
-    }
-  } else {
-    v->isEar = false;
-  }
-}
-
-// Triangulation by ear removal.
-int TPPLPartition::Triangulate_EC(TPPLPoly *poly, TPPLPolyList *triangles) {
-  if (!poly->Valid()) {
-    return 0;
-  }
-
-  long numvertices;
-  PartitionVertex *vertices = NULL;
-  PartitionVertex *ear = NULL;
-  TPPLPoly triangle;
-  long i, j;
-  bool earfound;
-
-  if (poly->GetNumPoints() < 3) {
-    return 0;
-  }
-  if (poly->GetNumPoints() == 3) {
-    triangles->push_back(*poly);
-    return 1;
-  }
-
-  numvertices = poly->GetNumPoints();
-
-  vertices = new PartitionVertex[numvertices];
-  for (i = 0; i < numvertices; i++) {
-    vertices[i].isActive = true;
-    vertices[i].p = poly->GetPoint(i);
-    if (i == (numvertices - 1)) {
-      vertices[i].next = &(vertices[0]);
-    } else {
-      vertices[i].next = &(vertices[i + 1]);
-    }
-    if (i == 0) {
-      vertices[i].previous = &(vertices[numvertices - 1]);
-    } else {
-      vertices[i].previous = &(vertices[i - 1]);
-    }
-  }
-  for (i = 0; i < numvertices; i++) {
-    UpdateVertex(&vertices[i], vertices, numvertices);
-  }
-
-  for (i = 0; i < numvertices - 3; i++) {
-    earfound = false;
-    // Find the most extruded ear.
-    for (j = 0; j < numvertices; j++) {
-      if (!vertices[j].isActive) {
-        continue;
-      }
-      if (!vertices[j].isEar) {
-        continue;
-      }
-      if (!earfound) {
-        earfound = true;
-        ear = &(vertices[j]);
-      } else {
-        if (vertices[j].angle > ear->angle) {
-          ear = &(vertices[j]);
+        if(i11 == (poly->numpoints - 1))
+            i13 = 0;
+        else
+            i13 = i11 + 1;
+        
+        if(EPPIsReflex(poly->points[i12], poly->points[i11], poly->points[i13]))
+        {
+            numreflex = 1;
+            break;
         }
-      }
-    }
-    if (!earfound) {
-      delete[] vertices;
-      return 0;
     }
 
-    triangle.Triangle(ear->previous->p, ear->p, ear->next->p);
-    triangles->push_back(triangle);
+    if(numreflex == 0)
+    {
+        epp_poly_list *New;
+        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        New->Poly = *poly;
 
-    ear->isActive = false;
-    ear->previous->next = ear->next;
-    ear->next->previous = ear->previous;
-
-    if (i == numvertices - 4) {
-      break;
+        DLIST_INSERT_AS_LAST(resultsentinal, New);
+        return 1;
     }
 
-    UpdateVertex(ear->previous, vertices, numvertices);
-    UpdateVertex(ear->next, vertices, numvertices);
-  }
-  for (i = 0; i < numvertices; i++) {
-    if (vertices[i].isActive) {
-      triangle.Triangle(vertices[i].previous->p, vertices[i].p, vertices[i].next->p);
-      triangles->push_back(triangle);
-      break;
+    if (!Triangulate_EC(poly, &triangles)) {
+        return 0;
     }
-  }
 
-  delete[] vertices;
+    for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
+        poly1 = &(*iter1);
+        for (i11 = 0; i11 < poly1->GetNumPoints(); i11++) {
+            d1 = poly1->GetPoint(i11);
+            i12 = (i11 + 1) % (poly1->GetNumPoints());
+            d2 = poly1->GetPoint(i12);
 
-  return 1;
-}
+            isdiagonal = false;
+            for (iter2 = iter1; iter2 != triangles.end(); iter2++) {
+                if (iter1 == iter2) {
+                    continue;
+                }
+                poly2 = &(*iter2);
 
-int TPPLPartition::Triangulate_EC(TPPLPolyList *inpolys, TPPLPolyList *triangles) {
-  TPPLPolyList outpolys;
-  TPPLPolyList::iterator iter;
+                for (i21 = 0; i21 < poly2->GetNumPoints(); i21++) {
+                    if ((d2.x != poly2->GetPoint(i21).x) || (d2.y != poly2->GetPoint(i21).y)) {
+                        continue;
+                    }
+                    i22 = (i21 + 1) % (poly2->GetNumPoints());
+                    if ((d1.x != poly2->GetPoint(i22).x) || (d1.y != poly2->GetPoint(i22).y)) {
+                        continue;
+                    }
+                    isdiagonal = true;
+                    break;
+                }
+                if (isdiagonal) {
+                    break;
+                }
+            }
 
-  if (!RemoveHoles(inpolys, &outpolys)) {
-    return 0;
-  }
-  for (iter = outpolys.begin(); iter != outpolys.end(); iter++) {
-    if (!Triangulate_EC(&(*iter), triangles)) {
-      return 0;
-    }
-  }
-  return 1;
-}
+            if (!isdiagonal) {
+                continue;
+            }
 
-int TPPLPartition::ConvexPartition_HM(TPPLPoly *poly, TPPLPolyList *parts) {
-  if (!poly->Valid()) {
-    return 0;
-  }
+            p2 = poly1->GetPoint(i11);
+            if (i11 == 0) {
+                i13 = poly1->GetNumPoints() - 1;
+            } else {
+                i13 = i11 - 1;
+            }
+            p1 = poly1->GetPoint(i13);
+            if (i22 == (poly2->GetNumPoints() - 1)) {
+                i23 = 0;
+            } else {
+                i23 = i22 + 1;
+            }
+            p3 = poly2->GetPoint(i23);
 
-  TPPLPolyList triangles;
-  TPPLPolyList::iterator iter1, iter2;
-  TPPLPoly *poly1 = NULL, *poly2 = NULL;
-  TPPLPoly newpoly;
-  TPPLPoint d1, d2, p1, p2, p3;
-  long i11, i12, i21 = 0, i22 = 0, i13, i23, j, k;
-  bool isdiagonal;
-  long numreflex;
+            if (!IsConvex(p1, p2, p3)) {
+                continue;
+            }
 
-  // Check if the poly is already convex.
-  numreflex = 0;
-  for (i11 = 0; i11 < poly->GetNumPoints(); i11++) {
-    if (i11 == 0) {
-      i12 = poly->GetNumPoints() - 1;
-    } else {
-      i12 = i11 - 1;
-    }
-    if (i11 == (poly->GetNumPoints() - 1)) {
-      i13 = 0;
-    } else {
-      i13 = i11 + 1;
-    }
-    if (IsReflex(poly->GetPoint(i12), poly->GetPoint(i11), poly->GetPoint(i13))) {
-      numreflex = 1;
-      break;
-    }
-  }
-  if (numreflex == 0) {
-    parts->push_back(*poly);
-    return 1;
-  }
+            p2 = poly1->GetPoint(i12);
+            if (i12 == (poly1->GetNumPoints() - 1)) {
+                i13 = 0;
+            } else {
+                i13 = i12 + 1;
+            }
+            p3 = poly1->GetPoint(i13);
+            if (i21 == 0) {
+                i23 = poly2->GetNumPoints() - 1;
+            } else {
+                i23 = i21 - 1;
+            }
+            p1 = poly2->GetPoint(i23);
 
-  if (!Triangulate_EC(poly, &triangles)) {
-    return 0;
-  }
+            if (!IsConvex(p1, p2, p3)) {
+                continue;
+            }
 
-  for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
-    poly1 = &(*iter1);
-    for (i11 = 0; i11 < poly1->GetNumPoints(); i11++) {
-      d1 = poly1->GetPoint(i11);
-      i12 = (i11 + 1) % (poly1->GetNumPoints());
-      d2 = poly1->GetPoint(i12);
+            newpoly.Init(poly1->GetNumPoints() + poly2->GetNumPoints() - 2);
+            k = 0;
+            for (j = i12; j != i11; j = (j + 1) % (poly1->GetNumPoints())) {
+                newpoly[k] = poly1->GetPoint(j);
+                k++;
+            }
+            for (j = i22; j != i21; j = (j + 1) % (poly2->GetNumPoints())) {
+                newpoly[k] = poly2->GetPoint(j);
+                k++;
+            }
 
-      isdiagonal = false;
-      for (iter2 = iter1; iter2 != triangles.end(); iter2++) {
-        if (iter1 == iter2) {
-          continue;
-        }
-        poly2 = &(*iter2);
+            triangles.erase(iter2);
+            *iter1 = newpoly;
+            poly1 = &(*iter1);
+            i11 = -1;
 
-        for (i21 = 0; i21 < poly2->GetNumPoints(); i21++) {
-          if ((d2.x != poly2->GetPoint(i21).x) || (d2.y != poly2->GetPoint(i21).y)) {
             continue;
-          }
-          i22 = (i21 + 1) % (poly2->GetNumPoints());
-          if ((d1.x != poly2->GetPoint(i22).x) || (d1.y != poly2->GetPoint(i22).y)) {
-            continue;
-          }
-          isdiagonal = true;
-          break;
         }
-        if (isdiagonal) {
-          break;
-        }
-      }
-
-      if (!isdiagonal) {
-        continue;
-      }
-
-      p2 = poly1->GetPoint(i11);
-      if (i11 == 0) {
-        i13 = poly1->GetNumPoints() - 1;
-      } else {
-        i13 = i11 - 1;
-      }
-      p1 = poly1->GetPoint(i13);
-      if (i22 == (poly2->GetNumPoints() - 1)) {
-        i23 = 0;
-      } else {
-        i23 = i22 + 1;
-      }
-      p3 = poly2->GetPoint(i23);
-
-      if (!IsConvex(p1, p2, p3)) {
-        continue;
-      }
-
-      p2 = poly1->GetPoint(i12);
-      if (i12 == (poly1->GetNumPoints() - 1)) {
-        i13 = 0;
-      } else {
-        i13 = i12 + 1;
-      }
-      p3 = poly1->GetPoint(i13);
-      if (i21 == 0) {
-        i23 = poly2->GetNumPoints() - 1;
-      } else {
-        i23 = i21 - 1;
-      }
-      p1 = poly2->GetPoint(i23);
-
-      if (!IsConvex(p1, p2, p3)) {
-        continue;
-      }
-
-      newpoly.Init(poly1->GetNumPoints() + poly2->GetNumPoints() - 2);
-      k = 0;
-      for (j = i12; j != i11; j = (j + 1) % (poly1->GetNumPoints())) {
-        newpoly[k] = poly1->GetPoint(j);
-        k++;
-      }
-      for (j = i22; j != i21; j = (j + 1) % (poly2->GetNumPoints())) {
-        newpoly[k] = poly2->GetPoint(j);
-        k++;
-      }
-
-      triangles.erase(iter2);
-      *iter1 = newpoly;
-      poly1 = &(*iter1);
-      i11 = -1;
-
-      continue;
     }
-  }
 
-  for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
-    parts->push_back(*iter1);
-  }
+    for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
+        parts->push_back(*iter1);
+    }
 
-  return 1;
+    return 1;
 }
 
 int TPPLPartition::ConvexPartition_HM(TPPLPolyList *inpolys, TPPLPolyList *parts) {
-  TPPLPolyList outpolys;
-  TPPLPolyList::iterator iter;
+    TPPLPolyList outpolys;
+    TPPLPolyList::iterator iter;
 
-  if (!RemoveHoles(inpolys, &outpolys)) {
-    return 0;
-  }
-  for (iter = outpolys.begin(); iter != outpolys.end(); iter++) {
-    if (!ConvexPartition_HM(&(*iter), parts)) {
-      return 0;
+    if (!RemoveHoles(inpolys, &outpolys)) {
+        return 0;
     }
-  }
-  return 1;
+    for (iter = outpolys.begin(); iter != outpolys.end(); iter++) {
+        if (!ConvexPartition_HM(&(*iter), parts)) {
+            return 0;
+        }
+    }
+    return 1;
 }
+#endif
+
+#if 0
 
 // Minimum-weight polygon triangulation by dynamic programming.
 // Time complexity: O(n^3)

@@ -300,7 +300,20 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         In.Prev = &Hole;
         
         epp_poly_list *Free = 0;
-        int r = EPPRemoveHoles(&In, Free, &EditorState->AudioArena);
+        epp_poly_list Result = {};
+        Result.Next = &Result;
+        Result.Prev = &Result;
+        int r = EPPTriangulateEC(&In, &Result, Free, &EditorState->AudioArena);
+//        int r = EPPRemoveHoles(&In, Free, &EditorState->AudioArena);
+        for(epp_poly_list *Iter = Result.Next;
+            Iter != &Result;
+            Iter = Iter->Next)
+        {
+            epp_poly P = Iter->Poly;
+            int f = 1;
+        }
+
+        int a = 0;
     }
 
     // NOTE(casey): Transient initialization

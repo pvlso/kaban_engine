@@ -85,7 +85,7 @@ struct epp_poly
 
 struct epp_poly_list
 {
-    epp_poly *Poly;
+    epp_poly Poly;
     epp_poly_list *Next;
     epp_poly_list *Prev;
 };
