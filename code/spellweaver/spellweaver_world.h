@@ -40,8 +40,8 @@ struct world_entity_block
 
 struct world_chunk
 {
-    int32 ChunkX;
-    int32 ChunkY;
+    s32 ChunkX;
+    s32 ChunkY;
 
     // TODO(casey): Profile this and determine if a pointer would be better here!
     world_entity_block *FirstBlock;

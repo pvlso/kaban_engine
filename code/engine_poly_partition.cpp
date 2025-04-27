@@ -189,8 +189,9 @@ EPPInCone(partition_vertex *v, epp_point p)
 
 // Removes holes from inpolys by merging them with non-holes.
 internal int
-EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list *freelist, memory_arena *Arena)
+EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list **freelist, memory_arena *Arena)
 {
+    TIMED_FUNCTION();
     epp_poly_list *inpolys = insentinal->Next;
     epp_poly_list *polys = 0;
     epp_poly_list *holeiter = 0;
@@ -361,12 +362,12 @@ EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list *freelist, memory_arena 
         }
 
         DLIST_REMOVE(holeiter);
-        POLY_FREELIST_DEALLOCATE(holeiter, freelist);
+        POLY_FREELIST_DEALLOCATE(holeiter, *freelist);
         DLIST_REMOVE(polyiter);
-        POLY_FREELIST_DEALLOCATE(polyiter, freelist);
+        POLY_FREELIST_DEALLOCATE(polyiter, *freelist);
 
         epp_poly_list *New;
-        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        POLY_FREELIST_ALLOCATE(New, *freelist, PushStruct(Arena, epp_poly_list));
 
         New->Poly = newpoly;
 
@@ -451,8 +452,9 @@ EPPUpdateVertex(partition_vertex *v, partition_vertex *vertices, s32 numvertices
 // Triangulation by ear removal.
 internal int
 EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
-                 epp_poly_list *freelist, memory_arena *Arena)
+                 epp_poly_list **freelist, memory_arena *Arena)
 {
+    TIMED_FUNCTION();
     if(poly->numpoints < 3)
         return 0;
 
@@ -466,7 +468,7 @@ EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
     if(poly->numpoints == 3)
     {
         epp_poly_list *New;
-        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        POLY_FREELIST_ALLOCATE(New, *freelist, PushStruct(Arena, epp_poly_list));
         New->Poly = *poly;
 
         DLIST_INSERT_AS_LAST(resultsentinal, New);
@@ -527,7 +529,7 @@ EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
         triangle.points[2] = ear->next->p;
 
         epp_poly_list *New;
-        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        POLY_FREELIST_ALLOCATE(New, *freelist, PushStruct(Arena, epp_poly_list));
         New->Poly = triangle;
         DLIST_INSERT_AS_LAST(resultsentinal, New);
 
@@ -553,7 +555,7 @@ EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
             triangle.points[2] = vertices[i].next->p;
 
             epp_poly_list *New;
-            POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+            POLY_FREELIST_ALLOCATE(New, *freelist, PushStruct(Arena, epp_poly_list));
             New->Poly = triangle;
             DLIST_INSERT_AS_LAST(resultsentinal, New);
             break;
@@ -565,7 +567,7 @@ EPPTriangulateEC(epp_poly *poly, epp_poly_list *resultsentinal,
 
 inline int
 EPPTriangulateEC(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
-                 epp_poly_list *freelist, memory_arena *Arena)
+                 epp_poly_list **freelist, memory_arena *Arena)
 {
     epp_poly_list *inpolys = insentinal->Next;
     epp_poly_list *iter = 0;
@@ -583,15 +585,14 @@ EPPTriangulateEC(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
     return 1;
 }
 
-#if 0
 internal int
 EPPConvexPartitionHM(epp_poly *poly, epp_poly_list *resultsentinal,
-                     epp_poly_list *freelist, memory_arena *Arena)
+                     epp_poly_list **freelist, memory_arena *Arena)
 {
+    TIMED_FUNCTION();
     if(poly->numpoints < 3)
         return 0;
 
-    epp_poly_list TrianglesSentinal = {};
     epp_poly_list *iter1 = 0;
     epp_poly_list *iter2 = 0;
 
@@ -630,129 +631,140 @@ EPPConvexPartitionHM(epp_poly *poly, epp_poly_list *resultsentinal,
     if(numreflex == 0)
     {
         epp_poly_list *New;
-        POLY_FREELIST_ALLOCATE(New, freelist, PushStruct(Arena, epp_poly_list));
+        POLY_FREELIST_ALLOCATE(New, *freelist, PushStruct(Arena, epp_poly_list));
         New->Poly = *poly;
 
         DLIST_INSERT_AS_LAST(resultsentinal, New);
         return 1;
     }
 
-    if (!Triangulate_EC(poly, &triangles)) {
+    if(!EPPTriangulateEC(poly, resultsentinal, freelist, Arena))
         return 0;
-    }
 
-    for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
-        poly1 = &(*iter1);
-        for (i11 = 0; i11 < poly1->GetNumPoints(); i11++) {
-            d1 = poly1->GetPoint(i11);
-            i12 = (i11 + 1) % (poly1->GetNumPoints());
-            d2 = poly1->GetPoint(i12);
+    epp_poly_list *Triangles = resultsentinal->Next;
+    for(iter1 = Triangles;
+        iter1 != resultsentinal;
+        iter1 = iter1->Next)
+    {
+        poly1 = &iter1->Poly;
+
+        for(i11 = 0; i11 < poly1->numpoints; i11++)
+        {
+            d1 = poly1->points[i11];
+            i12 = (i11 + 1) % (poly1->numpoints);
+            d2 = poly1->points[i12];
 
             isdiagonal = false;
-            for (iter2 = iter1; iter2 != triangles.end(); iter2++) {
-                if (iter1 == iter2) {
+            for(iter2 = Triangles;
+                iter2 != resultsentinal;
+                iter2 = iter2->Next)
+            {
+                if(iter1 == iter2)
                     continue;
-                }
-                poly2 = &(*iter2);
 
-                for (i21 = 0; i21 < poly2->GetNumPoints(); i21++) {
-                    if ((d2.x != poly2->GetPoint(i21).x) || (d2.y != poly2->GetPoint(i21).y)) {
+                poly2 = &iter2->Poly;
+
+                for(i21 = 0; i21 < poly2->numpoints; i21++)
+                {
+                    if((d2.x != poly2->points[i21].x) || (d2.y != poly2->points[i21].y))
                         continue;
-                    }
-                    i22 = (i21 + 1) % (poly2->GetNumPoints());
-                    if ((d1.x != poly2->GetPoint(i22).x) || (d1.y != poly2->GetPoint(i22).y)) {
+
+                    i22 = (i21 + 1) % (poly2->numpoints);
+                    if((d1.x != poly2->points[i22].x) || (d1.y != poly2->points[i22].y))
                         continue;
-                    }
+
                     isdiagonal = true;
                     break;
                 }
-                if (isdiagonal) {
+
+                if(isdiagonal)
                     break;
-                }
             }
 
-            if (!isdiagonal) {
+            if(!isdiagonal)
                 continue;
-            }
 
-            p2 = poly1->GetPoint(i11);
-            if (i11 == 0) {
-                i13 = poly1->GetNumPoints() - 1;
-            } else {
+            p2 = poly1->points[i11];
+            if(i11 == 0)
+                i13 = poly1->numpoints - 1;
+            else
                 i13 = i11 - 1;
-            }
-            p1 = poly1->GetPoint(i13);
-            if (i22 == (poly2->GetNumPoints() - 1)) {
+            p1 = poly1->points[i13];
+
+            if(i22 == (poly2->numpoints - 1))
                 i23 = 0;
-            } else {
+            else
                 i23 = i22 + 1;
-            }
-            p3 = poly2->GetPoint(i23);
+            p3 = poly2->points[i23];
 
-            if (!IsConvex(p1, p2, p3)) {
+            if(!EPPIsConvex(p1, p2, p3))
                 continue;
-            }
+            p2 = poly1->points[i12];
 
-            p2 = poly1->GetPoint(i12);
-            if (i12 == (poly1->GetNumPoints() - 1)) {
+            if (i12 == (poly1->numpoints - 1))
                 i13 = 0;
-            } else {
+            else
                 i13 = i12 + 1;
-            }
-            p3 = poly1->GetPoint(i13);
-            if (i21 == 0) {
-                i23 = poly2->GetNumPoints() - 1;
-            } else {
+            p3 = poly1->points[i13];
+
+            if(i21 == 0)
+                i23 = poly2->numpoints - 1;
+            else
                 i23 = i21 - 1;
-            }
-            p1 = poly2->GetPoint(i23);
+            p1 = poly2->points[i23];
 
-            if (!IsConvex(p1, p2, p3)) {
+            if(!EPPIsConvex(p1, p2, p3))
                 continue;
-            }
 
-            newpoly.Init(poly1->GetNumPoints() + poly2->GetNumPoints() - 2);
+            newpoly.numpoints = poly1->numpoints + poly2->numpoints - 2;
+            newpoly.points = PushArray(Arena, newpoly.numpoints, epp_point);
+
             k = 0;
-            for (j = i12; j != i11; j = (j + 1) % (poly1->GetNumPoints())) {
-                newpoly[k] = poly1->GetPoint(j);
-                k++;
-            }
-            for (j = i22; j != i21; j = (j + 1) % (poly2->GetNumPoints())) {
-                newpoly[k] = poly2->GetPoint(j);
+            for(j = i12; j != i11; j = (j + 1) % (poly1->numpoints))
+            {
+                newpoly.points[k] = poly1->points[j];
                 k++;
             }
 
-            triangles.erase(iter2);
-            *iter1 = newpoly;
-            poly1 = &(*iter1);
+            for(j = i22; j != i21; j = (j + 1) % (poly2->numpoints))
+            {
+                newpoly.points[k] = poly2->points[j];
+                k++;
+            }
+
+            DLIST_REMOVE(iter2);
+            POLY_FREELIST_DEALLOCATE(iter2, *freelist);
+            iter1->Poly = newpoly;
+            poly1 = &iter1->Poly;
             i11 = -1;
 
             continue;
         }
     }
 
-    for (iter1 = triangles.begin(); iter1 != triangles.end(); iter1++) {
-        parts->push_back(*iter1);
-    }
-
     return 1;
 }
 
-int TPPLPartition::ConvexPartition_HM(TPPLPolyList *inpolys, TPPLPolyList *parts) {
-    TPPLPolyList outpolys;
-    TPPLPolyList::iterator iter;
+inline int
+EPPConvexPartitionHM(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
+                     epp_poly_list **freelist, memory_arena *Arena)
+{
+    epp_poly_list *inpolys = insentinal->Next;
+    epp_poly_list *iter = 0;
 
-    if (!RemoveHoles(inpolys, &outpolys)) {
+    if(!EPPRemoveHoles(insentinal, freelist, Arena))
         return 0;
-    }
-    for (iter = outpolys.begin(); iter != outpolys.end(); iter++) {
-        if (!ConvexPartition_HM(&(*iter), parts)) {
+
+    for(iter = inpolys;
+        iter != insentinal;
+        iter = iter->Next)
+    {
+        if (!EPPConvexPartitionHM(&iter->Poly, resultsentinal, freelist, Arena))
             return 0;
-        }
     }
+
     return 1;
 }
-#endif
 
 #if 0
 
