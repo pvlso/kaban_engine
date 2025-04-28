@@ -51,5 +51,21 @@ struct world_polygon_set
     world_polygon *Polygons;
 };
 
+struct nav_poly_node
+{
+    world_position TileP;
+
+    s32 Index;
+    s32 PolyIndex;
+    
+    b32 Visited;
+
+    r32 GlobalGoal;
+    r32 LocalGoal;
+
+    nav_poly_node *Neighbours;
+    nav_poly_node *Parent;
+};
+
 #define EDITOR_GAME_MODE_NAVMESH_H
 #endif

@@ -212,6 +212,12 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         Result->AutoWriteSeconds = 300.0f;
 
         DLIST_INIT(&Result->MeshPolygonsSentinal);
+
+        Result->PolyNodeCount = 0;
+        Result->PolyNodes = PushArray(&EditorState->ModeArena, 512, nav_poly_node);
+        Result->MinPolyNodeHeap.MaxSize = 256;
+        Result->MinPolyNodeHeap.Size = 0;
+        Result->MinPolyNodeHeap.Nodes = PushArray(&EditorState->ModeArena, Result->MinPolyNodeHeap.MaxSize, sort_entry);
         
         EditorState->GameMode = Result;
     }
@@ -247,12 +253,12 @@ RenderMapGrid(render_group *RenderGroup, ui_state *UIState, world *World, world_
                 v2 Delta = Subtract(World, &TileP, &CameraP);
 #if 1
 
-                if(Global_EditorGameMode_ShowCoords)
+//                if(Global_EditorGameMode_ShowCoords)
                 {
                     FormatString(ArrayCount(Text), Text, "%d,%d", TileX, TileY);
                     entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform, &Transform, V3(Delta, 0.0f) - V3(0.32f, 0.48f, 0.0f));
                     v3 P = Unproject(&UIState->RenderGroup, &Transform, BasisP.P);
-                    UITextOutAt(UIState, P.xy, Text, 0.6f);
+                    UITextOutAt(UIState, P.xy, Text, 0.42f);
                 }
 
                 PushRectOutline(RenderGroup, &Transform, V3(Delta, 0.0f),
@@ -318,7 +324,8 @@ RenderMapGroundTiles(render_group *RenderGroup, world *World, world_position Cam
 }
 
 internal void
-DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s32 Count, world_position BaseP, s32 CurrentPolygonIndex, memory_arena *Arena)
+DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s32 Count,
+             world_position BaseP, s32 CurrentPolygonIndex, memory_arena *Arena)
 {
     object_transform Flat = DefaultFlatTransform();
     for(s32 Index = 0;
@@ -788,6 +795,42 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                         {
                             PartitionPolies(GameMode, SimRegion,
                                             RenderGroup, &Flat, TempMem.Arena);
+
+                            polygon2 DrawPoly = {};
+                            DrawPoly.VertexCount = 0;
+                            DrawPoly.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+
+                            s32 PIndex = 0;
+                            for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
+                                Iter != &GameMode->MeshPolygonsSentinal;
+                                Iter = Iter->Next)
+                            {
+                                world_polygon *Poly = &Iter->Poly;
+                                ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &DrawPoly);
+
+                                v2 Center = {};
+                                f32 SignedArea = 0.0f;
+                                for(s32 I = 0; I < DrawPoly.VertexCount; ++I)
+                                {
+                                    v2 p0 = DrawPoly.Vertices[I];
+                                    v2 p1 = DrawPoly.Vertices[(I + 1) % DrawPoly.VertexCount];
+
+                                    f32 C = Cross(p0, p1);
+                                    SignedArea += C;
+
+                                    Center += (p0 + p1)*C;
+                                }
+
+                                SignedArea *= 0.5f;
+                                if(AbsoluteValue(SignedArea) > 0)
+                                    Center *= 1.0f / (6.0f*SignedArea);
+
+                                nav_poly_node *Node = GameMode->PolyNodes + GameMode->PolyNodeCount++;                                
+                                InitNavPolyNode(Node, (GameMode->PolyNodeCount - 1), PIndex,
+                                                MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, Center));
+                                PIndex += 1;
+                            }
+                            
 //                            TriangulatePolygons(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                            BuildAdjacenciesArray(GameMode, SimRegion);
                             GameMode->Triangulated = true;
@@ -821,6 +864,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                    
                     if(GameMode->Triangulated)
                     {
+                        char Text[32];
                         polygon2 DrawPoly = {};
                         DrawPoly.VertexCount = 0;
                         DrawPoly.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
@@ -832,6 +876,31 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                         {
                             world_polygon *Poly = &Iter->Poly;
                             ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &DrawPoly);
+
+                            v2 Center = {};
+                            f32 SignedArea = 0.0f;
+                            for(s32 I = 0; I < DrawPoly.VertexCount; ++I)
+                            {
+                                v2 p0 = DrawPoly.Vertices[I];
+                                v2 p1 = DrawPoly.Vertices[(I + 1) % DrawPoly.VertexCount];
+
+                                f32 C = Cross(p0, p1);
+                                SignedArea += C;
+
+                                Center += (p0 + p1)*C;
+                            }
+
+                            SignedArea *= 0.5f;
+                            if(AbsoluteValue(SignedArea) > 0)
+                                Center *= 1.0f / (6.0f*SignedArea);
+
+                            PushRect(RenderGroup, &Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
+
+                            FormatString(ArrayCount(Text), Text, "%d", C);
+                            entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform,
+                                                                                 &Flat, V3(Center, 0.0f));
+                            v3 P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
+                            UITextOutAt(UIState, P.xy, Text, 1.2f);
                             
                             triangulate_result TResult = DelaunayTriangulate(&DrawPoly, TempMem.Arena);
                             for(s32 TIndex = 0;
@@ -839,13 +908,56 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                 ++TIndex)
                             {
                                 triangle *T = TResult.Triangles + TIndex;
-                                PushTriangle(RenderGroup, &Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.8f));
+                                PushTriangle(RenderGroup, &Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.5f));
                                     
                             }
                             Platform.DeallocateMemory(TResult.Triangles);
                             Platform.DeallocateMemory(TResult.Adjacencies);
                             ++C;
                         }
+
+                        s32 I1 = 0;
+                        for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
+                            Iter != &GameMode->MeshPolygonsSentinal;
+                            Iter = Iter->Next)
+                        {
+                            world_polygon *Poly = &Iter->Poly;
+                                
+                            s32 I2 = 1;
+                            for(world_polygon_list *Iter2 = Iter->Next;
+                                Iter2 != &GameMode->MeshPolygonsSentinal;
+                                Iter2 = Iter2->Next)
+                            {
+                                world_polygon *Poly2 = &Iter2->Poly;
+
+                                for(s32 I = 0; I < Poly->VertexCount; ++I)
+                                {
+                                    world_position A1 = Poly->Vertices[I];
+                                    world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
+
+                                    for(s32 J = 0; J < Poly2->VertexCount; ++J)
+                                    {
+                                        world_position A2 = Poly2->Vertices[J];
+                                        world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
+
+                                        if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
+                                           ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
+                                           ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
+                                           ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)))
+                                        {
+                                            int a = 0;
+//                                            nav_poly_node *Node
+                                            break;
+                                        }
+                                    }
+                                }
+                                    
+                                ++I2;
+                            }
+
+                            ++I1;
+                        }
+
                         
 //                        BuildAdjacenciesArray(GameMode, SimRegion);
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);

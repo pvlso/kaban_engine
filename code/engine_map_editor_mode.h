@@ -98,6 +98,10 @@ struct editor_mode_game
     s32 MeshPolygonCount;
     world_polygon_list MeshPolygonsSentinal;
     world_polygon_list *FreePolygons;
+
+    u32 PolyNodeCount;
+    nav_poly_node *PolyNodes;
+    heap MinPolyNodeHeap;
     
     f32 AutoWriteSeconds;
     f32 Zoom;
