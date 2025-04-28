@@ -1040,3 +1040,64 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     
     EndTemporaryMemory(TempMem);
 }
+
+internal void
+PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
+                render_group *RenderGroup, object_transform *Flat,
+                memory_arena *Arena)
+{
+    TIMED_BLOCK("PARTITION");
+
+    polygon2 P = {};
+    P.VertexCount = 0;
+    P.Vertices = PushArray(Arena, MAX_VERTEX_COUNT, v2);
+
+    epp_poly_list *Free = 0;
+    epp_poly_list In = {};
+    DLIST_INIT(&In);
+
+    for(u32 Index = 0;
+        Index < GameMode->PolygonCount;
+        ++Index)
+    {
+        world_polygon *Poly = GameMode->Polies + Index;
+        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &P);
+
+        epp_poly_list *New = 0;
+        POLY_FREELIST_ALLOCATE(New, Free, PushStruct(Arena, epp_poly_list));
+        epp_poly *poly = &New->Poly;
+        poly->numpoints = Poly->VertexCount;
+        poly->points = PushArray(Arena, poly->numpoints, epp_point);
+        for(s32 I = 0;
+            I < poly->numpoints;
+            ++I)
+        {
+            poly->points[I].x = P.Vertices[I].x;
+            poly->points[I].y = P.Vertices[I].y;
+            poly->points[I].id = I;
+        }
+
+        EPPSetOrientation(poly, EPP_ORIENTATION_CCW); // Ensure clockwise
+        DLIST_INSERT(&In, New);                            
+
+        epp_poly_list Result = {};
+        Result.Next = &Result;
+        Result.Prev = &Result;
+                                
+        int r = EPPConvexPartitionHM(&In, &Result, &Free, Arena);
+        for(epp_poly_list *Iter = Result.Next;
+            Iter != &Result;
+            Iter = Iter->Next)
+        {
+            epp_poly P = Iter->Poly;
+            world_polygon_list *New = 0;
+            POLY_FREELIST_ALLOCATE(New, GameMode->FreePolygons,
+                                   (world_polygon_list *)Platform.AllocateMemory(sizeof(world_polygon_list)));
+            DLIST_INSERT(&GameMode->MeshPolygonsSentinal, New);                            
+            New->Poly.VertexCount = P.numpoints;
+            New->Poly.Vertices = (world_position *)Platform.AllocateMemory(sizeof(world_position)*New->Poly.VertexCount);
+            for(s32 J = 0; J < P.numpoints; ++ J)
+                New->Poly.Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, V2(P.points[J].x, P.points[J].y));
+        }
+    }
+}

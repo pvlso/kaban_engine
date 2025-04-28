@@ -53,6 +53,13 @@ struct controlled_camera
     entity_id EntityIndex;
 };
 
+struct world_polygon_list
+{
+    world_polygon Poly;
+    world_polygon_list *Next;
+    world_polygon_list *Prev;
+};
+
 struct editor_mode_game
 {
     u32 CurrentAction;
@@ -87,6 +94,10 @@ struct editor_mode_game
     world_triangle *MeshTriangles;
     s32 FreeIndexCount;
     s32 *FreeTriangleIndices;
+    
+    s32 MeshPolygonCount;
+    world_polygon_list MeshPolygonsSentinal;
+    world_polygon_list *FreePolygons;
     
     f32 AutoWriteSeconds;
     f32 Zoom;
