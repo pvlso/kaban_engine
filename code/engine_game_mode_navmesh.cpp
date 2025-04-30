@@ -1049,7 +1049,6 @@ InitNavPolyNode(nav_poly_node *Node, s32 Index, s32 PolyIndex, world_position P)
     Node->PolyIndex = PolyIndex;
     Node->Visited = false;
     Node->Parent = 0;
-    Node->Neighbours = 0;
 }
 
 internal void
@@ -1102,9 +1101,7 @@ PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
         Iter = Iter->Next)
     {
         epp_poly P = Iter->Poly;
-        world_polygon_list *New = 0;
-        POLY_FREELIST_ALLOCATE(New, GameMode->FreePolygons,
-                               (world_polygon_list *)Platform.AllocateMemory(sizeof(world_polygon_list)));
+        world_polygon_list *New = (world_polygon_list *)Platform.AllocateMemory(sizeof(world_polygon_list));
         DLIST_INSERT(&GameMode->MeshPolygonsSentinal, New);                            
         New->Poly.VertexCount = P.numpoints;
         New->Poly.Vertices = (world_position *)Platform.AllocateMemory(sizeof(world_position)*New->Poly.VertexCount);

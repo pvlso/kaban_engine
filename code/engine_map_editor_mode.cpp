@@ -793,8 +793,31 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                         case GMAction_TriangulateAll:
                         {
+                            for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
+                                Iter != &GameMode->MeshPolygonsSentinal;
+                                )
+                            {
+                                world_polygon_list *T = Iter;
+                                Iter = T->Next;
+
+                                DLIST_REMOVE(T);
+                                Platform.DeallocateMemory(T->Poly.Vertices);
+                                Platform.DeallocateMemory(T);
+                            }
+                            
                             PartitionPolies(GameMode, SimRegion,
                                             RenderGroup, &Flat, TempMem.Arena);
+#if 1
+                            for(u32 I = 0;
+                                I < GameMode->PolyNodeCount;
+                                ++I)
+                            {
+                                nav_poly_node *Node = GameMode->PolyNodes + I;
+                                Node->NeighbourCount = 0;
+                            }
+
+                            GameMode->PolyNodeCount = 0;                            
+#endif
 
                             polygon2 DrawPoly = {};
                             DrawPoly.VertexCount = 0;
@@ -830,6 +853,109 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                                 MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, Center));
                                 PIndex += 1;
                             }
+                            
+#if 1
+                            s32 I1 = 0;
+                            for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
+                                Iter != &GameMode->MeshPolygonsSentinal;
+                                Iter = Iter->Next)
+                            {
+                                world_polygon *Poly = &Iter->Poly;
+                                
+                                s32 I2 = I1 + 1;
+                                for(world_polygon_list *Iter2 = Iter->Next;
+                                    Iter2 != &GameMode->MeshPolygonsSentinal;
+                                    Iter2 = Iter2->Next)
+                                {
+                                    world_polygon *Poly2 = &Iter2->Poly;
+
+                                    b32 Found = false;
+                                    for(s32 I = 0; I < Poly->VertexCount; ++I)
+                                    {
+                                        world_position A1 = Poly->Vertices[I];
+                                        world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
+
+                                        for(s32 J = 0; J < Poly2->VertexCount; ++J)
+                                        {
+                                            world_position A2 = Poly2->Vertices[J];
+                                            world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
+
+                                            if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
+                                               ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
+                                               ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
+                                               ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)) &&
+                                               (((A1.Offset.x == A2.Offset.x) && (A1.Offset.y == A2.Offset.y)) &&
+                                                ((B1.Offset.x == B2.Offset.x) && (B1.Offset.y == B2.Offset.y)) ||
+                                                ((B1.Offset.x == A2.Offset.x) && (B1.Offset.y == A2.Offset.y)) &&
+                                                ((A1.Offset.x == B2.Offset.x) && (A1.Offset.y == B2.Offset.y))))
+                                            {
+                                                nav_poly_node *Poly1Node = GameMode->PolyNodes + I1;
+                                                nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
+                                                if(Poly1Node->NeighbourCount == 0)
+                                                {
+                                                    Poly1Node->Neighbours[Poly1Node->NeighbourCount++] = Poly2Node;
+                                                }
+                                                else
+                                                {
+                                                    b32 IsNew = true;
+                                                    for(s32 NI = 0;
+                                                        NI < Poly1Node->NeighbourCount;
+                                                        ++NI)
+                                                    {
+                                                        nav_poly_node *Test = Poly1Node->Neighbours[NI];
+                                                        if(Test->PolyIndex == I2)
+                                                        {
+                                                            IsNew = false;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if(IsNew)
+                                                    {
+                                                        Poly1Node->Neighbours[Poly1Node->NeighbourCount++] = Poly2Node;
+                                                    }
+                                                }
+
+                                                if(Poly2Node->NeighbourCount == 0)
+                                                {
+                                                    Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                }
+                                                else
+                                                {
+                                                    b32 IsNew = true;
+                                                    for(s32 NI = 0;
+                                                        NI < Poly2Node->NeighbourCount;
+                                                        ++NI)
+                                                    {
+                                                        nav_poly_node *Test = Poly2Node->Neighbours[NI];
+                                                        if(Test->PolyIndex == I1)
+                                                        {
+                                                            IsNew = false;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if(IsNew)
+                                                    {
+                                                        Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                    }
+                                                }
+
+                                                Found = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if(Found)
+                                            break;
+                                    }
+                                    
+                                    ++I2;
+                                }
+
+                                ++I1;
+                            }
+#endif
                             
 //                            TriangulatePolygons(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                            BuildAdjacenciesArray(GameMode, SimRegion);
@@ -876,7 +1002,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                         {
                             world_polygon *Poly = &Iter->Poly;
                             ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &DrawPoly);
-
+#if 0
                             v2 Center = {};
                             f32 SignedArea = 0.0f;
                             for(s32 I = 0; I < DrawPoly.VertexCount; ++I)
@@ -896,11 +1022,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                             PushRect(RenderGroup, &Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
 
-                            FormatString(ArrayCount(Text), Text, "%d", C);
-                            entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform,
-                                                                                 &Flat, V3(Center, 0.0f));
-                            v3 P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
-                            UITextOutAt(UIState, P.xy, Text, 1.2f);
+#endif
                             
                             triangulate_result TResult = DelaunayTriangulate(&DrawPoly, TempMem.Arena);
                             for(s32 TIndex = 0;
@@ -908,7 +1030,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                 ++TIndex)
                             {
                                 triangle *T = TResult.Triangles + TIndex;
-                                PushTriangle(RenderGroup, &Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.5f));
+                                PushTriangle(RenderGroup, &Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.2f));
                                     
                             }
                             Platform.DeallocateMemory(TResult.Triangles);
@@ -916,48 +1038,31 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                             ++C;
                         }
 
-                        s32 I1 = 0;
-                        for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-                            Iter != &GameMode->MeshPolygonsSentinal;
-                            Iter = Iter->Next)
+                        for(u32 I = 0;
+                            I < GameMode->PolyNodeCount;
+                            ++I)
                         {
-                            world_polygon *Poly = &Iter->Poly;
-                                
-                            s32 I2 = 1;
-                            for(world_polygon_list *Iter2 = Iter->Next;
-                                Iter2 != &GameMode->MeshPolygonsSentinal;
-                                Iter2 = Iter2->Next)
+                            nav_poly_node *Node = GameMode->PolyNodes + I;
+                            v2 Center = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
+
+                            PushRect(RenderGroup, &Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
+
+                            FormatString(ArrayCount(Text), Text, "%d", I);
+                            entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform,
+                                                                                 &Flat, V3(Center, 0.0f));
+                            v3 P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
+                            UITextOutAt(UIState, P.xy, Text, 1.2f);
+
+                            for(s32 J = 0;
+                                J < Node->NeighbourCount;
+                                ++J)
                             {
-                                world_polygon *Poly2 = &Iter2->Poly;
-
-                                for(s32 I = 0; I < Poly->VertexCount; ++I)
-                                {
-                                    world_position A1 = Poly->Vertices[I];
-                                    world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
-
-                                    for(s32 J = 0; J < Poly2->VertexCount; ++J)
-                                    {
-                                        world_position A2 = Poly2->Vertices[J];
-                                        world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
-
-                                        if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
-                                           ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
-                                           ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
-                                           ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)))
-                                        {
-                                            int a = 0;
-//                                            nav_poly_node *Node
-                                            break;
-                                        }
-                                    }
-                                }
-                                    
-                                ++I2;
+                                nav_poly_node *NNode = Node->Neighbours[J];
+                                v2 NCenter = Subtract(GameMode->WorldState->World, &NNode->TileP, &SimRegion->Origin);
+                                PushLine(RenderGroup, &Flat, V3(Center, 32.0f), V3(NCenter, 32.0f), V4(0, 0, 1, 1));
+                                
                             }
-
-                            ++I1;
                         }
-
                         
 //                        BuildAdjacenciesArray(GameMode, SimRegion);
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);

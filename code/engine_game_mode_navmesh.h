@@ -63,7 +63,8 @@ struct nav_poly_node
     r32 GlobalGoal;
     r32 LocalGoal;
 
-    nav_poly_node *Neighbours;
+    s32 NeighbourCount;
+    nav_poly_node *Neighbours[8];
     nav_poly_node *Parent;
 };
 
