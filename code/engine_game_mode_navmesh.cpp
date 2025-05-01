@@ -1110,3 +1110,96 @@ PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
             New->Poly.Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, V2(P.points[J].x, P.points[J].y));
     }
 }
+
+
+inline r32
+DistanceBetween(world *World, nav_poly_node *NodeA, nav_poly_node *NodeB)
+{
+    v2 Delta = Subtract(World, &NodeA->TileP, &NodeB->TileP);
+
+    r32 Result = SquareRoot(Square(Delta.x) + Square(Delta.y));
+
+    return(Result);
+}
+
+internal void
+SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *End)
+{
+    TIMED_FUNCTION();
+
+    if(Start && End)
+    {
+        for(u32 NodeIndex = 0;
+            NodeIndex < GameMode->PolyNodeCount;
+            ++NodeIndex)
+        {
+            nav_poly_node *Node = GameMode->PolyNodes + NodeIndex;
+            Node->Visited = false;
+            Node->GlobalGoal = Real32Maximum;
+            Node->LocalGoal = Real32Maximum;
+            Node->Parent = 0;
+        }
+
+        nav_poly_node *CurrentNode = Start;
+        CurrentNode->LocalGoal = 0.0f;
+        CurrentNode->GlobalGoal = DistanceBetween(GameMode->WorldState->World, Start, End);
+
+        heap *Heap = &GameMode->MinPolyNodeHeap;
+
+        sort_entry Key = {};
+        Key.Index = Start->Index;
+        Key.SortKey = Start->GlobalGoal;
+        MinHeapInsertNode(Heap, Key);
+
+        while((Heap->Size != 0) && (CurrentNode != End))
+        {
+            nav_poly_node *TestNode = GameMode->PolyNodes + Heap->Nodes[0].Index;
+            while((TestNode->Visited) && (Heap->Size != 0))
+            {
+                MinHeapExtractNode(Heap);
+                TestNode = GameMode->PolyNodes + Heap->Nodes[0].Index;
+            }
+
+            if(Heap->Size == 0)
+            {
+                break;
+            }
+
+            CurrentNode = GameMode->PolyNodes + Heap->Nodes[0].Index; 
+            CurrentNode->Visited = true;
+
+            for(s32 NeighbourIndex = 0;
+                NeighbourIndex < CurrentNode->NeighbourCount;
+                ++NeighbourIndex)
+            {
+                nav_poly_node *NeighbourNode = CurrentNode->Neighbours[NeighbourIndex];
+                if(NeighbourNode)
+                {
+                    if((!NeighbourNode->Visited))
+                    {
+                        sort_entry Key = {};
+                        Key.Index = NeighbourNode->Index;
+                        Key.SortKey = NeighbourNode->GlobalGoal;
+
+                        r32 LowerGoal = CurrentNode->LocalGoal + DistanceBetween(GameMode->WorldState->World, CurrentNode, NeighbourNode);
+                        if(LowerGoal < NeighbourNode->LocalGoal)
+                        {
+                            NeighbourNode->Parent = CurrentNode;
+                            NeighbourNode->LocalGoal = LowerGoal;
+
+                            NeighbourNode->GlobalGoal = (NeighbourNode->LocalGoal +
+                                                         DistanceBetween(GameMode->WorldState->World, NeighbourNode, End));
+                            Key.SortKey = NeighbourNode->GlobalGoal;
+                        }
+
+                        MinHeapInsertNode(Heap, Key);
+                    }
+                }
+            }
+        }
+
+        ZeroArray(Heap->MaxSize, Heap->Nodes);
+        Heap->Size = 0;
+    }
+    
+}

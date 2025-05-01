@@ -1069,6 +1069,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 //                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
                         EndTemporaryMemory(TempMem);
                     }
+
+                    SolvePolyAStar(GameMode, GameMode->PolyNodes + 0, GameMode->PolyNodes + (GameMode->PolyNodeCount - 1));
                 } break;
 
                 InvalidDefaultCase;
