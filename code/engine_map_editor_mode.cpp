@@ -893,7 +893,9 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                                 nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
                                                 if(Poly1Node->NeighbourCount == 0)
                                                 {
-                                                    Poly1Node->Neighbours[Poly1Node->NeighbourCount++] = Poly2Node;
+                                                    Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
+                                                    Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
+                                                    ++Poly1Node->NeighbourCount;
                                                 }
                                                 else
                                                 {
@@ -913,12 +915,16 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                                     if(IsNew)
                                                     {
                                                         Poly1Node->Neighbours[Poly1Node->NeighbourCount++] = Poly2Node;
+                                                        Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
+                                                        ++Poly1Node->NeighbourCount;
                                                     }
                                                 }
 
                                                 if(Poly2Node->NeighbourCount == 0)
                                                 {
                                                     Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                    Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
+                                                    ++Poly2Node->NeighbourCount;
                                                 }
                                                 else
                                                 {
@@ -938,6 +944,8 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                                     if(IsNew)
                                                     {
                                                         Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                        Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
+                                                        ++Poly2Node->NeighbourCount;
                                                     }
                                                 }
 
@@ -1067,10 +1075,26 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 //                        BuildAdjacenciesArray(GameMode, SimRegion);
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
+
+                        nav_poly_node *Path = SolvePolyAStar(GameMode, GameMode->PolyNodes + 18,
+                                                             GameMode->PolyNodes + 14);
+                        for(nav_poly_node *Node = Path;
+                            Node->Parent;
+                            Node = Node->Parent)
+                        {
+                            nav_poly_node *Next = Node->Parent;
+
+                            v2 A = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
+                            v2 B = Subtract(GameMode->WorldState->World, &Next->TileP, &SimRegion->Origin);
+                            PushLine(RenderGroup, &Flat, V3(A, 42.0f), V3(B, 42.0f), V4(1, 0, 0, 1));
+                        }
+
+                        world_position TileP = {18, 4};
+                        v2 A = Subtract(GameMode->WorldState->World, &TileP, &SimRegion->Origin);
+                        PushRect(RenderGroup, &Flat, V3(A, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 1, 1));
                         EndTemporaryMemory(TempMem);
                     }
-
-                    SolvePolyAStar(GameMode, GameMode->PolyNodes + 0, GameMode->PolyNodes + (GameMode->PolyNodeCount - 1));
+                    
                 } break;
 
                 InvalidDefaultCase;

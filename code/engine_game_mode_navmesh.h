@@ -51,6 +51,12 @@ struct world_polygon_set
     world_polygon *Polygons;
 };
 
+struct neighbour_edge
+{
+    world_position A;
+    world_position B;
+};
+
 struct nav_poly_node
 {
     world_position TileP;
@@ -65,6 +71,8 @@ struct nav_poly_node
 
     s32 NeighbourCount;
     nav_poly_node *Neighbours[8];
+    neighbour_edge NEdge[8];
+    
     nav_poly_node *Parent;
 };
 

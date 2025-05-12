@@ -1122,7 +1122,7 @@ DistanceBetween(world *World, nav_poly_node *NodeA, nav_poly_node *NodeB)
     return(Result);
 }
 
-internal void
+internal nav_poly_node *
 SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *End)
 {
     TIMED_FUNCTION();
@@ -1201,5 +1201,6 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
         ZeroArray(Heap->MaxSize, Heap->Nodes);
         Heap->Size = 0;
     }
-    
+
+    return(End);
 }
