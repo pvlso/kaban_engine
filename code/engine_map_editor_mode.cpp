@@ -848,9 +848,12 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
                                 if(AbsoluteValue(SignedArea) > 0)
                                     Center *= 1.0f / (6.0f*SignedArea);
 
+                                rectangle2i Bounds = CalculatePolygonBoundingBox(Poly);
+
                                 nav_poly_node *Node = GameMode->PolyNodes + GameMode->PolyNodeCount++;                                
                                 InitNavPolyNode(Node, (GameMode->PolyNodeCount - 1), PIndex,
-                                                MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, Center));
+                                                MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, Center),
+                                                Bounds);
                                 PIndex += 1;
                             }
                             
@@ -914,7 +917,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                                                     if(IsNew)
                                                     {
-                                                        Poly1Node->Neighbours[Poly1Node->NeighbourCount++] = Poly2Node;
+                                                        Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
                                                         Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
                                                         ++Poly1Node->NeighbourCount;
                                                     }
@@ -922,7 +925,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                                                 if(Poly2Node->NeighbourCount == 0)
                                                 {
-                                                    Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                    Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
                                                     Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
                                                     ++Poly2Node->NeighbourCount;
                                                 }
@@ -943,7 +946,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                                                     if(IsNew)
                                                     {
-                                                        Poly2Node->Neighbours[Poly2Node->NeighbourCount++] = Poly1Node;
+                                                        Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
                                                         Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
                                                         ++Poly2Node->NeighbourCount;
                                                     }
@@ -1076,8 +1079,89 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 //                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
 //                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
 
-                        nav_poly_node *Path = SolvePolyAStar(GameMode, GameMode->PolyNodes + 18,
-                                                             GameMode->PolyNodes + 14);
+#if 1
+                        nav_poly_node *Path = SolvePolyAStar(GameMode, GameMode->PolyNodes + 17,
+                                                             GameMode->PolyNodes + 21);
+                        world_position TileP = {18, 4};
+                        world_position ETileP = {21, 19};
+                        v2 P = Subtract(GameMode->WorldState->World, &TileP, &SimRegion->Origin);
+//                        v2 EP = Subtract(GameMode->WorldState->World, &ETileP, &SimRegion->Origin);
+                        v2 EP = MouseP;
+                        PushRect(RenderGroup, &Flat, V3(P, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 1, 1));
+                        PushRect(RenderGroup, &Flat, V3(EP, 42.0f), V2(0.5f, 0.5f), V4(1, 0, 0, 1));
+
+                        s32 nportals = 0;
+                        f32 *portals = PushArray(TempMem.Arena, 128, f32);
+                        vcpy(&portals[nportals*4 + 0], P.E);
+                        vcpy(&portals[nportals*4 + 2], P.E);
+                        ++nportals;                        
+
+                        for(nav_poly_node *Node = Path;
+                            Node->Parent;
+                            Node = Node->Parent)
+                        {
+                            nav_poly_node *Parent = Node->Parent;
+                            neighbour_edge E = {};
+                            for(s32 I = 0;
+                                I < Node->NeighbourCount;
+                                ++I)
+                            {
+                                nav_poly_node *N = Node->Neighbours[I];
+                                if(N->Index == Parent->Index)
+                                {
+                                    E = Node->NEdge[I];
+                                    break;
+                                }
+                            }
+                            
+                            v2 A = Subtract(GameMode->WorldState->World, &E.A, &SimRegion->Origin);
+                            v2 B = Subtract(GameMode->WorldState->World, &E.B, &SimRegion->Origin);
+
+                            PushLine(RenderGroup, &Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
+
+                            vcpy(&portals[nportals*4 + 0], B.E);
+                            vcpy(&portals[nportals*4 + 2], A.E);
+                            ++nportals;                        
+
+                            PushRect(RenderGroup, &Flat, V3(A, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 0, 1));
+                            PushRect(RenderGroup, &Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 0, 1));
+#if 0
+                            v2 d = B - A;
+                            v2 ap = P - A;
+                            f32 Invdot = 1.0f / Inner(d, d);
+                            f32 t = Inner(ap, d) *Invdot;
+                            v2 Q = A + t*d;
+                            if(t < 0.0f)
+                            {
+                                Q = A;
+                            }
+                            else if(t > 1.0f)
+                            {
+                                Q = B;
+                            }
+
+                            PushRect(RenderGroup, &Flat, V3(Q, 42.0f), V2(0.25f, 0.25f), V4(1, 1, 1, 1));
+                            P = Q;
+#endif
+                        }
+
+                        vcpy(&portals[nportals*4 + 0], EP.E);
+                        vcpy(&portals[nportals*4 + 2], EP.E);
+                        ++nportals;                        
+
+                        s32 maxpts = 128;
+                        f32 *pts = PushArray(TempMem.Arena, maxpts, f32);
+                        s32 npts = stringPull(portals, nportals, pts, maxpts);
+
+                        for(s32 I = 0;
+                            I < npts - 1;
+                            ++I)
+                        {
+                            v2 A = V2(pts[I*2 + 0], pts[I*2 + 1]);
+                            v2 B = V2(pts[(I + 1)*2 + 0], pts[(I + 1)*2 + 1]);
+                            PushLine(RenderGroup, &Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
+                        }
+                        
                         for(nav_poly_node *Node = Path;
                             Node->Parent;
                             Node = Node->Parent)
@@ -1086,12 +1170,25 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                             v2 A = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
                             v2 B = Subtract(GameMode->WorldState->World, &Next->TileP, &SimRegion->Origin);
-                            PushLine(RenderGroup, &Flat, V3(A, 42.0f), V3(B, 42.0f), V4(1, 0, 0, 1));
-                        }
 
-                        world_position TileP = {18, 4};
-                        v2 A = Subtract(GameMode->WorldState->World, &TileP, &SimRegion->Origin);
-                        PushRect(RenderGroup, &Flat, V3(A, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 1, 1));
+                            PushLine(RenderGroup, &Flat, V3(A, 42.0f), V3(B, 42.0f), V4(1, 0, 0, 1));
+
+                            rectangle2 Rect = {};
+                            world_position Min = {Node->Bounds.Min.x, Node->Bounds.Min.y};
+                            world_position Max = {Node->Bounds.Max.x, Node->Bounds.Max.y};
+                            Rect.Min = Subtract(GameMode->WorldState->World, &Min, &SimRegion->Origin);
+                            Rect.Max = Subtract(GameMode->WorldState->World, &Max, &SimRegion->Origin);
+
+                            world_position MP = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
+    
+                            b32 IsInside = IsInRectangleMesh(Node->Bounds, {MP.TileX, MP.TileY});
+                            v4 Color = V4(1, 0, 1, 1);
+                            if(IsInside)
+                                Color = V4(1, 0, 0, 1);
+
+                            PushRectOutline(RenderGroup, &Flat, Rect, 50.0f, Color, 0.02f);
+                        }
+#endif                        
                         EndTemporaryMemory(TempMem);
                     }
                     

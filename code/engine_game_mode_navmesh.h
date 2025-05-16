@@ -69,12 +69,43 @@ struct nav_poly_node
     r32 GlobalGoal;
     r32 LocalGoal;
 
+    rectangle2i Bounds;
+
     s32 NeighbourCount;
     nav_poly_node *Neighbours[8];
     neighbour_edge NEdge[8];
     
     nav_poly_node *Parent;
 };
+
+inline rectangle2i
+CalculatePolygonBoundingBox(world_polygon *A)
+{
+    rectangle2i Result = InvertedInfinityRectangle2i();
+
+    for(s32 I = 0;
+        I < A->VertexCount;
+        ++I)
+    {
+        if(A->Vertices[I].TileX < Result.Min.x) Result.Min.x = A->Vertices[I].TileX;
+        if(A->Vertices[I].TileX > Result.Max.x) Result.Max.x = A->Vertices[I].TileX;
+        if(A->Vertices[I].TileY < Result.Min.y) Result.Min.y = A->Vertices[I].TileY;
+        if(A->Vertices[I].TileY > Result.Max.y) Result.Max.y = A->Vertices[I].TileY;
+    }
+    
+    return(Result);
+}
+
+inline bool32
+IsInRectangleMesh(rectangle2i Rectangle, v2i Test)
+{
+    bool32 Result = ((Test.x >= Rectangle.Min.x) &&
+                     (Test.y >= Rectangle.Min.y) &&
+                     (Test.x <= Rectangle.Max.x) &&
+                     (Test.y <= Rectangle.Max.y));
+
+    return(Result);
+}
 
 #define EDITOR_GAME_MODE_NAVMESH_H
 #endif

@@ -1042,12 +1042,14 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
 }
 
 inline void
-InitNavPolyNode(nav_poly_node *Node, s32 Index, s32 PolyIndex, world_position P)
+InitNavPolyNode(nav_poly_node *Node, s32 Index, s32 PolyIndex,
+                world_position P, rectangle2i Bounds)
 {
     Node->TileP = P;
     Node->Index = Index;
     Node->PolyIndex = PolyIndex;
     Node->Visited = false;
+    Node->Bounds = Bounds;
     Node->Parent = 0;
 }
 
@@ -1203,4 +1205,121 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
     }
 
     return(End);
+}
+inline float triarea2(const float* a, const float* b, const float* c)
+{
+    const float ax = b[0] - a[0];
+    const float ay = b[1] - a[1];
+    const float bx = c[0] - a[0];
+    const float by = c[1] - a[1];
+    return bx*ay - ax*by;
+}
+
+inline bool vequal(const float* a, const float* b)
+{
+    static const float eq = 0.001f*0.001f;
+    f32 ax = b[0] - a[0];
+    f32 ay = b[1] - a[1];
+    f32 Result = ax*ax + ay*ay;
+
+    return Result < eq;
+}
+
+inline void
+vcpy(float *Dest, const float *Source)
+{
+    Copy(sizeof(f32)*2, (void *)Source, Dest);
+}
+
+int stringPull(const float* portals, int nportals,
+               float* pts, const int maxPts)
+{
+    TIMED_FUNCTION();
+    // Find straight path.
+    int npts = 0;
+    // Init scan state
+    float portalApex[2], portalLeft[2], portalRight[2];
+    int apexIndex = 0, leftIndex = 0, rightIndex = 0;
+    vcpy(portalApex, &portals[0]);
+    vcpy(portalLeft, &portals[0]);
+    vcpy(portalRight, &portals[2]);
+
+    // Add start point.
+    vcpy(&pts[npts*2], portalApex);
+    npts++;
+
+    for (int i = 1; i < nportals && npts < maxPts; ++i)
+    {
+        const float* left = &portals[i*4+0];
+        const float* right = &portals[i*4+2];
+
+        // Update right vertex.
+        if (triarea2(portalApex, portalRight, right) <= 0.0f)
+        {
+            if (vequal(portalApex, portalRight) || triarea2(portalApex, portalLeft, right) > 0.0f)
+            {
+                // Tighten the funnel.
+                vcpy(portalRight, right);
+                rightIndex = i;
+            }
+            else
+            {
+                // Right over left, insert left to path and restart scan from portal left point.
+                vcpy(&pts[npts*2], portalLeft);
+                npts++;
+                // Make current left the new apex.
+                vcpy(portalApex, portalLeft);
+                apexIndex = leftIndex;
+                // Reset portal
+                vcpy(portalLeft, portalApex);
+                vcpy(portalRight, portalApex);
+                leftIndex = apexIndex;
+                rightIndex = apexIndex;
+                // Restart scan
+                i = apexIndex;
+                continue;
+            }
+        }
+
+        // Update left vertex.
+        if (triarea2(portalApex, portalLeft, left) >= 0.0f)
+        {
+            if (vequal(portalApex, portalLeft) || triarea2(portalApex, portalRight, left) < 0.0f)
+            {
+                // Tighten the funnel.
+                vcpy(portalLeft, left);
+                leftIndex = i;
+            }
+            else
+            {
+                // Left over right, insert right to path and restart scan from portal right point.
+                vcpy(&pts[npts*2], portalRight);
+                npts++;
+                // Make current right the new apex.
+                vcpy(portalApex, portalRight);
+                apexIndex = rightIndex;
+                // Reset portal
+                vcpy(portalLeft, portalApex);
+                vcpy(portalRight, portalApex);
+                leftIndex = apexIndex;
+                rightIndex = apexIndex;
+                // Restart scan
+                i = apexIndex;
+                continue;
+            }
+        }
+    }
+    // Append last point to path.
+    if (npts < maxPts)
+    {
+        vcpy(&pts[npts*2], &portals[(nportals-1)*4+0]);
+        npts++;
+    }
+
+    return npts;
+}
+
+internal void
+CalculatePath()
+{
 }
