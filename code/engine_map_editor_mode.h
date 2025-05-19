@@ -56,6 +56,8 @@ struct controlled_camera
 struct world_polygon_list
 {
     world_polygon Poly;
+    polygon2 RealPoly;
+
     world_polygon_list *Next;
     world_polygon_list *Prev;
 };
@@ -81,20 +83,16 @@ struct editor_mode_game
     s32 CurrentZLayer;
     ssa_tile Tile;
     array_cursor TileCursor;
-    
+
+// NOTE(paul): NAVIGATION MESHES --------------------------------------------------
     u32 CurrentPolygonIndex;
     world_polygon *CurrentPolygon;
 
     u32 PolygonCount;
-    b32 Triangulated;
     world_polygon *Polies;
     world_position *ChosenVertex;
 
-    s32 MeshTriangleCount;
-    world_triangle *MeshTriangles;
-    s32 FreeIndexCount;
-    s32 *FreeTriangleIndices;
-    
+    b32 Partitioned;
     s32 MeshPolygonCount;
     world_polygon_list MeshPolygonsSentinal;
     world_polygon_list *FreePolygons;
@@ -102,6 +100,13 @@ struct editor_mode_game
     u32 PolyNodeCount;
     nav_poly_node *PolyNodes;
     heap MinPolyNodeHeap;
+
+//    s32 MeshTriangleCount;
+//    world_triangle *MeshTriangles;
+//    s32 FreeIndexCount;
+//    s32 *FreeTriangleIndices;
+
+// --------------------------------------------------------------------------------
     
     f32 AutoWriteSeconds;
     f32 Zoom;
