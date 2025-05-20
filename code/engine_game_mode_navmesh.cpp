@@ -1058,7 +1058,6 @@ InitNavPolyNode(nav_poly_node *Node, s32 Index, s32 PolyIndex,
 
 internal void
 PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
-                render_group *RenderGroup, object_transform *Flat,
                 memory_arena *Arena)
 {
     TIMED_BLOCK("PARTITION");
@@ -1323,9 +1322,7 @@ int stringPull(const float* portals, int nportals,
 }
 
 internal void
-PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion,
-                        render_group *RenderGroup, object_transform *Flat,
-                        memory_arena *TempArena)
+PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memory_arena *TempArena)
 {
     // NOTE(paul): Clear Mesh Polygon List
     for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
@@ -1337,12 +1334,12 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion,
 
         DLIST_REMOVE(T);
         Platform.DeallocateMemory(T->Poly.Vertices);
+        Platform.DeallocateMemory(T->RealPoly.Vertices);
         Platform.DeallocateMemory(T);
     }
                             
-    PartitionPolies(GameMode, SimRegion, RenderGroup, Flat, TempArena);
+    PartitionPolies(GameMode, SimRegion, TempArena);
 
-#if 0
     // NOTE(paul): Clear node neighbours count
     for(u32 I = 0;
         I < GameMode->PolyNodeCount;
@@ -1354,24 +1351,23 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion,
 
     GameMode->PolyNodeCount = 0;                            
 
-    polygon2 RealPoly = {};
-    RealPoly.VertexCount = 0;
-    RealPoly.Vertices = PushArray(TempArena, MAX_VERTEX_COUNT, v2);
-
     s32 PIndex = 0;
     for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
         Iter != &GameMode->MeshPolygonsSentinal;
         Iter = Iter->Next)
     {
         world_polygon *Poly = &Iter->Poly;
-        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &DrawPoly);
+        polygon2 *RealPoly = &Iter->RealPoly;
+        RealPoly->VertexCount = Poly->VertexCount;
+        RealPoly->Vertices = (v2 *)Platform.AllocateMemory(Poly->VertexCount*sizeof(v2));
+        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, RealPoly);
 
         v2 Center = {};
         f32 SignedArea = 0.0f;
-        for(s32 I = 0; I < DrawPoly.VertexCount; ++I)
+        for(s32 I = 0; I < RealPoly->VertexCount; ++I)
         {
-            v2 p0 = DrawPoly.Vertices[I];
-            v2 p1 = DrawPoly.Vertices[(I + 1) % DrawPoly.VertexCount];
+            v2 p0 = RealPoly->Vertices[I];
+            v2 p1 = RealPoly->Vertices[(I + 1) % RealPoly->VertexCount];
 
             f32 C = Cross(p0, p1);
             SignedArea += C;
@@ -1501,7 +1497,6 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion,
 
         ++I1;
     }
-#endif
 }
 
 internal void
@@ -1527,10 +1522,12 @@ WritePolygons(world_polygon *Polygons, s32 PolygonCount)
 }
 
 internal void
-DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s32 Count,
+DrawPolygons(editor_mode_game *GameMode, render_group *RenderGroup, ui_state *UIState, world *World, world_polygon *Polygons, s32 Count,
              world_position BaseP, s32 CurrentPolygonIndex, memory_arena *Arena)
 {
     object_transform Flat = DefaultFlatTransform();
+    char Text[32];
+
     for(s32 Index = 0;
         Index < Count;
         ++Index)
@@ -1574,6 +1571,34 @@ DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s
                 PushRect(RenderGroup, &Flat, V3(Delta, Z), V2(0.1f, 0.1f),
                          (VertexIndex == Polygon->VertexCount - 1) ? V4(DebugColorTable[4], 1) : VertexColor);
             }
+        }
+
+        v2 Center = {};
+        f32 SignedArea = 0.0f;
+        if(GameMode->ShowNativeIds)
+        {
+            for(s32 I = 0; I < TempPoly.VertexCount; ++I)
+            {
+                v2 p0 = TempPoly.Vertices[I];
+                v2 p1 = TempPoly.Vertices[(I + 1) % TempPoly.VertexCount];
+
+                f32 C = Cross(p0, p1);
+                SignedArea += C;
+
+                Center += (p0 + p1)*C;
+            }
+
+            SignedArea *= 0.5f;
+            if(AbsoluteValue(SignedArea) > 0)
+                Center *= 1.0f / (6.0f*SignedArea);
+
+            PushRect(RenderGroup, &Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
+
+            FormatString(ArrayCount(Text), Text, "%d", Index);
+            entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform,
+                                                                 &Flat, V3(Center, 0.0f));
+            v3 P = Unproject(&UIState->RenderGroup, &Flat, BasisP.P);
+            UITextOutAt(UIState, P.xy, Text, 0.8f);
         }
 #if 0
         if(Index == CurrentPolygonIndex)
@@ -1630,7 +1655,7 @@ DrawPolygons(render_group *RenderGroup, world *World, world_polygon *Polygons, s
 }
 
 internal void
-UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, sim_region *SimRegion,
+UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_region *SimRegion,
                            render_group *RenderGroup, object_transform *Flat,
                            engine_input *Input, v2 MouseP)
 {
@@ -1675,8 +1700,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, sim_region *SimRegion,
 
         case GMAction_TriangulateAll:
         {
-//            PartitionNavigationMesh()
-            GameMode->Triangulated = true;
+            PartitionNavigationMesh(GameMode, SimRegion, TempMem.Arena);
+            GameMode->Partitioned = true;
         } break;
 
         case GMAction_SubtractRegion:
@@ -1702,60 +1727,35 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, sim_region *SimRegion,
         }
     }
 
-    DrawPolygons(RenderGroup, World, GameMode->Polies, GameMode->PolygonCount, SimRegion->Origin, GameMode->CurrentPolygonIndex,
-                 TempMem.Arena);
-                   
-#if 0
-    if(GameMode->Triangulated)
+    if(GameMode->ShowNativePolies)
     {
-        char Text[32];
-        polygon2 DrawPoly = {};
-        DrawPoly.VertexCount = 0;
-        DrawPoly.Vertices = PushArray(TempMem.Arena, MAX_VERTEX_COUNT, v2);
+        DrawPolygons(GameMode, RenderGroup, UIState, World, GameMode->Polies, GameMode->PolygonCount,
+                     SimRegion->Origin, GameMode->CurrentPolygonIndex, TempMem.Arena);
+    }
+                   
+    if(GameMode->Partitioned)
+    {
+//        char Text[32];
 
         int C = 0;
         for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
             Iter != &GameMode->MeshPolygonsSentinal;
             Iter = Iter->Next)
         {
-            world_polygon *Poly = &Iter->Poly;
-            ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &DrawPoly);
-#if 0
-            v2 Center = {};
-            f32 SignedArea = 0.0f;
-            for(s32 I = 0; I < DrawPoly.VertexCount; ++I)
-            {
-                v2 p0 = DrawPoly.Vertices[I];
-                v2 p1 = DrawPoly.Vertices[(I + 1) % DrawPoly.VertexCount];
-
-                f32 C = Cross(p0, p1);
-                SignedArea += C;
-
-                Center += (p0 + p1)*C;
-            }
-
-            SignedArea *= 0.5f;
-            if(AbsoluteValue(SignedArea) > 0)
-                Center *= 1.0f / (6.0f*SignedArea);
-
-            PushRect(RenderGroup, &Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
-
-#endif
-                            
-            triangulate_result TResult = DelaunayTriangulate(&DrawPoly, TempMem.Arena);
+            triangulate_result TResult = DelaunayTriangulate(&Iter->RealPoly, TempMem.Arena);
             for(s32 TIndex = 0;
                 TIndex < TResult.TriangleCount;
                 ++TIndex)
             {
                 triangle *T = TResult.Triangles + TIndex;
-                PushTriangle(RenderGroup, &Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.2f));
+                PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(DebugColorTable[(C) % ArrayCount(DebugColorTable)], 0.2f));
                                     
             }
             Platform.DeallocateMemory(TResult.Triangles);
             Platform.DeallocateMemory(TResult.Adjacencies);
             ++C;
         }
-
+#if 0
         for(u32 I = 0;
             I < GameMode->PolyNodeCount;
             ++I)
@@ -1896,8 +1896,35 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, sim_region *SimRegion,
             PushRectOutline(RenderGroup, &Flat, Rect, 50.0f, Color, 0.02f);
         }
 #endif                        
-    }
 #endif
+    }
+
+    nk_ui *UI = UIState->UI;
+    nk_context *Nk = UIState->Nk;
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
+    {
+        UI->NkLayoutSpacePush(Nk, UI->NkRect(1580, -240, 320, 200));
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+//        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+
+        if(UI->NkGroupBegin(Nk, "Mesh View", NK_WINDOW_NO_SCROLLBAR))
+        {
+            if(NkTreePush(Platform.UI, Nk, NK_TREE_NODE, "Mesh View Options", NK_MINIMIZED))
+            {
+                UI->NkCheckboxLabel(Nk, "Show Native Polies", &GameMode->ShowNativePolies);
+                UI->NkCheckboxLabel(Nk, "Show Native P IDs", &GameMode->ShowNativeIds);
+
+                if(GameMode->Partitioned)
+                {
+                    UI->NkCheckboxLabel(Nk, "Show Partition", &GameMode->ShowNativeIds);
+                }
+                    
+                UI->NkTreePop(Nk);
+            }
+            UI->NkGroupEnd(Nk);
+        }
+    }
+    UI->NkLayoutSpaceEnd(Nk);
 
     EndTemporaryMemory(TempMem);
 }

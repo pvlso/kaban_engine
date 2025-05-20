@@ -473,6 +473,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
     editor_assets *Assets = TranState->Assets;
     editor_mode_game *GameMode = EditorState->GameMode;
     ui_state *UIState = &EditorState->UIState;
+
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
     if(!Result)
     {
@@ -563,8 +564,9 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
             PushRectOutline(RenderGroup, &Flat, V3(0.0f, 0.0f, 0.0f), GetDim(SimRegion->UpdatableBounds), V4(1.0f, 0.0f, 1.0f, 1));
 #endif
 
-            UI->NkLayoutRowStatic(Nk, 30, 120, 1);
+            UI->NkLayoutRowStatic(Nk, 20, 120, 1);
             UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
+
             if(GameMode->ShowGrid)
             {
                 RenderMapGrid(RenderGroup, UIState, World, GameMode->WorldState->CameraP, SimRegion->Bounds);
@@ -626,7 +628,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 
                 case EditGameMode_NavMeshes:
                 {
-                    UpdateAndRenderNavMeshMode(GameMode, SimRegion, RenderGroup,
+                    UpdateAndRenderNavMeshMode(GameMode, UIState, SimRegion, RenderGroup,
                                                &Flat, Input, MouseP);
                 } break;
 

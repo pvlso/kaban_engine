@@ -101,6 +101,9 @@ struct editor_mode_game
     nav_poly_node *PolyNodes;
     heap MinPolyNodeHeap;
 
+    b32 ShowNativePolies;
+    b32 ShowNativeIds;
+    
 //    s32 MeshTriangleCount;
 //    world_triangle *MeshTriangles;
 //    s32 FreeIndexCount;
