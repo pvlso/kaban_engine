@@ -426,7 +426,6 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
                     case EditGameMode_Terrain:
                     {
-
                         if(WasPressed(Controller->LeftShoulder))
                             ToggleGMFlag(GameMode, GMFlag_ShowCurrentLayer);
 
@@ -455,8 +454,17 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
                     case EditGameMode_NavMeshes:
                     {
-                        if(WasPressed(Controller->Start))
-                            GameMode->CurrentAction = GMAction_SubtractRegion;
+                        if(GameMode->CurrentAction != GMAction_TriangulateAll)
+                        {
+                            if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
+                                GameMode->CurrentAction = GMAction_NavMeshPlaceStart;
+
+                            if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
+                                GameMode->CurrentAction = GMAction_NavMeshPlaceEnd;
+                        }
+
+//                        if(WasPressed(Controller->Start))
+//                            GameMode->CurrentAction = GMAction_SubtractRegion;
                     } break;
                 }
             }

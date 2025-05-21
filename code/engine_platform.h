@@ -4954,6 +4954,27 @@ NK_API nk_bool nk_menu_item_symbol_text(struct nk_context*, enum nk_symbol_type,
 NK_API nk_bool nk_menu_item_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags alignment);
 NK_API void nk_menu_close(struct nk_context*);
 NK_API void nk_menu_end(struct nk_context*);
+
+#if 0
+typedef void platform_nk_menubar_begin(struct nk_context*);
+typedef void platform_nk_menubar_end(struct nk_context*);
+typedef nk_bool platform_nk_menu_begin_text(struct nk_context*, const char* title, int title_len, nk_flags align, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_label(struct nk_context*, const char*, nk_flags align, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_image(struct nk_context*, const char*, struct nk_image, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_image_text(struct nk_context*, const char*, int,nk_flags align,struct nk_image, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_image_label(struct nk_context*, const char*, nk_flags align,struct nk_image, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_symbol(struct nk_context*, const char*, enum nk_symbol_type, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_symbol_text(struct nk_context*, const char*, int,nk_flags align,enum nk_symbol_type, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_begin_symbol_label(struct nk_context*, const char*, nk_flags align,enum nk_symbol_type, struct nk_vec2 size);
+typedef nk_bool platform_nk_menu_item_text(struct nk_context*, const char*, int,nk_flags align);
+typedef nk_bool platform_nk_menu_item_label(struct nk_context*, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_menu_item_image_label(struct nk_context*, struct nk_image, const char*, nk_flags alignment);
+typedef nk_bool platform_nk_menu_item_image_text(struct nk_context*, struct nk_image, const char*, int len, nk_flags alignment);
+typedef nk_bool platform_nk_menu_item_symbol_text(struct nk_context*, enum nk_symbol_type, const char*, int, nk_flags alignment);
+typedef nk_bool platform_nk_menu_item_symbol_label(struct nk_context*, enum nk_symbol_type, const char*, nk_flags alignment);
+typedef void platform_nk_menu_close(struct nk_context*);
+typedef void platform_nk_menu_end(struct nk_context*);
+#endif
 /* =============================================================================
  *
  *                                  STYLE
@@ -5007,6 +5028,7 @@ enum nk_style_cursor {
     NK_CURSOR_RESIZE_TOP_RIGHT_DOWN_LEFT,
     NK_CURSOR_COUNT
 };
+
 NK_API void nk_style_default(struct nk_context*);
 NK_API void nk_style_from_table(struct nk_context*, const struct nk_color*);
 NK_API void nk_style_load_cursor(struct nk_context*, enum nk_style_cursor, const struct nk_cursor*);

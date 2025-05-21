@@ -57,12 +57,21 @@ struct neighbour_edge
     world_position B;
 };
 
+struct world_polygon_list
+{
+    world_polygon Poly;
+    polygon2 RealPoly;
+
+    world_polygon_list *Next;
+    world_polygon_list *Prev;
+};
+
 struct nav_poly_node
 {
     world_position TileP;
 
     s32 Index;
-    s32 PolyIndex;
+    world_polygon_list *PolyPtr;
     
     b32 Visited;
 

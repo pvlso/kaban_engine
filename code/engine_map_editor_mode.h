@@ -39,6 +39,9 @@ enum editor_game_mode_actions
     GMAction_DeleteCurrentPolygon,
     GMAction_TriangulateAll,
     GMAction_SubtractRegion,
+
+    GMAction_NavMeshPlaceStart,
+    GMAction_NavMeshPlaceEnd,
 };
 
 enum editor_game_mode_flags
@@ -51,15 +54,6 @@ enum editor_game_mode_flags
 struct controlled_camera
 {
     entity_id EntityIndex;
-};
-
-struct world_polygon_list
-{
-    world_polygon Poly;
-    polygon2 RealPoly;
-
-    world_polygon_list *Next;
-    world_polygon_list *Prev;
 };
 
 struct editor_mode_game
@@ -103,6 +97,12 @@ struct editor_mode_game
 
     b32 ShowNativePolies;
     b32 ShowNativeIds;
+    b32 ShowPartition;
+    b32 ShowColor;
+    b32 ShowNeighbours;
+
+    world_position StartNode;
+    world_position EndNode;
     
 //    s32 MeshTriangleCount;
 //    world_triangle *MeshTriangles;
