@@ -196,6 +196,9 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         Result->MinPolyNodeHeap.MaxSize = 256;
         Result->MinPolyNodeHeap.Size = 0;
         Result->MinPolyNodeHeap.Nodes = PushArray(&EditorState->ModeArena, Result->MinPolyNodeHeap.MaxSize, sort_entry);
+
+        Result->StartNode = NullPosition();
+        Result->EndNode = NullPosition();
         
         EditorState->GameMode = Result;
     }
@@ -454,17 +457,10 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
 
                     case EditGameMode_NavMeshes:
                     {
-                        if(GameMode->CurrentAction != GMAction_TriangulateAll)
-                        {
-                            if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
-                                GameMode->CurrentAction = GMAction_NavMeshPlaceStart;
-
-                            if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
-                                GameMode->CurrentAction = GMAction_NavMeshPlaceEnd;
-                        }
-
-//                        if(WasPressed(Controller->Start))
-//                            GameMode->CurrentAction = GMAction_SubtractRegion;
+                        if(WasPressed(Controller->Start) && Input->ControlDown)
+                            GameMode->CurrentAction = GMAction_NavMeshPlaceEnd;
+                        else if(WasPressed(Controller->Start))
+                            GameMode->CurrentAction = GMAction_NavMeshPlaceStart;
                     } break;
                 }
             }
