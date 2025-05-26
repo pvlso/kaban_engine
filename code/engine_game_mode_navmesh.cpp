@@ -1323,6 +1323,123 @@ int stringPull(const float* portals, int nportals,
 }
 
 internal void
+FindAdjacencies(editor_mode_game *GameMode)
+{
+    // NOTE(paul): Build conectivity graph
+    s32 I1 = 0;
+    for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
+        Iter != &GameMode->MeshPolygonsSentinal;
+        Iter = Iter->Next)
+    {
+        world_polygon *Poly = &Iter->Poly;
+                                
+        s32 I2 = I1 + 1;
+        for(world_polygon_list *Iter2 = Iter->Next;
+            Iter2 != &GameMode->MeshPolygonsSentinal;
+            Iter2 = Iter2->Next)
+        {
+            world_polygon *Poly2 = &Iter2->Poly;
+
+            Assert(GetPolygonOrientation(&Iter2->RealPoly) == POLY_ORIENTATION_CCW)
+            
+            b32 Found = false;
+            for(s32 I = 0; I < Poly->VertexCount; ++I)
+            {
+                world_position A1 = Poly->Vertices[I];
+                world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
+
+                for(s32 J = 0; J < Poly2->VertexCount; ++J)
+                {
+                    world_position A2 = Poly2->Vertices[J];
+                    world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
+#if 0
+                    if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
+                       ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
+                       ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
+                       ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)) &&
+                       (((A1.Offset.x == A2.Offset.x) && (A1.Offset.y == A2.Offset.y)) &&
+                        ((B1.Offset.x == B2.Offset.x) && (B1.Offset.y == B2.Offset.y)) ||
+                        ((B1.Offset.x == A2.Offset.x) && (B1.Offset.y == A2.Offset.y)) &&
+                        ((A1.Offset.x == B2.Offset.x) && (A1.Offset.y == B2.Offset.y))))
+                    {
+                        nav_poly_node *Poly1Node = GameMode->PolyNodes + I1;
+                        nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
+                        if(Poly1Node->NeighbourCount == 0)
+                        {
+                            Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
+                            Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
+                            ++Poly1Node->NeighbourCount;
+                        }
+                        else
+                        {
+                            b32 IsNew = true;
+                            for(s32 NI = 0;
+                                NI < Poly1Node->NeighbourCount;
+                                ++NI)
+                            {
+                                nav_poly_node *Test = Poly1Node->Neighbours[NI];
+                                if(Test->Index == I2)
+                                {
+                                    IsNew = false;
+                                    break;
+                                }
+                            }
+
+                            if(IsNew)
+                            {
+                                Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
+                                Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
+                                ++Poly1Node->NeighbourCount;
+                            }
+                        }
+
+                        if(Poly2Node->NeighbourCount == 0)
+                        {
+                            Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
+                            Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
+                            ++Poly2Node->NeighbourCount;
+                        }
+                        else
+                        {
+                            b32 IsNew = true;
+                            for(s32 NI = 0;
+                                NI < Poly2Node->NeighbourCount;
+                                ++NI)
+                            {
+                                nav_poly_node *Test = Poly2Node->Neighbours[NI];
+                                if(Test->Index == I1)
+                                {
+                                    IsNew = false;
+                                    break;
+                                }
+                            }
+
+                            if(IsNew)
+                            {
+                                Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
+                                Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
+                                ++Poly2Node->NeighbourCount;
+                            }
+                        }
+
+                        Found = true;
+                        break;
+                    }
+#endif
+                }
+
+                if(Found)
+                    break;
+            }
+                                    
+            ++I2;
+        }
+
+        ++I1;
+    }
+}
+
+internal void
 PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memory_arena *TempArena)
 {
     // NOTE(paul): Clear Mesh Polygon List
@@ -1362,6 +1479,7 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
     {
         world_polygon *Poly = &Iter->Poly;
         ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &RealPoly);
+        Iter->RealPoly = RealPoly;
 
         v2 Center = {};
         f32 SignedArea = 0.0f;
@@ -1396,6 +1514,9 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
         Iter = Iter->Next)
     {
         world_polygon *Poly = &Iter->Poly;
+        
+        s32 Orientation = GetPolygonOrientation(&Iter->RealPoly); 
+        Assert(Orientation == POLY_ORIENTATION_CCW)
                                 
         s32 I2 = I1 + 1;
         for(world_polygon_list *Iter2 = Iter->Next;
@@ -1403,6 +1524,9 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
             Iter2 = Iter2->Next)
         {
             world_polygon *Poly2 = &Iter2->Poly;
+
+            s32 Orientation2 = GetPolygonOrientation(&Iter2->RealPoly); 
+            Assert(Orientation2 == POLY_ORIENTATION_CCW)
 
             b32 Found = false;
             for(s32 I = 0; I < Poly->VertexCount; ++I)
@@ -1812,7 +1936,6 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
     if(GameMode->Partitioned)
     {
         char Text[32];
-
         // NOTE(paul): Show Partition
         if(GameMode->ShowPartition)
         {

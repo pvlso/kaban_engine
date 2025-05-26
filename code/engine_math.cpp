@@ -170,3 +170,34 @@ SplitPolygonIntoConvexParts(polygon2 *Polygons, s32 *Count, s32 *NotConvexIndice
         SplitPolygon(Polygons, Count, NotConvexIndices, NotConvexCount, NotConvexIndex, Arena);
     }
 }
+
+enum poly_orientation
+{
+    POLY_ORIENTATION_CW = -1,
+    POLY_ORIENTATION_NONE = 0,
+    POLY_ORIENTATION_CCW = 1,
+};
+
+internal poly_orientation
+GetPolygonOrientation(polygon2 *P)
+{
+    s32 i1 = 0, i2 = 0;
+    f64 area = 0.0;
+
+    for (i1 = 0; i1 < P->VertexCount; i1++)
+    {
+        i2 = i1 + 1;
+        if(i2 == P->VertexCount)
+            i2 = 0;
+
+        area += P->Vertices[i1].x * P->Vertices[i2].y - P->Vertices[i1].y * P->Vertices[i2].x;
+    }
+
+    if(area > 0)
+        return POLY_ORIENTATION_CCW;
+
+    if (area < 0)
+        return POLY_ORIENTATION_CW;
+
+    return POLY_ORIENTATION_NONE;
+}
