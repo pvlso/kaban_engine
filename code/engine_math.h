@@ -398,13 +398,6 @@ SafeRatio1(f64 Numerator, f64 Divisor)
 // NOTE(paul): VECTOR 2 FLOAT
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-inline b32
-PointsAreEqual(v2 a, v2 b, f32 Epsilon)
-{
-    b32 Result = (AbsoluteValue(a.x - b.x) <= Epsilon) && (AbsoluteValue(a.y - b.y) <= Epsilon);
-    return(Result);
-}
-
 inline v2
 Perp(v2 A)
 {
@@ -566,6 +559,17 @@ Normalize(v2 A)
     }
 
     return(Result);
+}
+
+inline b32
+PointsAreEqual(v2 a, v2 b, f32 Epsilon)
+{
+    f32 eq = Square(Epsilon);
+
+    v2 ba = b - a;
+    f32 Result = Inner(ba, ba);
+
+    return(Result < eq);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2536,8 +2540,9 @@ TriangleSignedArea(triangle *T)
 inline f32
 TriangleArea2(v2 a, v2 b, v2 c)
 {
-    f32 Result = Cross(a, b) + Cross(c, a) + Cross(b, c);
-    return(Result);
+    v2 ba = b - a;
+    v2 ac = c - a;
+    return(Cross(ac, ba));
 }
 
 inline f32

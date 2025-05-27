@@ -199,6 +199,12 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
 
         Result->StartNode = NullPosition();
         Result->EndNode = NullPosition();
+
+        SubArena(&Result->NavMeshArena, &EditorState->ModeArena, Megabytes(1));
+        Result->EdgeTable.Size = 4096;
+        Result->EdgeTable.KeyType = HashKeyType_WORLD_EDGE;
+        Result->EdgeTable.DataType = HashDataType_POLY_MESH_ADJACENCY;
+        Result->EdgeTable.Hash = PushArray(&Result->NavMeshArena, Result->EdgeTable.Size, hash_table_entry *);
         
         EditorState->GameMode = Result;
     }

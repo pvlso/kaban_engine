@@ -103,6 +103,8 @@ struct editor_mode_game
 
     world_position StartNode;
     world_position EndNode;
+    memory_arena NavMeshArena;
+    hash_table EdgeTable;
     
 //    s32 MeshTriangleCount;
 //    world_triangle *MeshTriangles;

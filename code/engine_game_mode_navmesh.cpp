@@ -1209,234 +1209,102 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
     return(End);
 }
 
-inline float triarea2(const float* a, const float* b, const float* c)
-{
-    const float ax = b[0] - a[0];
-    const float ay = b[1] - a[1];
-    const float bx = c[0] - a[0];
-    const float by = c[1] - a[1];
-    return bx*ay - ax*by;
-}
-
-inline bool vequal(const float* a, const float* b)
-{
-    static const float eq = 0.001f*0.001f;
-    f32 ax = b[0] - a[0];
-    f32 ay = b[1] - a[1];
-    f32 Result = ax*ax + ay*ay;
-
-    return Result < eq;
-}
-
-inline void
-vcpy(float *Dest, const float *Source)
-{
-    Copy(sizeof(f32)*2, (void *)Source, Dest);
-}
-
-int stringPull(const float* portals, int nportals,
-               float* pts, const int maxPts)
+internal s32
+StringPull(v2 *Portals, s32 PortalsCount, v2 *Points, s32 MaxPoints)
 {
     TIMED_FUNCTION();
+
+    f32 Epsilon = 0.001f;
     // Find straight path.
-    int npts = 0;
+    s32 PointsCount = 0;
+
     // Init scan state
-    float portalApex[2], portalLeft[2], portalRight[2];
-    int apexIndex = 0, leftIndex = 0, rightIndex = 0;
-    vcpy(portalApex, &portals[0]);
-    vcpy(portalLeft, &portals[0]);
-    vcpy(portalRight, &portals[2]);
+    s32 ApexIndex = 0;
+    v2 PortalApex = Portals[0];
+
+    s32 LeftIndex = 0;
+    v2 PortalLeft = Portals[0];
+
+    s32 RightIndex = 0;
+    v2 PortalRight = Portals[1];
 
     // Add start point.
-    vcpy(&pts[npts*2], portalApex);
-    npts++;
+    Points[0] = PortalApex;
+    PointsCount++;
 
-    for (int i = 1; i < nportals && npts < maxPts; ++i)
+    for(int i = 1; i < PortalsCount && PointsCount < MaxPoints; ++i)
     {
-        const float* left = &portals[i*4+0];
-        const float* right = &portals[i*4+2];
+        v2 left = Portals[i*2];
+        v2 right = Portals[i*2 + 1];
 
         // Update right vertex.
-        if (triarea2(portalApex, portalRight, right) <= 0.0f)
+        if(TriangleArea2(PortalApex, PortalRight, right) <= 0.0f)
         {
-            if (vequal(portalApex, portalRight) || triarea2(portalApex, portalLeft, right) > 0.0f)
+            if(PointsAreEqual(PortalApex, PortalRight, Epsilon) ||
+               TriangleArea2(PortalApex, PortalLeft, right) > 0.0f)
             {
                 // Tighten the funnel.
-                vcpy(portalRight, right);
-                rightIndex = i;
+                PortalRight = right;
+                RightIndex = i;
             }
             else
             {
                 // Right over left, insert left to path and restart scan from portal left point.
-                vcpy(&pts[npts*2], portalLeft);
-                npts++;
+                Points[PointsCount++] = PortalLeft;
+
                 // Make current left the new apex.
-                vcpy(portalApex, portalLeft);
-                apexIndex = leftIndex;
+                PortalApex = PortalLeft;
+                ApexIndex = LeftIndex;
                 // Reset portal
-                vcpy(portalLeft, portalApex);
-                vcpy(portalRight, portalApex);
-                leftIndex = apexIndex;
-                rightIndex = apexIndex;
+                PortalLeft = PortalApex;
+                PortalRight = PortalApex;
+
+                LeftIndex = ApexIndex;
+                RightIndex = ApexIndex;
+
                 // Restart scan
-                i = apexIndex;
+                i = ApexIndex;
                 continue;
             }
         }
 
         // Update left vertex.
-        if (triarea2(portalApex, portalLeft, left) >= 0.0f)
+        if(TriangleArea2(PortalApex, PortalLeft, left) >= 0.0f)
         {
-            if (vequal(portalApex, portalLeft) || triarea2(portalApex, portalRight, left) < 0.0f)
+            if(PointsAreEqual(PortalApex, PortalLeft, Epsilon) ||
+               TriangleArea2(PortalApex, PortalRight, left) < 0.0f)
             {
                 // Tighten the funnel.
-                vcpy(portalLeft, left);
-                leftIndex = i;
+                PortalLeft = left;
+                LeftIndex = i;
             }
             else
             {
                 // Left over right, insert right to path and restart scan from portal right point.
-                vcpy(&pts[npts*2], portalRight);
-                npts++;
+                Points[PointsCount++] = PortalRight;
+
                 // Make current right the new apex.
-                vcpy(portalApex, portalRight);
-                apexIndex = rightIndex;
+                PortalApex = PortalRight;
+                ApexIndex = RightIndex;
                 // Reset portal
-                vcpy(portalLeft, portalApex);
-                vcpy(portalRight, portalApex);
-                leftIndex = apexIndex;
-                rightIndex = apexIndex;
+                PortalLeft = PortalApex;
+                PortalRight = PortalApex;
+
+                LeftIndex = ApexIndex;
+                RightIndex = ApexIndex;
+
                 // Restart scan
-                i = apexIndex;
+                i = ApexIndex;
                 continue;
             }
         }
     }
+
     // Append last point to path.
-    if (npts < maxPts)
-    {
-        vcpy(&pts[npts*2], &portals[(nportals-1)*4+0]);
-        npts++;
-    }
+    if(PointsCount < MaxPoints)
+        Points[PointsCount++] = Portals[(PortalsCount - 1)*2];
 
-    return npts;
-}
-
-internal void
-FindAdjacencies(editor_mode_game *GameMode)
-{
-    // NOTE(paul): Build conectivity graph
-    s32 I1 = 0;
-    for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-        Iter != &GameMode->MeshPolygonsSentinal;
-        Iter = Iter->Next)
-    {
-        world_polygon *Poly = &Iter->Poly;
-                                
-        s32 I2 = I1 + 1;
-        for(world_polygon_list *Iter2 = Iter->Next;
-            Iter2 != &GameMode->MeshPolygonsSentinal;
-            Iter2 = Iter2->Next)
-        {
-            world_polygon *Poly2 = &Iter2->Poly;
-
-            Assert(GetPolygonOrientation(&Iter2->RealPoly) == POLY_ORIENTATION_CCW)
-            
-            b32 Found = false;
-            for(s32 I = 0; I < Poly->VertexCount; ++I)
-            {
-                world_position A1 = Poly->Vertices[I];
-                world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
-
-                for(s32 J = 0; J < Poly2->VertexCount; ++J)
-                {
-                    world_position A2 = Poly2->Vertices[J];
-                    world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
-#if 0
-                    if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
-                       ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
-                       ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
-                       ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)) &&
-                       (((A1.Offset.x == A2.Offset.x) && (A1.Offset.y == A2.Offset.y)) &&
-                        ((B1.Offset.x == B2.Offset.x) && (B1.Offset.y == B2.Offset.y)) ||
-                        ((B1.Offset.x == A2.Offset.x) && (B1.Offset.y == A2.Offset.y)) &&
-                        ((A1.Offset.x == B2.Offset.x) && (A1.Offset.y == B2.Offset.y))))
-                    {
-                        nav_poly_node *Poly1Node = GameMode->PolyNodes + I1;
-                        nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
-                        if(Poly1Node->NeighbourCount == 0)
-                        {
-                            Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
-                            Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
-                            ++Poly1Node->NeighbourCount;
-                        }
-                        else
-                        {
-                            b32 IsNew = true;
-                            for(s32 NI = 0;
-                                NI < Poly1Node->NeighbourCount;
-                                ++NI)
-                            {
-                                nav_poly_node *Test = Poly1Node->Neighbours[NI];
-                                if(Test->Index == I2)
-                                {
-                                    IsNew = false;
-                                    break;
-                                }
-                            }
-
-                            if(IsNew)
-                            {
-                                Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
-                                Poly1Node->NEdge[Poly1Node->NeighbourCount] = {A1, B1};
-                                ++Poly1Node->NeighbourCount;
-                            }
-                        }
-
-                        if(Poly2Node->NeighbourCount == 0)
-                        {
-                            Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
-                            Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
-                            ++Poly2Node->NeighbourCount;
-                        }
-                        else
-                        {
-                            b32 IsNew = true;
-                            for(s32 NI = 0;
-                                NI < Poly2Node->NeighbourCount;
-                                ++NI)
-                            {
-                                nav_poly_node *Test = Poly2Node->Neighbours[NI];
-                                if(Test->Index == I1)
-                                {
-                                    IsNew = false;
-                                    break;
-                                }
-                            }
-
-                            if(IsNew)
-                            {
-                                Poly2Node->Neighbours[Poly2Node->NeighbourCount] = Poly1Node;
-                                Poly2Node->NEdge[Poly2Node->NeighbourCount] = {A1, B1};
-                                ++Poly2Node->NeighbourCount;
-                            }
-                        }
-
-                        Found = true;
-                        break;
-                    }
-#endif
-                }
-
-                if(Found)
-                    break;
-            }
-                                    
-            ++I2;
-        }
-
-        ++I1;
-    }
+    return(PointsCount);
 }
 
 internal void
@@ -1452,7 +1320,6 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
 
         DLIST_REMOVE(T);
         Platform.DeallocateMemory(T->Poly.Vertices);
-//        Platform.DeallocateMemory(T->RealPoly.Vertices);
         Platform.DeallocateMemory(T);
     }
                             
@@ -1467,6 +1334,21 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
         Node->NeighbourCount = 0;
     }
 
+    for(u32 I = 0;
+        I < GameMode->EdgeTable.Size;
+        ++I)
+    {
+        hash_table_entry *Scan = GameMode->EdgeTable.Hash[I];
+        while(Scan)
+        {
+            hash_table_entry *Entry = Scan;
+            Scan = Scan->Next;
+
+            Entry->Next = GameMode->EdgeTable.Free;
+            GameMode->EdgeTable.Free = Entry;
+        }
+    }
+    
     GameMode->PolyNodeCount = 0;                            
 
     polygon2 RealPoly = {};
@@ -1533,21 +1415,24 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
             {
                 world_position A1 = Poly->Vertices[I];
                 world_position B1 = Poly->Vertices[(I + 1) % Poly->VertexCount];
-
+                hash_key HashKey = {};
+                HashKey.WorldEdge.A = A1;
+                HashKey.WorldEdge.B = B1;
+                
                 for(s32 J = 0; J < Poly2->VertexCount; ++J)
                 {
                     world_position A2 = Poly2->Vertices[J];
                     world_position B2 = Poly2->Vertices[(J + 1) % Poly2->VertexCount];
 
-                    if(((A1.TileX == A2.TileX) && (A1.TileY == A2.TileY)) &&
-                       ((B1.TileX == B2.TileX) && (B1.TileY == B2.TileY)) ||
+                    if(((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)) &&
                        ((B1.TileX == A2.TileX) && (B1.TileY == A2.TileY)) &&
-                       ((A1.TileX == B2.TileX) && (A1.TileY == B2.TileY)) &&
-                       (((A1.Offset.x == A2.Offset.x) && (A1.Offset.y == A2.Offset.y)) &&
-                        ((B1.Offset.x == B2.Offset.x) && (B1.Offset.y == B2.Offset.y)) ||
-                        ((B1.Offset.x == A2.Offset.x) && (B1.Offset.y == A2.Offset.y)) &&
-                        ((A1.Offset.x == B2.Offset.x) && (A1.Offset.y == B2.Offset.y))))
+                       ((A1.Offset.x == B2.Offset.x) && (A1.Offset.y == B2.Offset.y)) &&
+                       ((B1.Offset.x == A2.Offset.x) && (B1.Offset.y == A2.Offset.y)))
                     {
+                        hash_data Data = {};
+                        Data.PolyMeshAdjacency = {(u32)I1, A1, B1, (u32)I2, A2, B2};
+                        InsertKey(&GameMode->EdgeTable, HashKey, Data, &GameMode->NavMeshArena);
+
                         nav_poly_node *Poly1Node = GameMode->PolyNodes + I1;
                         nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
                         if(Poly1Node->NeighbourCount == 0)
@@ -1797,7 +1682,7 @@ IsPointInPolygon(render_group *RenderGroup, object_transform *Flat, polygon2 *Po
             Result = !Result;
     }
 
-    PushLine(RenderGroup, Flat, V3(P, 34.0f), V3(RayP, 34.0f), V4(1, 0, 1, 1));
+//    PushLine(RenderGroup, Flat, V3(P, 34.0f), V3(RayP, 34.0f), V4(1, 0, 1, 1));
 
     return(Result);
 }
@@ -1886,13 +1771,11 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
         case GMAction_NavMeshPlaceStart:
         {
             GameMode->StartNode = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
-//            SubtractPolyFromMesh(GameMode, SimRegion, &Poly, &World->Arena);
         } break;
 
         case GMAction_NavMeshPlaceEnd:
         {
             GameMode->EndNode = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
-//            SubtractPolyFromMesh(GameMode, SimRegion, &Poly, &World->Arena);
         } break;
     }
 
@@ -1955,13 +1838,154 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
 
                 nav_poly_node *Path = SolvePolyAStar(GameMode, GameMode->PolyNodes + StartNodeIndex,
                                                      GameMode->PolyNodes + EndNodeIndex);
-
+#if 0
                 s32 nportals = 0;
                 f32 *portals = PushArray(TempMem.Arena, 128, f32);
+                vcpy(&portals[nportals*4 + 0], EndP.E);
+                vcpy(&portals[nportals*4 + 2], EndP.E);
+                ++nportals;                        
+
+                for(nav_poly_node *Node = Path;
+                    Node->Parent;
+                    Node = Node->Parent)
+                {
+                    nav_poly_node *Parent = Node->Parent;
+                    neighbour_edge E = {};
+                    for(s32 I = 0;
+                        I < Node->NeighbourCount;
+                        ++I)
+                    {
+                        nav_poly_node *N = Node->Neighbours[I];
+                        if(N->Index == Parent->Index)
+                        {
+                            E = Node->NEdge[I];
+                            break;
+                        }
+                    }
+
+                    u32 To = Node->Index;
+                    u32 From = Parent->Index;
+                    
+                    hash_key Key = {};
+                    Key.WorldEdge.A = E.A;
+                    Key.WorldEdge.B = E.B;
+                    hash_data Edge = GetHashElement(&GameMode->EdgeTable, Key);
+
+                    v2 A = {};
+                    v2 B = {};
+                    if(From == Edge.PolyMeshAdjacency.PolyAID)
+                    {
+                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                    }
+                    else
+                    {
+                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                    }
+
+                    vcpy(&portals[nportals*4 + 0], A.E);
+                    vcpy(&portals[nportals*4 + 2], B.E);
+                    ++nportals;                        
+
+                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
+
+                    PushRect(RenderGroup, Flat, V3(A, 50.0f), V2(0.25f, 0.25f), V4(0, 0, 1, 1));
+                    PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
+                }
+
                 vcpy(&portals[nportals*4 + 0], StartP.E);
                 vcpy(&portals[nportals*4 + 2], StartP.E);
                 ++nportals;                        
 
+                s32 maxpts = 128;
+                f32 *pts = PushArray(TempMem.Arena, maxpts, f32);
+                s32 npts = stringPull(portals, nportals, pts, maxpts);
+
+                for(s32 I = 0;
+                    I < npts - 1;
+                    ++I)
+                {
+                    v2 A = V2(pts[I*2 + 0], pts[I*2 + 1]);
+                    v2 B = V2(pts[(I + 1)*2 + 0], pts[(I + 1)*2 + 1]);
+                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
+                }
+#else
+                s32 nportals = 0;
+                v2 *portals = PushArray(TempMem.Arena, 64, v2);
+                portals[nportals*2 + 0] = EndP;
+                portals[nportals*2 + 1] = EndP;
+                ++nportals;                        
+
+                for(nav_poly_node *Node = Path;
+                    Node->Parent;
+                    Node = Node->Parent)
+                {
+                    nav_poly_node *Parent = Node->Parent;
+                    neighbour_edge E = {};
+                    for(s32 I = 0;
+                        I < Node->NeighbourCount;
+                        ++I)
+                    {
+                        nav_poly_node *N = Node->Neighbours[I];
+                        if(N->Index == Parent->Index)
+                        {
+                            E = Node->NEdge[I];
+                            break;
+                        }
+                    }
+
+                    u32 To = Node->Index;
+                    u32 From = Parent->Index;
+                    
+                    hash_key Key = {};
+                    Key.WorldEdge.A = E.A;
+                    Key.WorldEdge.B = E.B;
+                    hash_data Edge = GetHashElement(&GameMode->EdgeTable, Key);
+
+                    v2 A = {};
+                    v2 B = {};
+                    if(From == Edge.PolyMeshAdjacency.PolyAID)
+                    {
+                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                    }
+                    else
+                    {
+                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                    }
+
+                    portals[nportals*2] = A;
+                    portals[nportals*2 + 1] = B;
+                    ++nportals;                        
+
+                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
+
+                    PushRect(RenderGroup, Flat, V3(A, 50.0f), V2(0.25f, 0.25f), V4(0, 0, 1, 1));
+                    PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
+                }
+
+                portals[nportals*2] = StartP;
+                portals[nportals*2 + 1] = StartP;
+                ++nportals;                        
+
+                s32 maxpts = 64;
+                v2 *pts = PushArray(TempMem.Arena, maxpts, v2);
+                s32 npts = StringPull(portals, nportals, pts, maxpts);
+
+                for(s32 I = 0;
+                    I < npts - 1;
+                    ++I)
+                {
+                    v2 A = pts[I];
+                    v2 B = pts[I + 1];
+                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
+                }
+
+#endif
+                
+#if 0
                 for(nav_poly_node *Node = Path;
                     Node->Parent;
                     Node = Node->Parent)
@@ -1992,23 +2016,7 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     PushRect(RenderGroup, Flat, V3(A, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
                     PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
                 }
-
-                vcpy(&portals[nportals*4 + 0], EndP.E);
-                vcpy(&portals[nportals*4 + 2], EndP.E);
-                ++nportals;                        
-
-                s32 maxpts = 128;
-                f32 *pts = PushArray(TempMem.Arena, maxpts, f32);
-                s32 npts = stringPull(portals, nportals, pts, maxpts);
-
-                for(s32 I = 0;
-                    I < npts - 1;
-                    ++I)
-                {
-                    v2 A = V2(pts[I*2 + 0], pts[I*2 + 1]);
-                    v2 B = V2(pts[(I + 1)*2 + 0], pts[(I + 1)*2 + 1]);
-                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
-                }
+#endif
             }
 
             int C = 0;

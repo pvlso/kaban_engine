@@ -66,6 +66,8 @@
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 #include "engine_game_simulate.h"
+
+#include "engine_hash.h"
 #include "engine_map_editor_mode.h"
 #include "editor_ssa_file_builder.h"
 
