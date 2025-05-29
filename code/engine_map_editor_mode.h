@@ -61,6 +61,7 @@ struct editor_mode_game
     u32 CurrentAction;
     u32 Flags;
     
+    b32 HideUI;
     edit_game_mode GameEditMode;
 
     s32 CameraMoveStep;

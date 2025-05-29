@@ -114,7 +114,7 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
     }
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
-    UI->NkLayoutSpacePush(Nk, {0, 825, 160, 40});
+    UI->NkLayoutSpacePush(Nk, {0, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Exit"))
         GameMode->CurrentAction = GMAction_Exit;
     UI->NkLayoutSpaceEnd(Nk);
@@ -149,13 +149,59 @@ DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
                       GameMode->PolygonCount - 1, 1, 0.1f);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
-    UI->NkLayoutSpacePush(Nk, {0, 825, 160, 40});
+    UI->NkLayoutSpacePush(Nk, {0, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Exit"))
         GameMode->CurrentAction = GMAction_Exit;
 
-    UI->NkLayoutSpacePush(Nk, {165, 825, 160, 40});
+    UI->NkLayoutSpacePush(Nk, {165, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Write Polygons"))
         GameMode->CurrentAction = GMAction_WritePolygons;
+    UI->NkLayoutSpaceEnd(Nk);
+
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
+    {
+        UI->NkLayoutSpacePush(Nk, UI->NkRect(1580, -240, 320, 200));
+        struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
+        Platform.UI.NkFillRect(&Nk->current->buffer, Bounds, 5.0f, ColorTable[3]);
+
+        if(UI->NkGroupBegin(Nk, "Mesh View", NK_WINDOW_BORDER))
+        {
+            if(NkTreePush(Platform.UI, Nk, NK_TREE_NODE, "Mesh View Options", NK_MINIMIZED))
+            {
+                UI->NkCheckboxLabel(Nk, "Show Native Polies", &GameMode->ShowNativePolies);
+
+                if(GameMode->ShowNativePolies)
+                    UI->NkCheckboxLabel(Nk, "Show Native P IDs", &GameMode->ShowNativeIds);
+
+                if(GameMode->Partitioned)
+                {
+                    UI->NkCheckboxLabel(Nk, "Show Partition", &GameMode->ShowPartition);
+
+                    if(GameMode->ShowPartition)
+                    {
+                        UI->NkCheckboxLabel(Nk, "Show Color", &GameMode->ShowColor);
+                        UI->NkCheckboxLabel(Nk, "Show Neighbours", &GameMode->ShowNeighbours);
+                    }
+                }
+                    
+                UI->NkTreePop(Nk);
+            }
+
+            UI->NkLabel(Nk, "StartNode: ", NK_TEXT_ALIGN_LEFT);
+            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
+                         GameMode->StartNode.TileX, GameMode->StartNode.TileY);
+            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
+                         GameMode->StartNode.Offset.x, GameMode->StartNode.Offset.y);
+
+            UI->NkLabel(Nk, "EndNode: ", NK_TEXT_ALIGN_LEFT);
+            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
+                         GameMode->EndNode.TileX, GameMode->EndNode.TileY);
+            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
+                         GameMode->EndNode.Offset.x, GameMode->EndNode.Offset.y);
+
+            UI->NkGroupEnd(Nk);
+        }
+    }
     UI->NkLayoutSpaceEnd(Nk);
 }
 
@@ -165,57 +211,64 @@ DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generation
     nk_ui *UI = UIState->UI;
     nk_context *Nk = UIState->Nk;
 
-    UI->NkLayoutRowStatic(Nk, 30, 260, 2);
-
-    char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
-    struct nk_rect Rect = UI->NkWidgetBounds(Nk);
-    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabel(Nk, "Current Mode: ", NK_TEXT_CENTERED);
-
-    Rect = UI->NkWidgetBounds(Nk);
-    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", ModeString);
-
-    Rect = UI->NkWidgetBounds(Nk);
-    UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-
-    nk_color Red = {255, 0, 0, 255};
-    nk_color Green = {0, 255, 0, 255};
-    UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                        (IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? Green : Red),
-                        "Edit Enable: %s", IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? "true" : "false");
-    switch(GameMode->GameEditMode)
+    if(!GameMode->HideUI)
     {
-        case EditGameMode_None:
+        UI->NkLayoutRowStatic(Nk, 30, 260, 2);
+
+        char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
+        struct nk_rect Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabel(Nk, "Current Mode: ", NK_TEXT_CENTERED);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+        UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s", ModeString);
+
+        Rect = UI->NkWidgetBounds(Nk);
+        UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
+
+        nk_color Red = {255, 0, 0, 255};
+        nk_color Green = {0, 255, 0, 255};
+        UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
+                            (IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? Green : Red),
+                            "Edit Enable: %s", IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? "true" : "false");
+
+        UI->NkLayoutRowStatic(Nk, 20, 120, 1);
+        UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
+        switch(GameMode->GameEditMode)
         {
-            UI->NkLayoutRowStatic(Nk, 30, 260, 1);
-            UI->NkPropertyInt(Nk, "Ground Layer: ", 0,
-                              (int *)&GameMode->MapGroundLayer, 15, 1, 0.1f);
-            UI->NkPropertyInt(Nk, "Layer Count: ", 0,
-                              (int *)&GameMode->LayerCount, 15, 1, 0.1f);
+            case EditGameMode_None:
+            {
+                UI->NkLayoutRowStatic(Nk, 30, 260, 1);
+                UI->NkPropertyInt(Nk, "Ground Layer: ", 0,
+                                  (int *)&GameMode->MapGroundLayer, 15, 1, 0.1f);
+                UI->NkPropertyInt(Nk, "Layer Count: ", 0,
+                                  (int *)&GameMode->LayerCount, 15, 1, 0.1f);
 
-            UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
+                UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
 
-            UI->NkLayoutSpacePush(Nk, {0, 890, 130, 40});
-            if(UI->NkButtonLabel(Nk, "Exit"))
-                GameMode->CurrentAction = GMAction_Exit;
+                UI->NkLayoutSpacePush(Nk, {0, 870, 130, 40});
+                if(UI->NkButtonLabel(Nk, "Exit"))
+                    GameMode->CurrentAction = GMAction_Exit;
 
-            UI->NkLayoutSpacePush(Nk, {135, 890, 130, 40});
-            if(UI->NkButtonLabel(Nk, "Write SSWM"))
-                GameMode->CurrentAction = GMAction_WriteSSWM;
+                UI->NkLayoutSpacePush(Nk, {135, 870, 130, 40});
+                if(UI->NkButtonLabel(Nk, "Write SSWM"))
+                    GameMode->CurrentAction = GMAction_WriteSSWM;
 
-            UI->NkLayoutSpaceEnd(Nk);
-        } break;
+                UI->NkLayoutSpaceEnd(Nk);
+            } break;
 
-        case EditGameMode_Terrain:
-        {
-            DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, UIState->MouseZ);
+            case EditGameMode_Terrain:
+            {
+                DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, UIState->MouseZ);
             
-        } break;
+            } break;
 
-        case EditGameMode_NavMeshes:
-        {
-            DrawNavMeshModeUI(GameMode, UI, Nk);
-        } break;
+            case EditGameMode_NavMeshes:
+            {
+                DrawNavMeshModeUI(GameMode, UI, Nk);
+            } break;
+        }
+
     }
 }

@@ -927,7 +927,7 @@ typedef struct engine_controller_input
     
     union
     {
-        engine_button_state Buttons[20];
+        engine_button_state Buttons[21];
         struct
         {
             engine_button_state MoveUp;
@@ -956,6 +956,7 @@ typedef struct engine_controller_input
 
             engine_button_state Undo;
             engine_button_state ShowProfiler;
+            engine_button_state ShowUI;
 
             // NOTE(casey): All buttons must be added above this line
             

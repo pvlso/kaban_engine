@@ -1981,6 +1981,7 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     v2 A = pts[I];
                     v2 B = pts[I + 1];
                     PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
+                    PushLine(RenderGroup, Flat, V3(A - V2(0.0f, 0.02f), 44.0f), V3(B - V2(0.0f, 0.02f), 44.0f), V4(0, 0, 0, 1));
                 }
 
 #endif
@@ -2037,12 +2038,13 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     {
                         triangle *T = TResult.Triangles + TIndex;
                         if((s32)I == StartNodeIndex)
-                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(0, 1, 0, 0.25f));
+                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(0, 1, 0, 0.5f));
                         else if((s32)I == EndNodeIndex)
-                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(1, 0, 0, 0.25f));
+                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(1, 0, 0, 0.5f));
                         else
-                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(DebugColorTable[(C + 4) % ArrayCount(DebugColorTable)], 0.2f));
+                            PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(DebugColorTable[(C + 4) % ArrayCount(DebugColorTable)], 0.5f));
                             
+                        PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(0, 0, 0, 0.5f));
                     }
                     Platform.DeallocateMemory(TResult.Triangles);
                     Platform.DeallocateMemory(TResult.Adjacencies);
@@ -2197,54 +2199,6 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
 #endif                        
 #endif
     }
-
-    nk_ui *UI = UIState->UI;
-    nk_context *Nk = UIState->Nk;
-    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
-    {
-        UI->NkLayoutSpacePush(Nk, UI->NkRect(1580, -240, 320, 200));
-        struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
-        Platform.UI.NkFillRect(&Nk->current->buffer, Bounds, 5.0f, ColorTable[3]);
-
-        if(UI->NkGroupBegin(Nk, "Mesh View", NK_WINDOW_BORDER))
-        {
-            if(NkTreePush(Platform.UI, Nk, NK_TREE_NODE, "Mesh View Options", NK_MINIMIZED))
-            {
-                UI->NkCheckboxLabel(Nk, "Show Native Polies", &GameMode->ShowNativePolies);
-
-                if(GameMode->ShowNativePolies)
-                    UI->NkCheckboxLabel(Nk, "Show Native P IDs", &GameMode->ShowNativeIds);
-
-                if(GameMode->Partitioned)
-                {
-                    UI->NkCheckboxLabel(Nk, "Show Partition", &GameMode->ShowPartition);
-
-                    if(GameMode->ShowPartition)
-                    {
-                        UI->NkCheckboxLabel(Nk, "Show Color", &GameMode->ShowColor);
-                        UI->NkCheckboxLabel(Nk, "Show Neighbours", &GameMode->ShowNeighbours);
-                    }
-                }
-                    
-                UI->NkTreePop(Nk);
-            }
-
-            UI->NkLabel(Nk, "StartNode: ", NK_TEXT_ALIGN_LEFT);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
-                         GameMode->StartNode.TileX, GameMode->StartNode.TileY);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
-                         GameMode->StartNode.Offset.x, GameMode->StartNode.Offset.y);
-
-            UI->NkLabel(Nk, "EndNode: ", NK_TEXT_ALIGN_LEFT);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
-                         GameMode->EndNode.TileX, GameMode->EndNode.TileY);
-            UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
-                         GameMode->EndNode.Offset.x, GameMode->EndNode.Offset.y);
-
-            UI->NkGroupEnd(Nk);
-        }
-    }
-    UI->NkLayoutSpaceEnd(Nk);
 
     EndTemporaryMemory(TempMem);
 }

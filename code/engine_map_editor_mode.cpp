@@ -344,7 +344,7 @@ DrawMeshTriangles(ui_state *UIState, render_group *RenderGroup, world *World, wo
 
 //#include "subtruct_poly.cpp"
 inline controlled_camera *
-CheckForInput(editor_mode_game *GameMode, engine_input *Input)
+CheckForInput(editor_mode_game *GameMode, nk_context *Nk, engine_input *Input)
 {
     controlled_camera *Result = 0;
     for(int ControllerIndex = 0;
@@ -426,6 +426,9 @@ CheckForInput(editor_mode_game *GameMode, engine_input *Input)
                 {
                     UndoTileChanges(GameMode->WorldState->World, &GameMode->UndoStack, &GameMode->RedoStack);
                 }
+
+                if(WasPressed(Controller->ShowUI))
+                    GameMode->HideUI = !GameMode->HideUI;
                 
                 switch(GameMode->GameEditMode)
                 {
@@ -545,7 +548,7 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         
         if(!Exit)
         {
-            controlled_camera *ConCamera = CheckForInput(GameMode, Input);
+            controlled_camera *ConCamera = CheckForInput(GameMode, Nk, Input);
 
             RenderGroup->CameraTransform.DistanceAboveTarget += GameMode->Zoom;
             MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
@@ -574,8 +577,6 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
             PushRectOutline(RenderGroup, &Flat, V3(0.0f, 0.0f, 0.0f), GetDim(SimRegion->UpdatableBounds), V4(1.0f, 0.0f, 1.0f, 1));
 #endif
 
-            UI->NkLayoutRowStatic(Nk, 20, 120, 1);
-            UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
 
             if(GameMode->ShowGrid)
             {

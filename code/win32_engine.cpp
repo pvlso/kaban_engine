@@ -2215,6 +2215,10 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->ShowProfiler, IsDown);
                     }
+                    else if(VKCode == 'P')
+                    {
+                        Win32ProcessKeyboardMessage(&KeyboardController->ShowUI, IsDown);
+                    }
                     else if(VKCode == VK_UP)
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->ActionUp, IsDown);
