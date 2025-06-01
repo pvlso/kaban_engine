@@ -1091,7 +1091,7 @@ PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
             poly->points[I].id = I;
         }
 
-        EPPSetOrientation(poly, EPP_ORIENTATION_CCW); // Ensure clockwise
+        EPPSetOrientation(poly, EPP_ORIENTATION_CCW);
         DLIST_INSERT(&In, New);                            
     }
 
@@ -1816,6 +1816,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                      SimRegion->Origin, GameMode->CurrentPolygonIndex, TempMem.Arena);
     }
                    
+    b32 ShowStringPull = true;
+    b32 ShowStringPullEdges = false;
     if(GameMode->Partitioned)
     {
         char Text[32];
@@ -1828,8 +1830,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
             {
                 v2 StartP = Subtract(GameMode->WorldState->World, &GameMode->StartNode, &SimRegion->Origin);
                 v2 EndP = Subtract(GameMode->WorldState->World, &GameMode->EndNode, &SimRegion->Origin);
-                PushRect(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(0, 1, 0, 1));
-                PushRect(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(1, 0, 0, 1));
+                PushRect(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(1, 0, 0, 1));
+                PushRect(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(0, 1, 0, 1));
                 PushRectOutline(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
                 PushRectOutline(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
 
@@ -1960,10 +1962,17 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     portals[nportals*2 + 1] = B;
                     ++nportals;                        
 
-                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
+                    if(ShowStringPullEdges)
+                    {
+                        PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
 
-                    PushRect(RenderGroup, Flat, V3(A, 50.0f), V2(0.25f, 0.25f), V4(0, 0, 1, 1));
-                    PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
+                        PushRect(RenderGroup, Flat, V3(A, 50.0f), V2(0.25f, 0.25f), V4(0, 0, 1, 1));
+                        PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
+                    }
+
+                    v2 CenterA = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
+                    v2 CenterB = Subtract(GameMode->WorldState->World, &Parent->TileP, &SimRegion->Origin);
+                    PushLine(RenderGroup, Flat, V3(CenterA, 50.0f), V3(CenterB, 50.0f), V4(1, 0, 0, 1));
                 }
 
                 portals[nportals*2] = StartP;
@@ -1974,14 +1983,17 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                 v2 *pts = PushArray(TempMem.Arena, maxpts, v2);
                 s32 npts = StringPull(portals, nportals, pts, maxpts);
 
-                for(s32 I = 0;
-                    I < npts - 1;
-                    ++I)
+                if(ShowStringPull)
                 {
-                    v2 A = pts[I];
-                    v2 B = pts[I + 1];
-                    PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
-                    PushLine(RenderGroup, Flat, V3(A - V2(0.0f, 0.02f), 44.0f), V3(B - V2(0.0f, 0.02f), 44.0f), V4(0, 0, 0, 1));
+                    for(s32 I = 0;
+                        I < npts - 1;
+                        ++I)
+                    {
+                        v2 A = pts[I];
+                        v2 B = pts[I + 1];
+                        PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 1, 0, 1));
+                        PushLine(RenderGroup, Flat, V3(A - V2(0.0f, 0.02f), 44.0f), V3(B - V2(0.0f, 0.02f), 44.0f), V4(0, 0, 0, 1));
+                    }
                 }
 
 #endif
