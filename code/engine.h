@@ -76,7 +76,7 @@ enum editor_mode
     EditorMode_None,
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
-    EditorMode_GameMode,
+    EditorMode_MapEditor,
     EditorMode_SimulateGame,
 };
 
@@ -122,7 +122,7 @@ struct editor_state
     {
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
-        editor_mode_game *GameMode;
+        engine_map_editor *MapEditor;
         editor_game_simulate_mode *SimulateGame;
     };
 };

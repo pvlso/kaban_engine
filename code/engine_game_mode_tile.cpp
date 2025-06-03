@@ -26,13 +26,13 @@ AddGroundTile(action_stack *UndoStack, world *World, world_position P, ssa_tile 
 }
 
 inline void
-AddGroundTile(editor_mode_game *GameMode, world *World, world_position MouseP, b32 FloodFill)
+AddGroundTile(engine_map_editor *MapEditor, world *World, world_position MouseP, b32 FloodFill)
 {
-    AddGroundTile(&GameMode->UndoStack, World, MouseP, GameMode->Tile, GameMode->CurrentZLayer, FloodFill);
+    AddGroundTile(&MapEditor->UndoStack, World, MouseP, MapEditor->Tile, MapEditor->CurrentZLayer, FloodFill);
 }
 
 inline void
-RemoveGroundTile(action_stack *UndoStack, editor_mode_game *GameMode, world *World, world_position MouseP)
+RemoveGroundTile(action_stack *UndoStack, engine_map_editor *MapEditor, world *World, world_position MouseP)
 {
     sswm_ground_tile *GroundTile = EDITORGetWorldMapGroundTile(World, MouseP.TileX, MouseP.TileY);
 
@@ -43,8 +43,8 @@ RemoveGroundTile(action_stack *UndoStack, editor_mode_game *GameMode, world *Wor
         RemoveTileAction.PrevTile = *GroundTile;
         PushOnActionStack(UndoStack, RemoveTileAction);
             
-        GroundTile->BitmapID[GameMode->CurrentZLayer] = 0;
-        GroundTile->CheckSum[GameMode->CurrentZLayer] = 0;
+        GroundTile->BitmapID[MapEditor->CurrentZLayer] = 0;
+        GroundTile->CheckSum[MapEditor->CurrentZLayer] = 0;
     }
 }
 

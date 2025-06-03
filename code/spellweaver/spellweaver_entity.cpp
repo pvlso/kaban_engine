@@ -37,21 +37,21 @@ UpdateSpriteIndex(entity *Entity, r32 Time, u32 SpriteCount, u32 Speed)
 }
 
 internal void
-EntityAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
+EntityAttack(world_state *WorldState, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
              render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
 {
     // TODO(paul): Add more different entities that can attack
-    random_series *EffectsEntropy = &WorldMode->EffectsEntropy;
+    random_series *EffectsEntropy = &WorldState->EffectsEntropy;
     switch(Entity->Type)
     {
         case EntityType_Hero:
         {
-            HeroAttack(WorldMode, SimRegion, AudioState, Entity, RenderGroup, Transform, LocalMouseP);
+            HeroAttack(WorldState, SimRegion, AudioState, Entity, RenderGroup, Transform, LocalMouseP);
         } break;
 
         case EntityType_ImmidiateSpell:
         {
-            ImmidiateSpellAttack(WorldMode, SimRegion, AudioState, Entity, RenderGroup, Transform);
+            ImmidiateSpellAttack(WorldState, SimRegion, AudioState, Entity, RenderGroup, Transform);
         } break;
 
         default:
@@ -128,7 +128,7 @@ UpdateTimers(entity *Entity, r32 dt)
 }
 
 internal void
-RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *RenderGroup,
+RenderEntities(world_state *WorldState, sim_region *SimRegion, render_group *RenderGroup,
                object_transform *EntityTransform, entity *Entity, r32 dt, render_entity *RenderEntity)
 {
    loaded_spritesheet *SpriteSheet = RenderEntity->SpriteSheet;
@@ -274,7 +274,7 @@ RenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, render_group *
 }
 
 internal void
-UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *AudioState, controlled_hero *ConHero,
+UpdateAndRenderEntities(world_state *WorldState, sim_region *SimRegion, audio_state *AudioState, controlled_hero *ConHero,
                         render_group *RenderGroup, real32 dt, v2 MouseP)
 {
     TIMED_FUNCTION();
@@ -301,7 +301,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
 #if 0
                 if(Animation->AnimationTypeHaveChanged && IsCreationFlagSet(Entity, CreationFlag_SoundEffects))
                 {
-//                    u32 RandomSound = RandomBetween(&WorldMode->EffectsEntropy, 0, 2);
+//                    u32 RandomSound = RandomBetween(&WorldState->EffectsEntropy, 0, 2);
 //                    sound_id SoundID = Entity->SoundEffects->AnimationSoundEffect[Animation->AnimationType][RandomSound];
 //                    PlaySound(AudioState, SoundID);
                 }
@@ -315,11 +315,11 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
                     if(IsValid(RenderEntity.SpriteSheet->SpriteIDs[0]))
                     {
                         RenderEntity.SpriteSheetInfo = GetSpriteSheetInfo(RenderGroup->Assets, ID);
-                        RenderEntity.EntitySpriteIndex = UpdateSpriteIndex(Entity, WorldMode->Time,
+                        RenderEntity.EntitySpriteIndex = UpdateSpriteIndex(Entity, WorldState->Time,
                                                                            RenderEntity.SpriteSheetInfo->SpriteCount,
                                                                            RenderEntity.AnimationSpeed);
                         RenderEntity.AnimationFinished =
-                            AnimationHasComleted(WorldMode->Time, Animation->SpriteSheetOffset, RenderEntity.EntitySpriteIndex,
+                            AnimationHasComleted(WorldState->Time, Animation->SpriteSheetOffset, RenderEntity.EntitySpriteIndex,
                                                  RenderEntity.SpriteSheetInfo->SpriteCount, dt, RenderEntity.AnimationSpeed);
                         for(u32 SpriteIndex = 0;
                             SpriteIndex < RenderEntity.SpriteSheetInfo->SpriteCount;
@@ -338,7 +338,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
             }
             
             // NOTE(paul): Render Entity
-            RenderEntities(WorldMode, SimRegion, RenderGroup, &EntityTransform, Entity, dt, &RenderEntity);
+            RenderEntities(WorldState, SimRegion, RenderGroup, &EntityTransform, Entity, dt, &RenderEntity);
 
             // NOTE(paul): Update Timers
             if(IsCreationFlagSet(Entity, CreationFlag_NeedsTimers))
@@ -369,12 +369,12 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
                 {
                     case EntityType_Hero:
                     {
-                        UpdatedEntity = UpdateHero(WorldMode, SimRegion, ConHero, Entity, LocalMouseP, RenderGroup);
+                        UpdatedEntity = UpdateHero(WorldState, SimRegion, ConHero, Entity, LocalMouseP, RenderGroup);
                     } break;
 
                     case EntityType_FlyingSpell:
                     {
-                        UpdatedEntity = UpdateFlyingSpell(WorldMode, Entity);
+                        UpdatedEntity = UpdateFlyingSpell(WorldState, Entity);
                     } break;
 
                     case EntityType_ImmidiateSpell:
@@ -401,7 +401,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
 
             if((Entity->Type != EntityType_Tile) && Entity->StandardZUpdate)
             {
-                entity_id TileID = WorldMode->TileMap[Entity->TileP.TileY*WorldMode->World->TileWidth + Entity->TileP.TileX];
+                entity_id TileID = WorldState->TileMap[Entity->TileP.TileY*WorldState->World->TileWidth + Entity->TileP.TileX];
                 entity *GroundTile = GetEntityByID(SimRegion, TileID);
                 Entity->ZLayer = GroundTile->ZLayer + 1;
             }
@@ -416,30 +416,30 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
                 case EntityState_Moving:
                 {
                     Assert(IsSet(Entity, EntityFlag_Moveable));
-                    MoveEntity(WorldMode, SimRegion, Entity, dt, &UpdatedEntity.MoveSpec, UpdatedEntity.ddP);
+                    MoveEntity(WorldState, SimRegion, Entity, dt, &UpdatedEntity.MoveSpec, UpdatedEntity.ddP);
                 } break;
 
                 case EntityState_Attacking:
                 {
                     u32 StopSpriteIndex = Entity->Animation->AttackSpriteFinishIndex[Entity->Animation->AttackType];
-                    b32 AbleToAttack = (AnimationFinishedOnSprite(WorldMode->Time, Animation->SpriteSheetOffset,
+                    b32 AbleToAttack = (AnimationFinishedOnSprite(WorldState->Time, Animation->SpriteSheetOffset,
                                                                   RenderEntity.EntitySpriteIndex, RenderEntity.SpriteSheetInfo->SpriteCount, dt,
                                                                   StopSpriteIndex, RenderEntity.AnimationSpeed) && !Animation->AnimationTypeHaveChanged); 
                     if(AbleToAttack)
                     {
-                        EntityAttack(WorldMode, AudioState, SimRegion, Entity, RenderGroup, &EntityTransform, LocalMouseP);
+                        EntityAttack(WorldState, AudioState, SimRegion, Entity, RenderGroup, &EntityTransform, LocalMouseP);
                     }
                 } break;
 
                 case EntityState_CastingSpell:
                 {
                     u32 StopSpriteIndex = Entity->Animation->CastSpellSpriteFinishIndex[Entity->Animation->CastSpellType];
-                    b32 AbleToCast = (AnimationFinishedOnSprite(WorldMode->Time, Animation->SpriteSheetOffset,
+                    b32 AbleToCast = (AnimationFinishedOnSprite(WorldState->Time, Animation->SpriteSheetOffset,
                                                                 RenderEntity.EntitySpriteIndex, RenderEntity.SpriteSheetInfo->SpriteCount, dt,
                                                                 StopSpriteIndex, RenderEntity.AnimationSpeed) && !Animation->AnimationTypeHaveChanged); 
                     if(AbleToCast)
                     {
-                        EntityAttack(WorldMode, AudioState, SimRegion, Entity, RenderGroup, &EntityTransform, LocalMouseP);
+                        EntityAttack(WorldState, AudioState, SimRegion, Entity, RenderGroup, &EntityTransform, LocalMouseP);
                     }
                 } break;
 
@@ -452,7 +452,7 @@ UpdateAndRenderEntities(game_mode_world *WorldMode, sim_region *SimRegion, audio
                         {
                             case EntityType_Hero:
                             {
-                                WorldMode->HeroExist = false;
+                                WorldState->HeroExist = false;
 //                                PlaySound(AudioState, GameState->GameEndDeathFX);
 //                                GameState->MusicState = MusicState_DarkAmbient;
                             } break;

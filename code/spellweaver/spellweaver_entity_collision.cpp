@@ -7,10 +7,10 @@
             that was created by Casey Muratori $
    ======================================================================== */
 internal entity_collision *
-MakeSimpleGroundedCollision(game_mode_world *WorldMode, real32 DimX, real32 DimY, real32 DimZ)
+MakeSimpleGroundedCollision(world_state *WorldState, real32 DimX, real32 DimY, real32 DimZ)
 {
     // TODO(casey): NOT WORLD ARENA!  Change to using the fundamental types arena, etc.
-    entity_collision *Collision = PushStruct(&WorldMode->World->Arena, entity_collision);
+    entity_collision *Collision = PushStruct(&WorldState->World->Arena, entity_collision);
     Collision->OffsetP = V3(0, 0, 0);
     Collision->CollisionRect = RectCenterDim(Collision->OffsetP, V3(DimX, DimY, DimZ));
     Collision->Height = DimZ;
@@ -19,10 +19,10 @@ MakeSimpleGroundedCollision(game_mode_world *WorldMode, real32 DimX, real32 DimY
 }
 
 internal entity_collision *
-MakeNullCollision(game_mode_world *WorldMode)
+MakeNullCollision(world_state *WorldState)
 {
     // TODO(casey): NOT WORLD ARENA!  Change to using the fundamental types arena, etc.
-    entity_collision *Collision = PushStruct(&WorldMode->World->Arena, entity_collision);
+    entity_collision *Collision = PushStruct(&WorldState->World->Arena, entity_collision);
     Collision->OffsetP = V3(0, 0, 0);
     Collision->CollisionRect = InvertedInfinityRectangle3();
     Collision->Height = 0;
@@ -31,7 +31,7 @@ MakeNullCollision(game_mode_world *WorldMode)
 }
 
 internal void
-ClearCollisionRulesFor(game_mode_world *WorldMode, entity_id ID)
+ClearCollisionRulesFor(world_state *WorldState, entity_id ID)
 {
     // TODO(casey): Need to make a better data structure that allows
     // removal of collision rules without searching the entire table
@@ -44,10 +44,10 @@ ClearCollisionRulesFor(game_mode_world *WorldMode, entity_id ID)
     // the new things on the free list, and remove the reverse of
     // those pairs.
     for(uint32 HashBucket = 0;
-        HashBucket < ArrayCount(WorldMode->CollisionRuleHash);
+        HashBucket < ArrayCount(WorldState->CollisionRuleHash);
         ++HashBucket)
     {
-        for(pairwise_collision_rule **Rule = &WorldMode->CollisionRuleHash[HashBucket];
+        for(pairwise_collision_rule **Rule = &WorldState->CollisionRuleHash[HashBucket];
             *Rule;
             )
         {
@@ -57,8 +57,8 @@ ClearCollisionRulesFor(game_mode_world *WorldMode, entity_id ID)
                 pairwise_collision_rule *RemovedRule = *Rule;
                 *Rule = (*Rule)->NextInHash;
 
-                RemovedRule->NextInHash = WorldMode->FirstFreeCollisionRule;
-                WorldMode->FirstFreeCollisionRule = RemovedRule;
+                RemovedRule->NextInHash = WorldState->FirstFreeCollisionRule;
+                WorldState->FirstFreeCollisionRule = RemovedRule;
             }
             else
             {
@@ -69,7 +69,7 @@ ClearCollisionRulesFor(game_mode_world *WorldMode, entity_id ID)
 }
 
 internal void
-AddCollisionRule(game_mode_world *WorldMode, entity_id IDA, entity_id IDB, bool32 CanCollide)
+AddCollisionRule(world_state *WorldState, entity_id IDA, entity_id IDB, bool32 CanCollide)
 {
     // TODO(casey): Collapse this with ShouldCollide
     if(IDA.Value > IDB.Value)
@@ -81,8 +81,8 @@ AddCollisionRule(game_mode_world *WorldMode, entity_id IDA, entity_id IDB, bool3
 
     // TODO(casey): BETTER HASH FUNCTION
     pairwise_collision_rule *Found = 0;
-    uint32 HashBucket = IDA.Value & (ArrayCount(WorldMode->CollisionRuleHash) - 1);
-    for(pairwise_collision_rule *Rule = WorldMode->CollisionRuleHash[HashBucket];
+    uint32 HashBucket = IDA.Value & (ArrayCount(WorldState->CollisionRuleHash) - 1);
+    for(pairwise_collision_rule *Rule = WorldState->CollisionRuleHash[HashBucket];
         Rule;
         Rule = Rule->NextInHash)
     {
@@ -96,18 +96,18 @@ AddCollisionRule(game_mode_world *WorldMode, entity_id IDA, entity_id IDB, bool3
     
     if(!Found)
     {
-        Found = WorldMode->FirstFreeCollisionRule;
+        Found = WorldState->FirstFreeCollisionRule;
         if(Found)
         {
-            WorldMode->FirstFreeCollisionRule = Found->NextInHash;
+            WorldState->FirstFreeCollisionRule = Found->NextInHash;
         }
         else
         {
-            Found = PushStruct(&WorldMode->World->Arena, pairwise_collision_rule);
+            Found = PushStruct(&WorldState->World->Arena, pairwise_collision_rule);
         }
         
-        Found->NextInHash = WorldMode->CollisionRuleHash[HashBucket];
-        WorldMode->CollisionRuleHash[HashBucket] = Found;
+        Found->NextInHash = WorldState->CollisionRuleHash[HashBucket];
+        WorldState->CollisionRuleHash[HashBucket] = Found;
     }
 
     if(Found)

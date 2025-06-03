@@ -42,7 +42,7 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(UI->NkButtonLabel(Nk, "Game Mode"))
             {
-                PlayGameMode(EditorState, TranState);
+                PlayMapEditor(EditorState, TranState);
                 Result = true;
                 return(Result);
             }

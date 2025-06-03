@@ -38,11 +38,11 @@ ConvertWorldPolygonToPolygon2d(world *World, world_position *BaseP, world_polygo
 }
 
 inline void
-AddVertex(editor_mode_game *GameMode, world_polygon *Polygon, world *World, world_position TileP)
+AddVertex(engine_map_editor *MapEditor, world_polygon *Polygon, world *World, world_position TileP)
 {
     if((Polygon->VertexCount + 1) < MAX_VERTEX_COUNT)
     {
-        if(!GameMode->ChosenVertex)
+        if(!MapEditor->ChosenVertex)
         {
             r32 Tolerance = 0.002f;
             for(s32 VertexIndex = 0;
@@ -55,27 +55,27 @@ AddVertex(editor_mode_game *GameMode, world_polygon *Polygon, world *World, worl
                 r32 Y = AbsoluteValue(Delta.y);
                 if((X < Tolerance) && (Y < Tolerance))
                 {
-                    GameMode->ChosenVertex = Vertex;
+                    MapEditor->ChosenVertex = Vertex;
                     break;
                 }
             }
 
-            if(!GameMode->ChosenVertex)
+            if(!MapEditor->ChosenVertex)
             {
                 Polygon->Vertices[Polygon->VertexCount++] = TileP;
             }
         }
         else
         {
-            GameMode->ChosenVertex = 0;
+            MapEditor->ChosenVertex = 0;
         }
     }
 }
 
 inline void
-RemoveVertex(editor_mode_game *GameMode, world_polygon *Polygon, world *World, world_position TileP)
+RemoveVertex(engine_map_editor *MapEditor, world_polygon *Polygon, world *World, world_position TileP)
 {
-    if(!GameMode->ChosenVertex)
+    if(!MapEditor->ChosenVertex)
     {
         r32 Tolerance = 0.002f;
         for(s32 VertexIndex = 0;
@@ -104,11 +104,11 @@ RemoveVertex(editor_mode_game *GameMode, world_polygon *Polygon, world *World, w
 }
 
 inline void
-StartNewPolygon(editor_mode_game *GameMode)
+StartNewPolygon(engine_map_editor *MapEditor)
 {
-    GameMode->CurrentPolygon = GameMode->Polies + GameMode->PolygonCount;
-    ++GameMode->CurrentPolygonIndex;
-    ++GameMode->PolygonCount;
+    MapEditor->CurrentPolygon = MapEditor->Polies + MapEditor->PolygonCount;
+    ++MapEditor->CurrentPolygonIndex;
+    ++MapEditor->PolygonCount;
 }
 
 inline void
@@ -119,14 +119,14 @@ ResetPolygon(world_polygon *Polygon)
 }
 
 inline void
-DeletePolygon(editor_mode_game *GameMode)
+DeletePolygon(engine_map_editor *MapEditor)
 {
-    if(GameMode->CurrentPolygonIndex != 0)
+    if(MapEditor->CurrentPolygonIndex != 0)
     {
-        --GameMode->CurrentPolygonIndex;
-        --GameMode->PolygonCount;
+        --MapEditor->CurrentPolygonIndex;
+        --MapEditor->PolygonCount;
 
-        GameMode->CurrentPolygon = GameMode->Polies + GameMode->CurrentPolygonIndex;
+        MapEditor->CurrentPolygon = MapEditor->Polies + MapEditor->CurrentPolygonIndex;
     }
 }
 
@@ -176,16 +176,16 @@ FindOrAddEdge(hash_table *Table, edge *Edge, s32 TriangleIndex, memory_arena *Ar
 }
 
 inline b32
-ShareEdge(editor_mode_game *GameMode, s32 T, s32 Adj)
+ShareEdge(engine_map_editor *MapEditor, s32 T, s32 Adj)
 {
     s32 SharedCount = 0;
-    world_triangle *Tri = GameMode->MeshTriangles + T;
-    world_triangle *AdjTri = GameMode->MeshTriangles + Adj;
+    world_triangle *Tri = MapEditor->MeshTriangles + T;
+    world_triangle *AdjTri = MapEditor->MeshTriangles + Adj;
     for(s32 I = 0; I < 3; ++I)
     {
         for(s32 J = 0; J < 3; ++J)
         {
-            if(AreInSameTile(GameMode->World, &Tri->Vertices[I], &AdjTri->Vertices[J]))
+            if(AreInSameTile(MapEditor->World, &Tri->Vertices[I], &AdjTri->Vertices[J]))
             {
                 if(PointsAreEqual(Tri->Vertices[I].Offset, AdjTri->Vertices[J].Offset, 0.0001f))
                 {
@@ -200,28 +200,28 @@ ShareEdge(editor_mode_game *GameMode, s32 T, s32 Adj)
 }
 
 internal void
-BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
+BuildAdjacenciesArray(engine_map_editor *MapEditor, sim_region *SimRegion)
 {
     TIMED_FUNCTION();
 
-    temporary_memory TempMem = BeginTemporaryMemory(&GameMode->World->Arena); 
+    temporary_memory TempMem = BeginTemporaryMemory(&MapEditor->World->Arena); 
 
     hash_table EdgeHashTable = {};
-    EdgeHashTable.Size = 3*GameMode->MeshTriangleCount;
+    EdgeHashTable.Size = 3*MapEditor->MeshTriangleCount;
     EdgeHashTable.Hash = PushArray(TempMem.Arena, EdgeHashTable.Size, hash_table_entry *);
 
-    edge *Edges = PushArray(TempMem.Arena, 3*GameMode->MeshTriangleCount, edge);
+    edge *Edges = PushArray(TempMem.Arena, 3*MapEditor->MeshTriangleCount, edge);
     
     for(s32 I = 0;
-        I < GameMode->MeshTriangleCount;
+        I < MapEditor->MeshTriangleCount;
         ++I)
     {
-        world_triangle *T = GameMode->MeshTriangles + I;
+        world_triangle *T = MapEditor->MeshTriangles + I;
         if(IsValid(T->V1))
         {
-            v2 V1 = Subtract(GameMode->World, &T->V1, &SimRegion->Origin);
-            v2 V2 = Subtract(GameMode->World, &T->V2, &SimRegion->Origin);
-            v2 V3 = Subtract(GameMode->World, &T->V3, &SimRegion->Origin);
+            v2 V1 = Subtract(MapEditor->World, &T->V1, &SimRegion->Origin);
+            v2 V2 = Subtract(MapEditor->World, &T->V2, &SimRegion->Origin);
+            v2 V3 = Subtract(MapEditor->World, &T->V3, &SimRegion->Origin);
 
             s32 TIndex = 3*I;
             edge *Edge1 = CreateEdge(V1, V2, Edges, TIndex + 0);
@@ -235,10 +235,10 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
     }
     
     for(s32 I = 0;
-        I < GameMode->MeshTriangleCount;
+        I < MapEditor->MeshTriangleCount;
         ++I)
     {
-        world_triangle *T = GameMode->MeshTriangles + I;
+        world_triangle *T = MapEditor->MeshTriangles + I;
         if(IsValid(T->V1))
         {
 
@@ -302,14 +302,14 @@ BuildAdjacenciesArray(editor_mode_game *GameMode, sim_region *SimRegion)
     }
 
 #if EDITOR_SLOW
-    for(s32 I = 0; I < GameMode->MeshTriangleCount; ++I)
+    for(s32 I = 0; I < MapEditor->MeshTriangleCount; ++I)
     {
         for(s32 J = 0; J < 3; ++J)
         {
-            s32 AdjIndex = GameMode->MeshTriangles[I].Adj.Adjacencies[J];
+            s32 AdjIndex = MapEditor->MeshTriangles[I].Adj.Adjacencies[J];
             if(AdjIndex >= 0)
             {
-                Assert(ShareEdge(GameMode, I, AdjIndex))
+                Assert(ShareEdge(MapEditor, I, AdjIndex))
             }
         }
     }
@@ -341,7 +341,7 @@ TRemoveAt(triangle *Array, s32 Count, s32 Index)
 
 #if 0
 internal sub_region_result
-SubtractRegionFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, triangle *Subtractor,
+SubtractRegionFromMesh(engine_map_editor *MapEditor, sim_region *SimRegion, triangle *Subtractor,
                        triangle *SubjectTris, s32 *SubjectIndices, s32 *SubjectCount, memory_arena *TempArena)
 {
     subtract_result *SubResults = PushArray(TempArena, (*SubjectCount), subtract_result);
@@ -355,7 +355,7 @@ SubtractRegionFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, triang
         SubResults[SubCount] = SubtractTriangels(Subject, Subtractor, 0.0f, 0.0f, 0.0001f, TempArena);
         if((SubResults[SubCount].Set.PolygonCount > 0) || SubResults[SubCount].FullyRemoved)
         {
-            world_triangle *WorldT = GameMode->MeshTriangles + SubjectIndices[SubjectIndex];
+            world_triangle *WorldT = MapEditor->MeshTriangles + SubjectIndices[SubjectIndex];
             *WorldT = {};
             WorldT->Vertices[0].TileX = TILE_CHUNK_UNINITIALIZED;
             WorldT->Adj.Adjacencies[0] = -1;
@@ -447,16 +447,16 @@ SubtractRegionFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, triang
 }
 
 internal void
-FindSubjectTris(editor_mode_game *GameMode, sim_region *SimRegion, rectangle2 SubBounds, triangle *SubjectTris,
+FindSubjectTris(engine_map_editor *MapEditor, sim_region *SimRegion, rectangle2 SubBounds, triangle *SubjectTris,
                 s32 *SubjectIndices, s32 *SubjectCount)
 {
-    game_mode_world *WorldState = GameMode->WorldState;
+    game_mode_world *WorldState = MapEditor->WorldState;
     
     for(s32 Index = 0;
-        Index < GameMode->MeshTriangleCount;
+        Index < MapEditor->MeshTriangleCount;
         ++Index)
     {
-        world_triangle *T = GameMode->MeshTriangles + Index; 
+        world_triangle *T = MapEditor->MeshTriangles + Index; 
         r32 Z = 10.0f;
 
         triangle *ConvertedT = SubjectTris + (*SubjectCount);
@@ -474,7 +474,7 @@ FindSubjectTris(editor_mode_game *GameMode, sim_region *SimRegion, rectangle2 Su
 }
 
 internal void
-SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2 *Region, memory_arena *Arena)
+SubtractPolyFromMesh(engine_map_editor *MapEditor, sim_region *SimRegion, polygon2 *Region, memory_arena *Arena)
 {
     triangulate_result TriangulatedRegion = DelaunayTriangulate(Region, Arena);
 
@@ -491,10 +491,10 @@ SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2
         triangle *RegionT = TriangulatedRegion.Triangles + RegionTIndex;
         
         CalculateTriangleBoundingBox(RegionT);
-        FindSubjectTris(GameMode, SimRegion, RegionT->Bounds, SubjectTris, SubjectIndices, &SubjectCount);
+        FindSubjectTris(MapEditor, SimRegion, RegionT->Bounds, SubjectTris, SubjectIndices, &SubjectCount);
 
         temporary_memory SubTempMem = BeginTemporaryMemory(TempMem.Arena);
-        sub_region_result SubResult = SubtractRegionFromMesh(GameMode, SimRegion, RegionT, SubjectTris,
+        sub_region_result SubResult = SubtractRegionFromMesh(MapEditor, SimRegion, RegionT, SubjectTris,
                                                              SubjectIndices, &SubjectCount, SubTempMem.Arena);
 
         s32 ReplacedCount = 0;
@@ -507,24 +507,24 @@ SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2
             if(ResultTIndex < SubjectCount)
             {
                 s32 SubjectIndex = SubjectIndices[ResultTIndex];
-                WorldT = GameMode->MeshTriangles + SubjectIndex; 
+                WorldT = MapEditor->MeshTriangles + SubjectIndex; 
                 ++ReplacedCount;
             }
             else
             {
-                if(GameMode->FreeIndexCount > 0)
+                if(MapEditor->FreeIndexCount > 0)
                 {
-                    WorldT = GameMode->MeshTriangles + GameMode->FreeTriangleIndices[--GameMode->FreeIndexCount]; 
+                    WorldT = MapEditor->MeshTriangles + MapEditor->FreeTriangleIndices[--MapEditor->FreeIndexCount]; 
                 }
                 else
                 {
-                    WorldT = GameMode->MeshTriangles + GameMode->MeshTriangleCount++; 
+                    WorldT = MapEditor->MeshTriangles + MapEditor->MeshTriangleCount++; 
                 }
             }
 
-            WorldT->Vertices[0] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[0]);
-            WorldT->Vertices[1] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[1]);
-            WorldT->Vertices[2] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, ResultT->Vertices[2]);
+            WorldT->Vertices[0] = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, ResultT->Vertices[0]);
+            WorldT->Vertices[1] = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, ResultT->Vertices[1]);
+            WorldT->Vertices[2] = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, ResultT->Vertices[2]);
         }
 
         if(ReplacedCount < SubjectCount)
@@ -533,7 +533,7 @@ SubtractPolyFromMesh(editor_mode_game *GameMode, sim_region *SimRegion, polygon2
                 I < SubjectCount;
                 ++I)
             {
-                GameMode->FreeTriangleIndices[GameMode->FreeIndexCount++] = SubjectIndices[I];
+                MapEditor->FreeTriangleIndices[MapEditor->FreeIndexCount++] = SubjectIndices[I];
             }
         }
 
@@ -552,13 +552,13 @@ struct t_adj_pair
 };
 
 internal void
-MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
+MergeTriangels(render_group *RenderGroup, object_transform *Flat, engine_map_editor *MapEditor, world_position *BaseP, memory_arena *Arena)
 {
     TIMED_FUNCTION();
 
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
 
-    s32 TCount = GameMode->MeshTriangleCount;
+    s32 TCount = MapEditor->MeshTriangleCount;
     triangle *Triangles = PushArray(TempMem.Arena, TCount, triangle);
     triangle_adjs *AdjArray = PushArray(TempMem.Arena, TCount, triangle_adjs);
     b32 *IsMerged = PushArray(TempMem.Arena, TCount, b32);
@@ -566,15 +566,15 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
         I < TCount;
         ++I)
     {
-        world_triangle *WorldT = GameMode->MeshTriangles + I;
+        world_triangle *WorldT = MapEditor->MeshTriangles + I;
         if(IsValid(WorldT->V1))
         {
             triangle *T = Triangles + I;
             triangle_adjs *Adj = AdjArray + I;
 
-            T->Vertices[0] = Subtract(GameMode->WorldState->World, &WorldT->V1, BaseP);
-            T->Vertices[1] = Subtract(GameMode->WorldState->World, &WorldT->V2, BaseP);
-            T->Vertices[2] = Subtract(GameMode->WorldState->World, &WorldT->V3, BaseP);
+            T->Vertices[0] = Subtract(MapEditor->WorldState->World, &WorldT->V1, BaseP);
+            T->Vertices[1] = Subtract(MapEditor->WorldState->World, &WorldT->V2, BaseP);
+            T->Vertices[2] = Subtract(MapEditor->WorldState->World, &WorldT->V3, BaseP);
 
             Adj->AdjV1V2 = WorldT->Adj.AdjV1V2;
             Adj->AdjV2V3 = WorldT->Adj.AdjV2V3;
@@ -731,7 +731,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
             J < Poly->VertexCount;
             ++J)
         {
-            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, Poly->Vertices[J]);
+            WorldPoly->Vertices[J] = MapIntoTileSpace(MapEditor->WorldState->World, *BaseP, Poly->Vertices[J]);
         }
     }
 
@@ -757,7 +757,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
 }
 
 internal void
-MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode,
+MergeTriangels(render_group *RenderGroup, object_transform *Flat, engine_map_editor *MapEditor,
                triangle *Triangles, triangle_adjs *AdjArray, s32 TriangleCount,
                world_position *BaseP, memory_arena *Arena)
 {
@@ -912,7 +912,7 @@ MergeTriangels(render_group *RenderGroup, object_transform *Flat, editor_mode_ga
             J < Poly->VertexCount;
             ++J)
         {
-            WorldPoly->Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, Poly->Vertices[J]);
+            WorldPoly->Vertices[J] = MapIntoTileSpace(MapEditor->WorldState->World, *BaseP, Poly->Vertices[J]);
         }
     }
 
@@ -968,11 +968,11 @@ RemoveDublicatPoints(v2 *Vertices, s32 *Count)
 }
 
 internal void
-TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mode_game *GameMode, world_position *BaseP, memory_arena *Arena)
+TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, engine_map_editor *MapEditor, world_position *BaseP, memory_arena *Arena)
 {
     TIMED_FUNCTION();
 
-    GameMode->MeshTriangleCount = 0;
+    MapEditor->MeshTriangleCount = 0;
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
 
     polygon2 P = {};
@@ -981,10 +981,10 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
 #if 0
     s32 VertexMaxCount = 0;
     for(u32 I = 0;
-        I < GameMode->PolygonCount;
+        I < MapEditor->PolygonCount;
         ++I)
     {
-        world_polygon *Poly = GameMode->Polies + I;
+        world_polygon *Poly = MapEditor->Polies + I;
         VertexMaxCount += Poly->VertexCount;
     }
 
@@ -992,11 +992,11 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     v2 *At = Vertices;
     
     for(u32 Index = 0;
-        Index < GameMode->PolygonCount;
+        Index < MapEditor->PolygonCount;
         ++Index)
     {
-        world_polygon *Poly = GameMode->Polies + Index;
-        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
+        world_polygon *Poly = MapEditor->Polies + Index;
+        ConvertWorldPolygonToPolygon2(MapEditor->WorldState->World, BaseP, Poly, &P);
 
         Copy(sizeof(v2)*Poly->VertexCount, P.Vertices, At);
         At += Poly->VertexCount;
@@ -1009,31 +1009,31 @@ TriangulatePolygons(render_group *RenderGroup, object_transform *Flat, editor_mo
     
 #if 1    
     for(u32 Index = 0;
-        Index < GameMode->PolygonCount;
+        Index < MapEditor->PolygonCount;
         ++Index)
     {
-        world_polygon *Poly = GameMode->Polies + Index;
-        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, BaseP, Poly, &P);
+        world_polygon *Poly = MapEditor->Polies + Index;
+        ConvertWorldPolygonToPolygon2(MapEditor->WorldState->World, BaseP, Poly, &P);
 
 //        triangulate_result TResult = ConstrainedDelaunayTriangulate(&P, Arena);
         triangulate_result TResult = DelaunayTriangulate(&P, Arena);
 
-        for(s32 TIndex = GameMode->MeshTriangleCount;
-            TIndex < (GameMode->MeshTriangleCount + TResult.TriangleCount);
+        for(s32 TIndex = MapEditor->MeshTriangleCount;
+            TIndex < (MapEditor->MeshTriangleCount + TResult.TriangleCount);
             ++TIndex)
         {
-            triangle *T = TResult.Triangles + (TIndex - GameMode->MeshTriangleCount);
-            world_triangle *WorldT = GameMode->MeshTriangles + TIndex;
-            WorldT->V1 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[0]);
-            WorldT->V2 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[1]);
-            WorldT->V3 = MapIntoTileSpace(GameMode->WorldState->World, *BaseP, T->Vertices[2]);
+            triangle *T = TResult.Triangles + (TIndex - MapEditor->MeshTriangleCount);
+            world_triangle *WorldT = MapEditor->MeshTriangles + TIndex;
+            WorldT->V1 = MapIntoTileSpace(MapEditor->WorldState->World, *BaseP, T->Vertices[0]);
+            WorldT->V2 = MapIntoTileSpace(MapEditor->WorldState->World, *BaseP, T->Vertices[1]);
+            WorldT->V3 = MapIntoTileSpace(MapEditor->WorldState->World, *BaseP, T->Vertices[2]);
         }
 
-//        MergeTriangels(RenderGroup, Flat, GameMode,
+//        MergeTriangels(RenderGroup, Flat, MapEditor,
 //                       TResult.Triangles, TResult.Adjacencies, TResult.TriangleCount,
 //                       BaseP, TempMem.Arena);
 
-        GameMode->MeshTriangleCount += TResult.TriangleCount;
+        MapEditor->MeshTriangleCount += TResult.TriangleCount;
 
         Platform.DeallocateMemory(TResult.Triangles);
         Platform.DeallocateMemory(TResult.Adjacencies);
@@ -1057,7 +1057,7 @@ InitNavPolyNode(nav_poly_node *Node, s32 Index, world_polygon_list *Ptr,
 }
 
 internal void
-PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
+PartitionPolies(engine_map_editor *MapEditor, sim_region *SimRegion,
                 memory_arena *Arena)
 {
     TIMED_BLOCK("PARTITION");
@@ -1071,11 +1071,11 @@ PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
     DLIST_INIT(&In);
 
     for(u32 Index = 0;
-        Index < GameMode->PolygonCount;
+        Index < MapEditor->PolygonCount;
         ++Index)
     {
-        world_polygon *Poly = GameMode->Polies + Index;
-        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &P);
+        world_polygon *Poly = MapEditor->Polies + Index;
+        ConvertWorldPolygonToPolygon2(MapEditor->WorldState->World, &SimRegion->Origin, Poly, &P);
 
         epp_poly_list *New = 0;
         POLY_FREELIST_ALLOCATE(New, Free, PushStruct(Arena, epp_poly_list));
@@ -1106,12 +1106,12 @@ PartitionPolies(editor_mode_game *GameMode, sim_region *SimRegion,
     {
         epp_poly P = Iter->Poly;
         world_polygon_list *New = (world_polygon_list *)Platform.AllocateMemory(sizeof(world_polygon_list));
-        DLIST_INSERT(&GameMode->MeshPolygonsSentinal, New);                            
+        DLIST_INSERT(&MapEditor->MeshPolygonsSentinal, New);                            
         New->Poly.VertexCount = P.numpoints;
         New->Poly.Vertices = (world_position *)Platform.AllocateMemory(sizeof(world_position)*New->Poly.VertexCount);
 
         for(s32 J = 0; J < P.numpoints; ++ J)
-            New->Poly.Vertices[J] = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, V2(P.points[J].x, P.points[J].y));
+            New->Poly.Vertices[J] = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, V2(P.points[J].x, P.points[J].y));
     }
 }
 
@@ -1127,17 +1127,17 @@ DistanceBetween(world *World, nav_poly_node *NodeA, nav_poly_node *NodeB)
 }
 
 internal nav_poly_node *
-SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *End)
+SolvePolyAStar(engine_map_editor *MapEditor, nav_poly_node *Start, nav_poly_node *End)
 {
     TIMED_FUNCTION();
 
     if(Start && End)
     {
         for(u32 NodeIndex = 0;
-            NodeIndex < GameMode->PolyNodeCount;
+            NodeIndex < MapEditor->PolyNodeCount;
             ++NodeIndex)
         {
-            nav_poly_node *Node = GameMode->PolyNodes + NodeIndex;
+            nav_poly_node *Node = MapEditor->PolyNodes + NodeIndex;
             Node->Visited = false;
             Node->GlobalGoal = Real32Maximum;
             Node->LocalGoal = Real32Maximum;
@@ -1146,9 +1146,9 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
 
         nav_poly_node *CurrentNode = Start;
         CurrentNode->LocalGoal = 0.0f;
-        CurrentNode->GlobalGoal = DistanceBetween(GameMode->WorldState->World, Start, End);
+        CurrentNode->GlobalGoal = DistanceBetween(MapEditor->WorldState->World, Start, End);
 
-        heap *Heap = &GameMode->MinPolyNodeHeap;
+        heap *Heap = &MapEditor->MinPolyNodeHeap;
 
         sort_entry Key = {};
         Key.Index = Start->Index;
@@ -1157,11 +1157,11 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
 
         while((Heap->Size != 0) && (CurrentNode != End))
         {
-            nav_poly_node *TestNode = GameMode->PolyNodes + Heap->Nodes[0].Index;
+            nav_poly_node *TestNode = MapEditor->PolyNodes + Heap->Nodes[0].Index;
             while((TestNode->Visited) && (Heap->Size != 0))
             {
                 MinHeapExtractNode(Heap);
-                TestNode = GameMode->PolyNodes + Heap->Nodes[0].Index;
+                TestNode = MapEditor->PolyNodes + Heap->Nodes[0].Index;
             }
 
             if(Heap->Size == 0)
@@ -1169,7 +1169,7 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
                 break;
             }
 
-            CurrentNode = GameMode->PolyNodes + Heap->Nodes[0].Index; 
+            CurrentNode = MapEditor->PolyNodes + Heap->Nodes[0].Index; 
             CurrentNode->Visited = true;
 
             for(s32 NeighbourIndex = 0;
@@ -1185,14 +1185,14 @@ SolvePolyAStar(editor_mode_game *GameMode, nav_poly_node *Start, nav_poly_node *
                         Key.Index = NeighbourNode->Index;
                         Key.SortKey = NeighbourNode->GlobalGoal;
 
-                        r32 LowerGoal = CurrentNode->LocalGoal + DistanceBetween(GameMode->WorldState->World, CurrentNode, NeighbourNode);
+                        r32 LowerGoal = CurrentNode->LocalGoal + DistanceBetween(MapEditor->WorldState->World, CurrentNode, NeighbourNode);
                         if(LowerGoal < NeighbourNode->LocalGoal)
                         {
                             NeighbourNode->Parent = CurrentNode;
                             NeighbourNode->LocalGoal = LowerGoal;
 
                             NeighbourNode->GlobalGoal = (NeighbourNode->LocalGoal +
-                                                         DistanceBetween(GameMode->WorldState->World, NeighbourNode, End));
+                                                         DistanceBetween(MapEditor->WorldState->World, NeighbourNode, End));
                             Key.SortKey = NeighbourNode->GlobalGoal;
                         }
 
@@ -1308,11 +1308,11 @@ StringPull(v2 *Portals, s32 PortalsCount, v2 *Points, s32 MaxPoints)
 }
 
 internal void
-PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memory_arena *TempArena)
+PartitionNavigationMesh(engine_map_editor *MapEditor, sim_region *SimRegion, memory_arena *TempArena)
 {
     // NOTE(paul): Clear Mesh Polygon List
-    for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-        Iter != &GameMode->MeshPolygonsSentinal;
+    for(world_polygon_list *Iter = MapEditor->MeshPolygonsSentinal.Next;
+        Iter != &MapEditor->MeshPolygonsSentinal;
         )
     {
         world_polygon_list *T = Iter;
@@ -1323,44 +1323,44 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
         Platform.DeallocateMemory(T);
     }
                             
-    PartitionPolies(GameMode, SimRegion, TempArena);
+    PartitionPolies(MapEditor, SimRegion, TempArena);
 
     // NOTE(paul): Clear node neighbours count
     for(u32 I = 0;
-        I < GameMode->PolyNodeCount;
+        I < MapEditor->PolyNodeCount;
         ++I)
     {
-        nav_poly_node *Node = GameMode->PolyNodes + I;
+        nav_poly_node *Node = MapEditor->PolyNodes + I;
         Node->NeighbourCount = 0;
     }
 
     for(u32 I = 0;
-        I < GameMode->EdgeTable.Size;
+        I < MapEditor->EdgeTable.Size;
         ++I)
     {
-        hash_table_entry *Scan = GameMode->EdgeTable.Hash[I];
+        hash_table_entry *Scan = MapEditor->EdgeTable.Hash[I];
         while(Scan)
         {
             hash_table_entry *Entry = Scan;
             Scan = Scan->Next;
 
-            Entry->Next = GameMode->EdgeTable.Free;
-            GameMode->EdgeTable.Free = Entry;
+            Entry->Next = MapEditor->EdgeTable.Free;
+            MapEditor->EdgeTable.Free = Entry;
         }
     }
     
-    GameMode->PolyNodeCount = 0;                            
+    MapEditor->PolyNodeCount = 0;                            
 
     polygon2 RealPoly = {};
     RealPoly.Vertices = PushArray(TempArena, 128, v2);
 
     s32 PIndex = 0;
-    for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-        Iter != &GameMode->MeshPolygonsSentinal;
+    for(world_polygon_list *Iter = MapEditor->MeshPolygonsSentinal.Next;
+        Iter != &MapEditor->MeshPolygonsSentinal;
         Iter = Iter->Next)
     {
         world_polygon *Poly = &Iter->Poly;
-        ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, &RealPoly);
+        ConvertWorldPolygonToPolygon2(MapEditor->WorldState->World, &SimRegion->Origin, Poly, &RealPoly);
         Iter->RealPoly = RealPoly;
 
         v2 Center = {};
@@ -1382,17 +1382,17 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
 
         rectangle2i Bounds = CalculatePolygonBoundingBox(Poly);
 
-        nav_poly_node *Node = GameMode->PolyNodes + GameMode->PolyNodeCount++;                                
-        InitNavPolyNode(Node, (GameMode->PolyNodeCount - 1), Iter,
-                        MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, Center),
+        nav_poly_node *Node = MapEditor->PolyNodes + MapEditor->PolyNodeCount++;                                
+        InitNavPolyNode(Node, (MapEditor->PolyNodeCount - 1), Iter,
+                        MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, Center),
                         Bounds);
         PIndex += 1;
     }
 
     // NOTE(paul): Build conectivity graph
     s32 I1 = 0;
-    for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-        Iter != &GameMode->MeshPolygonsSentinal;
+    for(world_polygon_list *Iter = MapEditor->MeshPolygonsSentinal.Next;
+        Iter != &MapEditor->MeshPolygonsSentinal;
         Iter = Iter->Next)
     {
         world_polygon *Poly = &Iter->Poly;
@@ -1402,7 +1402,7 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
                                 
         s32 I2 = I1 + 1;
         for(world_polygon_list *Iter2 = Iter->Next;
-            Iter2 != &GameMode->MeshPolygonsSentinal;
+            Iter2 != &MapEditor->MeshPolygonsSentinal;
             Iter2 = Iter2->Next)
         {
             world_polygon *Poly2 = &Iter2->Poly;
@@ -1431,10 +1431,10 @@ PartitionNavigationMesh(editor_mode_game *GameMode, sim_region *SimRegion, memor
                     {
                         hash_data Data = {};
                         Data.PolyMeshAdjacency = {(u32)I1, A1, B1, (u32)I2, A2, B2};
-                        InsertKey(&GameMode->EdgeTable, HashKey, Data, &GameMode->NavMeshArena);
+                        InsertKey(&MapEditor->EdgeTable, HashKey, Data, &MapEditor->NavMeshArena);
 
-                        nav_poly_node *Poly1Node = GameMode->PolyNodes + I1;
-                        nav_poly_node *Poly2Node = GameMode->PolyNodes + I2;
+                        nav_poly_node *Poly1Node = MapEditor->PolyNodes + I1;
+                        nav_poly_node *Poly2Node = MapEditor->PolyNodes + I2;
                         if(Poly1Node->NeighbourCount == 0)
                         {
                             Poly1Node->Neighbours[Poly1Node->NeighbourCount] = Poly2Node;
@@ -1532,7 +1532,7 @@ WritePolygons(world_polygon *Polygons, s32 PolygonCount)
 }
 
 internal void
-DrawPolygons(editor_mode_game *GameMode, render_group *RenderGroup, ui_state *UIState, world *World, world_polygon *Polygons, s32 Count,
+DrawPolygons(engine_map_editor *MapEditor, render_group *RenderGroup, ui_state *UIState, world *World, world_polygon *Polygons, s32 Count,
              world_position BaseP, s32 CurrentPolygonIndex, memory_arena *Arena)
 {
     object_transform Flat = DefaultFlatTransform();
@@ -1585,7 +1585,7 @@ DrawPolygons(editor_mode_game *GameMode, render_group *RenderGroup, ui_state *UI
 
         v2 Center = {};
         f32 SignedArea = 0.0f;
-        if(GameMode->ShowNativeIds)
+        if(MapEditor->ShowNativeIds)
         {
             for(s32 I = 0; I < TempPoly.VertexCount; ++I)
             {
@@ -1688,20 +1688,20 @@ IsPointInPolygon(render_group *RenderGroup, object_transform *Flat, polygon2 *Po
 }
 
 internal s32
-FindNavPolyNodeForPoint(editor_mode_game *GameMode, render_group *RenderGroup, object_transform *Flat,
+FindNavPolyNodeForPoint(engine_map_editor *MapEditor, render_group *RenderGroup, object_transform *Flat,
                         sim_region *SimRegion, world_position P)
 {
     s32 Result = -1;
     for(u32 I = 0;
-        I < GameMode->PolyNodeCount;
+        I < MapEditor->PolyNodeCount;
         ++I)
     {
-        nav_poly_node *Node = GameMode->PolyNodes + I;
+        nav_poly_node *Node = MapEditor->PolyNodes + I;
 
         b32 IsInBounds = IsInRectangleMesh(Node->Bounds, {P.TileX, P.TileY});
         if(IsInBounds)
         {
-            v2 RealP = Subtract(GameMode->WorldState->World, &P, &SimRegion->Origin);
+            v2 RealP = Subtract(MapEditor->WorldState->World, &P, &SimRegion->Origin);
             if(IsPointInPolygon(RenderGroup, Flat, &Node->PolyPtr->RealPoly, RealP))
             {
                 Result = I;
@@ -1714,12 +1714,12 @@ FindNavPolyNodeForPoint(editor_mode_game *GameMode, render_group *RenderGroup, o
 }
 
 internal void
-UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_region *SimRegion,
+UpdateAndRenderNavMeshMode(engine_map_editor *MapEditor, ui_state *UIState, sim_region *SimRegion,
                            render_group *RenderGroup, object_transform *Flat,
                            engine_input *Input, v2 MouseP)
 {
-    world *World = GameMode->WorldState->World;
-    GameMode->CurrentPolygon = GameMode->Polies + GameMode->CurrentPolygonIndex;
+    world *World = MapEditor->WorldState->World;
+    MapEditor->CurrentPolygon = MapEditor->Polies + MapEditor->CurrentPolygonIndex;
 
     v2 PointDim = V2(0.1f, 0.1f);
     v2 P = (MouseP - 0.5f*PointDim) * (1.0f / PointDim.x);
@@ -1735,111 +1735,111 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
     polygon2 Poly = {};
     temporary_memory TempMem = BeginTemporaryMemory(&World->Arena);
 
-    switch(GameMode->CurrentAction)
+    switch(MapEditor->CurrentAction)
     {
-        case GMAction_StartNewPolygon:
+        case MEAction_StartNewPolygon:
         {
-            StartNewPolygon(GameMode);
+            StartNewPolygon(MapEditor);
         } break;
 
-        case GMAction_ResetCurrentPolygon:
+        case MEAction_ResetCurrentPolygon:
         {
-            ResetPolygon(GameMode->CurrentPolygon);
+            ResetPolygon(MapEditor->CurrentPolygon);
         } break;
 
-        case GMAction_DeleteCurrentPolygon:
+        case MEAction_DeleteCurrentPolygon:
         {
-            DeletePolygon(GameMode);
+            DeletePolygon(MapEditor);
         } break;
 
-        case GMAction_WritePolygons:
+        case MEAction_WritePolygons:
         {
-            WritePolygons(GameMode->Polies, GameMode->PolygonCount);
+            WritePolygons(MapEditor->Polies, MapEditor->PolygonCount);
         } break;
 
-        case GMAction_TriangulateAll:
+        case MEAction_TriangulateAll:
         {
-            PartitionNavigationMesh(GameMode, SimRegion, TempMem.Arena);
-            GameMode->Partitioned = true;
+            PartitionNavigationMesh(MapEditor, SimRegion, TempMem.Arena);
+            MapEditor->Partitioned = true;
         } break;
 
-        case GMAction_SubtractRegion:
+        case MEAction_SubtractRegion:
         {
-//            SubtractPolyFromMesh(GameMode, SimRegion, &Poly, &World->Arena);
+//            SubtractPolyFromMesh(MapEditor, SimRegion, &Poly, &World->Arena);
         } break;
 
-        case GMAction_NavMeshPlaceStart:
+        case MEAction_NavMeshPlaceStart:
         {
-            GameMode->StartNode = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
+            MapEditor->StartNode = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, MouseP);
         } break;
 
-        case GMAction_NavMeshPlaceEnd:
+        case MEAction_NavMeshPlaceEnd:
         {
-            GameMode->EndNode = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
+            MapEditor->EndNode = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, MouseP);
         } break;
     }
 
-    if(IsSetGameModeFlag(GameMode, GMFlag_EditEnable))
+    if(IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable))
     {
-        if(GameMode->ChosenVertex)
+        if(MapEditor->ChosenVertex)
         {
-            *GameMode->ChosenVertex = TestP;
+            *MapEditor->ChosenVertex = TestP;
         }
                     
         if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
         {
-            AddVertex(GameMode, GameMode->CurrentPolygon, World, TestP);
+            AddVertex(MapEditor, MapEditor->CurrentPolygon, World, TestP);
         }
         else if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
         {
-            RemoveVertex(GameMode, GameMode->CurrentPolygon, World, TestP);
+            RemoveVertex(MapEditor, MapEditor->CurrentPolygon, World, TestP);
         }
     }
 
     {
         TIMED_BLOCK("Polies Conversation");
         // NOTE(paul): Convert Polies for simulation
-        for(world_polygon_list *Iter = GameMode->MeshPolygonsSentinal.Next;
-            Iter != &GameMode->MeshPolygonsSentinal;
+        for(world_polygon_list *Iter = MapEditor->MeshPolygonsSentinal.Next;
+            Iter != &MapEditor->MeshPolygonsSentinal;
             Iter = Iter->Next)
         {
             world_polygon *Poly = &Iter->Poly;
             polygon2 *RealPoly = &Iter->RealPoly;
             RealPoly->Vertices = PushArray(TempMem.Arena, Poly->VertexCount, v2);
-            ConvertWorldPolygonToPolygon2(GameMode->WorldState->World, &SimRegion->Origin, Poly, RealPoly);
+            ConvertWorldPolygonToPolygon2(MapEditor->WorldState->World, &SimRegion->Origin, Poly, RealPoly);
         }
     }
 
-    if(GameMode->ShowNativePolies)
+    if(MapEditor->ShowNativePolies)
     {
-        DrawPolygons(GameMode, RenderGroup, UIState, World, GameMode->Polies, GameMode->PolygonCount,
-                     SimRegion->Origin, GameMode->CurrentPolygonIndex, TempMem.Arena);
+        DrawPolygons(MapEditor, RenderGroup, UIState, World, MapEditor->Polies, MapEditor->PolygonCount,
+                     SimRegion->Origin, MapEditor->CurrentPolygonIndex, TempMem.Arena);
     }
                    
     b32 ShowStringPull = true;
     b32 ShowStringPullEdges = false;
-    if(GameMode->Partitioned)
+    if(MapEditor->Partitioned)
     {
         char Text[32];
         // NOTE(paul): Show Partition
-        if(GameMode->ShowPartition)
+        if(MapEditor->ShowPartition)
         {
             s32 StartNodeIndex = -1;
             s32 EndNodeIndex = -1;
-            if(IsValid(GameMode->StartNode) && IsValid(GameMode->EndNode))
+            if(IsValid(MapEditor->StartNode) && IsValid(MapEditor->EndNode))
             {
-                v2 StartP = Subtract(GameMode->WorldState->World, &GameMode->StartNode, &SimRegion->Origin);
-                v2 EndP = Subtract(GameMode->WorldState->World, &GameMode->EndNode, &SimRegion->Origin);
+                v2 StartP = Subtract(MapEditor->WorldState->World, &MapEditor->StartNode, &SimRegion->Origin);
+                v2 EndP = Subtract(MapEditor->WorldState->World, &MapEditor->EndNode, &SimRegion->Origin);
                 PushRect(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(1, 0, 0, 1));
                 PushRect(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(0, 1, 0, 1));
                 PushRectOutline(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
                 PushRectOutline(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
 
-                StartNodeIndex = FindNavPolyNodeForPoint(GameMode, RenderGroup, Flat, SimRegion, GameMode->StartNode);
-                EndNodeIndex = FindNavPolyNodeForPoint(GameMode, RenderGroup, Flat, SimRegion, GameMode->EndNode);
+                StartNodeIndex = FindNavPolyNodeForPoint(MapEditor, RenderGroup, Flat, SimRegion, MapEditor->StartNode);
+                EndNodeIndex = FindNavPolyNodeForPoint(MapEditor, RenderGroup, Flat, SimRegion, MapEditor->EndNode);
 
-                nav_poly_node *Path = SolvePolyAStar(GameMode, GameMode->PolyNodes + StartNodeIndex,
-                                                     GameMode->PolyNodes + EndNodeIndex);
+                nav_poly_node *Path = SolvePolyAStar(MapEditor, MapEditor->PolyNodes + StartNodeIndex,
+                                                     MapEditor->PolyNodes + EndNodeIndex);
 #if 0
                 s32 nportals = 0;
                 f32 *portals = PushArray(TempMem.Arena, 128, f32);
@@ -1871,19 +1871,19 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     hash_key Key = {};
                     Key.WorldEdge.A = E.A;
                     Key.WorldEdge.B = E.B;
-                    hash_data Edge = GetHashElement(&GameMode->EdgeTable, Key);
+                    hash_data Edge = GetHashElement(&MapEditor->EdgeTable, Key);
 
                     v2 A = {};
                     v2 B = {};
                     if(From == Edge.PolyMeshAdjacency.PolyAID)
                     {
-                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
-                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                        A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                        B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
                     }
                     else
                     {
-                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
-                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                        A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                        B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
                     }
 
                     vcpy(&portals[nportals*4 + 0], A.E);
@@ -1943,19 +1943,19 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                     hash_key Key = {};
                     Key.WorldEdge.A = E.A;
                     Key.WorldEdge.B = E.B;
-                    hash_data Edge = GetHashElement(&GameMode->EdgeTable, Key);
+                    hash_data Edge = GetHashElement(&MapEditor->EdgeTable, Key);
 
                     v2 A = {};
                     v2 B = {};
                     if(From == Edge.PolyMeshAdjacency.PolyAID)
                     {
-                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
-                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                        A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                        B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
                     }
                     else
                     {
-                        A = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
-                        B = Subtract(GameMode->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                        A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                        B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
                     }
 
                     portals[nportals*2] = A;
@@ -1970,8 +1970,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                         PushRect(RenderGroup, Flat, V3(B, 50.0f), V2(0.1f, 0.25f), V4(0, 1, 1, 1));
                     }
 
-                    v2 CenterA = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
-                    v2 CenterB = Subtract(GameMode->WorldState->World, &Parent->TileP, &SimRegion->Origin);
+                    v2 CenterA = Subtract(MapEditor->WorldState->World, &Node->TileP, &SimRegion->Origin);
+                    v2 CenterB = Subtract(MapEditor->WorldState->World, &Parent->TileP, &SimRegion->Origin);
                     PushLine(RenderGroup, Flat, V3(CenterA, 50.0f), V3(CenterB, 50.0f), V4(1, 0, 0, 1));
                 }
 
@@ -2017,8 +2017,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                         }
                     }
                             
-                    v2 A = Subtract(GameMode->WorldState->World, &E.A, &SimRegion->Origin);
-                    v2 B = Subtract(GameMode->WorldState->World, &E.B, &SimRegion->Origin);
+                    v2 A = Subtract(MapEditor->WorldState->World, &E.A, &SimRegion->Origin);
+                    v2 B = Subtract(MapEditor->WorldState->World, &E.B, &SimRegion->Origin);
 
                     PushLine(RenderGroup, Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
 
@@ -2034,14 +2034,14 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
 
             int C = 0;
             for(u32 I = 0;
-                I < GameMode->PolyNodeCount;
+                I < MapEditor->PolyNodeCount;
                 ++I)
             {
-                nav_poly_node *Node = GameMode->PolyNodes + I;
+                nav_poly_node *Node = MapEditor->PolyNodes + I;
                 polygon2 *RealPoly = &Node->PolyPtr->RealPoly;
-                v2 Center = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
+                v2 Center = Subtract(MapEditor->WorldState->World, &Node->TileP, &SimRegion->Origin);
 
-                if(GameMode->ShowColor)
+                if(MapEditor->ShowColor)
                 {
                     triangulate_result TResult = DelaunayTriangulate(RealPoly, TempMem.Arena);
                     for(s32 TIndex = 0;
@@ -2080,14 +2080,14 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                 v3 P = Unproject(&UIState->RenderGroup, Flat, BasisP.P);
                 UITextOutAt(UIState, P.xy, Text, 0.8f);
 
-                if(GameMode->ShowNeighbours)
+                if(MapEditor->ShowNeighbours)
                 {
                     for(s32 J = 0;
                         J < Node->NeighbourCount;
                         ++J)
                     {
                         nav_poly_node *NNode = Node->Neighbours[J];
-                        v2 NCenter = Subtract(GameMode->WorldState->World, &NNode->TileP, &SimRegion->Origin);
+                        v2 NCenter = Subtract(MapEditor->WorldState->World, &NNode->TileP, &SimRegion->Origin);
                         PushLine(RenderGroup, Flat, V3(Center, 32.0f), V3(NCenter, 32.0f), V4(0, 0, 1, 1));
                     }
                 }
@@ -2097,15 +2097,15 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
         }
 #if 0
                         
-//                        BuildAdjacenciesArray(GameMode, SimRegion);
-//                        MergeTriangels(RenderGroup, &Flat, GameMode, &SimRegion->Origin, &World->Arena);
-//                        DrawMeshTriangles(UIState, RenderGroup, World, GameMode->MeshTriangles, GameMode->MeshTriangleCount, SimRegion, MouseRect);
+//                        BuildAdjacenciesArray(MapEditor, SimRegion);
+//                        MergeTriangels(RenderGroup, &Flat, MapEditor, &SimRegion->Origin, &World->Arena);
+//                        DrawMeshTriangles(UIState, RenderGroup, World, MapEditor->MeshTriangles, MapEditor->MeshTriangleCount, SimRegion, MouseRect);
 
 #if 0
         world_position TileP = {18, 4};
         world_position ETileP = {21, 19};
-        v2 P = Subtract(GameMode->WorldState->World, &TileP, &SimRegion->Origin);
-//                        v2 EP = Subtract(GameMode->WorldState->World, &ETileP, &SimRegion->Origin);
+        v2 P = Subtract(MapEditor->WorldState->World, &TileP, &SimRegion->Origin);
+//                        v2 EP = Subtract(MapEditor->WorldState->World, &ETileP, &SimRegion->Origin);
         v2 EP = MouseP;
         PushRect(RenderGroup, &Flat, V3(P, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 1, 1));
         PushRect(RenderGroup, &Flat, V3(EP, 42.0f), V2(0.5f, 0.5f), V4(1, 0, 0, 1));
@@ -2134,8 +2134,8 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
                 }
             }
                             
-            v2 A = Subtract(GameMode->WorldState->World, &E.A, &SimRegion->Origin);
-            v2 B = Subtract(GameMode->WorldState->World, &E.B, &SimRegion->Origin);
+            v2 A = Subtract(MapEditor->WorldState->World, &E.A, &SimRegion->Origin);
+            v2 B = Subtract(MapEditor->WorldState->World, &E.B, &SimRegion->Origin);
 
             PushLine(RenderGroup, &Flat, V3(A, 45.0f), V3(B, 45.0f), V4(1, 0, 1, 1));
 
@@ -2188,18 +2188,18 @@ UpdateAndRenderNavMeshMode(editor_mode_game *GameMode, ui_state *UIState, sim_re
         {
             nav_poly_node *Next = Node->Parent;
 
-            v2 A = Subtract(GameMode->WorldState->World, &Node->TileP, &SimRegion->Origin);
-            v2 B = Subtract(GameMode->WorldState->World, &Next->TileP, &SimRegion->Origin);
+            v2 A = Subtract(MapEditor->WorldState->World, &Node->TileP, &SimRegion->Origin);
+            v2 B = Subtract(MapEditor->WorldState->World, &Next->TileP, &SimRegion->Origin);
 
             PushLine(RenderGroup, &Flat, V3(A, 42.0f), V3(B, 42.0f), V4(1, 0, 0, 1));
 
             rectangle2 Rect = {};
             world_position Min = {Node->Bounds.Min.x, Node->Bounds.Min.y};
             world_position Max = {Node->Bounds.Max.x, Node->Bounds.Max.y};
-            Rect.Min = Subtract(GameMode->WorldState->World, &Min, &SimRegion->Origin);
-            Rect.Max = Subtract(GameMode->WorldState->World, &Max, &SimRegion->Origin);
+            Rect.Min = Subtract(MapEditor->WorldState->World, &Min, &SimRegion->Origin);
+            Rect.Max = Subtract(MapEditor->WorldState->World, &Max, &SimRegion->Origin);
 
-            world_position MP = MapIntoTileSpace(GameMode->WorldState->World, SimRegion->Origin, MouseP);
+            world_position MP = MapIntoTileSpace(MapEditor->WorldState->World, SimRegion->Origin, MouseP);
     
             b32 IsInside = IsInRectangleMesh(Node->Bounds, {MP.TileX, MP.TileY});
             v4 Color = V4(1, 0, 1, 1);

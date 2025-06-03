@@ -439,7 +439,7 @@ GameUpdateAndRender(editor_state *EditorState, transient_state *EditorTranState,
 
                 case GameMode_World:
                 {
-                    Rerun = UpdateAndRenderWorld(GameState, GameState->WorldMode, TranState, Input, RenderGroup,
+                    Rerun = UpdateAndRenderWorld(GameState, GameState->WorldState, TranState, Input, RenderGroup,
                                                  &DrawBuffer);
                 } break;
 

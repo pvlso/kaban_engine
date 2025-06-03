@@ -23,26 +23,26 @@ AbleToStart(world_map_startup MapStartup)
 }
 
 internal void
-ReadPolygons(editor_mode_game *GameMode)
+ReadPolygons(engine_map_editor *MapEditor)
 {
     FILE *Out;
     fopen_s(&Out, "polygons.nmp", "rb");
     if(Out)
     {
-        fread(&GameMode->PolygonCount, sizeof(u32), 1, Out);
+        fread(&MapEditor->PolygonCount, sizeof(u32), 1, Out);
         
         for(u32 PolygonIndex = 0;
-            PolygonIndex < GameMode->PolygonCount;
+            PolygonIndex < MapEditor->PolygonCount;
             ++PolygonIndex)
         {
-            world_polygon *Current = GameMode->Polies + PolygonIndex;
+            world_polygon *Current = MapEditor->Polies + PolygonIndex;
             fread(&Current->VertexCount, sizeof(u32), 1, Out); 
             u32 VerticesSize = Current->VertexCount*sizeof(world_position);
             fread(Current->Vertices, VerticesSize, 1, Out);
         }
 
-        GameMode->CurrentPolygon = GameMode->Polies + 0;
-        GameMode->CurrentPolygonIndex = GameMode->PolygonCount - 1;
+        MapEditor->CurrentPolygon = MapEditor->Polies + 0;
+        MapEditor->CurrentPolygonIndex = MapEditor->PolygonCount - 1;
     }
 
     fclose(Out);
@@ -107,7 +107,7 @@ WriteSSWM(editor_state *EditorState, world *World, u32 GroundLayer_ZLayerCount)
 }
 
 internal void
-PlayGameMode(editor_state *EditorState, transient_state *TranState)
+PlayMapEditor(editor_state *EditorState, transient_state *TranState)
 {
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
@@ -129,10 +129,10 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
 
     if(AbleToStart(EditorState->MapStartup))
     {
-        SetEditorMode(EditorState, TranState, EditorMode_GameMode);
+        SetEditorMode(EditorState, TranState, EditorMode_MapEditor);
     
-        editor_mode_game *Result = PushStruct(&EditorState->ModeArena, editor_mode_game);
-        Result->WorldState = PushStruct(&EditorState->ModeArena, game_mode_world);
+        engine_map_editor *Result = PushStruct(&EditorState->ModeArena, engine_map_editor);
+        Result->WorldState = PushStruct(&EditorState->ModeArena, world_state);
         
         r32 PixelsToMeters = 1.0f / 32.0f;
         u32 TileSideInPixels = 32;
@@ -206,7 +206,7 @@ PlayGameMode(editor_state *EditorState, transient_state *TranState)
         Result->EdgeTable.DataType = HashDataType_POLY_MESH_ADJACENCY;
         Result->EdgeTable.Hash = PushArray(&Result->NavMeshArena, Result->EdgeTable.Size, hash_table_entry *);
         
-        EditorState->GameMode = Result;
+        EditorState->MapEditor = Result;
     }
     else
     {
@@ -240,7 +240,7 @@ RenderMapGrid(render_group *RenderGroup, ui_state *UIState, world *World, world_
                 v2 Delta = Subtract(World, &TileP, &CameraP);
 #if 1
 
-//                if(Global_EditorGameMode_ShowCoords)
+//                if(Global_EditorMapEditor_ShowCoords)
                 {
                     FormatString(ArrayCount(Text), Text, "%d,%d", TileX, TileY);
                     entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform, &Transform, V3(Delta, 0.0f) - V3(0.32f, 0.48f, 0.0f));
@@ -342,9 +342,8 @@ DrawMeshTriangles(ui_state *UIState, render_group *RenderGroup, world *World, wo
     }
 }
 
-//#include "subtruct_poly.cpp"
 inline controlled_camera *
-CheckForInput(editor_mode_game *GameMode, nk_context *Nk, engine_input *Input)
+CheckForInput(engine_map_editor *MapEditor, nk_context *Nk, engine_input *Input)
 {
     controlled_camera *Result = 0;
     for(int ControllerIndex = 0;
@@ -352,7 +351,7 @@ CheckForInput(editor_mode_game *GameMode, nk_context *Nk, engine_input *Input)
         ++ControllerIndex)
     {
         engine_controller_input *Controller = GetController(Input, ControllerIndex);
-        Result = GameMode->ControlledCameras + ControllerIndex;
+        Result = MapEditor->ControlledCameras + ControllerIndex;
 
         if(Controller->IsConnected)
         {
@@ -364,112 +363,112 @@ CheckForInput(editor_mode_game *GameMode, nk_context *Nk, engine_input *Input)
 
                 if(WasPressed(Controller->FirstMode))
                 {
-                    GameMode->GameEditMode = EditGameMode_None;
+                    MapEditor->MapEditorMode = MapEditorMode_None;
                 }
 
                 if(WasPressed(Controller->SecondMode))
                 {
-                    GameMode->GameEditMode = EditGameMode_Terrain;
+                    MapEditor->MapEditorMode = MapEditorMode_Terrain;
                 }
 
                 if(WasPressed(Controller->ThirdMode))
                 {
-                    GameMode->GameEditMode = EditGameMode_NavMeshes;
+                    MapEditor->MapEditorMode = MapEditorMode_NavMeshes;
                 }
 
                 if(WasPressed(Controller->RightShoulder))
                 {
-                    if(IsSetGameModeFlag(GameMode, GMFlag_EditEnable))
+                    if(IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable))
                     {
-                        ClearGameModeFlag(GameMode, GMFlag_EditEnable);
+                        ClearMapEditorFlag(MapEditor, MEFlag_EditEnable);
                     }
                     else
                     {
-                        SetGameModeFlag(GameMode, GMFlag_EditEnable);
+                        SetMapEditorFlag(MapEditor, MEFlag_EditEnable);
                     }
                 }
 
                 if(Input->ControlDown)
-                    GameMode->Zoom += (f32)-0.8f*Input->MouseZ;
+                    MapEditor->Zoom += (f32)-0.8f*Input->MouseZ;
 
                 if(WasPressed(Input->MouseButtons[PlatformMouseButton_Middle]))
-                    GameMode->Zoom = 0.0f;
+                    MapEditor->Zoom = 0.0f;
                 
                 if(WasPressed(Controller->MoveUp))
-                    GameMode->WorldState->CameraP.TileY += GameMode->CameraMoveStep;
+                    MapEditor->WorldState->CameraP.TileY += MapEditor->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveDown))
-                    GameMode->WorldState->CameraP.TileY -= GameMode->CameraMoveStep;
+                    MapEditor->WorldState->CameraP.TileY -= MapEditor->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveLeft))
-                    GameMode->WorldState->CameraP.TileX -= GameMode->CameraMoveStep;
+                    MapEditor->WorldState->CameraP.TileX -= MapEditor->CameraMoveStep;
 
                 if(WasPressed(Controller->MoveRight))
-                    GameMode->WorldState->CameraP.TileX += GameMode->CameraMoveStep;
+                    MapEditor->WorldState->CameraP.TileX += MapEditor->CameraMoveStep;
 
                 if(WasPressed(Controller->ActionLeft))
                 {
-                    if(GameMode->CameraMoveStep > 1)
+                    if(MapEditor->CameraMoveStep > 1)
                     {
-                        GameMode->CameraMoveStep -= 1;
+                        MapEditor->CameraMoveStep -= 1;
                     }
                 }
 
                 if(WasPressed(Controller->ActionRight))
-                    GameMode->CameraMoveStep += 1;
+                    MapEditor->CameraMoveStep += 1;
 
                 if(Input->ShiftDown && Input->AltDown && WasPressed(Controller->Undo))
                 {
-                    RedoTileChanges(GameMode->WorldState->World, &GameMode->UndoStack, &GameMode->RedoStack);
+                    RedoTileChanges(MapEditor->WorldState->World, &MapEditor->UndoStack, &MapEditor->RedoStack);
                 }
                 else if(Input->AltDown && WasPressed(Controller->Undo))
                 {
-                    UndoTileChanges(GameMode->WorldState->World, &GameMode->UndoStack, &GameMode->RedoStack);
+                    UndoTileChanges(MapEditor->WorldState->World, &MapEditor->UndoStack, &MapEditor->RedoStack);
                 }
 
                 if(WasPressed(Controller->ShowUI))
-                    GameMode->HideUI = !GameMode->HideUI;
+                    MapEditor->HideUI = !MapEditor->HideUI;
                 
-                switch(GameMode->GameEditMode)
+                switch(MapEditor->MapEditorMode)
                 {
-                    case EditGameMode_None:
+                    case MapEditorMode_None:
                     {
                     } break;
 
-                    case EditGameMode_Terrain:
+                    case MapEditorMode_Terrain:
                     {
                         if(WasPressed(Controller->LeftShoulder))
-                            ToggleGMFlag(GameMode, GMFlag_ShowCurrentLayer);
+                            ToggleMEFlag(MapEditor, MEFlag_ShowCurrentLayer);
 
                         if(WasPressed(Controller->Fill))
-                            GameMode->FillActive = !GameMode->FillActive;
+                            MapEditor->FillActive = !MapEditor->FillActive;
 
                         if(WasPressed(Controller->ActionUp))
                         {
-                            GameMode->CurrentZLayer += 1;
-                            if(GameMode->CurrentZLayer >= 16)
+                            MapEditor->CurrentZLayer += 1;
+                            if(MapEditor->CurrentZLayer >= 16)
                             {
-                                GameMode->CurrentZLayer = 15;
-                                GameMode->WorldState->World->Map->Header->GroundLayer_ZLayerCount &= 0xFFFF0010;
+                                MapEditor->CurrentZLayer = 15;
+                                MapEditor->WorldState->World->Map->Header->GroundLayer_ZLayerCount &= 0xFFFF0010;
                             }
                         }
 
                         if(WasPressed(Controller->ActionDown))
                         {
-                            GameMode->CurrentZLayer -= 1;
-                            if(GameMode->CurrentZLayer < 0)
+                            MapEditor->CurrentZLayer -= 1;
+                            if(MapEditor->CurrentZLayer < 0)
                             {
-                                GameMode->CurrentZLayer = 0;
+                                MapEditor->CurrentZLayer = 0;
                             }
                         }
                     } break;
 
-                    case EditGameMode_NavMeshes:
+                    case MapEditorMode_NavMeshes:
                     {
                         if(WasPressed(Controller->Start) && Input->ControlDown)
-                            GameMode->CurrentAction = GMAction_NavMeshPlaceEnd;
+                            MapEditor->CurrentAction = MEAction_NavMeshPlaceEnd;
                         else if(WasPressed(Controller->Start))
-                            GameMode->CurrentAction = GMAction_NavMeshPlaceStart;
+                            MapEditor->CurrentAction = MEAction_NavMeshPlaceStart;
                     } break;
                 }
             }
@@ -480,11 +479,11 @@ CheckForInput(editor_mode_game *GameMode, nk_context *Nk, engine_input *Input)
 }
 
 internal b32
-UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
+UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, render_group *RenderGroup,
                         engine_input *Input, u32 RenderWidth, u32 RenderHeight)
 {
     editor_assets *Assets = TranState->Assets;
-    editor_mode_game *GameMode = EditorState->GameMode;
+    engine_map_editor *MapEditor = EditorState->MapEditor;
     ui_state *UIState = &EditorState->UIState;
 
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
@@ -510,65 +509,65 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
         object_transform Flat = DefaultFlatTransform();
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
 
-        DrawGameModeUI(GameMode, TranState->Assets, TranState->MainGenerationID, UIState);
+        DrawMapEditorUI(MapEditor, TranState->Assets, TranState->MainGenerationID, UIState);
 
         b32 Exit = false;
-        switch(GameMode->CurrentAction)
+        switch(MapEditor->CurrentAction)
         {
-            case GMAction_None:
+            case MEAction_None:
             {
                 // NOTE(babykaban): Do nothing
             } break;
 
-            case GMAction_Exit:
+            case MEAction_Exit:
             {
                 Exit = true;
             } break;
 
-            case GMAction_WriteSSWM:
+            case MEAction_WriteSSWM:
             {
-                if((GameMode->AutoWriteSeconds - Input->dtForFrame) > 0.0f)
+                if((MapEditor->AutoWriteSeconds - Input->dtForFrame) > 0.0f)
                 {
-                    u32 GroundLayer_ZLayerCount = (u32)((GameMode->MapGroundLayer << 16) | (GameMode->LayerCount & 0xFFFF));
-                    WriteSSWM(EditorState, GameMode->WorldState->World, GroundLayer_ZLayerCount);
-                    GameMode->AutoWriteSeconds = 300.0f;
+                    u32 GroundLayer_ZLayerCount = (u32)((MapEditor->MapGroundLayer << 16) | (MapEditor->LayerCount & 0xFFFF));
+                    WriteSSWM(EditorState, MapEditor->WorldState->World, GroundLayer_ZLayerCount);
+                    MapEditor->AutoWriteSeconds = 300.0f;
                 }
             } break;
 
-            case GMAction_EditEnable:
+            case MEAction_EditEnable:
             {
-                ToggleGMFlag(GameMode, GMFlag_EditEnable);
+                ToggleMEFlag(MapEditor, MEFlag_EditEnable);
             } break;
 
-            case GMAction_ShowCurrentLayer:
+            case MEAction_ShowCurrentLayer:
             {
-                ToggleGMFlag(GameMode, GMFlag_ShowCurrentLayer);
+                ToggleMEFlag(MapEditor, MEFlag_ShowCurrentLayer);
             } break;
         }
         
         if(!Exit)
         {
-            controlled_camera *ConCamera = CheckForInput(GameMode, Nk, Input);
+            controlled_camera *ConCamera = CheckForInput(MapEditor, Nk, Input);
 
-            RenderGroup->CameraTransform.DistanceAboveTarget += GameMode->Zoom;
+            RenderGroup->CameraTransform.DistanceAboveTarget += MapEditor->Zoom;
             MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
             
             PushRect(RenderGroup, &Flat, V3(0, 0, 0), V2(0.25f, 0.25f), V4(0, 1, 0, 1.0f));
 
-            world *World = GameMode->WorldState->World;
+            world *World = MapEditor->WorldState->World;
             memory_arena *WorldArena = &World->Arena;
-            {DEBUG_DATA_BLOCK("EditorGameMode");
+            {DEBUG_DATA_BLOCK("EditorMapEditor");
                 {DEBUG_DATA_BLOCK("Memory");
                     DEBUG_VALUE(WorldArena);
                 }
             }
 
-            v2 SimBoundsExpansion = {3.0f + GameMode->Zoom, 3.0f + GameMode->Zoom};
+            v2 SimBoundsExpansion = {3.0f + MapEditor->Zoom, 3.0f + MapEditor->Zoom};
             rectangle2 SimBounds = AddRadiusTo(CameraBoundsInMeters, SimBoundsExpansion);
             temporary_memory SimMemory = BeginTemporaryMemory(&TranState->TranArena);
-            world_position SimCenterP = GameMode->WorldState->CameraP;
+            world_position SimCenterP = MapEditor->WorldState->CameraP;
 
-            sim_region *SimRegion = BeginSim(&TranState->TranArena, GameMode->WorldState->World,
+            sim_region *SimRegion = BeginSim(&TranState->TranArena, MapEditor->WorldState->World,
                                              SimCenterP, SimBounds, Input->dtForFrame);
 
 #if 0    
@@ -578,86 +577,86 @@ UpdateAndRenderGameMode(editor_state *EditorState, transient_state *TranState, r
 #endif
 
 
-            if(GameMode->ShowGrid)
+            if(MapEditor->ShowGrid)
             {
-                RenderMapGrid(RenderGroup, UIState, World, GameMode->WorldState->CameraP, SimRegion->Bounds);
+                RenderMapGrid(RenderGroup, UIState, World, MapEditor->WorldState->CameraP, SimRegion->Bounds);
             }
 
             world_position MouseWorldP = MapIntoTileSpace(World, SimRegion->Origin, MouseP);
-            v2 CameraP = Subtract(World, &GameMode->WorldState->CameraP, &SimCenterP);
+            v2 CameraP = Subtract(World, &MapEditor->WorldState->CameraP, &SimCenterP);
 
             
-            if(IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer))
+            if(IsSetMapEditorFlag(MapEditor, MEFlag_ShowCurrentLayer))
             {
-                RenderMapGroundTiles(RenderGroup, World, GameMode->WorldState->CameraP, SimBounds, GameMode->CurrentZLayer, true);
+                RenderMapGroundTiles(RenderGroup, World, MapEditor->WorldState->CameraP, SimBounds, MapEditor->CurrentZLayer, true);
             }
             else
             {
-                RenderMapGroundTiles(RenderGroup, World, GameMode->WorldState->CameraP, SimBounds, GameMode->LayerCount);
+                RenderMapGroundTiles(RenderGroup, World, MapEditor->WorldState->CameraP, SimBounds, MapEditor->LayerCount);
             }
         
-//            UpdateAndRenderEntities(GameMode, SimRegion, RenderGroup, Input->dtForFrame, MouseP);
+//            UpdateAndRenderEntities(MapEditor, SimRegion, RenderGroup, Input->dtForFrame, MouseP);
 
-            switch(GameMode->GameEditMode)
+            switch(MapEditor->MapEditorMode)
             {
-                case EditGameMode_None:
+                case MapEditorMode_None:
                 {
                 } break;
 
-                case EditGameMode_Terrain:
+                case MapEditorMode_Terrain:
                 {
-                    if(IsSetGameModeFlag(GameMode, GMFlag_EditEnable))
+                    if(IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable))
                     {
-                        if(GameMode->FillActive)
+                        if(MapEditor->FillActive)
                         {
                             if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
                             {
-                                TileFloodFill(&GameMode->UndoStack, World, MouseWorldP, GameMode->Tile, GameMode->CurrentZLayer);
+                                TileFloodFill(&MapEditor->UndoStack, World, MouseWorldP, MapEditor->Tile, MapEditor->CurrentZLayer);
                             }
                             else if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
                             {
                                 ssa_tile Tile = {};
-                                TileFloodFill(&GameMode->UndoStack, World, MouseWorldP, Tile, GameMode->CurrentZLayer);
+                                TileFloodFill(&MapEditor->UndoStack, World, MouseWorldP, Tile, MapEditor->CurrentZLayer);
                             }
                         }
                         else
                         {
                             if(WasPressed(Input->MouseButtons[PlatformMouseButton_Left]))
                             {
-                                AddGroundTile(GameMode, World, MouseWorldP, false);
+                                AddGroundTile(MapEditor, World, MouseWorldP, false);
                             }
                             else if(WasPressed(Input->MouseButtons[PlatformMouseButton_Right]))
                             {
-                                RemoveGroundTile(&GameMode->UndoStack, GameMode, World, MouseWorldP);
+                                RemoveGroundTile(&MapEditor->UndoStack, MapEditor, World, MouseWorldP);
                             }
                         }
                     }
 
-                    GameMode->Tileset = PushTileset(RenderGroup, GameMode->CurrentTileset);
-                    GameMode->TilesetInfo = GetTilesetInfo(Assets, GameMode->CurrentTileset);
+                    MapEditor->Tileset = PushTileset(RenderGroup, MapEditor->CurrentTileset);
+                    MapEditor->TilesetInfo = GetTilesetInfo(Assets, MapEditor->CurrentTileset);
                 } break;
 
-                case EditGameMode_NavMeshes:
+                case MapEditorMode_NavMeshes:
                 {
-                    UpdateAndRenderNavMeshMode(GameMode, UIState, SimRegion, RenderGroup,
+                    UpdateAndRenderNavMeshMode(MapEditor, UIState, SimRegion, RenderGroup,
                                                &Flat, Input, MouseP);
                 } break;
 
                 InvalidDefaultCase;
             }
 
-            GameMode->AutoWriteSeconds -= Input->dtForFrame;
-            if(GameMode->AutoWriteSeconds <= 0.0f)
+            MapEditor->AutoWriteSeconds -= Input->dtForFrame;
+            if(MapEditor->AutoWriteSeconds <= 0.0f)
             {
-                u32 GroundLayer_ZLayerCount = (u32)((GameMode->MapGroundLayer << 16) | (GameMode->LayerCount & 0xFFFF));
+                u32 GroundLayer_ZLayerCount = (u32)((MapEditor->MapGroundLayer << 16) | (MapEditor->LayerCount & 0xFFFF));
                 WriteSSWM(EditorState, World, GroundLayer_ZLayerCount);
-                GameMode->AutoWriteSeconds = 300.0f;
+                MapEditor->AutoWriteSeconds = 300.0f;
             }
 
             // NOTE(babykaban): Clear action
-            GameMode->CurrentAction = 0;
+            MapEditor->CurrentAction = 0;
             
-            EndSim(GameMode->WorldState, SimRegion, CameraBoundsInMeters);
+            EndSim(MapEditor->WorldState, SimRegion, CameraBoundsInMeters);
             EndTemporaryMemory(SimMemory);
         }
         else

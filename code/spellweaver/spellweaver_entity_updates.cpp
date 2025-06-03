@@ -171,7 +171,7 @@ SpellTypeToSpellIndex(u8 SpellType)
 }
 
 inline void
-HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets *Assets, entity *Entity,
+HeroCastSpell(world_state *WorldState, audio_state *AudioState, editor_assets *Assets, entity *Entity,
               hero_entity *HeroData, v2 MouseP, render_group *RenderGroup)
 {
     hero_spell *Spell = HeroData->Spells + SpellTypeToSpellIndex(HeroData->CurrentSpell);
@@ -196,8 +196,8 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
                 CastedSpell.OffsetP = V3(0, 0.5f, 0);
                 CastedSpell.dP = V3(0, 0, 0);
             
-                entity_id SpellID = AddFlyingSpell(WorldMode, Assets, CastedSpell, Entity->ZLayer);
-                AddCollisionRule(WorldMode, SpellID, Entity->ID, false);
+                entity_id SpellID = AddFlyingSpell(WorldState, Assets, CastedSpell, Entity->ZLayer);
+                AddCollisionRule(WorldState, SpellID, Entity->ID, false);
 
                 ResetTimer(&Spell->Timer);
             }
@@ -214,8 +214,8 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
                 CastedSpell.OffsetP = V3(0, 0, 0);
                 CastedSpell.dP = V3(0, 0, 0);
             
-                entity_id SpellID = AddImmidiateSpell(WorldMode, Assets, CastedSpell);
-                AddCollisionRule(WorldMode, SpellID, Entity->ID, false);
+                entity_id SpellID = AddImmidiateSpell(WorldState, Assets, CastedSpell);
+                AddCollisionRule(WorldState, SpellID, Entity->ID, false);
 
                 ResetTimer(&Spell->Timer);
             }
@@ -247,13 +247,13 @@ HeroCastSpell(game_mode_world *WorldMode, audio_state *AudioState, editor_assets
 }
 
 internal void
-HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *AudioState, entity *Entity,
+HeroAttack(world_state *WorldState, sim_region *SimRegion, audio_state *AudioState, entity *Entity,
            render_group *RenderGroup, object_transform *Transform, v3 LocalMouseP)
 {
     hero_entity *HeroData = (hero_entity *)Entity->Data;
     if(Entity->State == EntityState_CastingSpell)
     {
-        HeroCastSpell(WorldMode, AudioState, RenderGroup->Assets, Entity, HeroData, LocalMouseP.xy,
+        HeroCastSpell(WorldState, AudioState, RenderGroup->Assets, Entity, HeroData, LocalMouseP.xy,
                       RenderGroup);
         ChangeEntityState(Entity, EntityState_Staying);
     }
@@ -273,7 +273,7 @@ HeroAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *Audio
             case SwordType_Fire:  {Damage = 25;} break;
         }
 
-        HitEntitiesInRectangle(SimRegion, AudioState, &WorldMode->EffectsEntropy, Transform,
+        HitEntitiesInRectangle(SimRegion, AudioState, &WorldState->EffectsEntropy, Transform,
                                Entity, AttackSurface, Damage);
 
         ChangeEntityState(Entity, EntityState_Staying);
@@ -548,9 +548,9 @@ Chaikin(v2* InputPoints, s32 InputPointCount, v2** OutputPoints, s32* OutputPoin
 }
 
 internal void
-CalculatePath(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+CalculatePath(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
-    world *World = WorldMode->World;
+    world *World = WorldState->World;
     entity_move_state *MoveState = Entity->MoveState;    
     heap *MovePointMinHeap = &MoveState->MovePointMinHeap;
 
@@ -611,7 +611,7 @@ CalculatePath(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 }
 
 internal updated_entity
-UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *ConHero, entity *Entity,
+UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConHero, entity *Entity,
            v3 LocalMouseP, render_group *RenderGroup)
 {
     updated_entity Result = {};
@@ -620,11 +620,11 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
     heap *MovePointMinHeap = &Entity->MoveState->MovePointMinHeap;
     if(ConHero->Move)
     {
-        world_position MouseP = MapIntoTileSpace(WorldMode->World, SimRegion->Origin, LocalMouseP.xy);
-        Entity->MoveState->EndNode = GetTileNode(WorldMode->World, MouseP);
-        Entity->MoveState->StartNode = GetTileNode(WorldMode->World, Entity->TileP);
+        world_position MouseP = MapIntoTileSpace(WorldState->World, SimRegion->Origin, LocalMouseP.xy);
+        Entity->MoveState->EndNode = GetTileNode(WorldState->World, MouseP);
+        Entity->MoveState->StartNode = GetTileNode(WorldState->World, Entity->TileP);
 
-        SolveAStar(WorldMode->World, Entity->MoveState, SimRegion);
+        SolveAStar(WorldState->World, Entity->MoveState, SimRegion);
 
         if(Entity->MoveState->EndNode)
         {
@@ -636,7 +636,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
             {
                 as_tile_node *ParentNode = Node;
                 sort_entry Key = {};
-                Key.Index = ParentNode->Y*WorldMode->World->TileNodeWidth + ParentNode->X;
+                Key.Index = ParentNode->Y*WorldState->World->TileNodeWidth + ParentNode->X;
                 Key.SortKey = ParentNode->LocalGoal;
                 MinHeapInsertNode(MovePointMinHeap, Key);
 
@@ -644,7 +644,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
             }
         }
         
-        CalculatePath(WorldMode, SimRegion, Entity);
+        CalculatePath(WorldState, SimRegion, Entity);
         
         ChangeEntityState(Entity, EntityState_Moving);
     }
@@ -660,7 +660,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
             ++Index)
         {
             world_position Point = MoveState->TilePoints[Index];
-            PushRect(RenderGroup, &Flat, V3(Subtract(WorldMode->World, &Point, &SimRegion->Origin), 0.0f), V2(0.2f, 0.2f), V4(0, 0, 1, 1));
+            PushRect(RenderGroup, &Flat, V3(Subtract(WorldState->World, &Point, &SimRegion->Origin), 0.0f), V2(0.2f, 0.2f), V4(0, 0, 1, 1));
         }
 #endif
     
@@ -668,7 +668,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
         {
             world_position ClosestP = MoveState->TilePoints[0];
 
-            v2 Delta = Subtract(WorldMode->World, &ClosestP, &Entity->TileP);
+            v2 Delta = Subtract(WorldState->World, &ClosestP, &Entity->TileP);
 
             if(MoveState->PointCount < 8)
             {
@@ -700,7 +700,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
                     --MoveState->PointCount;
 
                     ClosestP = MoveState->TilePoints[0];
-                    Delta = Subtract(WorldMode->World, &ClosestP, &Entity->TileP);
+                    Delta = Subtract(WorldState->World, &ClosestP, &Entity->TileP);
                     Result.ddP = V3(Normalize(Delta), 0);
                 }
             }
@@ -778,7 +778,7 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
         }
     }
 
-    if(WorldMode->GameFinished)
+    if(WorldState->GameFinished)
     {
         Entity->FacingDirection = 3;
         Entity->State = EntityState_Staying;
@@ -793,19 +793,19 @@ UpdateHero(game_mode_world *WorldMode, sim_region *SimRegion, controlled_hero *C
 
 #if 0
 internal void
-MonsterDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity *Entity)
+MonsterDeathEvent(world_state *WorldState, editor_assets *Assets, entity *Entity)
 {
-    r32 RandomNumber = RandomBetween(&WorldMode->EffectsEntropy, 0.0f, 1.0f);
+    r32 RandomNumber = RandomBetween(&WorldState->EffectsEntropy, 0.0f, 1.0f);
     if(RandomNumber > 0.5f)
     {
-        AddItem(WorldMode, Assets, Entity->TileP, ItemName_HealPotion);
+        AddItem(WorldState, Assets, Entity->TileP, ItemName_HealPotion);
     }
 }
 
 // NOTE(paul):====================================== Necromancer Update ==============================================
 
 internal void
-NecromancerAttack(game_mode_world *WorldMode, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
+NecromancerAttack(world_state *WorldState, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
 {
     necromancer_entity *EntityData = (necromancer_entity *)Entity->Data;
     switch(Entity->CastSpellType)
@@ -836,7 +836,7 @@ NecromancerAttack(game_mode_world *WorldMode, editor_assets *Assets, sim_region 
                 CastedSpell.ImpactEffect = 
                     GetSoundEffectForType(Assets, SoundEffect_ThunderImpact);
 
-                entity_id SpellID = AddImmidiateSpell(WorldMode, Assets, CastedSpell);
+                entity_id SpellID = AddImmidiateSpell(WorldState, Assets, CastedSpell);
             }
         } break;
 
@@ -855,8 +855,8 @@ NecromancerAttack(game_mode_world *WorldMode, editor_assets *Assets, sim_region 
 
             // TODO(paul): Add sound effect
             
-            AddPossesed(WorldMode, Assets, Entity->TileP, V2(2.0f, 0.0f));
-            AddPossesed(WorldMode, Assets, Entity->TileP, V2(-2.0f, 0.0f));
+            AddPossesed(WorldState, Assets, Entity->TileP, V2(2.0f, 0.0f));
+            AddPossesed(WorldState, Assets, Entity->TileP, V2(-2.0f, 0.0f));
             
         } break;
 
@@ -885,7 +885,7 @@ NecromancerAttack(game_mode_world *WorldMode, editor_assets *Assets, sim_region 
 }
 
 internal updated_entity
-UpdateNecromancer(game_mode_world *WorldMode, editor_assets *Assets, audio_state *AudioState, sim_region *SimRegion,
+UpdateNecromancer(world_state *WorldState, editor_assets *Assets, audio_state *AudioState, sim_region *SimRegion,
                   entity *Entity)
 {
     updated_entity Result = {};
@@ -897,10 +897,10 @@ UpdateNecromancer(game_mode_world *WorldMode, editor_assets *Assets, audio_state
                     
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(8.0f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1003,7 +1003,7 @@ UpdateNecromancer(game_mode_world *WorldMode, editor_assets *Assets, audio_state
 
 // NOTE(paul):====================================== FlyingSpell Update ==============================================
 internal updated_entity
-UpdateFlyingSpell(game_mode_world *WorldMode, entity *Entity)
+UpdateFlyingSpell(world_state *WorldState, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1015,7 +1015,7 @@ UpdateFlyingSpell(game_mode_world *WorldMode, entity *Entity)
     Result.ddP = SpellData->Direction;
     if(Entity->MoveState->DistanceLimit == 0.0f)
     {
-        ClearCollisionRulesFor(WorldMode, Entity->ID);
+        ClearCollisionRulesFor(WorldState, Entity->ID);
         ChangeEntityState(Entity, EntityState_Dieing);
         Result.ddP = {};
     }
@@ -1038,7 +1038,7 @@ UpdateFlyingSpell(game_mode_world *WorldMode, entity *Entity)
 // NOTE(paul):====================================== Immidiate Spell Update ==========================================
 
 internal void
-ImmidiateSpellAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_state *AudioState,
+ImmidiateSpellAttack(world_state *WorldState, sim_region *SimRegion, audio_state *AudioState,
                      entity *Entity, render_group *RenderGroup, object_transform *Transform)
 {
     rectangle2 AttackSurface = RectCenterDim(V2(0, 0), V2(1.0f, 1.0f));
@@ -1051,7 +1051,7 @@ ImmidiateSpellAttack(game_mode_world *WorldMode, sim_region *SimRegion, audio_st
     }
     else
     {
-//        HitEntitiesInRectangle(SimRegion, AudioState, &WorldMode->EffectsEntropy, Transform,
+//        HitEntitiesInRectangle(SimRegion, AudioState, &WorldState->EffectsEntropy, Transform,
 //                               Entity, AttackSurface, EntityData->Damage_Heal);
     }
     
@@ -1093,7 +1093,7 @@ MonsterAttack(sim_region *SimRegion, audio_state *AudioState, random_series *Eff
 }
 
 internal updated_entity
-UpdateGolem(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdateGolem(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1102,10 +1102,10 @@ UpdateGolem(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
     {
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.0f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1132,7 +1132,7 @@ UpdateGolem(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 // NOTE(paul):====================================== Goblin Beast Update =============================================
 #if 0
 internal updated_entity
-UpdateGoblinBeast(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, random_series *Series)
+UpdateGoblinBeast(world_state *WorldState, sim_region *SimRegion, entity *Entity, random_series *Series)
 {
     updated_entity Result = {};
 
@@ -1141,10 +1141,10 @@ UpdateGoblinBeast(game_mode_world *WorldMode, sim_region *SimRegion, entity *Ent
         found_entity ClosestHero = FindClosestEntityOfType(SimRegion, Entity, EntityType_Hero, 10.0f);
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.2f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1178,7 +1178,7 @@ UpdateGoblinBeast(game_mode_world *WorldMode, sim_region *SimRegion, entity *Ent
 // NOTE(paul):====================================== Goblin Berserker Update =========================================
 
 internal updated_entity
-UpdateGoblinBerserker(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdateGoblinBerserker(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1188,10 +1188,10 @@ UpdateGoblinBerserker(game_mode_world *WorldMode, sim_region *SimRegion, entity 
                     
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.2f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1228,7 +1228,7 @@ UpdateGoblinBerserker(game_mode_world *WorldMode, sim_region *SimRegion, entity 
 // NOTE(paul):====================================== Goblin Rider Update =============================================
 
 internal updated_entity
-UpdateGoblinRider(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity, random_series *Series)
+UpdateGoblinRider(world_state *WorldState, sim_region *SimRegion, entity *Entity, random_series *Series)
 {
     updated_entity Result = {};
 
@@ -1237,10 +1237,10 @@ UpdateGoblinRider(game_mode_world *WorldMode, sim_region *SimRegion, entity *Ent
         found_entity ClosestHero = FindClosestEntityOfType(SimRegion, Entity, EntityType_Hero, 10.0f);
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.2f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1284,7 +1284,7 @@ UpdateGoblinRider(game_mode_world *WorldMode, sim_region *SimRegion, entity *Ent
 // NOTE(paul):====================================== Skeleton Grunt Update ===========================================
 
 internal updated_entity
-UpdateSkeletonGrunt(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdateSkeletonGrunt(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1293,10 +1293,10 @@ UpdateSkeletonGrunt(game_mode_world *WorldMode, sim_region *SimRegion, entity *E
         found_entity ClosestHero = FindClosestEntityOfType(SimRegion, Entity, EntityType_Hero, 8.0f);
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.2f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1329,23 +1329,23 @@ UpdateSkeletonGrunt(game_mode_world *WorldMode, sim_region *SimRegion, entity *E
 // NOTE(paul):====================================== Skeleton King Update ============================================
 
 internal void
-SkeletonKingDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity *Entity)
+SkeletonKingDeathEvent(world_state *WorldState, editor_assets *Assets, entity *Entity)
 {
     skeleton_king_entity *SkeletonKingData = (skeleton_king_entity *)Entity->Data;
-    AddItem(WorldMode, Assets, Entity->TileP, ItemName_MapToTheTrees);
+    AddItem(WorldState, Assets, Entity->TileP, ItemName_MapToTheTrees);
 
     for(u32 ObstacleIndex = 0;
         ObstacleIndex < SkeletonKingData->ObstacleCount;
         ++ObstacleIndex)
     {
         for(u32 EntityIndex = 0;
-            EntityIndex < ArrayCount(WorldMode->EntitiesToDestroy);
+            EntityIndex < ArrayCount(WorldState->EntitiesToDestroy);
             ++EntityIndex)
         {
-            entity_id ID = WorldMode->EntitiesToDestroy[EntityIndex];
+            entity_id ID = WorldState->EntitiesToDestroy[EntityIndex];
             if(ID.Value == 0)
             {
-                WorldMode->EntitiesToDestroy[EntityIndex] = SkeletonKingData->Obstacles[ObstacleIndex];
+                WorldState->EntitiesToDestroy[EntityIndex] = SkeletonKingData->Obstacles[ObstacleIndex];
                 break;
             }
         }
@@ -1353,7 +1353,7 @@ SkeletonKingDeathEvent(game_mode_world *WorldMode, editor_assets *Assets, entity
 }
 
 internal void
-SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
+SkeletonKingAttack(world_state *WorldState, audio_state *AudioState, sim_region *SimRegion, entity *Entity,
                    render_group *RenderGroup, object_transform Transform)
 {
     if(Entity->State == EntityState_CastingSpell)
@@ -1382,7 +1382,7 @@ SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_regi
     {
         if(Entity->AttackType == AttackType_0)
         {
-            MonsterAttack(SimRegion, AudioState, &WorldMode->EffectsEntropy,
+            MonsterAttack(SimRegion, AudioState, &WorldState->EffectsEntropy,
                           Entity, RenderGroup, Transform, 35, V2(1.2f, 1.2f));
             Entity->AttackType = AttackType_1;
             ChangeAnimationType(Entity, AnimationType_Attack1);
@@ -1390,7 +1390,7 @@ SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_regi
         }
         else
         {
-            MonsterAttack(SimRegion, AudioState, &WorldMode->EffectsEntropy, Entity,
+            MonsterAttack(SimRegion, AudioState, &WorldState->EffectsEntropy, Entity,
                           RenderGroup, Transform, 35, V2(1.2f, 1.2f));
             ChangeAnimationType(Entity, AnimationType_Idle);
             ChangeEntityState(Entity, EntityState_Staying);
@@ -1399,7 +1399,7 @@ SkeletonKingAttack(game_mode_world *WorldMode, audio_state *AudioState, sim_regi
 }
 
 internal updated_entity
-UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
+UpdateSkeletonKing(world_state *WorldState, editor_assets *Assets, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
 
@@ -1407,10 +1407,10 @@ UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region
     skeleton_king_entity *SkeletonKingData = (skeleton_king_entity *)Entity->Data;
     if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(8.0f)))
     {
-        Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+        Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
         ChangeEntityState(Entity, EntityState_Moving);
 
-        Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+        Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
     }
     else if(ClosestHero.Entity)
     {
@@ -1461,10 +1461,10 @@ UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region
                 ObstacleWeightVector.E[Tag_SizeLevel] = 1.0f;
 
                 SkeletonKingData->Obstacles[SkeletonKingData->ObstacleCount++] =
-                    AddObstacle(WorldMode, Assets, 16, 15, Asset_Stone,
+                    AddObstacle(WorldState, Assets, 16, 15, Asset_Stone,
                                 &ObstacleMatchVector, &ObstacleWeightVector, 2.0f, V2(2.0f, 1.0f), V3(0.5f, 0, 0));
                 SkeletonKingData->Obstacles[SkeletonKingData->ObstacleCount++] =
-                    AddObstacle(WorldMode, Assets, 18, 15, Asset_Stone,
+                    AddObstacle(WorldState, Assets, 18, 15, Asset_Stone,
                                 &ObstacleMatchVector, &ObstacleWeightVector, 2.0f, V2(2.0f, 1.0f), V3(0.5f, 0, 0));
                 SkeletonKingData->ObstaclesPresent = true;
             }
@@ -1487,7 +1487,7 @@ UpdateSkeletonKing(game_mode_world *WorldMode, editor_assets *Assets, sim_region
 // NOTE(paul):====================================== Cultist Update ==================================================
 
 internal void
-CultistAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
+CultistAttack(world_state *WorldState, sim_region *SimRegion, entity *Entity,
               render_group *RenderGroup, object_transform Transform, v3 LocalMouseP)
 {
     cultist_entity *EntityData = (cultist_entity *)Entity->Data;
@@ -1519,8 +1519,8 @@ CultistAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
         CastedSpell.CastSpellEffect = GetSoundEffectForType(RenderGroup->Assets, SoundEffect_FireBallCast);
         CastedSpell.ImpactEffect = GetSoundEffectForType(RenderGroup->Assets, SoundEffect_FireBallImpact);
 
-        entity_id SpellID = AddFlyingSpell(WorldMode, RenderGroup->Assets, CastedSpell);
-        AddCollisionRule(WorldMode, SpellID, Entity->ID, false);
+        entity_id SpellID = AddFlyingSpell(WorldState, RenderGroup->Assets, CastedSpell);
+        AddCollisionRule(WorldState, SpellID, Entity->ID, false);
 
         ChangeEntityState(Entity, EntityState_Staying);
         ChangeAnimationType(Entity, AnimationType_Idle);
@@ -1532,7 +1532,7 @@ CultistAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
 }
 
 internal updated_entity
-UpdateCultist(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdateCultist(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
     cultist_entity *EntityData = (cultist_entity *)Entity->Data;
@@ -1543,10 +1543,10 @@ UpdateCultist(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
                     
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(8.0f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1588,7 +1588,7 @@ UpdateCultist(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
 // NOTE(paul):====================================== Cultist Update ==================================================
 
 internal void
-SkeletonHunterAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity,
+SkeletonHunterAttack(world_state *WorldState, sim_region *SimRegion, entity *Entity,
                      render_group *RenderGroup, object_transform Transform)
 {
     skeleton_hunter_entity *EntityData = (skeleton_hunter_entity *)Entity->Data;
@@ -1612,8 +1612,8 @@ SkeletonHunterAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *
         CastedSpell.OffsetP = V3(0, 0.5f, 0);
         CastedSpell.dP = V3(0, 0, 0);
 
-        entity_id SpellID = AddArrowProjectile(WorldMode, RenderGroup->Assets, CastedSpell);
-        AddCollisionRule(WorldMode, SpellID, Entity->ID, false);
+        entity_id SpellID = AddArrowProjectile(WorldState, RenderGroup->Assets, CastedSpell);
+        AddCollisionRule(WorldState, SpellID, Entity->ID, false);
 
         ChangeEntityState(Entity, EntityState_Staying);
         ChangeAnimationType(Entity, AnimationType_Idle);
@@ -1625,7 +1625,7 @@ SkeletonHunterAttack(game_mode_world *WorldMode, sim_region *SimRegion, entity *
 }
 
 internal updated_entity
-UpdateSkeletonHunter(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdateSkeletonHunter(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
     skeleton_hunter_entity *EntityData = (skeleton_hunter_entity *)Entity->Data;
@@ -1636,10 +1636,10 @@ UpdateSkeletonHunter(game_mode_world *WorldMode, sim_region *SimRegion, entity *
                     
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(5.0f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {
@@ -1680,7 +1680,7 @@ UpdateSkeletonHunter(game_mode_world *WorldMode, sim_region *SimRegion, entity *
 
 // NOTE(paul):====================================== Possesed Update =================================================
 internal updated_entity
-UpdatePossesed(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity)
+UpdatePossesed(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     updated_entity Result = {};
     if(Entity->State != EntityState_Attacking)
@@ -1689,10 +1689,10 @@ UpdatePossesed(game_mode_world *WorldMode, sim_region *SimRegion, entity *Entity
                     
         if(ClosestHero.Entity && (ClosestHero.DistanceSq > Square(1.0f)))
         {
-            Entity->EndNode = GetTileNode(WorldMode->World, ClosestHero.Entity->TileP);
+            Entity->EndNode = GetTileNode(WorldState->World, ClosestHero.Entity->TileP);
             ChangeEntityState(Entity, EntityState_Moving);
 
-            Result.ddP = UpdateEntityMovement(WorldMode->World, SimRegion, Entity);
+            Result.ddP = UpdateEntityMovement(WorldState->World, SimRegion, Entity);
         }
         else if(ClosestHero.Entity)
         {

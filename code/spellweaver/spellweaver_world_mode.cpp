@@ -16,14 +16,14 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
     PlaySound(GameState->AudioState, GameState->GameStartFX);
     ChangeBackgroundMusic(GameState, MusicState_Ambient);
         
-    game_mode_world *WorldMode = PushStruct(&GameState->ModeArena, game_mode_world);
+    world_state *WorldState = PushStruct(&GameState->ModeArena, world_state);
 
     real32 PixelsToMeters = 1.0f / 32.0f;
     uint32 TileSideInPixels = 32;
     real32 TileSideInMeters = TileSideInPixels * PixelsToMeters;
 
-    WorldMode->EffectsEntropy = RandomSeed(1257457);
-    WorldMode->MathEntropy = RandomSeed(562739124);
+    WorldState->EffectsEntropy = RandomSeed(1257457);
+    WorldState->MathEntropy = RandomSeed(562739124);
 
     asset_vector MatchVector = {};
     asset_vector WeightVector = {};
@@ -58,22 +58,22 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
         }
     }
 
-    WorldMode->World = CreateWorld(TileSideInMeters, Map);
-    world *World = WorldMode->World;
+    WorldState->World = CreateWorld(TileSideInMeters, Map);
+    world *World = WorldState->World;
     
-    WorldMode->MiniMapBitmap = MakeEmptyBitmap(&WorldMode->World->Arena, 720, 720, false);
+    WorldState->MiniMapBitmap = MakeEmptyBitmap(&WorldState->World->Arena, 720, 720, false);
 
-    WorldMode->NullCollision = MakeNullCollision(WorldMode);
-    WorldMode->SphereCollision = MakeSimpleGroundedCollision(WorldMode, 0.5f, 0.5f, 0.5f);
-    WorldMode->PlayerCollision = MakeSimpleGroundedCollision(WorldMode, 0.8f, 0.5f, 1.2f);
-    WorldMode->TileCollision = MakeSimpleGroundedCollision(WorldMode, World->TileDimInMeters.x,
+    WorldState->NullCollision = MakeNullCollision(WorldState);
+    WorldState->SphereCollision = MakeSimpleGroundedCollision(WorldState, 0.5f, 0.5f, 0.5f);
+    WorldState->PlayerCollision = MakeSimpleGroundedCollision(WorldState, 0.8f, 0.5f, 1.2f);
+    WorldState->TileCollision = MakeSimpleGroundedCollision(WorldState, World->TileDimInMeters.x,
                                                            World->TileDimInMeters.y,
                                                            World->TileDimInMeters.z);
 
-    WorldMode->SpellCollision = MakeSimpleGroundedCollision(WorldMode, 0.5f, 0.5f, 0.5f);
-    WorldMode->GolemCollision = MakeSimpleGroundedCollision(WorldMode, 1.4f, 0.7f, 1.5f);
+    WorldState->SpellCollision = MakeSimpleGroundedCollision(WorldState, 0.5f, 0.5f, 0.5f);
+    WorldState->GolemCollision = MakeSimpleGroundedCollision(WorldState, 1.4f, 0.7f, 1.5f);
 
-    WorldMode->TileMap = PushArray(&World->Arena, World->TileCount, entity_id);
+    WorldState->TileMap = PushArray(&World->Arena, World->TileCount, entity_id);
     for(u32 TileIndex = 0;
         TileIndex < World->TileCount;
         ++TileIndex)
@@ -93,10 +93,10 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
             }
         }
 
-        WorldMode->TileMap[TileIndex] = AddTile(WorldMode, WorldMode->TileCollision, false, SourceTile, HighestZ);
+        WorldState->TileMap[TileIndex] = AddTile(WorldState, WorldState->TileCollision, false, SourceTile, HighestZ);
     }
 
-//    AddGolem(WorldMode, TranState->Assets, CenteredTilePoint(World, 12, 12));
+//    AddGolem(WorldState, TranState->Assets, CenteredTilePoint(World, 12, 12));
 
     //
     // NOTE(paul): Camera Setup
@@ -107,16 +107,16 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
     uint32 CameraTileY = World->TileHeight / 2;
     NewCameraP = ChunkPositionFromTilePosition(World, CameraTileX, CameraTileY);
 
-    WorldMode->CameraBoundsMin.TileX = 0;
-    WorldMode->CameraBoundsMin.TileY = 0;
-    WorldMode->CameraBoundsMin.Offset = V2(-0.5f, -0.5f);
+    WorldState->CameraBoundsMin.TileX = 0;
+    WorldState->CameraBoundsMin.TileY = 0;
+    WorldState->CameraBoundsMin.Offset = V2(-0.5f, -0.5f);
     
-    WorldMode->CameraBoundsMax.TileX = World->TileWidth;
-    WorldMode->CameraBoundsMax.TileY = World->TileHeight;
-    WorldMode->CameraBoundsMax.Offset = V2(0.5f, 0.5f);
-    WorldMode->CameraP = NewCameraP;
+    WorldState->CameraBoundsMax.TileX = World->TileWidth;
+    WorldState->CameraBoundsMax.TileY = World->TileHeight;
+    WorldState->CameraBoundsMax.Offset = V2(0.5f, 0.5f);
+    WorldState->CameraP = NewCameraP;
     
-    GameState->WorldMode = WorldMode;
+    GameState->WorldState = WorldState;
 }
 
 internal void
@@ -167,34 +167,34 @@ UpdateAndRenderGroundTiles(render_group *RenderGroup, world *World, world_positi
 }
 
 internal void
-DestroyEntities(game_mode_world *WorldMode, sim_region *SimRegion)
+DestroyEntities(world_state *WorldState, sim_region *SimRegion)
 {
     for(u32 EntityIndex = 0;
-        EntityIndex < ArrayCount(WorldMode->EntitiesToDestroy);
+        EntityIndex < ArrayCount(WorldState->EntitiesToDestroy);
         ++EntityIndex)
     {
-        entity_id ID = WorldMode->EntitiesToDestroy[EntityIndex];
+        entity_id ID = WorldState->EntitiesToDestroy[EntityIndex];
         if(ID.Value)
         {
             entity *Entity = GetEntityByID(SimRegion, ID);
             if(Entity)
             {
                 AddFlags(Entity, EntityFlag_Deleted);
-                WorldMode->EntitiesToDestroy[EntityIndex].Value = 0;                
+                WorldState->EntitiesToDestroy[EntityIndex].Value = 0;                
             }
         }
     }
 }
 
 internal void
-DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2 CameraBoundsInMeters,
+DrawTileNodes(world_state *WorldState, transient_state *TranState, rectangle2 CameraBoundsInMeters,
               render_group *RenderGroup, as_tile_node *StartNode, as_tile_node *EndNode)
 {
     TIMED_FUNCTION();
 
-    world_position MinTileP = MapIntoTileSpace(WorldMode->World, WorldMode->CameraP,
+    world_position MinTileP = MapIntoTileSpace(WorldState->World, WorldState->CameraP,
                                                GetMinCorner(CameraBoundsInMeters));
-    world_position MaxTileP = MapIntoTileSpace(WorldMode->World, WorldMode->CameraP,
+    world_position MaxTileP = MapIntoTileSpace(WorldState->World, WorldState->CameraP,
                                                GetMaxCorner(CameraBoundsInMeters));
 
     v2 CameraDim = GetDim(CameraBoundsInMeters);
@@ -213,12 +213,12 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
             world_position TileP = CenteredTilePoint(TileX, TileY);
             if((TileX < WORLD_TILE_COUNT_PER_DIM) && (TileY < WORLD_TILE_COUNT_PER_DIM))
             {
-                as_tile_node *Node = GetTileNode(WorldMode->World, TileP);
-                v2 Delta = Subtract(WorldMode->World, &TileP, &WorldMode->CameraP) - V2(0.5f, 0.5f);
+                as_tile_node *Node = GetTileNode(WorldState->World, TileP);
+                v2 Delta = Subtract(WorldState->World, &TileP, &WorldState->CameraP) - V2(0.5f, 0.5f);
 
                 PushRectOutline(RenderGroup, Transform, V3(Delta + V2(0.5f, 0.5f), 2.0f),
-                                V2(WorldMode->World->TileSideInMeters,
-                                   WorldMode->World->TileSideInMeters),
+                                V2(WorldState->World->TileSideInMeters,
+                                   WorldState->World->TileSideInMeters),
                                 V4(1.0f, 0.0f, 0.0f, 1.0f), 0.02f);
 
                 for(u32 NIndex = 0;
@@ -228,7 +228,7 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
                     as_tile_node *NeighborNode = Node->Neighbours[NIndex];
                     if(NeighborNode)
                     {
-                        v2 NDelta = Subtract(WorldMode->World, &NeighborNode->TileP, &WorldMode->CameraP) - V2(0.5f, 0.5f);
+                        v2 NDelta = Subtract(WorldState->World, &NeighborNode->TileP, &WorldState->CameraP) - V2(0.5f, 0.5f);
                         PushLine(RenderGroup, DefaultFlatTransform(),
                                  V3(Delta + V2(0.5f, 0.5f), 3.0f),
                                  V3(NDelta + V2(0.5f, 0.5f), 3.0f), V4(0, 0, 1, 1));
@@ -244,8 +244,8 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
         as_tile_node *Node = EndNode;
         while(Node->Parent)
         {
-            v2 Delta = Subtract(WorldMode->World, &Node->TileP, &WorldMode->CameraP) - V2(0.125f, 0.125f);
-            v2 NDelta = Subtract(WorldMode->World, &Node->Parent->TileP, &WorldMode->CameraP) - V2(0.125f, 0.125f);
+            v2 Delta = Subtract(WorldState->World, &Node->TileP, &WorldState->CameraP) - V2(0.125f, 0.125f);
+            v2 NDelta = Subtract(WorldState->World, &Node->Parent->TileP, &WorldState->CameraP) - V2(0.125f, 0.125f);
 
             object_transform Flat = DefaultFlatTransform();
             PushLine(RenderGroup, &Flat,
@@ -257,7 +257,7 @@ DrawTileNodes(game_mode_world *WorldMode, transient_state *TranState, rectangle2
 }
 
 internal b32
-UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_transient_state *TranState,
+UpdateAndRenderWorld(game_state *GameState, world_state *WorldState, game_transient_state *TranState,
                      engine_input *Input, render_group *RenderGroup, loaded_bitmap *DrawBuffer)
 {
     TIMED_FUNCTION();
@@ -265,11 +265,11 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     b32 Result = false;
 
     {DEBUG_DATA_BLOCK("WorldMemory");
-        memory_arena *WorldArena = &WorldMode->World->Arena;
+        memory_arena *WorldArena = &WorldState->World->Arena;
         DEBUG_VALUE(WorldArena);
     }
 
-    world *World = WorldMode->World;
+    world *World = WorldState->World;
 
     v2 MouseP = {Input->MouseX, Input->MouseY};
 
@@ -290,7 +290,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
 
     // NOTE(casey): Ground tiles rendering
 
-    UpdateAndRenderGroundTiles(RenderGroup, World, WorldMode->CameraP, CameraBoundsInMeters);
+    UpdateAndRenderGroundTiles(RenderGroup, World, WorldState->CameraP, CameraBoundsInMeters);
 
     //
     // NOTE(paul): Take Input
@@ -310,13 +310,13 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
                 if(GameState->GameHaveStarted)
                 {
                     *ConHero = {};
-                    ConHero->EntityIndex = AddPlayer(WorldMode, TranState->Assets);
-                    WorldMode->HeroExist = true;
+                    ConHero->EntityIndex = AddPlayer(WorldState, TranState->Assets);
+                    WorldState->HeroExist = true;
                     GameState->GameHaveStarted = false;
                 }
             }
 
-            if(ConHero->EntityIndex.Value && WorldMode->HeroExist && !WorldMode->GameFinished)
+            if(ConHero->EntityIndex.Value && WorldState->HeroExist && !WorldState->GameFinished)
             {
                 ConHero->ddP = {};
                 ConHero->SphereNewType = SphereType_Null;
@@ -361,7 +361,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
 
                 if(WasPressed(Controller->Back))
                 {
-                    WorldMode->QuitRequested = !WorldMode->QuitRequested;
+                    WorldState->QuitRequested = !WorldState->QuitRequested;
                     PlaySound(GameState->AudioState, GetSoundEffectForType(TranState->Assets, SoundEffect_Click));
                 }
             }
@@ -373,13 +373,13 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     v2 SimBoundsExpansion = {5.0f, 5.0f};
     rectangle2 SimBounds = AddRadiusTo(CameraBoundsInMeters, SimBoundsExpansion);
     temporary_memory SimMemory = BeginTemporaryMemory(&TranState->TranArena);
-    world_position SimCenterP = WorldMode->CameraP;
-    sim_region *SimRegion = BeginSim(&TranState->TranArena, WorldMode->World,
+    world_position SimCenterP = WorldState->CameraP;
+    sim_region *SimRegion = BeginSim(&TranState->TranArena, WorldState->World,
                                      SimCenterP, SimBounds, Input->dtForFrame);
     
-    v2 CameraP = Subtract(World, &WorldMode->CameraP, &SimCenterP);
+    v2 CameraP = Subtract(World, &WorldState->CameraP, &SimCenterP);
 
-//    DrawTileNodes(WorldMode, TranState, SimBounds, RenderGroup, WorldMode->StartNode, WorldMode->EndNode);
+//    DrawTileNodes(WorldState, TranState, SimBounds, RenderGroup, WorldState->StartNode, WorldState->EndNode);
     
     object_transform Flat = DefaultFlatTransform();
 #if SPELLWEAVER_INTERNAL    
@@ -392,7 +392,7 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     u32 OldClipRect = RenderGroup->CurrentClipRectIndex;
     RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, &BarsTransform, ScreenBounds, 0.0f, 1);
 
-    if(WorldMode->HeroExist)
+    if(WorldState->HeroExist)
     {
 #if 0        
         bitmap_id HealthBar = GetFirstBitmapFrom(TranState->Assets, Asset_HeroHealthBar);
@@ -412,24 +412,24 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
     
     {
         TIMED_BLOCK("EntityRender");
-        UpdateAndRenderEntities(WorldMode, SimRegion, GameState->AudioState, ConHero, RenderGroup, Input->dtForFrame, MouseP);
+        UpdateAndRenderEntities(WorldState, SimRegion, GameState->AudioState, ConHero, RenderGroup, Input->dtForFrame, MouseP);
                 
-        DestroyEntities(WorldMode, SimRegion);
-        WorldMode->Time += Input->dtForFrame;
+        DestroyEntities(WorldState, SimRegion);
+        WorldState->Time += Input->dtForFrame;
     }
     
     RenderGroup->GlobalAlpha = 1.0f;
 
-    EndSim(WorldMode, SimRegion, CameraBoundsInMeters);
+    EndSim(WorldState, SimRegion, CameraBoundsInMeters);
     EndTemporaryMemory(SimMemory);
 
-    if(!WorldMode->HeroExist || WorldMode->QuitRequested || WorldMode->GameFinished)
+    if(!WorldState->HeroExist || WorldState->QuitRequested || WorldState->GameFinished)
     {
         b32 Hover = false;
         object_transform Transform = DefaultFlatTransform();
         Transform.ChunkZ = 100000;
         v4 RectColor = V4(0, 0, 0, 0.5f);
-        if(WorldMode->GameFinished)
+        if(WorldState->GameFinished)
         {
             RectColor = V4(0, 0, 0, 0.1f);
         }
@@ -466,12 +466,12 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
         Transform.OffsetP += AdditionalOffset;
         PushBitmap(RenderGroup, &Transform, TitleImage, 2.0f, V3(0, 0, 0));
 
-        if(WorldMode->QuitRequested)
+        if(WorldState->QuitRequested)
         {
         }
-        else if(WorldMode->GameFinished)
+        else if(WorldState->GameFinished)
         {
-            if(!WorldMode->GameEndMusic)
+            if(!WorldState->GameEndMusic)
             {
                 asset_vector MusicWeightVector = {};
                 MusicWeightVector.E[Tag_MusicType] = 1;
@@ -481,18 +481,18 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
                 MusicMatchVector.E[Tag_Variety] = VarietyType_None;
                 sound_id MusicID = GetBestMatchSoundFrom(TranState->Assets, Asset_Music, &MusicMatchVector, &MusicWeightVector);
 
-                WorldMode->GameEndMusic = PlaySound(GameState->AudioState, MusicID);
-                ChangeVolume(GameState->AudioState, WorldMode->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
+                WorldState->GameEndMusic = PlaySound(GameState->AudioState, MusicID);
+                ChangeVolume(GameState->AudioState, WorldState->GameEndMusic, 2.0f, V2(0.7f, 0.7f));
             }
             else
             {
                 ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.0f, 0.0f));
-                if(!WorldMode->GameEndMusic->SoundIsPlaying)
+                if(!WorldState->GameEndMusic->SoundIsPlaying)
                 {
                     ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
                     GameState->FadeState = FadeState_FadeIn;
                     ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
-                    MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                    MuteAndTerminateSound(GameState->AudioState, WorldState->GameEndMusic, 2.0f);
                 }
             }
 
@@ -520,18 +520,18 @@ UpdateAndRenderWorld(game_state *GameState, game_mode_world *WorldMode, game_tra
             PlaySound(GameState->AudioState, GetSoundEffectForType(RenderGroup->Assets, SoundEffect_Click));
             GameState->FadeState = FadeState_FadeIn;
             ChangeVolume(GameState->AudioState, GameState->Music, 2.0f, V2(0.5f, 0.5f));
-            if(WorldMode->GameFinished)
+            if(WorldState->GameFinished)
             {
-                MuteAndTerminateSound(GameState->AudioState, WorldMode->GameEndMusic, 2.0f);
+                MuteAndTerminateSound(GameState->AudioState, WorldState->GameEndMusic, 2.0f);
             }
         }
 
         if(GameState->CurrentAlpha == 1.0f)
         {
-            WorldMode->QuitRequested = false;
+            WorldState->QuitRequested = false;
             GameState->GameHaveStarted = false;
             ConHero->EntityIndex.Value = 0;
-            WorldMode->CameraFollowingEntityIndex.Value = 0;
+            WorldState->CameraFollowingEntityIndex.Value = 0;
 
             for(int ControllerIndex = 0;
                 ControllerIndex < ArrayCount(Input->Controllers);

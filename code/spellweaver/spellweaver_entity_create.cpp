@@ -15,61 +15,61 @@ SetMaxHealthAndMana(entity_stats *Stats, u16 Health, u16 Mana)
 }
 
 internal entity *
-BeginEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_type Type, u32 CreationFlags)
+BeginEntity(world_state *WorldState, entity_general_type GeneralType, entity_type Type, u32 CreationFlags)
 {
-    Assert(WorldMode->CreationBufferIndex < ArrayCount(WorldMode->CreationBuffers));
-    entity *Entity = WorldMode->CreationBuffers + WorldMode->CreationBufferIndex++;
+    Assert(WorldState->CreationBufferIndex < ArrayCount(WorldState->CreationBuffers));
+    entity *Entity = WorldState->CreationBuffers + WorldState->CreationBufferIndex++;
 
     ZeroStruct(*Entity);
-    Entity->ID.Value = ++WorldMode->LastUsedEntityStorageIndex;
+    Entity->ID.Value = ++WorldState->LastUsedEntityStorageIndex;
 
     Entity->CreationFlags = CreationFlags;
     Entity->GeneralType = GeneralType;
     Entity->Type = Type;
     
     Entity->State = EntityState_Staying;
-    Entity->Collision = WorldMode->NullCollision;
+    Entity->Collision = WorldState->NullCollision;
 
-    Entity->RenderHeight = WorldMode->World->TileDimInMeters.y;
+    Entity->RenderHeight = WorldState->World->TileDimInMeters.y;
     Entity->StandardZUpdate = true;
 
 
     if(CreationFlags & CreationFlag_Stats)
     {
-        Entity->Stats = PushStruct(&WorldMode->World->Arena, entity_stats);
+        Entity->Stats = PushStruct(&WorldState->World->Arena, entity_stats);
         Entity->Stats->HealthMax_Health = (u32)((100 << 16) | 100);
         Entity->Stats->ManaMax_Mana = (u32)((100 << 16) | 100);
     }
 
     if(CreationFlags & CreationFlag_Movable)
     {
-        Entity->MoveState = PushStruct(&WorldMode->World->Arena, entity_move_state);
+        Entity->MoveState = PushStruct(&WorldState->World->Arena, entity_move_state);
         Entity->MoveState->MovePointMinHeap.MaxSize = 64;
         Entity->MoveState->MovePointMinHeap.Size = 0;
         Entity->MoveState->MovePointMinHeap.Nodes =
-            PushArray(&WorldMode->World->Arena, Entity->MoveState->MovePointMinHeap.MaxSize, sort_entry);
+            PushArray(&WorldState->World->Arena, Entity->MoveState->MovePointMinHeap.MaxSize, sort_entry);
     }
 
     if(CreationFlags & CreationFlag_Animated)
     {
-        Entity->Animation = PushStruct(&WorldMode->World->Arena, entity_animation);
+        Entity->Animation = PushStruct(&WorldState->World->Arena, entity_animation);
         Entity->Animation->AnimationType = AnimationType_Idle;
         Entity->Animation->AnimationTypeHaveChanged = true;
     }
 
     if(CreationFlags & CreationFlag_HaveReferences)
     {
-        Entity->References = PushStruct(&WorldMode->World->Arena, entity_references);
+        Entity->References = PushStruct(&WorldState->World->Arena, entity_references);
     }
 
     if(CreationFlags & CreationFlag_NeedsTimers)
     {
-        Entity->Timers = PushStruct(&WorldMode->World->Arena, entity_timers);
+        Entity->Timers = PushStruct(&WorldState->World->Arena, entity_timers);
     }
 
     if(CreationFlags & CreationFlag_SoundEffects)
     {
-        Entity->SoundEffects = PushStruct(&WorldMode->World->Arena, entity_sound_effects);
+        Entity->SoundEffects = PushStruct(&WorldState->World->Arena, entity_sound_effects);
     }
 
     if(CreationFlags & CreationFlag_DataNeeded)
@@ -78,27 +78,27 @@ BeginEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_
         {
             case EntityType_Hero:
             {
-                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(hero_entity));
+                Entity->Data = PushSize(&WorldState->World->Arena, sizeof(hero_entity));
             } break;
 
             case EntityType_FlyingSpell:
             {
-                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(flyingspell_entity));
+                Entity->Data = PushSize(&WorldState->World->Arena, sizeof(flyingspell_entity));
             } break;
 
             case EntityType_ImmidiateSpell:
             {
-                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(immidiatespell_entity));
+                Entity->Data = PushSize(&WorldState->World->Arena, sizeof(immidiatespell_entity));
             } break;
 
             case EntityType_MagicSphere:
             {
-                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(hero_sphere_entity));
+                Entity->Data = PushSize(&WorldState->World->Arena, sizeof(hero_sphere_entity));
             } break;
 
             case EntityType_Tile:
             {
-                Entity->Data = PushSize(&WorldMode->World->Arena, sizeof(tile_entity));
+                Entity->Data = PushSize(&WorldState->World->Arena, sizeof(tile_entity));
             } break;
 
             InvalidDefaultCase;
@@ -109,27 +109,27 @@ BeginEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_
 }
 
 internal void
-EndEntity(game_mode_world *WorldMode, entity *Entity, world_position P)
+EndEntity(world_state *WorldState, entity *Entity, world_position P)
 {
-    --WorldMode->CreationBufferIndex;
-    Assert(Entity == (WorldMode->CreationBuffers + WorldMode->CreationBufferIndex));
+    --WorldState->CreationBufferIndex;
+    Assert(Entity == (WorldState->CreationBuffers + WorldState->CreationBufferIndex));
 
-    PackEntityIntoWorld(&WorldMode->World->Arena, WorldMode->World, Entity, P);
+    PackEntityIntoWorld(&WorldState->World->Arena, WorldState->World, Entity, P);
 }
 
 internal entity *
-BeginGroundedEntity(game_mode_world *WorldMode, entity_general_type GeneralType, entity_type Type, u32 CreationFlags,
+BeginGroundedEntity(world_state *WorldState, entity_general_type GeneralType, entity_type Type, u32 CreationFlags,
                     entity_collision *Collision)
 {
-    entity *Entity = BeginEntity(WorldMode, GeneralType, Type, CreationFlags);
+    entity *Entity = BeginEntity(WorldState, GeneralType, Type, CreationFlags);
     Entity->Collision = Collision;
     return(Entity);
 }
 
 internal entity_id
-AddTile(game_mode_world *WorldMode, entity_collision *Collision, b32 Occupied, sswm_ground_tile *Source, s32 ZLayer)
+AddTile(world_state *WorldState, entity_collision *Collision, b32 Occupied, sswm_ground_tile *Source, s32 ZLayer)
 {
-    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Object, EntityType_Tile, CreationFlag_DataNeeded, Collision);
+    entity *Entity = BeginGroundedEntity(WorldState, GeneralType_Object, EntityType_Tile, CreationFlag_DataNeeded, Collision);
     Entity->ZLayer = ZLayer;
 
     tile_entity *Tile = (tile_entity *)Entity->Data;
@@ -137,7 +137,7 @@ AddTile(game_mode_world *WorldMode, entity_collision *Collision, b32 Occupied, s
     Copy(sizeof(bitmap_id)*16, Source->BitmapID, Tile->BitmapID);
     
     entity_id Result = Entity->ID;
-    EndEntity(WorldMode, Entity, CenteredTilePoint(WorldMode->World, Source->TileX, Source->TileY));
+    EndEntity(WorldState, Entity, CenteredTilePoint(WorldState->World, Source->TileX, Source->TileY));
 
     return(Result);
 }
@@ -172,11 +172,11 @@ AddEntitySpriteSheets(editor_assets *Assets, entity *Entity, asset_vector *Match
 }
 
 internal entity_id
-AddGolem(game_mode_world *WorldMode, editor_assets *Assets, world_position P)
+AddGolem(world_state *WorldState, editor_assets *Assets, world_position P)
 {
     u32 CreationFlags = CreationFlag_Stats|CreationFlag_Animated|CreationFlag_Movable;
-    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Enemy, EntityType_Golem,
-                                         CreationFlags, WorldMode->GolemCollision);
+    entity *Entity = BeginGroundedEntity(WorldState, GeneralType_Enemy, EntityType_Golem,
+                                         CreationFlags, WorldState->GolemCollision);
     Entity->RenderHeight = 1.5f;
 
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable);
@@ -184,21 +184,21 @@ AddGolem(game_mode_world *WorldMode, editor_assets *Assets, world_position P)
     Entity->BitmapID = GetFirstBitmapFrom(Assets, Asset_Golem);
 
     entity_id Result = Entity->ID;
-    EndEntity(WorldMode, Entity, P);
+    EndEntity(WorldState, Entity, P);
 
     return(Result);
 }
 
 internal entity_id
-AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell, s32 ZLayer = 0)
+AddFlyingSpell(world_state *WorldState, editor_assets *Assets, casted_spell Spell, s32 ZLayer = 0)
 {
-    entity *Entity = BeginEntity(WorldMode, GeneralType_Spell, EntityType_FlyingSpell,
+    entity *Entity = BeginEntity(WorldState, GeneralType_Spell, EntityType_FlyingSpell,
                                  CreationFlag_Animated|CreationFlag_Movable|CreationFlag_SoundEffects|
                                  CreationFlag_DataNeeded);
     Entity->ZLayer = ZLayer;
     Entity->StandardZUpdate = false;
     Entity->RenderHeight = Spell.RenderHeight;
-    Entity->Collision = WorldMode->SpellCollision;
+    Entity->Collision = WorldState->SpellCollision;
 
     Entity->MoveState->DistanceLimit = Spell.Distance;
     Entity->MoveState->dP = Spell.dP;
@@ -242,19 +242,19 @@ AddFlyingSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell S
 
     entity_id Result = Entity->ID;
     
-    world_position Pos = MapIntoTileSpace(WorldMode->World, Spell.BaseP, Spell.OffsetP.xy);
-    EndEntity(WorldMode, Entity, Pos);
+    world_position Pos = MapIntoTileSpace(WorldState->World, Spell.BaseP, Spell.OffsetP.xy);
+    EndEntity(WorldState, Entity, Pos);
 
     return(Result);
 }
 
 internal entity_id
-AddImmidiateSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spell Spell)
+AddImmidiateSpell(world_state *WorldState, editor_assets *Assets, casted_spell Spell)
 {
-    entity *Entity = BeginEntity(WorldMode, GeneralType_Spell, EntityType_ImmidiateSpell, CreationFlag_Animated|
+    entity *Entity = BeginEntity(WorldState, GeneralType_Spell, EntityType_ImmidiateSpell, CreationFlag_Animated|
                                  CreationFlag_SoundEffects|CreationFlag_DataNeeded);
 
-    Entity->Collision = WorldMode->SpellCollision;
+    Entity->Collision = WorldState->SpellCollision;
     Entity->RenderHeight = Spell.RenderHeight;
 
     Entity->Animation->AttackSpriteFinishIndex[0] = Spell.ImmidiateAnimationFinishIndex;
@@ -290,18 +290,18 @@ AddImmidiateSpell(game_mode_world *WorldMode, editor_assets *Assets, casted_spel
 
     entity_id Result = Entity->ID;
     
-    world_position Pos = MapIntoTileSpace(WorldMode->World, Spell.BaseP, Spell.OffsetP.xy);
-    EndEntity(WorldMode, Entity, Pos);
+    world_position Pos = MapIntoTileSpace(WorldState->World, Spell.BaseP, Spell.OffsetP.xy);
+    EndEntity(WorldState, Entity, Pos);
 
     return(Result);
 }
 
 internal entity *
-AddSphere(game_mode_world *WorldMode, v3 P, world_position BasePos)
+AddSphere(world_state *WorldState, v3 P, world_position BasePos)
 {
-    world_position Pos = MapIntoTileSpace(WorldMode->World, BasePos, P.xy);
-    entity *Entity = BeginEntity(WorldMode, GeneralType_Object, EntityType_MagicSphere, CreationFlag_DataNeeded);
-    Entity->Collision = WorldMode->SphereCollision;
+    world_position Pos = MapIntoTileSpace(WorldState->World, BasePos, P.xy);
+    entity *Entity = BeginEntity(WorldState, GeneralType_Object, EntityType_MagicSphere, CreationFlag_DataNeeded);
+    Entity->Collision = WorldState->SphereCollision;
     Entity->RenderHeight = 0.7f;
 
     hero_sphere_entity *Data = (hero_sphere_entity *)Entity->Data;
@@ -309,7 +309,7 @@ AddSphere(game_mode_world *WorldMode, v3 P, world_position BasePos)
     Data->tMove = 0.0f;
     Data->CircleCenter = V3(0.0f, 0.0f, 0.0f);
     
-    EndEntity(WorldMode, Entity, Pos);
+    EndEntity(WorldState, Entity, Pos);
         
     return(Entity);
 }
@@ -351,16 +351,16 @@ AddHeroSpell(hero_spell *Spell, spell_type Type, r32 TimerDurationSeconds, effec
 }
 
 internal entity_id
-AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
+AddPlayer(world_state *WorldState, editor_assets *Assets)
 {
-    world_position P = WorldMode->CameraP;
+    world_position P = WorldState->CameraP;
 
     u32 CreationFlags = (CreationFlag_Stats|CreationFlag_Movable|CreationFlag_Animated|
                          CreationFlag_HaveReferences|CreationFlag_NeedsTimers|CreationFlag_SoundEffects|
                          CreationFlag_DataNeeded);
 
-    entity *Entity = BeginGroundedEntity(WorldMode, GeneralType_Hero, EntityType_Hero, CreationFlags,
-                                             WorldMode->PlayerCollision);
+    entity *Entity = BeginGroundedEntity(WorldState, GeneralType_Hero, EntityType_Hero, CreationFlags,
+                                             WorldState->PlayerCollision);
     AddFlags(Entity, EntityFlag_Collides|EntityFlag_Moveable|EntityFlag_OnTheGround);
 
     hero_entity *Data = (hero_entity *)Entity->Data;
@@ -393,7 +393,7 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
                     (Entity->P.y + Radius*Sin(tMove)),
                     0.0f);
 
-        entity *Sphere = AddSphere(WorldMode, Pos + OffsetP, P);
+        entity *Sphere = AddSphere(WorldState, Pos + OffsetP, P);
         Entity->References->References[Entity->References->RefCount].ID = Sphere->ID;
         Data->SpheresRefIndex[SphereIndex] = Entity->References->RefCount;
         ++Entity->References->RefCount;
@@ -511,14 +511,14 @@ AddPlayer(game_mode_world *WorldMode, editor_assets *Assets)
     Entity->SoundEffects->AnimationSoundEffect[AnimationType_Move][2] =
         GetSoundEffectForType(Assets, SoundEffect_Walk, VarietyType_2);
     
-    if(WorldMode->CameraFollowingEntityIndex.Value == 0)
+    if(WorldState->CameraFollowingEntityIndex.Value == 0)
     {
-        WorldMode->CameraFollowingEntityIndex = Entity->ID;
+        WorldState->CameraFollowingEntityIndex = Entity->ID;
     }
     
     entity_id Result = Entity->ID;
 
-    EndEntity(WorldMode, Entity, P);
+    EndEntity(WorldState, Entity, P);
     
     return(Result);
 }

@@ -7,7 +7,7 @@
    ======================================================================== */
 
 inline void
-DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, nk_ui *UI, nk_context *Nk, s16 MouseZ)
+DrawTerrainModeUI(engine_map_editor *MapEditor, editor_assets *Assets, u32 GenerationID, nk_ui *UI, nk_context *Nk, s16 MouseZ)
 {
     nk_color Red = {255, 0, 0, 255};
     nk_color Green = {0, 255, 0, 255};
@@ -17,37 +17,37 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", GameMode->CurrentZLayer);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Z Layer: %d", MapEditor->CurrentZLayer);
 
     UI->NkLayoutRowStatic(Nk, 30, 260, 2);
     if(UI->NkButtonLabel(Nk, "Show only this layer"))
-        GameMode->CurrentAction = GMAction_ShowCurrentLayer;
+        MapEditor->CurrentAction = MEAction_ShowCurrentLayer;
     if(UI->NkButtonLabel(Nk, "Toggle Fill"))
-        GameMode->FillActive = !GameMode->FillActive;
+        MapEditor->FillActive = !MapEditor->FillActive;
 
     Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
     UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                        (IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? Green : Red),
-                        "Active: %s", IsSetGameModeFlag(GameMode, GMFlag_ShowCurrentLayer) ? "true" : "false");
+                        (IsSetMapEditorFlag(MapEditor, MEFlag_ShowCurrentLayer) ? Green : Red),
+                        "Active: %s", IsSetMapEditorFlag(MapEditor, MEFlag_ShowCurrentLayer) ? "true" : "false");
     Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
     UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                        (GameMode->FillActive ? Green : Red),
-                        "Active: %s", GameMode->FillActive ? "true" : "false");
+                        (MapEditor->FillActive ? Green : Red),
+                        "Active: %s", MapEditor->FillActive ? "true" : "false");
 
     asset_type TilesetAssetType = Assets->AssetTypes[Asset_Tileset];
     if(TilesetAssetType.FirstAssetIndex != TilesetAssetType.OnePastLastAssetIndex)
     {
         UI->NkPropertyInt(Nk, "Choose Tileset: ", TilesetAssetType.FirstAssetIndex,
-                          (int *)&GameMode->CurrentTileset.Value,
+                          (int *)&MapEditor->CurrentTileset.Value,
                           TilesetAssetType.OnePastLastAssetIndex - 1, 1, 0.1f);
     }
 
-    if(GameMode->Tileset)
+    if(MapEditor->Tileset)
     {
-        u32 TileCount = GameMode->TilesetInfo->TileCount;
-        array_cursor *TileCursor = &GameMode->TileCursor;
+        u32 TileCount = MapEditor->TilesetInfo->TileCount;
+        array_cursor *TileCursor = &MapEditor->TileCursor;
         if(TileCursor->ElementCount != TileCount)
         {
             ResetCursorArray(TileCursor);
@@ -76,8 +76,8 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
                 UI->NkFillRect(&Nk->current->buffer, Rect, 5.0f, Current ? ColorTable[1] : ColorTable[3]);
 
                 u32 TileIndex = TileCursor->Array[ElementIndex];
-                bitmap_id ID = GameMode->Tileset->Tiles[TileIndex].BitmapID;
-                ID.Value += GameMode->Tileset->BitmapIDOffset;
+                bitmap_id ID = MapEditor->Tileset->Tiles[TileIndex].BitmapID;
+                ID.Value += MapEditor->Tileset->BitmapIDOffset;
         
                 PrefetchBitmap(Assets, ID, true);
                 loaded_bitmap *Bitmap = GetBitmap(Assets, ID, GenerationID);
@@ -95,15 +95,15 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
         }
         UI->NkLayoutSpaceEnd(Nk);
 
-        u32 TileIndex = GameMode->TileCursor.Array[GameMode->TileCursor.ArrayPosition];
-        GameMode->Tile.BitmapID = GameMode->Tileset->Tiles[TileIndex].BitmapID;
-        GameMode->Tile.BitmapID.Value += GameMode->Tileset->BitmapIDOffset;
-        GameMode->Tile.CheckSum = GameMode->Tileset->Tiles[TileIndex].CheckSum;
+        u32 TileIndex = MapEditor->TileCursor.Array[MapEditor->TileCursor.ArrayPosition];
+        MapEditor->Tile.BitmapID = MapEditor->Tileset->Tiles[TileIndex].BitmapID;
+        MapEditor->Tile.BitmapID.Value += MapEditor->Tileset->BitmapIDOffset;
+        MapEditor->Tile.CheckSum = MapEditor->Tileset->Tiles[TileIndex].CheckSum;
 
         UI->NkTooltipBegin(Nk, 70);
 
-        PrefetchBitmap(Assets, GameMode->Tile.BitmapID, true);
-        loaded_bitmap *Bitmap = GetBitmap(Assets, GameMode->Tile.BitmapID, GenerationID);
+        PrefetchBitmap(Assets, MapEditor->Tile.BitmapID, true);
+        loaded_bitmap *Bitmap = GetBitmap(Assets, MapEditor->Tile.BitmapID, GenerationID);
         UI->NkLayoutRowStatic(Nk, 64, 64, 1);
         if(Bitmap->TextureHandle)
         {
@@ -116,46 +116,46 @@ DrawTerrainModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generat
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
     UI->NkLayoutSpacePush(Nk, {0, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Exit"))
-        GameMode->CurrentAction = GMAction_Exit;
+        MapEditor->CurrentAction = MEAction_Exit;
     UI->NkLayoutSpaceEnd(Nk);
 }
 
 inline void
-DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
+DrawNavMeshModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
 {
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Polygon Count: %d", GameMode->PolygonCount);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Polygon Count: %d", MapEditor->PolygonCount);
     UI->NkLayoutRowStatic(Nk, 30, 130, 4);
 
     if(UI->NkButtonLabel(Nk, "Start New"))
-        GameMode->CurrentAction = GMAction_StartNewPolygon;
+        MapEditor->CurrentAction = MEAction_StartNewPolygon;
     if(UI->NkButtonLabel(Nk, "Reset Curr"))
-        GameMode->CurrentAction = GMAction_ResetCurrentPolygon;
+        MapEditor->CurrentAction = MEAction_ResetCurrentPolygon;
     if(UI->NkButtonLabel(Nk, "Delete Curr"))
-        GameMode->CurrentAction = GMAction_DeleteCurrentPolygon;
+        MapEditor->CurrentAction = MEAction_DeleteCurrentPolygon;
     if(UI->NkButtonLabel(Nk, "Triangulate"))
-        GameMode->CurrentAction = GMAction_TriangulateAll;
+        MapEditor->CurrentAction = MEAction_TriangulateAll;
 
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Polygon: %d", GameMode->CurrentPolygonIndex);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Current Polygon: %d", MapEditor->CurrentPolygonIndex);
 
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     UI->NkPropertyInt(Nk, "Choose Poly: ", 0,
-                      (int *)&GameMode->CurrentPolygonIndex,
-                      GameMode->PolygonCount - 1, 1, 0.1f);
+                      (int *)&MapEditor->CurrentPolygonIndex,
+                      MapEditor->PolygonCount - 1, 1, 0.1f);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
     UI->NkLayoutSpacePush(Nk, {0, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Exit"))
-        GameMode->CurrentAction = GMAction_Exit;
+        MapEditor->CurrentAction = MEAction_Exit;
 
     UI->NkLayoutSpacePush(Nk, {165, 805, 160, 40});
     if(UI->NkButtonLabel(Nk, "Write Polygons"))
-        GameMode->CurrentAction = GMAction_WritePolygons;
+        MapEditor->CurrentAction = MEAction_WritePolygons;
     UI->NkLayoutSpaceEnd(Nk);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 0, INT_MAX);
@@ -168,19 +168,19 @@ DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
         {
             if(NkTreePush(Platform.UI, Nk, NK_TREE_NODE, "Mesh View Options", NK_MINIMIZED))
             {
-                UI->NkCheckboxLabel(Nk, "Show Native Polies", &GameMode->ShowNativePolies);
+                UI->NkCheckboxLabel(Nk, "Show Native Polies", &MapEditor->ShowNativePolies);
 
-                if(GameMode->ShowNativePolies)
-                    UI->NkCheckboxLabel(Nk, "Show Native P IDs", &GameMode->ShowNativeIds);
+                if(MapEditor->ShowNativePolies)
+                    UI->NkCheckboxLabel(Nk, "Show Native P IDs", &MapEditor->ShowNativeIds);
 
-                if(GameMode->Partitioned)
+                if(MapEditor->Partitioned)
                 {
-                    UI->NkCheckboxLabel(Nk, "Show Partition", &GameMode->ShowPartition);
+                    UI->NkCheckboxLabel(Nk, "Show Partition", &MapEditor->ShowPartition);
 
-                    if(GameMode->ShowPartition)
+                    if(MapEditor->ShowPartition)
                     {
-                        UI->NkCheckboxLabel(Nk, "Show Color", &GameMode->ShowColor);
-                        UI->NkCheckboxLabel(Nk, "Show Neighbours", &GameMode->ShowNeighbours);
+                        UI->NkCheckboxLabel(Nk, "Show Color", &MapEditor->ShowColor);
+                        UI->NkCheckboxLabel(Nk, "Show Neighbours", &MapEditor->ShowNeighbours);
                     }
                 }
                     
@@ -189,15 +189,15 @@ DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
 
             UI->NkLabel(Nk, "StartNode: ", NK_TEXT_ALIGN_LEFT);
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
-                         GameMode->StartNode.TileX, GameMode->StartNode.TileY);
+                         MapEditor->StartNode.TileX, MapEditor->StartNode.TileY);
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
-                         GameMode->StartNode.Offset.x, GameMode->StartNode.Offset.y);
+                         MapEditor->StartNode.Offset.x, MapEditor->StartNode.Offset.y);
 
             UI->NkLabel(Nk, "EndNode: ", NK_TEXT_ALIGN_LEFT);
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  TileX/Y: (%d, %d)",
-                         GameMode->EndNode.TileX, GameMode->EndNode.TileY);
+                         MapEditor->EndNode.TileX, MapEditor->EndNode.TileY);
             UI->NkLabelf(Nk, NK_TEXT_ALIGN_LEFT, "  Offset.x/y: (%.2f, %.2f)",
-                         GameMode->EndNode.Offset.x, GameMode->EndNode.Offset.y);
+                         MapEditor->EndNode.Offset.x, MapEditor->EndNode.Offset.y);
 
             UI->NkGroupEnd(Nk);
         }
@@ -206,16 +206,16 @@ DrawNavMeshModeUI(editor_mode_game *GameMode, nk_ui *UI, nk_context *Nk)
 }
 
 internal void
-DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 GenerationID, ui_state *UIState)
+DrawMapEditorUI(engine_map_editor *MapEditor, editor_assets *Assets, u32 GenerationID, ui_state *UIState)
 {
     nk_ui *UI = UIState->UI;
     nk_context *Nk = UIState->Nk;
 
-    if(!GameMode->HideUI)
+    if(!MapEditor->HideUI)
     {
         UI->NkLayoutRowStatic(Nk, 30, 260, 2);
 
-        char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditGameMode", GameMode->GameEditMode);
+        char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditMapEditor", MapEditor->MapEditorMode);
         struct nk_rect Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, "Current Mode: ", NK_TEXT_CENTERED);
@@ -230,43 +230,43 @@ DrawGameModeUI(editor_mode_game *GameMode, editor_assets *Assets, u32 Generation
         nk_color Red = {255, 0, 0, 255};
         nk_color Green = {0, 255, 0, 255};
         UI->NkLabelfColored(Nk, NK_TEXT_CENTERED,
-                            (IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? Green : Red),
-                            "Edit Enable: %s", IsSetGameModeFlag(GameMode, GMFlag_EditEnable) ? "true" : "false");
+                            (IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable) ? Green : Red),
+                            "Edit Enable: %s", IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable) ? "true" : "false");
 
         UI->NkLayoutRowStatic(Nk, 20, 120, 1);
-        UI->NkCheckboxLabel(Nk, "Show Grid", &GameMode->ShowGrid);
-        switch(GameMode->GameEditMode)
+        UI->NkCheckboxLabel(Nk, "Show Grid", &MapEditor->ShowGrid);
+        switch(MapEditor->MapEditorMode)
         {
-            case EditGameMode_None:
+            case MapEditorMode_None:
             {
                 UI->NkLayoutRowStatic(Nk, 30, 260, 1);
                 UI->NkPropertyInt(Nk, "Ground Layer: ", 0,
-                                  (int *)&GameMode->MapGroundLayer, 15, 1, 0.1f);
+                                  (int *)&MapEditor->MapGroundLayer, 15, 1, 0.1f);
                 UI->NkPropertyInt(Nk, "Layer Count: ", 0,
-                                  (int *)&GameMode->LayerCount, 15, 1, 0.1f);
+                                  (int *)&MapEditor->LayerCount, 15, 1, 0.1f);
 
                 UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
 
                 UI->NkLayoutSpacePush(Nk, {0, 870, 130, 40});
                 if(UI->NkButtonLabel(Nk, "Exit"))
-                    GameMode->CurrentAction = GMAction_Exit;
+                    MapEditor->CurrentAction = MEAction_Exit;
 
                 UI->NkLayoutSpacePush(Nk, {135, 870, 130, 40});
                 if(UI->NkButtonLabel(Nk, "Write SSWM"))
-                    GameMode->CurrentAction = GMAction_WriteSSWM;
+                    MapEditor->CurrentAction = MEAction_WriteSSWM;
 
                 UI->NkLayoutSpaceEnd(Nk);
             } break;
 
-            case EditGameMode_Terrain:
+            case MapEditorMode_Terrain:
             {
-                DrawTerrainModeUI(GameMode, Assets, GenerationID, UI, Nk, UIState->MouseZ);
+                DrawTerrainModeUI(MapEditor, Assets, GenerationID, UI, Nk, UIState->MouseZ);
             
             } break;
 
-            case EditGameMode_NavMeshes:
+            case MapEditorMode_NavMeshes:
             {
-                DrawNavMeshModeUI(GameMode, UI, Nk);
+                DrawNavMeshModeUI(MapEditor, UI, Nk);
             } break;
         }
 

@@ -125,7 +125,7 @@ struct game_state
     {
         game_mode_title_screen *TitleScreen;
         game_mode_cutscene *CutScene;
-        game_mode_world *WorldMode;
+        world_state *WorldState;
     };
 };
 

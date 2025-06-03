@@ -11,44 +11,44 @@
 #include "engine_game_mode_tile.h"
 #include "engine_game_mode_navmesh.h"
 
-enum edit_game_mode
+enum map_editor_mode
 {
-    EditGameMode_None,
-    EditGameMode_Terrain,
-    EditGameMode_NavMeshes,
+    MapEditorMode_None,
+    MapEditorMode_Terrain,
+    MapEditorMode_NavMeshes,
 
-    EditGameMode_Count,
+    MapEditorMode_Count,
 };
 
-enum editor_game_mode_actions
+enum map_editor__actions
 {
-    GMAction_None,
+    MEAction_None,
 
-    GMAction_Exit,
-    GMAction_WriteSSWM,
-    GMAction_EditEnable,
+    MEAction_Exit,
+    MEAction_WriteSSWM,
+    MEAction_EditEnable,
 
     // NOTE(babykaban): Tiles
-    GMAction_ShowCurrentLayer,
-    GMAction_FillActive,
+    MEAction_ShowCurrentLayer,
+    MEAction_FillActive,
 
     // NOTE(babykaban): Nav meshes
-    GMAction_WritePolygons,
-    GMAction_StartNewPolygon,
-    GMAction_ResetCurrentPolygon,
-    GMAction_DeleteCurrentPolygon,
-    GMAction_TriangulateAll,
-    GMAction_SubtractRegion,
+    MEAction_WritePolygons,
+    MEAction_StartNewPolygon,
+    MEAction_ResetCurrentPolygon,
+    MEAction_DeleteCurrentPolygon,
+    MEAction_TriangulateAll,
+    MEAction_SubtractRegion,
 
-    GMAction_NavMeshPlaceStart,
-    GMAction_NavMeshPlaceEnd,
+    MEAction_NavMeshPlaceStart,
+    MEAction_NavMeshPlaceEnd,
 };
 
-enum editor_game_mode_flags
+enum map_editor_flags
 {
-    GMFlag_EditEnable = (1 << 0),
-    GMFlag_ShowCurrentLayer = (1 << 1),
-    GMFlag_FillActive = (1 << 2),
+    MEFlag_EditEnable = (1 << 0),
+    MEFlag_ShowCurrentLayer = (1 << 1),
+    MEFlag_FillActive = (1 << 2),
 };
 
 struct controlled_camera
@@ -56,13 +56,17 @@ struct controlled_camera
     entity_id EntityIndex;
 };
 
-struct editor_mode_game
+struct navigation_state
+{
+};
+
+struct engine_map_editor
 {
     u32 CurrentAction;
     u32 Flags;
     
     b32 HideUI;
-    edit_game_mode GameEditMode;
+    map_editor_mode MapEditorMode;
 
     s32 CameraMoveStep;
     controlled_camera ControlledCameras[ArrayCount(((engine_input *)0)->Controllers)];
@@ -121,42 +125,42 @@ struct editor_mode_game
     action_stack UndoStack;
     action_stack RedoStack;
 
-    game_mode_world *WorldState;
+    world_state *WorldState;
 };
 
 inline void
-SetGameModeFlag(editor_mode_game *GameMode, u32 Flag)
+SetMapEditorFlag(engine_map_editor *MapEditor, u32 Flag)
 {
-    GameMode->Flags |= Flag;
+    MapEditor->Flags |= Flag;
 }
 
 inline void
-ClearGameModeFlag(editor_mode_game *GameMode, u32 Flag)
+ClearMapEditorFlag(engine_map_editor *MapEditor, u32 Flag)
 {
-    GameMode->Flags &= ~Flag;
+    MapEditor->Flags &= ~Flag;
 }
 
 inline b32
-IsSetGameModeFlag(editor_mode_game *GameMode, u32 Flag)
+IsSetMapEditorFlag(engine_map_editor *MapEditor, u32 Flag)
 {
-    b32 Result = GameMode->Flags & Flag;
+    b32 Result = MapEditor->Flags & Flag;
     return(Result);
 }
 
 inline void
-ToggleGMFlag(editor_mode_game *GameMode, u32 Flag)
+ToggleMEFlag(engine_map_editor *MapEditor, u32 Flag)
 {
-    if(IsSetGameModeFlag(GameMode, Flag))
+    if(IsSetMapEditorFlag(MapEditor, Flag))
     {
-        ClearGameModeFlag(GameMode, Flag);
+        ClearMapEditorFlag(MapEditor, Flag);
     }
     else
     {
-        SetGameModeFlag(GameMode, Flag);
+        SetMapEditorFlag(MapEditor, Flag);
     }
 }
 
-internal void PlayGameMode(editor_state *EditorState, transient_state *TranState);
+internal void PlayMapEditor(editor_state *EditorState, transient_state *TranState);
 
 #define ENGINE_MAP_EDITOR_MODE_H
 #endif

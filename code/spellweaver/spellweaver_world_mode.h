@@ -7,7 +7,7 @@
    $Notice: A large part of the code is borrowed from Handmade Hero series 
             that was created by Casey Muratori $
    ======================================================================== */
-struct game_mode_world;
+struct world_state;
 
 struct pairwise_collision_rule
 {
@@ -18,9 +18,8 @@ struct pairwise_collision_rule
     pairwise_collision_rule *NextInHash;
 };
 
-struct game_state;
-internal void AddCollisionRule(game_mode_world *WorldMode, entity_id StorageIndexA, entity_id StorageIndexB, bool32 CanCollide);
-internal void ClearCollisionRulesFor(game_mode_world *WorldMode, entity_id StorageIndex);
+internal void AddCollisionRule(world_state *WorldMode, entity_id StorageIndexA, entity_id StorageIndexB, bool32 CanCollide);
+internal void ClearCollisionRulesFor(world_state *WorldMode, entity_id StorageIndex);
 
 struct particle_cel
 {
@@ -38,7 +37,7 @@ struct particle
     v4 dColor;
 };
 
-struct game_mode_world
+struct world_state
 {
     world *World;
     

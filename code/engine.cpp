@@ -273,7 +273,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-        PlayGameMode(EditorState, TranState);
+        PlayMapEditor(EditorState, TranState);
 //        PlayTitleScreen(EditorState, TranState);
     }
 
@@ -332,10 +332,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                     Rerun = UpdateAndRenderAssetsMode(EditorState, TranState, Input);
                 } break;
 
-                case EditorMode_GameMode:
+                case EditorMode_MapEditor:
                 {
-                    Rerun = UpdateAndRenderGameMode(EditorState, TranState, RenderGroup,
-                                                    Input, RenderWidth, RenderHeight);
+                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
+                                                     Input, RenderWidth, RenderHeight);
                 } break;
 
                 case EditorMode_SimulateGame:
