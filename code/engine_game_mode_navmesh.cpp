@@ -362,8 +362,8 @@ UpdateAndRenderNavMeshMode(engine_map_editor *MapEditor, ui_state *UIState, sim_
                 PushRectOutline(RenderGroup, Flat, V3(StartP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
                 PushRectOutline(RenderGroup, Flat, V3(EndP, 42.0f), V2(0.5f, 0.5f), V4(0, 0, 0, 1), 0.04f);
 
-                StartNodeIndex = FindNavPolyNodeForPoint(&MapEditor->NavMesh, RenderGroup, Flat, World, SimRegion, MapEditor->StartNode);
-                EndNodeIndex = FindNavPolyNodeForPoint(&MapEditor->NavMesh, RenderGroup, Flat, World, SimRegion, MapEditor->EndNode);
+                StartNodeIndex = FindNavPolyNodeForPoint(&MapEditor->NavMesh, World, SimRegion, MapEditor->StartNode);
+                EndNodeIndex = FindNavPolyNodeForPoint(&MapEditor->NavMesh, World, SimRegion, MapEditor->EndNode);
 
                 nav_poly_node *Path = SolvePolyAStar(&MapEditor->NavMesh, World, MapEditor->NavMesh.PolyNodes + StartNodeIndex,
                                                      MapEditor->NavMesh.PolyNodes + EndNodeIndex);

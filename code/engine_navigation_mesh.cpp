@@ -496,7 +496,7 @@ StringPull(v2 *Portals, s32 PortalsCount, v2 *Points, s32 MaxPoints)
 }
 
 internal b32
-IsPointInPolygon(render_group *RenderGroup, object_transform *Flat, polygon2 *Poly, v2 P)
+IsPointInPolygon(polygon2 *Poly, v2 P)
 {
     b32 Result = false;
 
@@ -513,14 +513,11 @@ IsPointInPolygon(render_group *RenderGroup, object_transform *Flat, polygon2 *Po
             Result = !Result;
     }
 
-//    PushLine(RenderGroup, Flat, V3(P, 34.0f), V3(RayP, 34.0f), V4(1, 0, 1, 1));
-
     return(Result);
 }
 
 internal s32
-FindNavPolyNodeForPoint(navigation_mesh *NavMesh, render_group *RenderGroup, object_transform *Flat,
-                        world *World, sim_region *SimRegion, world_position P)
+FindNavPolyNodeForPoint(navigation_mesh *NavMesh, world *World, sim_region *SimRegion, world_position P)
 {
     s32 Result = -1;
     for(u32 I = 0;
@@ -533,7 +530,7 @@ FindNavPolyNodeForPoint(navigation_mesh *NavMesh, render_group *RenderGroup, obj
         if(IsInBounds)
         {
             v2 RealP = Subtract(World, &P, &SimRegion->Origin);
-            if(IsPointInPolygon(RenderGroup, Flat, &Node->PolyPtr->RealPoly, RealP))
+            if(IsPointInPolygon(&Node->PolyPtr->RealPoly, RealP))
             {
                 Result = I;
                 break;

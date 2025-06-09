@@ -49,23 +49,6 @@ struct world_chunk
     world_chunk *NextInHash;
 };
 
-struct as_tile_node
-{
-    world_position TileP;
-
-    s32 X;
-    s32 Y;
-    
-    b32 Obstacle;
-    b32 Visited;
-
-    r32 GlobalGoal;
-    r32 LocalGoal;
-
-    as_tile_node *Neighbours[8];
-    as_tile_node *Parent;
-};
-
 struct world
 {
     memory_arena Arena;
@@ -76,15 +59,7 @@ struct world
     u32 TileHeight;
     u32 TileCount;
 
-    u32 NodesPerTile;
-    u32 TileNodeWidth;
-    u32 TileNodeHeight;
-    u32 TileNodeCount;
-
     loaded_world_map *Map;
-
-    as_tile_node *TileNodes;
-    heap MinTileNodeHeap;
     
     world_entity_block *FirstFree;
 

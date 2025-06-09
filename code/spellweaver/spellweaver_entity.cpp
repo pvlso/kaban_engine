@@ -369,7 +369,7 @@ UpdateAndRenderEntities(world_state *WorldState, sim_region *SimRegion, audio_st
                 {
                     case EntityType_Hero:
                     {
-                        UpdatedEntity = UpdateHero(WorldState, SimRegion, ConHero, Entity, LocalMouseP, RenderGroup);
+                        UpdatedEntity = UpdateHero(WorldState, SimRegion, ConHero, Entity, LocalMouseP);
                     } break;
 
                     case EntityType_FlyingSpell:

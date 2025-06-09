@@ -280,227 +280,6 @@ HeroAttack(world_state *WorldState, sim_region *SimRegion, audio_state *AudioSta
     }
 }
 
-internal as_tile_node *
-FindClosestOpenNode(as_tile_node *Node)
-{
-    as_tile_node *Result = Node;
-
-    u32 UncheckedCount = 0;
-    as_tile_node *Unchecked[64] = {};
-    Unchecked[UncheckedCount++] = Node;
-    
-    b32 Found = false;
-    as_tile_node *CurrentNode = Node;
-    while(!Found && (UncheckedCount < 64))
-    {
-        as_tile_node *CurrentNode = Unchecked[UncheckedCount - 1];
-        --UncheckedCount;
-
-        if(CurrentNode->Obstacle)
-        {
-            for(u32 NeighbourIndex = 0;
-                NeighbourIndex < ArrayCount(Result->Neighbours);
-                ++NeighbourIndex)
-            {
-                as_tile_node *Neighbour = CurrentNode->Neighbours[NeighbourIndex];
-                if(Neighbour->Obstacle)
-                {
-                    Unchecked[UncheckedCount++] = Neighbour;
-                }
-                else
-                {
-                    Result = Neighbour;
-                    Found = true;
-                    break;
-                }
-            }
-        }
-        else
-        {
-            Result = CurrentNode;
-            break;
-        }
-    }
-
-    if(UncheckedCount >= 64)
-    {
-        Result = Node;
-    }
-    
-    return(Result);
-}
-
-inline b32
-IsDiagonalNeighbor(s32 X1, s32 Y1, s32 X2, s32 Y2)
-{
-    b32 Result = false;
-    s32 Dx = AbsoluteValue(X2 - X1);
-    s32 Dy = AbsoluteValue(Y2 - Y1);
-
-    if((Dx == 1) && (Dy == 1))
-    {
-        Result = true;
-    }
-
-    return(Result);
-}
-
-enum diagonal_direction
-{
-    Direction_None,
-    Direction_TopLeft,
-    Direction_TopRight,
-    Direction_BottomLeft,
-    Direction_BottomRight,
-};
-
-inline diagonal_direction
-GetDiagonalDirection(s32 X1, s32 Y1, s32 X2, s32 Y2)
-{
-    diagonal_direction Result = Direction_None;
-    s32 Dx = X2 - X1;
-    s32 Dy = Y2 - Y1;
-
-    if(IsDiagonalNeighbor(X1, Y1, X2, Y2))
-    {
-        if((Dx == 1) && (Dy == 1))        {Result = Direction_TopRight;}
-        else if((Dx == -1) && (Dy == 1))  {Result = Direction_TopLeft;}
-        else if((Dx == 1) && (Dy == -1))  {Result = Direction_BottomRight;}
-        else if((Dx == -1) && (Dy == -1)) {Result = Direction_BottomLeft;}
-    }
-
-    return(Result);
-}
-
-#if 0
-internal void
-SolveAStar(world *World, entity_move_state *MoveState, sim_region *SimRegion)
-{
-    TIMED_FUNCTION();
-
-    if(MoveState->StartNode && MoveState->EndNode)
-    {
-        for(u32 NodeIndex = 0;
-            NodeIndex < World->TileNodeCount;
-            ++NodeIndex)
-        {
-            as_tile_node *Node = World->TileNodes + NodeIndex;
-            Node->Visited = false;
-            Node->GlobalGoal = Real32Maximum;
-            Node->LocalGoal = Real32Maximum;
-            Node->Parent = 0;
-        }
-
-        as_tile_node *CurrentNode = MoveState->StartNode;
-        CurrentNode->LocalGoal = 0.0f;
-        CurrentNode->GlobalGoal = DistanceBetween(World, MoveState->StartNode, MoveState->EndNode);
-
-        heap *Heap = &World->MinTileNodeHeap;
-
-        sort_entry Key = {};
-        Key.Index = MoveState->StartNode->Y*World->TileNodeWidth + MoveState->StartNode->X;
-        Key.SortKey = MoveState->StartNode->GlobalGoal;
-        MinHeapInsertNode(Heap, Key);
-
-        while((Heap->Size != 0) && (CurrentNode != MoveState->EndNode))
-        {
-            as_tile_node *TestNode = World->TileNodes + Heap->Nodes[0].Index;
-            while((TestNode->Visited) && (Heap->Size != 0))
-            {
-                MinHeapExtractNode(Heap);
-                TestNode = World->TileNodes + Heap->Nodes[0].Index;
-            }
-
-            if(Heap->Size == 0)
-            {
-                break;
-            }
-
-            CurrentNode = World->TileNodes + Heap->Nodes[0].Index; 
-            CurrentNode->Visited = true;
-
-            for(u32 NeighbourIndex = 0;
-                NeighbourIndex < ArrayCount(CurrentNode->Neighbours);
-                ++NeighbourIndex)
-            {
-                as_tile_node *NeighbourNode = CurrentNode->Neighbours[NeighbourIndex];
-                if(NeighbourNode)
-                {
-                    b32 Avaliable = true;
-                    diagonal_direction Direction = GetDiagonalDirection(CurrentNode->X, CurrentNode->Y, NeighbourNode->X, NeighbourNode->Y);
-                    if(Direction)
-                    {
-                        as_tile_node *FirstAdjacent = 0;
-                        as_tile_node *SecondAdjacent = 0;
-                        switch(Direction)
-                        {
-                            case Direction_TopLeft:
-                            case Direction_BottomLeft:
-                            {
-                                FirstAdjacent = World->TileNodes + NeighbourNode->Y*World->TileNodeWidth + (NeighbourNode->X + 1);
-                                SecondAdjacent = World->TileNodes + CurrentNode->Y*World->TileNodeWidth + (CurrentNode->X - 1);
-                            } break;
-
-                            case Direction_BottomRight:
-                            case Direction_TopRight:
-                            {
-                                FirstAdjacent = World->TileNodes + NeighbourNode->Y*World->TileNodeWidth + (NeighbourNode->X - 1);
-                                SecondAdjacent = World->TileNodes + CurrentNode->Y*World->TileNodeWidth + (CurrentNode->X + 1);
-                            } break;
-
-                            InvalidDefaultCase;
-                        }
-
-                        v2 TileCollisionDim = World->TileDimInMeters.xy;
-
-                        v2 EntityCollisionSimP = Subtract(World, &CurrentNode->TileP, &SimRegion->Origin); 
-                        v2 NeighborCollisionSimP = Subtract(World, &NeighbourNode->TileP, &SimRegion->Origin); 
-
-                        if(FirstAdjacent->Obstacle)
-                        {
-                            v2 TileCollisionSimP0 = Subtract(World, &FirstAdjacent->TileP, &SimRegion->Origin); 
-                            rectangle2 TileRect0 = RectCenterDim(TileCollisionSimP0, TileCollisionDim);
-                            Avaliable = !LineIntersectsRectangle(EntityCollisionSimP, NeighborCollisionSimP, TileRect0);
-                        }
-
-                        if(SecondAdjacent->Obstacle)
-                        {
-                            v2 TileCollisionSimP1 = Subtract(World, &SecondAdjacent->TileP, &SimRegion->Origin); 
-                            rectangle2 TileRect1 = RectCenterDim(TileCollisionSimP1, TileCollisionDim);
-                            Avaliable = !LineIntersectsRectangle(EntityCollisionSimP, NeighborCollisionSimP, TileRect1);
-                        }
-                    }
-                        
-                    if((!NeighbourNode->Visited) && (!NeighbourNode->Obstacle) && Avaliable)
-                    {
-                        sort_entry Key = {};
-                        Key.Index = NeighbourNode->Y*World->TileNodeWidth + NeighbourNode->X;
-                        Key.SortKey = NeighbourNode->GlobalGoal;
-
-                        r32 LowerGoal = CurrentNode->LocalGoal + DistanceBetween(World, CurrentNode, NeighbourNode);
-                        if(LowerGoal < NeighbourNode->LocalGoal)
-                        {
-                            NeighbourNode->Parent = CurrentNode;
-                            NeighbourNode->LocalGoal = LowerGoal;
-
-                            NeighbourNode->GlobalGoal = (NeighbourNode->LocalGoal +
-                                                         DistanceBetween(World, NeighbourNode, MoveState->EndNode));
-                            Key.SortKey = NeighbourNode->GlobalGoal;
-                        }
-
-                        MinHeapInsertNode(Heap, Key);
-                    }
-                }
-            }
-        }
-
-        ZeroArray(Heap->MaxSize, Heap->Nodes);
-        Heap->Size = 0;
-    }
-    
-}
-#endif
-
 internal void
 Chaikin(v2* InputPoints, s32 InputPointCount, v2** OutputPoints, s32* OutputPointCount)
 {
@@ -554,26 +333,7 @@ CalculatePath(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 {
     world *World = WorldState->World;
     entity_move_state *MoveState = Entity->MoveState;    
-    heap *MovePointMinHeap = &MoveState->MovePointMinHeap;
-
-    MinHeapExtractNode(MovePointMinHeap);
-    MoveState->PointCount = MovePointMinHeap->Size + 1;
-    MoveState->Points = (v2 *)Platform.AllocateMemory(MoveState->PointCount*sizeof(v2));
-    for(u32 Index = 0;
-        Index < MoveState->PointCount;
-        ++Index)
-    {
-        if(Index)
-        {
-            sort_entry Key = MinHeapExtractNode(MovePointMinHeap);
-            as_tile_node *Node = World->TileNodes + Key.Index;
-            MoveState->Points[Index] = Subtract(World, &Node->TileP, &SimRegion->Origin);             
-        }
-        else
-        {
-            MoveState->Points[Index] = Entity->P.xy;             
-        }
-    }
+#if 0
 
     v2 *SmoothedPoints = 0;
     s32 SmoothedPointCount;
@@ -582,17 +342,7 @@ CalculatePath(world_state *WorldState, sim_region *SimRegion, entity *Entity)
     Platform.DeallocateMemory(MoveState->Points);
     MoveState->Points = SmoothedPoints;
     MoveState->PointCount = SmoothedPointCount;
-
-    Chaikin(MoveState->Points, MoveState->PointCount, &SmoothedPoints, &SmoothedPointCount);
-    Platform.DeallocateMemory(MoveState->Points);
-    MoveState->Points = SmoothedPoints;
-    MoveState->PointCount = SmoothedPointCount;
-
-    Chaikin(MoveState->Points, MoveState->PointCount, &SmoothedPoints, &SmoothedPointCount);
-    Platform.DeallocateMemory(MoveState->Points);
-    MoveState->Points = SmoothedPoints;
-    MoveState->PointCount = SmoothedPointCount;
-
+#endif
     if(MoveState->TilePoints)
     {
         Platform.DeallocateMemory(MoveState->TilePoints);
@@ -614,53 +364,29 @@ CalculatePath(world_state *WorldState, sim_region *SimRegion, entity *Entity)
 
 internal updated_entity
 UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConHero, entity *Entity,
-           v3 LocalMouseP, render_group *RenderGroup)
+           v3 LocalMouseP)
 {
     updated_entity Result = {};
     hero_entity *HeroData = (hero_entity *)Entity->Data;
-    object_transform Flat = DefaultFlatTransform();
-
-    heap *MovePointMinHeap = &Entity->MoveState->MovePointMinHeap;
+    
     if(ConHero->Move)
     {
+        ConHero->Move = false;
         world_position MouseP = MapIntoTileSpace(WorldState->World, SimRegion->Origin, LocalMouseP.xy);
-//        Entity->MoveState->EndNode = GetTileNode(WorldState->World, MouseP);
-//        Entity->MoveState->StartNode = GetTileNode(WorldState->World, Entity->TileP);
 
-        Entity->MoveState->EndNode =
-            WorldState->NavMesh.PolyNodes + FindNavPolyNodeForPoint(&WorldState->NavMesh, RenderGroup, &Flat, WorldState->World, SimRegion,
-                                                                    MouseP);
-        Entity->MoveState->StartNode =
-            WorldState->NavMesh.PolyNodes + FindNavPolyNodeForPoint(&WorldState->NavMesh, RenderGroup, &Flat, WorldState->World, SimRegion,
-                                                                    Entity->TileP);
-
-        nav_poly_node *Path = SolvePolyAStar(&WorldState->NavMesh, WorldState->World,
-                                             Entity->MoveState->EndNode,
-                                             Entity->MoveState->StartNode);
-//        SolveAStar(WorldState->World, Entity->MoveState, SimRegion);
-
-        if(Entity->MoveState->EndNode)
+        s32 StartNodeIndex = -1;
+        s32 EndNodeIndex = -1;
+        if(IsValid(Entity->TileP) && IsValid(MouseP))
         {
-            ZeroArray(MovePointMinHeap->MaxSize, MovePointMinHeap->Nodes);
-            MovePointMinHeap->Size = 0;
+            StartNodeIndex = FindNavPolyNodeForPoint(&WorldState->NavMesh, WorldState->World, SimRegion, MouseP);
+            EndNodeIndex = FindNavPolyNodeForPoint(&WorldState->NavMesh, WorldState->World, SimRegion, Entity->TileP);
 
-            #if 0
-            as_tile_node *Node = Entity->MoveState->EndNode;
-            while((Node) && (MovePointMinHeap->Size != MovePointMinHeap->MaxSize))
-            {
-                as_tile_node *ParentNode = Node;
-                sort_entry Key = {};
-                Key.Index = ParentNode->Y*WorldState->World->TileNodeWidth + ParentNode->X;
-                Key.SortKey = ParentNode->LocalGoal;
-                MinHeapInsertNode(MovePointMinHeap, Key);
-
-                Node = Node->Parent;
-            }
-#endif
+            nav_poly_node *Path = SolvePolyAStar(&WorldState->NavMesh, WorldState->World, WorldState->NavMesh.PolyNodes + StartNodeIndex,
+                                                 WorldState->NavMesh.PolyNodes + EndNodeIndex);
             s32 nportals = 0;
-            v2 *portals = PushArray(TempMem.Arena, 64, v2);
-            portals[nportals*2 + 0] = EndP;
-            portals[nportals*2 + 1] = EndP;
+            v2 *portals = PushArray(&WorldState->NavMesh.Arena, 64, v2);
+            portals[nportals*2 + 0] = Entity->P.xy;
+            portals[nportals*2 + 1] = Entity->P.xy;
             ++nportals;                        
 
             for(nav_poly_node *Node = Path;
@@ -687,19 +413,19 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
                 hash_key Key = {};
                 Key.WorldEdge.A = E.A;
                 Key.WorldEdge.B = E.B;
-                hash_data Edge = GetHashElement(&MapEditor->NavMesh.EdgeTable, Key);
+                hash_data Edge = GetHashElement(&WorldState->NavMesh.EdgeTable, Key);
 
                 v2 A = {};
                 v2 B = {};
                 if(From == Edge.PolyMeshAdjacency.PolyAID)
                 {
-                    A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
-                    B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                    A = Subtract(WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                    B = Subtract(WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
                 }
                 else
                 {
-                    A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
-                    B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                    A = Subtract(WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                    B = Subtract(WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
                 }
 
                 portals[nportals*2] = A;
@@ -707,16 +433,24 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
                 ++nportals;                        
             }
 
-            portals[nportals*2] = StartP;
-            portals[nportals*2 + 1] = StartP;
+            portals[nportals*2] = LocalMouseP.xy;
+            portals[nportals*2 + 1] = LocalMouseP.xy;
             ++nportals;                        
 
             s32 maxpts = 64;
-            v2 *pts = PushArray(TempMem.Arena, maxpts, v2);
+            v2 *pts = PushArray(&WorldState->NavMesh.Arena, maxpts, v2);
             s32 npts = StringPull(portals, nportals, pts, maxpts);
 
+            Entity->MoveState->PointCount = npts;
+            Entity->MoveState->Points = (v2 *)Platform.AllocateMemory(Entity->MoveState->PointCount*sizeof(v2));
+            for(s32 Index = 0;
+                Index < npts;
+                ++Index)
+            {
+                Entity->MoveState->Points[Index] = pts[Index];             
+            }
         }
-        
+
         CalculatePath(WorldState, SimRegion, Entity);
         
         ChangeEntityState(Entity, EntityState_Moving);
@@ -725,16 +459,6 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
     entity_move_state *MoveState = Entity->MoveState;
     if(Entity->State == EntityState_Moving)
     {
-#if 1
-        Flat.ChunkZ = 10000;
-        for(u32 Index = 0;
-            Index < MoveState->PointCount;
-            ++Index)
-        {
-            world_position Point = MoveState->TilePoints[Index];
-            PushRect(RenderGroup, &Flat, V3(Subtract(WorldState->World, &Point, &SimRegion->Origin), 0.0f), V2(0.2f, 0.2f), V4(0, 0, 1, 1));
-        }
-#endif
     
         if(MoveState->PointCount)
         {
@@ -742,7 +466,7 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
 
             v2 Delta = Subtract(WorldState->World, &ClosestP, &Entity->TileP);
 
-            if(MoveState->PointCount < 8)
+            if(MoveState->PointCount <= 1)
             {
                 Result.ddP = V3(Delta, 0);
             }

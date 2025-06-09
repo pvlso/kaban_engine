@@ -362,12 +362,9 @@ struct entity_stats
 
 struct entity_move_state
 {
-    struct nav_poly_node *StartNode;
-    struct nav_poly_node *EndNode;
-    heap MovePointMinHeap;
-
     u32 PointCount;
     v2 *Points;
+
     world_position *TilePoints;
     
     real32 DistanceLimit;

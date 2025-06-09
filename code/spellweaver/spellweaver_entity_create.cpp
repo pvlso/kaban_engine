@@ -44,10 +44,6 @@ BeginEntity(world_state *WorldState, entity_general_type GeneralType, entity_typ
     if(CreationFlags & CreationFlag_Movable)
     {
         Entity->MoveState = PushStruct(&WorldState->World->Arena, entity_move_state);
-        Entity->MoveState->MovePointMinHeap.MaxSize = 64;
-        Entity->MoveState->MovePointMinHeap.Size = 0;
-        Entity->MoveState->MovePointMinHeap.Nodes =
-            PushArray(&WorldState->World->Arena, Entity->MoveState->MovePointMinHeap.MaxSize, sort_entry);
     }
 
     if(CreationFlags & CreationFlag_Animated)

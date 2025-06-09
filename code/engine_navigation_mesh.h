@@ -125,14 +125,10 @@ ConvertWorldPolygonToPolygon2(world *World, world_position *BaseP,
 }
 
 inline void InitNavMesh(navigation_mesh *NavMesh, memory_arena *Arena);
-internal s32
-FindNavPolyNodeForPoint(navigation_mesh *NavMesh, render_group *RenderGroup, object_transform *Flat,
-                        world *World, sim_region *SimRegion, world_position P);
-internal void PartitionNavigationMesh(navigation_mesh *NavMesh, world *World,
-                                      sim_region *SimRegion, memory_arena *TempArena);
-internal nav_poly_node *
-SolvePolyAStar(navigation_mesh *NavMesh, world *World,
-               nav_poly_node *Start, nav_poly_node *End);
+internal s32 FindNavPolyNodeForPoint(navigation_mesh *NavMesh, world *World, sim_region *SimRegion, world_position P);
+internal void PartitionNavigationMesh(navigation_mesh *NavMesh, world *World, sim_region *SimRegion, memory_arena *TempArena);
+internal nav_poly_node *SolvePolyAStar(navigation_mesh *NavMesh, world *World, nav_poly_node *Start, nav_poly_node *End);
+internal s32 StringPull(v2 *Portals, s32 PortalsCount, v2 *Points, s32 MaxPoints);
 
 #define ENGINE_NAVIGATION_MESH_H
 #endif

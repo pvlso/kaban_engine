@@ -281,93 +281,6 @@ AddChunkToFreeList(world *World, world_chunk *Old)
     World->FirstFreeChunk = Old;
 }
 
-inline void
-InitASTileNode(world *World, as_tile_node *Node, v2 P, s32 X, s32 Y)
-{
-    world_position BaseP = {};
-    Node->TileP = MapIntoTileSpace(World, BaseP, P);
-    Node->X = X;
-    Node->Y = Y;
-    Node->Obstacle = false;
-    Node->Visited = false;
-    Node->Parent = 0;
-}
-
-inline void
-FindTileNodeNeighbors(world *World, as_tile_node *Node)
-{
-    s32 X = Node->X;
-    s32 Y = Node->Y;
-
-    
-    s32 Indecies[8][2] =
-        {
-            {Y, X - 1},
-            {Y, X + 1},
-            {Y - 1, X},
-            {Y + 1, X},
-            {Y + 1, X + 1},
-            {Y - 1, X - 1},
-            {Y + 1, X - 1},
-            {Y - 1, X + 1},
-        };
-
-    for(u32 I = 0;
-        I < ArrayCount(Indecies);
-        ++I)
-    {
-        u32 IndexX = Indecies[I][1];
-        u32 IndexY = Indecies[I][0];
-
-        if((IndexX >= 0) && (IndexX < World->TileNodeWidth) &&
-           (IndexY >= 0) && (IndexY < World->TileNodeHeight))
-        {
-            s32 Index = IndexY*World->TileNodeWidth + IndexX;
-            Node->Neighbours[I] = World->TileNodes + Index;
-        }
-    }
-}
-
-internal as_tile_node *
-GetTileNode(world *World, world_position TileP)
-{
-    as_tile_node *Result = 0;
-
-    r32 NodeCount = (r32)World->NodesPerTile;
-    r32 HalfNodeCount = (r32)World->NodesPerTile / 2.0f;
-    
-    r32 X = (r32)TileP.TileX*NodeCount + HalfNodeCount;
-    r32 Y = (r32)TileP.TileY*NodeCount + HalfNodeCount; 
-    r32 OffsetX = X + (TileP.Offset.x*NodeCount);
-    r32 OffsetY = Y + (TileP.Offset.y*NodeCount);
-    s32 IndexX = (s32)OffsetX;
-    s32 IndexY = (s32)OffsetY;
-
-    Result = World->TileNodes + IndexY*World->TileNodeWidth + IndexX;
-
-    return(Result);
-}
-
-internal as_tile_node *
-GetTileNode(world *World, s32 NodeX, s32 NodeY)
-{
-    as_tile_node *Result = 0;
-
-    Result = World->TileNodes + NodeY*World->TileNodeWidth + NodeX;
-
-    return(Result);
-}
-
-inline r32
-DistanceBetween(world *World, as_tile_node *NodeA, as_tile_node *NodeB)
-{
-    v2 Delta = Subtract(World, &NodeA->TileP, &NodeB->TileP);
-
-    r32 Result = SquareRoot(Square(Delta.x) + Square(Delta.y));
-
-    return(Result);
-}
-
 internal world *
 CreateWorld(r32 TileSideInMeters, loaded_world_map *Map)
 {
@@ -379,31 +292,6 @@ CreateWorld(r32 TileSideInMeters, loaded_world_map *Map)
     World->TileWidth = Map->Header->MapWidth;
     World->TileHeight = Map->Header->MapHeight;
     World->TileCount = World->TileWidth*World->TileHeight;
-
-    World->NodesPerTile = 1;
-    World->TileNodeWidth = World->NodesPerTile*World->TileWidth;
-    World->TileNodeHeight = World->NodesPerTile*World->TileHeight;
-    World->TileNodeCount = World->NodesPerTile*World->TileCount;
-
-    World->TileNodes = PushArray(&World->Arena, World->TileNodeCount, as_tile_node);
-    World->MinTileNodeHeap.MaxSize = World->TileNodeCount / 4;
-    World->MinTileNodeHeap.Size = 0;
-    World->MinTileNodeHeap.Nodes = PushArray(&World->Arena, World->MinTileNodeHeap.MaxSize, sort_entry);
-
-    for(u32 Y = 0;
-        Y < World->TileNodeHeight;
-        ++Y)
-    {
-        for(u32 X = 0;
-            X < World->TileNodeWidth;
-            ++X)
-        {
-            v2 P = V2i(X, Y);
-            as_tile_node *Node = World->TileNodes + Y*World->TileNodeWidth + X;
-            InitASTileNode(World, Node, P, X, Y);
-            FindTileNodeNeighbors(World, Node);
-        }
-    }
     
     return(World);
 }
@@ -447,11 +335,6 @@ EDITORCreateWorld(transient_state *TranState, r32 TileSideInMeters, u32 WorldTil
     World->TileWidth = WorldTileWidth;
     World->TileHeight = WorldTileHeight;
     World->TileCount = World->TileWidth*World->TileHeight;
-
-    World->NodesPerTile = NodesPerTile;
-    World->TileNodeWidth = NodesPerTile*WorldTileWidth;
-    World->TileNodeHeight = NodesPerTile*WorldTileHeight;
-    World->TileNodeCount = NodesPerTile*World->TileCount;
 
     if(Map)
     {

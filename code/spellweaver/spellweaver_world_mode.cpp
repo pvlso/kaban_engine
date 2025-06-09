@@ -157,53 +157,6 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
 }
 
 internal void
-UpdateAndRenderGroundTiles(render_group *RenderGroup, world *World, world_position CameraP, rectangle2 CameraBoundsInMeters)
-{
-    TIMED_FUNCTION();
-#if 0
-    world_position MinTileP = MapIntoTileSpace(World, CameraP, GetMinCorner(CameraBoundsInMeters));
-    world_position MaxTileP = MapIntoTileSpace(World, CameraP, GetMaxCorner(CameraBoundsInMeters));
-    v2 CameraDim = GetDim(CameraBoundsInMeters);
-    v2 CameraHalfDim = 0.5f*CameraDim;
-
-    object_transform Transform = DefaultFlatTransform();
-    for(s32 TileY = MinTileP.TileY;
-        TileY <= MaxTileP.TileY;
-        ++TileY)
-    {
-        for(s32 TileX = MinTileP.TileX;
-            TileX <= MaxTileP.TileX;
-            ++TileX)
-        {
-            world_position TileP = CenteredTilePoint(World, TileX, TileY);
-            if(((u32)TileX < World->TileWidth) && ((u32)TileY < WORLD_TILE_COUNT_PER_DIM))
-            {
-                v2 Delta = Subtract(World, &TileP, &CameraP);
-
-                sswm_ground_tile *Tile = World->Map->GroundTiles + TileY*World->Map->Header->MapWidth + TileX;
-                u32 ZLayerCount = World->Map->Header->GroundLayer_ZLayerCount & 0xFFFF;
-                for(u32 BitmapIndex = 0;
-                    BitmapIndex < ZLayerCount;
-                    ++BitmapIndex)
-                {
-                    bitmap_id ID = {Tile->BitmapID[BitmapIndex]};
-                    PushBitmap(RenderGroup, &Transform, ID, World->TileDimInMeters.y, V3(Delta, 0.0f));
-                    Transform.ChunkZ += 1;
-                }
-
-                Transform.ChunkZ -= ZLayerCount;
-                
-#if SPELLWEAVER_INTERNAL
-                PushRectOutline(RenderGroup, &Transform, V3(Delta, 2.0f), World->TileDimInMeters.xy,
-                                V4(1.0f, 1.0f, 0.0f, 1.0f), 0.02f);
-#endif
-            }
-        }
-    }
-#endif
-}
-
-internal void
 DestroyEntities(world_state *WorldState, sim_region *SimRegion)
 {
     for(u32 EntityIndex = 0;
@@ -219,76 +172,6 @@ DestroyEntities(world_state *WorldState, sim_region *SimRegion)
                 AddFlags(Entity, EntityFlag_Deleted);
                 WorldState->EntitiesToDestroy[EntityIndex].Value = 0;                
             }
-        }
-    }
-}
-
-internal void
-DrawTileNodes(world_state *WorldState, transient_state *TranState, rectangle2 CameraBoundsInMeters,
-              render_group *RenderGroup, as_tile_node *StartNode, as_tile_node *EndNode)
-{
-    TIMED_FUNCTION();
-
-    world_position MinTileP = MapIntoTileSpace(WorldState->World, WorldState->CameraP,
-                                               GetMinCorner(CameraBoundsInMeters));
-    world_position MaxTileP = MapIntoTileSpace(WorldState->World, WorldState->CameraP,
-                                               GetMaxCorner(CameraBoundsInMeters));
-
-    v2 CameraDim = GetDim(CameraBoundsInMeters);
-    v2 CameraHalfDim = 0.5f*CameraDim;
-
-#if 0
-    object_transform Transform = DefaultFlatTransform();
-    for(int32 TileY = MinTileP.TileY;
-        TileY <= MaxTileP.TileY;
-        ++TileY)
-    {
-        for(int32 TileX = MinTileP.TileX;
-            TileX <= MaxTileP.TileX;
-            ++TileX)
-        {
-            world_position TileP = CenteredTilePoint(TileX, TileY);
-            if((TileX < WORLD_TILE_COUNT_PER_DIM) && (TileY < WORLD_TILE_COUNT_PER_DIM))
-            {
-                as_tile_node *Node = GetTileNode(WorldState->World, TileP);
-                v2 Delta = Subtract(WorldState->World, &TileP, &WorldState->CameraP) - V2(0.5f, 0.5f);
-
-                PushRectOutline(RenderGroup, Transform, V3(Delta + V2(0.5f, 0.5f), 2.0f),
-                                V2(WorldState->World->TileSideInMeters,
-                                   WorldState->World->TileSideInMeters),
-                                V4(1.0f, 0.0f, 0.0f, 1.0f), 0.02f);
-
-                for(u32 NIndex = 0;
-                    NIndex < ArrayCount(Node->Neighbours);
-                    ++NIndex)
-                {
-                    as_tile_node *NeighborNode = Node->Neighbours[NIndex];
-                    if(NeighborNode)
-                    {
-                        v2 NDelta = Subtract(WorldState->World, &NeighborNode->TileP, &WorldState->CameraP) - V2(0.5f, 0.5f);
-                        PushLine(RenderGroup, DefaultFlatTransform(),
-                                 V3(Delta + V2(0.5f, 0.5f), 3.0f),
-                                 V3(NDelta + V2(0.5f, 0.5f), 3.0f), V4(0, 0, 1, 1));
-                    }
-                }
-            }
-        }
-    }
-#endif
-
-    if(EndNode)
-    {
-        as_tile_node *Node = EndNode;
-        while(Node->Parent)
-        {
-            v2 Delta = Subtract(WorldState->World, &Node->TileP, &WorldState->CameraP) - V2(0.125f, 0.125f);
-            v2 NDelta = Subtract(WorldState->World, &Node->Parent->TileP, &WorldState->CameraP) - V2(0.125f, 0.125f);
-
-            object_transform Flat = DefaultFlatTransform();
-            PushLine(RenderGroup, &Flat,
-                     V3(NDelta + V2(0.125f, 0.125f), 4.0f), V3(Delta + V2(0.125f, 0.125f), 4.0f), V4(1, 1, 0, 1));
-
-            Node = Node->Parent;
         }
     }
 }
@@ -324,10 +207,6 @@ UpdateAndRenderWorld(game_state *GameState, world_state *WorldState, game_transi
 
     rectangle2 ScreenBounds = GetCameraRectangleAtTarget(RenderGroup);
     rectangle2 CameraBoundsInMeters = RectMinMax(ScreenBounds.Min, ScreenBounds.Max);
-
-    // NOTE(casey): Ground tiles rendering
-
-    UpdateAndRenderGroundTiles(RenderGroup, World, WorldState->CameraP, CameraBoundsInMeters);
 
     //
     // NOTE(paul): Take Input
@@ -415,7 +294,7 @@ UpdateAndRenderWorld(game_state *GameState, world_state *WorldState, game_transi
                                      &WorldState->NavMesh, SimCenterP, SimBounds, Input->dtForFrame);
     
     v2 CameraP = Subtract(World, &WorldState->CameraP, &SimCenterP);
-
+#if 0
     if(WorldState->NavMesh.Partitioned)
     {
         char Text[32];
@@ -482,6 +361,7 @@ UpdateAndRenderWorld(game_state *GameState, world_state *WorldState, game_transi
         }
     }
 //    DrawTileNodes(WorldState, TranState, SimBounds, RenderGroup, WorldState->StartNode, WorldState->EndNode);
+#endif
     
     object_transform Flat = DefaultFlatTransform();
 #if SPELLWEAVER_INTERNAL    
