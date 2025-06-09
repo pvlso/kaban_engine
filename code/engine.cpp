@@ -145,6 +145,7 @@ platform_api Platform;
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
 #include "engine_game_simulate.cpp"
+#include "engine_navigation_mesh.cpp"
 #include "engine_map_editor_mode.cpp"
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)

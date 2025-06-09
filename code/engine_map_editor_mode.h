@@ -9,6 +9,8 @@
 #include "engine_game_mode_undo.h"
 
 #include "engine_game_mode_tile.h"
+
+#include "engine_navigation_mesh.h"
 #include "engine_game_mode_navmesh.h"
 
 enum map_editor_mode
@@ -87,18 +89,9 @@ struct engine_map_editor
     u32 CurrentPolygonIndex;
     world_polygon *CurrentPolygon;
 
-    u32 PolygonCount;
-    world_polygon *Polies;
     world_position *ChosenVertex;
 
-    b32 Partitioned;
-    s32 MeshPolygonCount;
-    world_polygon_list MeshPolygonsSentinal;
-    world_polygon_list *FreePolygons;
-
-    u32 PolyNodeCount;
-    nav_poly_node *PolyNodes;
-    heap MinPolyNodeHeap;
+    navigation_mesh NavMesh;
 
     b32 ShowNativePolies;
     b32 ShowNativeIds;
@@ -108,8 +101,6 @@ struct engine_map_editor
 
     world_position StartNode;
     world_position EndNode;
-    memory_arena NavMeshArena;
-    hash_table EdgeTable;
     
 //    s32 MeshTriangleCount;
 //    world_triangle *MeshTriangles;

@@ -29,20 +29,20 @@ ReadPolygons(engine_map_editor *MapEditor)
     fopen_s(&Out, "polygons.nmp", "rb");
     if(Out)
     {
-        fread(&MapEditor->PolygonCount, sizeof(u32), 1, Out);
+        fread(&MapEditor->NavMesh.PolygonCount, sizeof(u32), 1, Out);
         
         for(u32 PolygonIndex = 0;
-            PolygonIndex < MapEditor->PolygonCount;
+            PolygonIndex < MapEditor->NavMesh.PolygonCount;
             ++PolygonIndex)
         {
-            world_polygon *Current = MapEditor->Polies + PolygonIndex;
+            world_polygon *Current = MapEditor->NavMesh.Polies + PolygonIndex;
             fread(&Current->VertexCount, sizeof(u32), 1, Out); 
             u32 VerticesSize = Current->VertexCount*sizeof(world_position);
             fread(Current->Vertices, VerticesSize, 1, Out);
         }
 
-        MapEditor->CurrentPolygon = MapEditor->Polies + 0;
-        MapEditor->CurrentPolygonIndex = MapEditor->PolygonCount - 1;
+        MapEditor->CurrentPolygon = MapEditor->NavMesh.Polies + 0;
+        MapEditor->CurrentPolygonIndex = MapEditor->NavMesh.PolygonCount - 1;
     }
 
     fclose(Out);
@@ -173,38 +173,22 @@ PlayMapEditor(editor_state *EditorState, transient_state *TranState)
         InitActionStack(&Result->UndoStack, &EditorState->ModeArena);
         InitActionStack(&Result->RedoStack, &EditorState->ModeArena);
 
-        Result->Polies = PushArray(&EditorState->ModeArena, 256, world_polygon);
+        InitNavMesh(&Result->NavMesh, &EditorState->ModeArena);
+        Result->NavMesh.Polies = PushArray(&Result->NavMesh.Arena, 256, world_polygon);
         for(s32 Index = 0;
             Index < 256;
             ++Index)
         {
-            world_polygon *Poly = Result->Polies + Index;
-            Poly->Vertices = PushArray(&EditorState->ModeArena, MAX_VERTEX_COUNT, world_position);
+            world_polygon *Poly = Result->NavMesh.Polies + Index;
+            Poly->Vertices = PushArray(&Result->NavMesh.Arena, MAX_VERTEX_COUNT, world_position);
         }
 
         ReadPolygons(Result);
 
-//        Result->MeshTriangles = PushArray(&EditorState->ModeArena, 4096, world_triangle);
-//        Result->FreeTriangleIndices = PushArray(&EditorState->ModeArena, 1024, s32);
-        
-        Result->AutoWriteSeconds = 300.0f;
-
-        DLIST_INIT(&Result->MeshPolygonsSentinal);
-
-        Result->PolyNodeCount = 0;
-        Result->PolyNodes = PushArray(&EditorState->ModeArena, 512, nav_poly_node);
-        Result->MinPolyNodeHeap.MaxSize = 256;
-        Result->MinPolyNodeHeap.Size = 0;
-        Result->MinPolyNodeHeap.Nodes = PushArray(&EditorState->ModeArena, Result->MinPolyNodeHeap.MaxSize, sort_entry);
-
         Result->StartNode = NullPosition();
         Result->EndNode = NullPosition();
-
-        SubArena(&Result->NavMeshArena, &EditorState->ModeArena, Megabytes(1));
-        Result->EdgeTable.Size = 4096;
-        Result->EdgeTable.KeyType = HashKeyType_WORLD_EDGE;
-        Result->EdgeTable.DataType = HashDataType_POLY_MESH_ADJACENCY;
-        Result->EdgeTable.Hash = PushArray(&Result->NavMeshArena, Result->EdgeTable.Size, hash_table_entry *);
+        
+        Result->AutoWriteSeconds = 300.0f;
         
         EditorState->MapEditor = Result;
     }
@@ -568,7 +552,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
             world_position SimCenterP = MapEditor->WorldState->CameraP;
 
             sim_region *SimRegion = BeginSim(&TranState->TranArena, MapEditor->WorldState->World,
-                                             SimCenterP, SimBounds, Input->dtForFrame);
+                                             &MapEditor->NavMesh, SimCenterP, SimBounds, Input->dtForFrame);
 
 #if 0    
             PushRectOutline(RenderGroup, &Flat, V3(0.0f, 0.0f, 0.0f), GetDim(ScreenBounds), V4(1.0f, 1.0f, 0.0f, 1), 0.05f);

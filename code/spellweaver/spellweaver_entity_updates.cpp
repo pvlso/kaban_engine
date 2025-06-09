@@ -372,6 +372,7 @@ GetDiagonalDirection(s32 X1, s32 Y1, s32 X2, s32 Y2)
     return(Result);
 }
 
+#if 0
 internal void
 SolveAStar(world *World, entity_move_state *MoveState, sim_region *SimRegion)
 {
@@ -498,6 +499,7 @@ SolveAStar(world *World, entity_move_state *MoveState, sim_region *SimRegion)
     }
     
 }
+#endif
 
 internal void
 Chaikin(v2* InputPoints, s32 InputPointCount, v2** OutputPoints, s32* OutputPointCount)
@@ -616,21 +618,33 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
 {
     updated_entity Result = {};
     hero_entity *HeroData = (hero_entity *)Entity->Data;
+    object_transform Flat = DefaultFlatTransform();
 
     heap *MovePointMinHeap = &Entity->MoveState->MovePointMinHeap;
     if(ConHero->Move)
     {
         world_position MouseP = MapIntoTileSpace(WorldState->World, SimRegion->Origin, LocalMouseP.xy);
-        Entity->MoveState->EndNode = GetTileNode(WorldState->World, MouseP);
-        Entity->MoveState->StartNode = GetTileNode(WorldState->World, Entity->TileP);
+//        Entity->MoveState->EndNode = GetTileNode(WorldState->World, MouseP);
+//        Entity->MoveState->StartNode = GetTileNode(WorldState->World, Entity->TileP);
 
-        SolveAStar(WorldState->World, Entity->MoveState, SimRegion);
+        Entity->MoveState->EndNode =
+            WorldState->NavMesh.PolyNodes + FindNavPolyNodeForPoint(&WorldState->NavMesh, RenderGroup, &Flat, WorldState->World, SimRegion,
+                                                                    MouseP);
+        Entity->MoveState->StartNode =
+            WorldState->NavMesh.PolyNodes + FindNavPolyNodeForPoint(&WorldState->NavMesh, RenderGroup, &Flat, WorldState->World, SimRegion,
+                                                                    Entity->TileP);
+
+        nav_poly_node *Path = SolvePolyAStar(&WorldState->NavMesh, WorldState->World,
+                                             Entity->MoveState->EndNode,
+                                             Entity->MoveState->StartNode);
+//        SolveAStar(WorldState->World, Entity->MoveState, SimRegion);
 
         if(Entity->MoveState->EndNode)
         {
             ZeroArray(MovePointMinHeap->MaxSize, MovePointMinHeap->Nodes);
             MovePointMinHeap->Size = 0;
 
+            #if 0
             as_tile_node *Node = Entity->MoveState->EndNode;
             while((Node) && (MovePointMinHeap->Size != MovePointMinHeap->MaxSize))
             {
@@ -642,6 +656,65 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
 
                 Node = Node->Parent;
             }
+#endif
+            s32 nportals = 0;
+            v2 *portals = PushArray(TempMem.Arena, 64, v2);
+            portals[nportals*2 + 0] = EndP;
+            portals[nportals*2 + 1] = EndP;
+            ++nportals;                        
+
+            for(nav_poly_node *Node = Path;
+                Node->Parent;
+                Node = Node->Parent)
+            {
+                nav_poly_node *Parent = Node->Parent;
+                neighbour_edge E = {};
+                for(s32 I = 0;
+                    I < Node->NeighbourCount;
+                    ++I)
+                {
+                    nav_poly_node *N = Node->Neighbours[I];
+                    if(N->Index == Parent->Index)
+                    {
+                        E = Node->NEdge[I];
+                        break;
+                    }
+                }
+
+                u32 To = Node->Index;
+                u32 From = Parent->Index;
+                    
+                hash_key Key = {};
+                Key.WorldEdge.A = E.A;
+                Key.WorldEdge.B = E.B;
+                hash_data Edge = GetHashElement(&MapEditor->NavMesh.EdgeTable, Key);
+
+                v2 A = {};
+                v2 B = {};
+                if(From == Edge.PolyMeshAdjacency.PolyAID)
+                {
+                    A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ALeft, &SimRegion->Origin);
+                    B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.ARight, &SimRegion->Origin);
+                }
+                else
+                {
+                    A = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BLeft, &SimRegion->Origin);
+                    B = Subtract(MapEditor->WorldState->World, &Edge.PolyMeshAdjacency.BRight, &SimRegion->Origin);
+                }
+
+                portals[nportals*2] = A;
+                portals[nportals*2 + 1] = B;
+                ++nportals;                        
+            }
+
+            portals[nportals*2] = StartP;
+            portals[nportals*2 + 1] = StartP;
+            ++nportals;                        
+
+            s32 maxpts = 64;
+            v2 *pts = PushArray(TempMem.Arena, maxpts, v2);
+            s32 npts = StringPull(portals, nportals, pts, maxpts);
+
         }
         
         CalculatePath(WorldState, SimRegion, Entity);
@@ -653,7 +726,6 @@ UpdateHero(world_state *WorldState, sim_region *SimRegion, controlled_hero *ConH
     if(Entity->State == EntityState_Moving)
     {
 #if 1
-        object_transform Flat = DefaultFlatTransform();
         Flat.ChunkZ = 10000;
         for(u32 Index = 0;
             Index < MoveState->PointCount;

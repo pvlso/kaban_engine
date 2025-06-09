@@ -97,5 +97,7 @@ struct world
     world_entity_block *FirstFreeBlock;
 };
 
+inline v2 Subtract(world *World, world_position *A, world_position *B);
+
 #define SPELLWEAVER_WORLD_H
 #endif

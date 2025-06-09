@@ -7,6 +7,31 @@
             that was created by Casey Muratori $
    ======================================================================== */
 
+// TODO(paul): Remove this the polygons will be read from sswm file that
+// is loaded through asset system
+internal void
+ReadPolygons(navigation_mesh *NavMesh)
+{
+    FILE *Out;
+    fopen_s(&Out, "polygons.nmp", "rb");
+    if(Out)
+    {
+        fread(&NavMesh->PolygonCount, sizeof(u32), 1, Out);
+        
+        for(u32 PolygonIndex = 0;
+            PolygonIndex < NavMesh->PolygonCount;
+            ++PolygonIndex)
+        {
+            world_polygon *Current = NavMesh->Polies + PolygonIndex;
+            fread(&Current->VertexCount, sizeof(u32), 1, Out); 
+            u32 VerticesSize = Current->VertexCount*sizeof(world_position);
+            fread(Current->Vertices, VerticesSize, 1, Out);
+        }
+    }
+
+    fclose(Out);
+}
+
 internal void
 PlayWorld(game_state *GameState, game_transient_state *TranState)
 {
@@ -57,6 +82,18 @@ PlayWorld(game_state *GameState, game_transient_state *TranState)
             Tile->BitmapID[BitmapIndex] = ID.Value;
         }
     }
+
+    InitNavMesh(&WorldState->NavMesh, &GameState->ModeArena);
+    WorldState->NavMesh.Polies = PushArray(&WorldState->NavMesh.Arena, 256, world_polygon);
+    for(s32 Index = 0;
+        Index < 256;
+        ++Index)
+    {
+        world_polygon *Poly = WorldState->NavMesh.Polies + Index;
+        Poly->Vertices = PushArray(&WorldState->NavMesh.Arena, MAX_VERTEX_COUNT, world_position);
+    }
+
+    ReadPolygons(&WorldState->NavMesh);
 
     WorldState->World = CreateWorld(TileSideInMeters, Map);
     world *World = WorldState->World;
@@ -375,10 +412,75 @@ UpdateAndRenderWorld(game_state *GameState, world_state *WorldState, game_transi
     temporary_memory SimMemory = BeginTemporaryMemory(&TranState->TranArena);
     world_position SimCenterP = WorldState->CameraP;
     sim_region *SimRegion = BeginSim(&TranState->TranArena, WorldState->World,
-                                     SimCenterP, SimBounds, Input->dtForFrame);
+                                     &WorldState->NavMesh, SimCenterP, SimBounds, Input->dtForFrame);
     
     v2 CameraP = Subtract(World, &WorldState->CameraP, &SimCenterP);
 
+    if(WorldState->NavMesh.Partitioned)
+    {
+        char Text[32];
+        // NOTE(paul): Show Partition
+        s32 StartNodeIndex = -1;
+        s32 EndNodeIndex = -1;
+        object_transform Flat_ = {};
+        object_transform *Flat = &Flat_;
+        int C = 0;
+        for(u32 I = 0;
+            I < WorldState->NavMesh.PolyNodeCount;
+            ++I)
+        {
+            nav_poly_node *Node = WorldState->NavMesh.PolyNodes + I;
+            polygon2 *RealPoly = &Node->PolyPtr->RealPoly;
+            v2 Center = Subtract(WorldState->World, &Node->TileP, &SimRegion->Origin);
+
+            triangulate_result TResult = DelaunayTriangulate(RealPoly, &TranState->TranArena);
+            for(s32 TIndex = 0;
+                TIndex < TResult.TriangleCount;
+                ++TIndex)
+            {
+                triangle *T = TResult.Triangles + TIndex;
+                if((s32)I == StartNodeIndex)
+                    PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(0, 1, 0, 0.5f));
+                else if((s32)I == EndNodeIndex)
+                    PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(1, 0, 0, 0.5f));
+                else
+                    PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(DebugColorTable[(C + 4) % ArrayCount(DebugColorTable)], 0.5f));
+                            
+                PushTriangle(RenderGroup, Flat, *T, 24.0f, V4(0, 0, 0, 0.5f));
+            }
+            Platform.DeallocateMemory(TResult.Triangles);
+            Platform.DeallocateMemory(TResult.Adjacencies);
+
+            for(s32 PI = 0;
+                PI < RealPoly->VertexCount;
+                ++PI)
+            {
+                v2 A = RealPoly->Vertices[PI];
+                v2 B = RealPoly->Vertices[(PI + 1) % RealPoly->VertexCount];
+
+                PushLine(RenderGroup, Flat, V3(A, 24.0f), V3(B, 24.0f), V4(0, 0, 0, 1));
+            }
+                    
+            PushRect(RenderGroup, Flat, V3(Center, 30.0f), V2(0.1f, 0.1f), V4(1, 1, 0.5f, 1));
+
+            FormatString(ArrayCount(Text), Text, "%d", I);
+            entity_basis_p_result BasisP = GetRenderEntityBasisP(RenderGroup->CameraTransform,
+                                                                 Flat, V3(Center, 0.0f));
+//                v3 P = Unproject(&UIState->RenderGroup, Flat, BasisP.P);
+//                UITextOutAt(UIState, P.xy, Text, 0.8f);
+
+            for(s32 J = 0;
+                J < Node->NeighbourCount;
+                ++J)
+            {
+                nav_poly_node *NNode = Node->Neighbours[J];
+                v2 NCenter = Subtract(WorldState->World, &NNode->TileP, &SimRegion->Origin);
+                PushLine(RenderGroup, Flat, V3(Center, 32.0f), V3(NCenter, 32.0f), V4(0, 0, 1, 1));
+            }
+
+            ++C;
+        }
+    }
 //    DrawTileNodes(WorldState, TranState, SimBounds, RenderGroup, WorldState->StartNode, WorldState->EndNode);
     
     object_transform Flat = DefaultFlatTransform();

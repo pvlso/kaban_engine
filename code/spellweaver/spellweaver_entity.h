@@ -362,8 +362,8 @@ struct entity_stats
 
 struct entity_move_state
 {
-    as_tile_node *StartNode;
-    as_tile_node *EndNode;
+    struct nav_poly_node *StartNode;
+    struct nav_poly_node *EndNode;
     heap MovePointMinHeap;
 
     u32 PointCount;

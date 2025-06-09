@@ -53,7 +53,8 @@ struct world_state
     world_position CameraBoundsMax;
 
     loaded_bitmap MiniMapBitmap;
-
+    navigation_mesh NavMesh;
+    
     entity_id EntitiesToDestroy[64];
     
     // TODO(casey): Must be power of two

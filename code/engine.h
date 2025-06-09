@@ -65,9 +65,17 @@
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
-#include "engine_game_simulate.h"
+
+#include "spellweaver\spellweaver_shared.h"
+#include "spellweaver\spellweaver_world.h"
+#include "spellweaver\spellweaver_entity.h"
+#include "spellweaver\spellweaver_sim_region.h"
 
 #include "engine_hash.h"
+#include "engine_navigation_mesh.h"
+
+#include "engine_game_simulate.h"
+
 #include "engine_map_editor_mode.h"
 #include "editor_ssa_file_builder.h"
 

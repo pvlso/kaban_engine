@@ -7,16 +7,9 @@
    $Notice: $
    ======================================================================== */
 
-//#include "spellweaver\spellweaver_platform.h"
-//#include "spellweaver\spellweaver_config.h"
-#include "spellweaver\spellweaver_shared.h"
 #include "spellweaver\spellweaver_cutscene.h"
 
 #include "spellweaver\spellweaver_render.h"
-//#include "spellweaver\spellweaver_asset.h"
-#include "spellweaver\spellweaver_world.h"
-#include "spellweaver\spellweaver_entity.h"
-#include "spellweaver\spellweaver_sim_region.h"
 
 struct text_config
 {

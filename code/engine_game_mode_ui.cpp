@@ -126,7 +126,8 @@ DrawNavMeshModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Polygon Count: %d", MapEditor->PolygonCount);
+    UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Polygon Count: %d",
+                 MapEditor->NavMesh.PolygonCount);
     UI->NkLayoutRowStatic(Nk, 30, 130, 4);
 
     if(UI->NkButtonLabel(Nk, "Start New"))
@@ -146,7 +147,7 @@ DrawNavMeshModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
     UI->NkLayoutRowStatic(Nk, 30, 260, 1);
     UI->NkPropertyInt(Nk, "Choose Poly: ", 0,
                       (int *)&MapEditor->CurrentPolygonIndex,
-                      MapEditor->PolygonCount - 1, 1, 0.1f);
+                      MapEditor->NavMesh.PolygonCount - 1, 1, 0.1f);
 
     UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
     UI->NkLayoutSpacePush(Nk, {0, 805, 160, 40});
@@ -173,7 +174,7 @@ DrawNavMeshModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
                 if(MapEditor->ShowNativePolies)
                     UI->NkCheckboxLabel(Nk, "Show Native P IDs", &MapEditor->ShowNativeIds);
 
-                if(MapEditor->Partitioned)
+                if(MapEditor->NavMesh.Partitioned)
                 {
                     UI->NkCheckboxLabel(Nk, "Show Partition", &MapEditor->ShowPartition);
 
@@ -215,7 +216,7 @@ DrawMapEditorUI(engine_map_editor *MapEditor, editor_assets *Assets, u32 Generat
     {
         UI->NkLayoutRowStatic(Nk, 30, 260, 2);
 
-        char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "EditMapEditor", MapEditor->MapEditorMode);
+        char *ModeString = JsonGetEnumString(UIState->JsonStringsHead, "MapEditorMode", MapEditor->MapEditorMode);
         struct nk_rect Rect = UI->NkWidgetBounds(Nk);
         UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         UI->NkLabel(Nk, "Current Mode: ", NK_TEXT_CENTERED);

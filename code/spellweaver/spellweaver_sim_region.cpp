@@ -140,8 +140,8 @@ ConnectEntityPointers(sim_region *SimRegion)
 }
 
 internal sim_region *
-BeginSim(memory_arena *SimArena, world *World, world_position Origin,
-         rectangle2 Bounds, real32 dt)
+BeginSim(memory_arena *SimArena, world *World, navigation_mesh *NavMesh,
+         world_position Origin, rectangle2 Bounds, real32 dt)
 {
     TIMED_FUNCTION();
 
@@ -213,6 +213,37 @@ BeginSim(memory_arena *SimArena, world *World, world_position Origin,
     }
 
     ConnectEntityPointers(SimRegion);
+
+    if(!NavMesh->Partitioned)
+    {
+        PartitionNavigationMesh(NavMesh, World, SimRegion, SimArena);
+
+        for(world_polygon_list *Iter = NavMesh->MeshPolygonsSentinal.Next;
+            Iter != &NavMesh->MeshPolygonsSentinal;
+            Iter = Iter->Next)
+        {
+            world_polygon *Poly = &Iter->Poly;
+            polygon2 *RealPoly = &Iter->RealPoly;
+            RealPoly->Vertices = PushArray(SimArena, Poly->VertexCount, v2);
+            ConvertWorldPolygonToPolygon2(World, &SimRegion->Origin, Poly, RealPoly);
+        }
+
+        NavMesh->Partitioned = true;
+    }
+    else
+    {
+        TIMED_BLOCK("Polies Conversation");
+        // NOTE(paul): Convert Polies for simulation
+        for(world_polygon_list *Iter = NavMesh->MeshPolygonsSentinal.Next;
+            Iter != &NavMesh->MeshPolygonsSentinal;
+            Iter = Iter->Next)
+        {
+            world_polygon *Poly = &Iter->Poly;
+            polygon2 *RealPoly = &Iter->RealPoly;
+            RealPoly->Vertices = PushArray(SimArena, Poly->VertexCount, v2);
+            ConvertWorldPolygonToPolygon2(World, &SimRegion->Origin, Poly, RealPoly);
+        }
+    }
 
     return(SimRegion);
 }
