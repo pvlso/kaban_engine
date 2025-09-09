@@ -360,6 +360,11 @@ CheckForInput(engine_map_editor *MapEditor, nk_context *Nk, engine_input *Input)
                     MapEditor->MapEditorMode = MapEditorMode_NavMeshes;
                 }
 
+                if(WasPressed(Controller->ForthMode))
+                {
+                    MapEditor->MapEditorMode = MapEditorMode_Entity;
+                }
+
                 if(WasPressed(Controller->RightShoulder))
                 {
                     if(IsSetMapEditorFlag(MapEditor, MEFlag_EditEnable))
@@ -619,13 +624,19 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
                     MapEditor->Tileset = PushTileset(RenderGroup, MapEditor->CurrentTileset);
                     MapEditor->TilesetInfo = GetTilesetInfo(Assets, MapEditor->CurrentTileset);
                 } break;
-
+ 
                 case MapEditorMode_NavMeshes:
                 {
                     UpdateAndRenderNavMeshMode(MapEditor, UIState, SimRegion, RenderGroup,
                                                &Flat, Input, MouseP);
                 } break;
-
+ 
+                case MapEditorMode_Entity:
+                {
+//                    UpdateAndRenderNavMeshMode(MapEditor, UIState, SimRegion, RenderGroup,
+//                                               &Flat, Input, MouseP);
+                } break;
+                
                 InvalidDefaultCase;
             }
 

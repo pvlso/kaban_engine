@@ -927,7 +927,7 @@ typedef struct engine_controller_input
     
     union
     {
-        engine_button_state Buttons[21];
+        engine_button_state Buttons[22];
         struct
         {
             engine_button_state MoveUp;
@@ -943,6 +943,7 @@ typedef struct engine_controller_input
             engine_button_state FirstMode;
             engine_button_state SecondMode;
             engine_button_state ThirdMode;
+            engine_button_state ForthMode;
             engine_button_state Fill;
             
             engine_button_state LeftShoulder;

@@ -2205,9 +2205,13 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     }
                     else if(VKCode == '4')
                     {
-                        Win32ProcessKeyboardMessage(&KeyboardController->PlayMusic, IsDown);
+                        Win32ProcessKeyboardMessage(&KeyboardController->ForthMode, IsDown);
                     }
                     else if(VKCode == '5')
+                    {
+                        Win32ProcessKeyboardMessage(&KeyboardController->PlayMusic, IsDown);
+                    }
+                    else if(VKCode == '6')
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->TerminateSound, IsDown);
                     }

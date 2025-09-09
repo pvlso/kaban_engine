@@ -154,38 +154,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     nk_ui UI = Platform.UI;
 
     GenerateCRC64Table();
-
-#if 0
-    TPPLPartition Partition = TPPLPartition();
-
-    TPPLPolyList PolyList;
-
-    TPPLPoly TPoly = {};
-    TPoly.Init(4);
-    TPoly.points[0] = {0.0, 0.0};
-    TPoly.points[1] = {0.0, 4.0};
-    TPoly.points[2] = {4.0, 4.0};
-    TPoly.points[3] = {4.0, 0.0};
-    TPoly.SetOrientation(TPPL_ORIENTATION_CCW);
-    PolyList.push_back(TPoly);
-
-    TPPLPoly TPoly0 = {};
-    TPoly0.Init(4);
-    TPoly0.points[0] = {0.0, 0.0};
-    TPoly0.points[1] = {0.0, 2.0};
-    TPoly0.points[2] = {2.0, 2.0};
-    TPoly0.points[3] = {2.0, 0.0};
-    TPoly0.hole = true;
-    TPoly0.SetOrientation(TPPL_ORIENTATION_CW);
-    PolyList.push_back(TPoly0);
-
-    TPPLPolyList List;
-    s32 Result = Partition.RemoveHoles(&PolyList, &List);
-
-    TPPLPolyList Res;
-    s32 R = Partition.ConvexPartition_HM(&PolyList, &Res);
-#endif
-    
+   
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
     DebugGlobalMemory = Memory;

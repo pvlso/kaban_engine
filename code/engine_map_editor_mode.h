@@ -18,6 +18,7 @@ enum map_editor_mode
     MapEditorMode_None,
     MapEditorMode_Terrain,
     MapEditorMode_NavMeshes,
+    MapEditorMode_Entity,
 
     MapEditorMode_Count,
 };

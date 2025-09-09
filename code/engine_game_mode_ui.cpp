@@ -206,6 +206,16 @@ DrawNavMeshModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
     UI->NkLayoutSpaceEnd(Nk);
 }
 
+inline void
+DrawEntityModeUI(engine_map_editor *MapEditor, nk_ui *UI, nk_context *Nk)
+{
+    UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 20, 2);
+    UI->NkLayoutSpacePush(Nk, {0, 935, 160, 40});
+    if(UI->NkButtonLabel(Nk, "Exit"))
+        MapEditor->CurrentAction = MEAction_Exit;
+    UI->NkLayoutSpaceEnd(Nk);
+}
+
 internal void
 DrawMapEditorUI(engine_map_editor *MapEditor, editor_assets *Assets, u32 GenerationID, ui_state *UIState)
 {
@@ -268,6 +278,11 @@ DrawMapEditorUI(engine_map_editor *MapEditor, editor_assets *Assets, u32 Generat
             case MapEditorMode_NavMeshes:
             {
                 DrawNavMeshModeUI(MapEditor, UI, Nk);
+            } break;
+
+            case MapEditorMode_Entity:
+            {
+                DrawEntityModeUI(MapEditor, UI, Nk);
             } break;
         }
 
