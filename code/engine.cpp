@@ -310,8 +310,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_SimulateGame:
                 {
-                    Rerun = GameUpdateAndRender(EditorState, TranState, Input, RenderCommands,
-                                                &Memory->TextureOpQueue);
+                    EditorState->EditorMode = EditorMode_TitleScreen;
+                    // TODO(pvlso): make the game as a saparate .dll 
+//                    Rerun = GameUpdateAndRender(EditorState, TranState, Input, RenderCommands,
+//                                                &Memory->TextureOpQueue);
                 } break;
 
                 InvalidDefaultCase;

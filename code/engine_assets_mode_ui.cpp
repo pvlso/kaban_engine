@@ -319,7 +319,7 @@ inline void
 DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk)
 {
     char Text[256];
-    UI->NkLayoutSpacePush(Nk, UI->NkRect(612, -900, 1290, 1068));
+    UI->NkLayoutSpacePush(Nk, UI->NkRect(612, -790, 1290, 1068));
     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
     if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_NO_SCROLLBAR))
@@ -1530,37 +1530,28 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                          AssetsMode->StoredHeader.SizeOfStoredAsset);
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Major High  Version: %d",
-                         (AssetsMode->StoredHeader.Version >> 24) & 0xFF);
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Major Low Version: %d",
-                         (AssetsMode->StoredHeader.Version >> 16) & 0xFF);
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Minor High  Version: %d",
-                         (AssetsMode->StoredHeader.Version >> 8) & 0xFF);
-            Rect = UI->NkWidgetBounds(Nk);
-            UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Minor Low Version: %d",
+            UI->NkLabelf(Nk, NK_TEXT_LEFT, "  Version: %d.%d.%d.%d",
+                         (AssetsMode->StoredHeader.Version >> 24) & 0xFF,
+                         (AssetsMode->StoredHeader.Version >> 16) & 0xFF,
+                         (AssetsMode->StoredHeader.Version >> 8) & 0xFF,
                          AssetsMode->StoredHeader.Version & 0xFF);
 
             DrawShowStoredAssets(AssetsMode, UIState, UI, Nk);
             
             UI->NkLayoutSpaceBegin(Nk, NK_STATIC, 40, INT_MAX);
-            UI->NkLayoutSpacePush(Nk, UI->NkRect(0, 128, 130, 40));
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(0, 238, 130, 40));
             if(UI->NkButtonLabel(Nk, "Exit"))
             {
                 AssetsMode->Exit = true;
             }
 
-            UI->NkLayoutSpacePush(Nk, UI->NkRect(134, 128, 130, 40));
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(134, 238, 130, 40));
             if(UI->NkButtonLabel(Nk, "Write Assets"))
             {
                 AssetsMode->WriteAssets = true;
             }
 
-            UI->NkLayoutSpacePush(Nk, UI->NkRect(268, 128, 130, 40));
+            UI->NkLayoutSpacePush(Nk, UI->NkRect(268, 238, 130, 40));
             if(UI->NkButtonLabel(Nk, "Write SSA"))
             {
                 AssetsMode->WriteSSA = true;

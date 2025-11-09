@@ -40,7 +40,7 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
                 return(Result);
             }
 
-            if(UI->NkButtonLabel(Nk, "Game Mode"))
+            if(UI->NkButtonLabel(Nk, "Map Editor"))
             {
                 PlayMapEditor(EditorState, TranState);
                 Result = true;
@@ -63,18 +63,9 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
         UI->NkLayoutRowDynamic(Nk, 40, 1);
         UI->NkSpacer(Nk);
-        UI->NkLabel(Nk, "Stored Assets Version: ", NK_TEXT_ALIGN_LEFT);
 
-        FormatString(ArrayCount(Buffer), Buffer, "Major High Version: %d", EditorState->Version.MajorHigh);
-        UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-
-        FormatString(ArrayCount(Buffer), Buffer, "Major Low Version: %d", EditorState->Version.MajorLow);
-        UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-
-        FormatString(ArrayCount(Buffer), Buffer, "Minor High Version: %d", EditorState->Version.MinorHigh);
-        UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-
-        FormatString(ArrayCount(Buffer), Buffer, "Minor Low Version: %d", EditorState->Version.MinorLow);
+        FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d", EditorState->Version.MajorHigh,
+                     EditorState->Version.MajorLow, EditorState->Version.MinorHigh, EditorState->Version.MinorLow);
         UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
         UI->NkSpacer(Nk);
 
