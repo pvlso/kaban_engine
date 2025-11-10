@@ -342,15 +342,19 @@ ParseJson(char *FileName, memory_arena *Arena)
     JsonParser.Tokens = PushArray(Arena, 4096, json_token);
 
     read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_JSON, 0);
-    JsonTokenize(&JsonParser, (char *)ReadResult.Contents);
+    if(ReadResult.Contents)
+    {
+        JsonTokenize(&JsonParser, (char *)ReadResult.Contents);
 
 #if EDITOR_INTERNAL
-    PrintTokens(&JsonParser);
+        PrintTokens(&JsonParser);
 #endif
 
-    u32 TokenIndex = 0;
-    Head = JsonParseElement(&JsonParser, 0, GetNextToken(&JsonParser));
+        u32 TokenIndex = 0;
+        Head = JsonParseElement(&JsonParser, 0, GetNextToken(&JsonParser));
+    }
 
     Platform.FreeFileMemory(ReadResult.Contents);
+
     return(Head);
 }

@@ -43,9 +43,9 @@ ReadPolygons(engine_map_editor *MapEditor)
 
         MapEditor->CurrentPolygon = MapEditor->NavMesh.Polies + 0;
         MapEditor->CurrentPolygonIndex = MapEditor->NavMesh.PolygonCount - 1;
-    }
 
-    fclose(Out);
+        fclose(Out);
+    }
 }
 
 internal void

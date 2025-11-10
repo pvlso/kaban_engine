@@ -655,6 +655,7 @@ Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height
     {
         struct nk_font_atlas *atlas;
         Win32NkFontStashBegin(NkWin32, &atlas);
+        struct nk_font *deffont = nk_font_atlas_add_default(atlas, 14, 0);
         struct nk_font *droid = nk_font_atlas_add_from_file(atlas, "fonts\\LiberationMono-Regular.ttf", 20, 0);
         /*struct nk_font *roboto = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Roboto-Regular.ttf", 14, 0);*/
         /*struct nk_font *future = nk_font_atlas_add_from_file(atlas, "../../../extra_font/kenvector_future_thin.ttf", 13, 0);*/
@@ -663,7 +664,12 @@ Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height
         /*struct nk_font *cousine = nk_font_atlas_add_from_file(atlas, "../../../extra_font/Cousine-Regular.ttf", 13, 0);*/
         Win32NkFontStashEnd(NkWin32);
         nk_style_load_all_cursors(Result, atlas->cursors);
-        nk_style_set_font(Result, &droid->handle);
+
+        if(droid)
+            nk_style_set_font(Result, &droid->handle);
+        else
+            nk_style_set_font(Result, &deffont->handle);
+            
     }
 
     return(Result);
