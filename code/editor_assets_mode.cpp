@@ -1097,7 +1097,7 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
         char CommandLine[512];
         FormatString(ArrayCount(CommandLine), CommandLine,
                      "openwithnotepad.bat txts/%s", FileName);
-        Platform.DEBUGExecuteSystemCommand(0, 0, CommandLine);
+        //Platform.DEBUGExecuteSystemCommand(0, 0, CommandLine);
 
         TextMode->EditTextFile = false;
     }
@@ -1180,25 +1180,18 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
     }
     else
     {
-        if(FullVersion == 0)
-        {
-            fopen_s(&StoredAssetsFile, StoredFileName, "wb");
-            StoredHeader->SizeOfStoredAsset = sizeof(stored_asset);
-            StoredHeader->Version = FullVersion;
-            StoredHeader->AssetCount = 1;
-            AssetsMode->StoredAssets = (stored_asset *)Platform.AllocateMemory(StoredHeader->SizeOfStoredAsset);
+        fopen_s(&StoredAssetsFile, StoredFileName, "wb");
+        StoredHeader->SizeOfStoredAsset = sizeof(stored_asset);
+        StoredHeader->Version = FullVersion;
+        StoredHeader->AssetCount = 1;
+        AssetsMode->StoredAssets = (stored_asset *)Platform.AllocateMemory(StoredHeader->SizeOfStoredAsset);
 
-            fwrite(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
+        fwrite(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
 
-            stored_asset NullAsset = {};
-            fwrite(&NullAsset, sizeof(stored_asset), 1, StoredAssetsFile);
+        stored_asset NullAsset = {};
+        fwrite(&NullAsset, sizeof(stored_asset), 1, StoredAssetsFile);
 
-            fclose(StoredAssetsFile);
-        }
-        else
-        {
-            Assert(!"No version found");
-        }
+        fclose(StoredAssetsFile);
     }
 
     AssetsMode->NextStoredAssetID = StoredHeader->AssetCount;

@@ -1849,7 +1849,9 @@ Win32InputScroll(win32_state *State, double xoffset, double yoffset)
     Assert(yoffset < FLT_MAX);
 
     Win32NkScrollCallback(&State->Main, xoffset, yoffset);
+#if EDITOR_INTERNAL
     Win32NkScrollCallback(&State->Debug, xoffset, yoffset);
+#endif
 }
 
 // Notifies shared code of a Unicode codepoint input event
@@ -1876,7 +1878,9 @@ Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
     if (plain)
     {
         Win32NkCharCallback(&State->Main, codepoint);
+#if EDITOR_INTERNAL
         Win32NkCharCallback(&State->Debug, codepoint);
+#endif
     }
 }
 
@@ -1915,7 +1919,10 @@ Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
         mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
     Win32NkKeyCallback(&State->Main, key, scancode, action, mods);
+
+#if EDITOR_INTERNAL
     Win32NkKeyCallback(&State->Debug, key, scancode, action, mods);
+#endif
 }
 
 // Notifies shared code of a mouse button click event
@@ -1942,7 +1949,9 @@ Win32InputMouseClick(win32_state *State, int button, int action, int mods)
     State->MouseButtons[button] = (char) action;
 
     Win32NkMouseButtonCallback(&State->Main, State, button, action);
+#if EDITOR_INTERNAL
     Win32NkMouseButtonCallback(&State->Debug, State, button, action);
+#endif
 }
 
 internal void
@@ -3353,8 +3362,10 @@ WinMain(HINSTANCE Instance,
 
             nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main,
                                                  UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
+#if EDITOR_INTERNAL
             nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug,
                                                        UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
+#endif
             nk_colorf bg = {};
             
             GlobalRunning = true;

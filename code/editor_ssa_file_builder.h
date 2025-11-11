@@ -7,21 +7,6 @@
    $Notice: $
    ======================================================================== */
 
-struct builder_loaded_tileset
-{
-    ssa_tile *Tiles;
-    loaded_bitmap TilesetBitmap;
-    loaded_bitmap MergeTile;
-    stored_asset_tileset *StoredTileset;
-};
-
-struct builder_loaded_spritesheet
-{
-    bitmap_id *SpriteIDs;
-    loaded_bitmap *Sprites;
-    stored_asset_spritesheet *StoredSheet;
-};
-
 enum builder_asset_type
 {
     BuilderAssetType_Sound,
@@ -35,6 +20,21 @@ enum builder_asset_type
     BuilderAssetType_Text,
     BuilderAssetType_BinaryFile,
     BuilderAssetType_SSWM,
+};
+
+struct builder_loaded_tileset
+{
+    ssa_tile *Tiles;
+    loaded_bitmap TilesetBitmap;
+    loaded_bitmap MergeTile;
+    stored_asset_tileset *StoredTileset;
+};
+
+struct builder_loaded_spritesheet
+{
+    bitmap_id *SpriteIDs;
+    loaded_bitmap *Sprites;
+    stored_asset_spritesheet *StoredSheet;
 };
 
 struct builder_asset_source_font

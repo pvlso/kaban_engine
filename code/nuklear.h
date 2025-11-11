@@ -288,6 +288,7 @@ template<typename T> struct nk_alignof{struct Big {T x; char c;}; enum {
 
 #define NK_DEFAULT (-1)
 
+#define NK_VSNPRINTF(s,n,f,a) vsnprintf(s,n,f,a)
 #ifndef NK_VSNPRINTF
 /* If your compiler does support `vsnprintf` I would highly recommend
  * defining this to vsnprintf instead since `vsprintf` is basically
