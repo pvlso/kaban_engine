@@ -32,13 +32,51 @@ struct json_token
     char *Value;
 };
 
-struct json_element
+enum json_value_type
 {
-    char *Label;
-    char *Value;
-    json_element *FirstSubElement;
+    JsonValue_Null,
+    JsonValue_Bool,
+    JsonValue_Int,
+    JsonValue_Double,
+    JsonValue_String,
+    JsonValue_Array,
+    JsonValue_Object,
+    
+    JsonValue_Count,
+};
 
-    json_element *NextSibling;
+struct json_pair;
+struct json_value;
+struct json_array
+{
+    u32 Count;
+    json_value **Items;
+};
+
+struct json_object
+{
+    u32 Count;
+    json_pair **Pairs;
+};
+
+struct json_value
+{
+    json_value_type Type;
+    union
+    {
+        b32 Bool;
+        s64 Int;
+        f64 Double;
+        char *String;
+        json_array Array;
+        json_object Object;
+    };
+};
+
+struct json_pair
+{
+    char *Key;
+    json_value *Value;
 };
 
 struct json_parser
@@ -49,6 +87,8 @@ struct json_parser
     u32 TokenCount;
     json_token *Tokens;
 };
+
+internal json_value *JsonParseToken(json_parser *Parser, json_token Token);
 
 #define EDITOR_JSON_PARSER_H
 #endif

@@ -70,16 +70,14 @@ GetOrCreateStringArray(ui_state *UIState, char *Key, u32 StringCount)
         Result->StringCount = StringCount;
         Result->Strings = PushArray(&UIState->StringsArena, Result->StringCount, char *);
 
-        json_element *EnumStrings = JsonLookupElement(UIState->JsonStringsHead, Key);
+        json_value *EnumStrings = JsonLookupObjectElement(UIState->JsonStringsHead, Key);
         if(EnumStrings)
         {
-            json_element *EnumString = EnumStrings->FirstSubElement;
             for(u32 ElementIndex = 0;
                 ElementIndex < Result->StringCount;
                 ++ElementIndex)
             {
-                Result->Strings[ElementIndex] = EnumString->Value;
-                EnumString = EnumString->NextSibling;
+                Result->Strings[ElementIndex] = EnumStrings->Array.Items[ElementIndex]->String;
             }
         }
         

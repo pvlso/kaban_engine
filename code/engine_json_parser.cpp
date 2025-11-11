@@ -117,13 +117,13 @@ JsonTokenize(json_parser *Parser, char *Json)
 
             case 't':
             {
-                JsonAddToken(Parser, Token_False, "true");
+                JsonAddToken(Parser, Token_True, "true");
                 At += 4;
             } break;
 
             case 'n':
             {
-                JsonAddToken(Parser, Token_False, "null");
+                JsonAddToken(Parser, Token_Null, "null");
                 At += 4;
             } break;
         }
@@ -143,113 +143,285 @@ GetNextToken(json_parser *Parser)
     return(Result);
 }
 
-internal json_element *
-JsonParseList(json_parser *Parser, json_token StartingToken, json_token_type EndType, b32 HasLabels);
-
-internal json_element *
-JsonParseElement(json_parser *Parser, char *Label, json_token Value)
+inline json_value *
+JsonParsePair(json_parser *Parser)
 {
-    b32 Valid = true;
-    json_element *SubElement = 0;
-    if(Value.Type == Token_CurlyOpen)
+    json_value *Value = 0;
+    json_token Token = GetNextToken(Parser);
+    if(Token.Type == Token_Colon)
     {
-        SubElement = JsonParseList(Parser, Value, Token_CurlyClose, true);
-    }
-    else if(Value.Type == Token_SquareOpen)
-    {
-        SubElement = JsonParseList(Parser, Value, Token_SquareClose, false);
-    }
-    else if((Value.Type == Token_String) ||
-            (Value.Type == Token_True) ||
-            (Value.Type == Token_False) ||
-            (Value.Type == Token_Null) ||
-            (Value.Type == Token_Number))
-    {
+        Token = GetNextToken(Parser);
+        Value = JsonParseToken(Parser, Token);
     }
     else
     {
-        Valid = false;
+        Assert(!"Expect Colon");
     }
 
-    json_element *Result = 0;
-    if(Valid)
+    return(Value);
+}
+
+inline void
+JsonParseObject(json_parser *Parser, json_value *Value)
+{
+    Value->Object.Pairs = PushArray(Parser->TempArena, 1024, json_pair *);
+    json_token Token = GetNextToken(Parser);
+    while(Token.Type != Token_CurlyClose)
     {
-        Result = PushStruct(Parser->TempArena, json_element);
-        Result->Label = Label;
-        Result->Value = Value.Value;
-        Result->FirstSubElement = SubElement;
-        Result->NextSibling = 0;
+        switch(Token.Type)
+        {
+            case Token_String:
+            {
+                Value->Object.Pairs[Value->Object.Count] = PushStruct(Parser->TempArena, json_pair);
+                Value->Object.Pairs[Value->Object.Count]->Key = Token.Value;
+                Value->Object.Pairs[Value->Object.Count]->Value = JsonParsePair(Parser);
+                ++Value->Object.Count;
+            } break;
+
+            case Token_Comma:
+                break;
+
+            default:
+            {
+                Assert(!"Expect String");
+            } break;
+        }
+
+        Token = GetNextToken(Parser);
+    }
+}
+
+inline void
+JsonParseArray(json_parser *Parser, json_value *Value)
+{
+    Value->Array.Items = PushArray(Parser->TempArena, 1024, json_value *);
+    json_token Token = GetNextToken(Parser);
+    while(Token.Type != Token_SquareClose)
+    {
+        switch(Token.Type)
+        {
+            case Token_Comma:
+                break;
+
+            default:
+            {
+                Value->Array.Items[Value->Array.Count] = PushStruct(Parser->TempArena, json_value);
+                Value->Array.Items[Value->Object.Count] = JsonParseToken(Parser, Token);
+                ++Value->Object.Count;
+            } break;
+        }
+
+        Token = GetNextToken(Parser);
+    }
+}
+
+inline s64
+ParseInt(char *At)
+{
+    s32 Neg = 0;
+    if(*At == '-')
+    {
+        Neg = 1;
+    }
+    else if(*At == '+')
+        At++;
+
+    s64 Result = 0;
+    while((*At >= '0') && (*At <= '9'))
+    {
+        Result = Result * 10 + (*At - '0');
+        At++;
+    }
+
+    return(Neg ? -Result : Result);
+}
+
+inline f64
+ParseFloat(char *At)
+{
+    s32 Neg = 0;
+    if(*At == '-')
+    {
+        Neg = 1;
+        At++;
+    }
+    else if(*At == '+')
+        At++;
+
+    f64 Result = 0.0;
+    while((*At >= '0') && (*At <= '9'))
+    {
+        Result = Result * 10.0 + (*At - '0');
+        At++;
+    }
+
+    if(*At == '.')
+    {
+        At++;
+        f64 Frac = 0.1;
+        while((*At >= '0') && (*At <= '9'))
+        {
+            Result += (*At - '0') * Frac;
+            Frac *= 0.1;
+            At++;
+        }
+    }
+
+    if(*At == 'e' || *At == 'E')
+    {
+        At++;
+        s32 ExpNeg = 0;
+        if(*At == '-')
+        {
+            ExpNeg = 1;
+            At++;
+        }
+        else if(*At == '+')
+            At++;
+
+        s32 Exp = 0;
+        while((*At >= '0') && (*At <= '9'))
+        {
+            Exp = Exp * 10 + (*At - '0');
+            At++;
+        }
+
+        f64 Pow10 = 1.0;
+        while(Exp--)
+            Pow10 *= 10.0;
+
+        Result = ExpNeg ? (Result / Pow10) : (Result * Pow10);
+    }
+
+    return(Neg ? -Result : Result);
+}
+
+
+internal json_value *
+JsonParseToken(json_parser *Parser, json_token Token)
+{
+    json_value *Value = PushStruct(Parser->TempArena, json_value);
+    switch(Token.Type)
+    {
+        case Token_CurlyOpen:
+        {
+            Value->Type = JsonValue_Object;
+            JsonParseObject(Parser, Value);
+        } break;
+
+        case Token_SquareOpen:
+        {
+            Value->Type = JsonValue_Array;
+            JsonParseArray(Parser, Value);
+        } break;
+
+        case Token_String:
+        {
+            Value->Type = JsonValue_String;
+            Value->String = Token.Value;
+        } break;
+
+        case Token_Number:
+        {
+            char *At = Token.Value;
+            while((*At != 0) && (*At != '.') &&
+                  (*At != 'e') && (*At != 'E'))
+                At++;
+
+            if((*At == '.') || (*At == 'e') || (*At == 'E'))
+            {
+                Value->Type = JsonValue_Double;
+                Value->Double = ParseFloat(Token.Value);
+            }
+            else
+            {
+                Value->Type = JsonValue_Int;
+                Value->Int = ParseInt(Token.Value);
+            }
+        } break;
+
+        case Token_True:
+        {
+            Value->Type = JsonValue_Bool;
+            Value->Bool = true;
+        } break;
+
+        case Token_False:
+        {
+            Value->Type = JsonValue_Bool;
+            Value->Bool = false;
+        } break;
+
+        case Token_Null:
+        {
+            Value->Type = JsonValue_Null;
+        } break;
+
+
+        default:
+        {
+            Assert(!"Unexpected Token");
+        } break;
+    }
+
+    return(Value);
+}
+
+
+internal json_value *
+JsonLookupObjectElement(json_object *Object, char *Key)
+{
+    json_value *Result = 0;
+    if(Object)
+    {
+        for(u32 I = 0; I < Object->Count; ++I)
+        {
+            json_pair *Pair = Object->Pairs[I];
+            if(StringsAreEqual(Key, Pair->Key))
+            {
+                Result = Pair->Value;
+                break;
+            }
+        }
     }
 
     return(Result);
 }
 
-internal json_element *
-JsonParseList(json_parser *Parser, json_token StartingToken, json_token_type EndType, b32 HasLabels)
+inline char *
+JsonGetEnumString(json_object *Head, char *Key, u32 Index)
 {
-    json_element *FirstElement = 0;
-    json_element *LastElement = 0;
+    char *Result = 0;
 
-    while(1)
+    json_value *EnumStrings = JsonLookupObjectElement(Head, Key);
+    if(EnumStrings)
     {
-        char *Label = 0; 
-        json_token Value = GetNextToken(Parser);
-        if(HasLabels)
-        {
-            if(Value.Type == Token_String)
-            {
-                Label = Value.Value;
-
-                json_token Colon = GetNextToken(Parser);
-                if(Colon.Type == Token_Colon)
-                {
-                    Value = GetNextToken(Parser);
-                }
-                else
-                {
-                    Assert(!"Colon Expected");
-                    FirstElement = 0;
-                    break;
-                }
-            }
-            else if(Value.Type != EndType)
-            {
-                Assert(!"UnExpected token");
-                FirstElement = 0;
-                break;
-            }
-        }
-
-        json_element *Element = JsonParseElement(Parser, Label, Value);
-        if(Element)
-        {
-            LastElement = (LastElement ? LastElement->NextSibling : FirstElement) = Element;
-        }
-        else if(Value.Type == EndType)
-        {
-            break;
-        }
-        else
-        {
-            Assert(!"UnExpected token");
-            FirstElement = 0;
-            break;
-        }
-
-        json_token Comma = GetNextToken(Parser);
-        if(Comma.Type == EndType)
-        {
-            break;
-        }
-        else if(Comma.Type != Token_Comma)
-        {
-            Assert(!"Expected comma or endtype");
-            FirstElement = 0;
-            break;
-        }
+        Assert(EnumStrings->Type == JsonValue_Array);
+        Assert(EnumStrings->Array.Items[Index]->Type == JsonValue_String);
+        Result = EnumStrings->Array.Items[Index]->String;
     }
 
-    return(FirstElement);
+    return(Result);
+}
+
+inline char *
+JsonGetTagValueEnumKey(json_object *Head, u32 TagValue)
+{
+    char *Result = 0;
+
+    json_value *TagTable = JsonLookupObjectElement(Head, "TagValuesTable");
+    if(TagTable)
+    {
+        char *TagString = JsonGetEnumString(Head, "AssetTag", TagValue);
+
+        Assert(TagTable->Type == JsonValue_Object);
+        json_value *EnumKey = JsonLookupObjectElement(&TagTable->Object, TagString);
+
+        Assert(EnumKey->Type == JsonValue_String);
+        Result = EnumKey->String;
+    }
+    
+    return(Result);
 }
 
 internal void
@@ -269,76 +441,14 @@ PrintTokens(json_parser *Parser)
     fclose(File);
 }
 
-internal json_element *
-JsonLookupElement(json_element *Object, char *Key)
-{
-    json_element *Result = 0;
-    if(Object)
-    {
-        for(json_element *Search = Object->FirstSubElement;
-            Search;
-            Search = Search->NextSibling)
-        {
-            if(StringsAreEqual(Key, Search->Label))
-            {
-                Result = Search;
-                break;
-            }
-        }
-    }
-
-    Assert(Result);
-
-    return(Result);
-}
-
-inline char *
-JsonGetEnumString(json_element *Head, char *Key, u32 Index)
-{
-    char *Result = 0;
-
-    json_element *EnumStrings = JsonLookupElement(Head, Key);
-    if(EnumStrings)
-    {
-        json_element *EnumString = EnumStrings->FirstSubElement;
-        for(u32 ElementIndex = 0;
-            ElementIndex < Index;
-            ++ElementIndex)
-        {
-            EnumString = EnumString->NextSibling;
-        }
-
-        Result = EnumString->Value;
-    }
-
-    Assert(Result);
-
-    return(Result);
-}
-
-inline char *
-JsonGetTagValueEnumKey(json_element *Head, u32 TagValue)
-{
-    char *Result = 0;
-
-    json_element *TagTable = JsonLookupElement(Head, "TagValuesTable");
-    char *TagString = JsonGetEnumString(Head, "AssetTag", TagValue);
-    json_element *EnumKey = JsonLookupElement(TagTable, TagString);
-
-    Result = EnumKey->Value;
-
-    Assert(Result);
-    
-    return(Result);
-}
-
-internal json_element *
+internal json_object *
 ParseJson(char *FileName, memory_arena *Arena)
 {
-    json_element *Head = 0;
+    json_object *Head = 0;
 
     json_parser JsonParser = {};
     JsonParser.TempArena = Arena;
+    JsonParser.CurrentTokenIndex = 1;
     JsonParser.Tokens = PushArray(Arena, 4096, json_token);
 
     read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_JSON, 0);
@@ -350,8 +460,11 @@ ParseJson(char *FileName, memory_arena *Arena)
         PrintTokens(&JsonParser);
 #endif
 
-        u32 TokenIndex = 0;
-        Head = JsonParseElement(&JsonParser, 0, GetNextToken(&JsonParser));
+        json_value *Result = PushStruct(Arena, json_value);
+        Result->Type = JsonValue_Object;
+        JsonParseObject(&JsonParser, Result);
+
+        Head = &Result->Object;
     }
 
     Platform.FreeFileMemory(ReadResult.Contents);

@@ -132,7 +132,7 @@ struct ui_state
     memory_arena UIArena;
     memory_arena StringsArena;
 
-    json_element *JsonStringsHead;
+    json_object *JsonStringsHead;
     string_array *EnumStringArraysHash[4096];
 
     u32 DefaultClipRect;
