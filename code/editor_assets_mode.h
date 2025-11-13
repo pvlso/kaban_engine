@@ -150,13 +150,13 @@ struct stored_asset_sswm_file
 
 struct stored_asset
 {
-    u32 ID;
+    u32 GUID;
 
     u32 TypeID;
     stored_asset_type Type;
 
     u32 TagCount;
-    ssa_tag AssetTags[32];
+    kea_tag AssetTags[32];
     union
     {
         stored_asset_bitmap Bitmap;
@@ -256,6 +256,21 @@ struct sswm_mode
     u8 *FileData;
 };
 
+static platform_file_type StoredToSourceTypeMap[StoredAssetType_Count] =
+{
+    PlatformFileType_None, PlatformFileType_BMP,
+    PlatformFileType_SSBMP, PlatformFileType_TSBMP,
+    PlatformFileType_WAV, PlatformFileType_TXT,
+    PlatformFileType_TTF, PlatformFileType_BIN,
+    PlatformFileType_SSWM
+};
+
+struct tag_map_list
+{
+    kea_tag_map Tag;
+    tag_map_list *Next;
+};
+
 struct editor_mode_assets
 {
     b32 AssetsInitialized;
@@ -295,30 +310,19 @@ struct editor_mode_assets
     u32 CurrentTagValue;
     u32 CurrentTag;
 
+    u32 TagMapListCount;
+    tag_map_list *TagMapListHead;
+    
     u32 FileIndex;
     u32 LastFileIndex;
     u32 SubFileIndex;
     u32 LastSubFileIndex;
 
-    u32 BitmapFileCount;
-    char **BitmapFiles;
-    u32 SpriteSheetFileCount;
-    char **SpriteSheetFiles;
+    u32 SourceFileCounts[StoredAssetType_Count];
+    char **SourceFiles[StoredAssetType_Count];
     u32 SolidTileFileCount;
     char **SolidTileFiles;
-    u32 TilesetFileCount;
-    char **TilesetFiles;
-    u32 SoundFileCount;
-    char **SoundFiles;
-    u32 TextFileCount;
-    char **TextFiles;
-    u32 FontFileCount;
-    char **FontFiles;
-    u32 BinaryFileCount;
-    char **BinaryFiles;
-    u32 SSWMFileCount;
-    char **SSWMFiles;
-
+    
     v2 PixelPosition;
     r32 Time;
 
@@ -334,6 +338,64 @@ struct editor_mode_assets
         sswm_mode SSWMMode;
     };
 };
+
+inline assets_edit_mode
+AssetsEditModeFromStoredType(u32 StoredType)
+{
+    assets_edit_mode Result = EditMode_None;
+    switch(StoredType)
+    {
+        case StoredAssetType_None:        {}                               break;
+        case StoredAssetType_Bitmap:      {Result = EditMode_Bitmap;}      break;
+        case StoredAssetType_SpriteSheet: {Result = EditMode_SpriteSheet;} break;
+        case StoredAssetType_Tileset:     {Result = EditMode_Tileset;}     break;
+        case StoredAssetType_Sound:       {Result = EditMode_Sound;}       break;
+        case StoredAssetType_Text:        {Result = EditMode_Text;}        break;
+        case StoredAssetType_Font:        {Result = EditMode_Font;}        break;
+        case StoredAssetType_File:        {Result = EditMode_File;}        break;
+        case StoredAssetType_SSWM:        {Result = EditMode_SSWM;}        break;
+        InvalidDefaultCase;
+    }
+
+    return(Result);
+}
+
+inline stored_asset_type
+StoredAssetTypeFromEditMode(u32 EditMode)
+{
+    stored_asset_type Result = StoredAssetType_None;
+    switch(EditMode)
+    {
+        case EditMode_None:        {}                                      break;
+        case EditMode_Bitmap:      {Result = StoredAssetType_Bitmap;}      break;
+        case EditMode_SpriteSheet: {Result = StoredAssetType_SpriteSheet;} break;
+        case EditMode_Tileset:     {Result = StoredAssetType_Tileset;}     break;
+        case EditMode_Sound:       {Result = StoredAssetType_Sound;}       break;
+        case EditMode_Text:        {Result = StoredAssetType_Text;}        break;
+        case EditMode_Font:        {Result = StoredAssetType_Font;}        break;
+        case EditMode_File:        {Result = StoredAssetType_File;}        break;
+        case EditMode_SSWM:        {Result = StoredAssetType_SSWM;}        break;
+        InvalidDefaultCase;
+    }
+
+    return(Result);
+}
+
+inline tag_map_list *
+GetTagMapByIndex(editor_mode_assets *AssetsMode, u32 Index)
+{
+    tag_map_list *Result = AssetsMode->TagMapListHead;
+    for(u32 I = 0;
+        I < AssetsMode->TagMapListCount;
+        ++I)
+    {
+        if(I == Index)
+            break;
+        Result = Result->Next;
+    }
+
+    return(Result);
+}
 
 internal void PlayAssetsMode(editor_state *EditorState, transient_state *TranState);
 

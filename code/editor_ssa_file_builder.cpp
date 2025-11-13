@@ -159,7 +159,6 @@ LoadWAV(char *FileName, u32 SectionFirstSampleIndex, u32 SectionSampleCount, voi
     loaded_sound Result = {};
     
     read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_WAV, Arena);    
-    Assert(ReadResult.Size);
     if(ReadResult.Size != 0)
     {
         if(!Arena)
@@ -311,6 +310,7 @@ LoadText(char *FileName, memory_arena *Arena)
     return(Result);
 }
 
+#if 0
 struct builder_added_asset
 {
     u32 ID;
@@ -454,6 +454,7 @@ BuilderAddAsset(builder_assets *Assets, asset_type_id TypeID)
     
     return(Result);
 }
+#endif
 
 internal loaded_bitmap
 LoadTileBitmap(builder_loaded_tileset *Tileset, u32 TileIndex, memory_arena *TempArena)
@@ -533,6 +534,7 @@ LoadTileBitmap(builder_loaded_tileset *Tileset, u32 TileIndex, memory_arena *Tem
     return(Tile);
 }
 
+#if 0
 internal void
 AddTag(builder_assets *Assets, asset_tag_id ID, u32 Value)
 {
@@ -763,6 +765,7 @@ AddFontAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *
 
     return(Result);
 }
+#endif
 
 inline void
 BeginWritingLog(FILE *LogFile, char *FileName = 0)
@@ -1166,6 +1169,7 @@ BuilderWriteSSA(builder_assets *Assets, working_version Version, memory_arena *T
     fclose(LogFile);
 }
 
+#if 0
 internal void
 BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_arena *TempArena)
 {
@@ -1288,3 +1292,5 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
 
     BuilderWriteSSA(Assets, Version, TempArena);
 }
+
+#endif

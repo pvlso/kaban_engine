@@ -1,0 +1,33 @@
+{
+    "AssetType": [    "KEAType_None",
+		      "KEAType_Bitmap",
+		      "KEAType_Sound",
+		      "KEAType_Font",
+		      "KEAType_FontGlyph",
+		      "KEAType_SpriteSheet",
+		      "KEAType_Sprite",
+		      "KEAType_Tileset",
+		      "KEAType_Tile",
+		      "KEAType_BIN",
+		      "KEAType_SSWM"
+		 ],
+
+    "Tags": {    "Count": 2,
+		 "TagArray": ["Tag_None", "Tag_Biome"],
+		 
+		 "Tag_None":  ["None"],
+		 "Tag_Biome": ["Forest", "Mountines", "Swamps"]
+	    },
+    
+    "StoredAssetType": [    "None",
+			    "Bitmap",
+			    "SpriteSheet",
+			    "Tileset",
+			    "Sound",
+			    "Text",
+			    "Font",
+			    "File",
+			    "SSWM",
+		       ],
+}
+

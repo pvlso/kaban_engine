@@ -2556,6 +2556,9 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
     char *WildCard = "*.*";
     switch(Type)
     {
+        case PlatformFileType_None:
+            break;
+
         case PlatformFileType_AssetFile:
         {
             WildCard = "*.ssa";
@@ -3046,49 +3049,51 @@ internal void
 Win32FindFontName(char *FileName, char *Dest, memory_arena *Arena)
 {
     read_file_result ReadResult = Win32PlatformReadEntireFile(FileName, PlatformFileType_TTF, Arena);
-
-    u8 *Buffer = (u8 *)ReadResult.Contents;
-    u32 NumTable = ReadU16(Buffer, 4);
-    s32 NameTableOffset = -1;
-    for(u32 Index = 0;
-        Index < NumTable;
-        ++Index)
+    if(ReadResult.Contents != 0)
     {
-        u32 TableOffset = sizeof(ttf_offset_subtable) + Index*sizeof(ttf_table_directory);
-        u32 Tag = ReadU32(Buffer, TableOffset);
-        if(Tag == 0x6E616D65) // NOTE(paul): 'name' in hex
+        u8 *Buffer = (u8 *)ReadResult.Contents;
+        u32 NumTable = ReadU16(Buffer, 4);
+        s32 NameTableOffset = -1;
+        for(u32 Index = 0;
+            Index < NumTable;
+            ++Index)
         {
-            NameTableOffset = ReadU32(Buffer, TableOffset + 8);
-            break;
+            u32 TableOffset = sizeof(ttf_offset_subtable) + Index*sizeof(ttf_table_directory);
+            u32 Tag = ReadU32(Buffer, TableOffset);
+            if(Tag == 0x6E616D65) // NOTE(paul): 'name' in hex
+            {
+                NameTableOffset = ReadU32(Buffer, TableOffset + 8);
+                break;
+            }
+        }
+
+        Assert(NameTableOffset != -1);
+
+        u16 NameTableCount = ReadU16(Buffer, NameTableOffset + 2);
+        u16 StringOffset = ReadU16(Buffer, NameTableOffset + 4);
+        for(u16 RecordIndex = 0;
+            RecordIndex < NameTableCount;
+            ++RecordIndex)
+        {
+            u32 RecordOffset = NameTableOffset + 6 + RecordIndex*sizeof(ttf_name_record);
+            ttf_name_record Record = {};
+            Record.PlatformID = ReadU16(Buffer, RecordOffset);
+            Record.EncodingID = ReadU16(Buffer, RecordOffset + 2);
+            Record.LanguageID = ReadU16(Buffer, RecordOffset + 4);
+            Record.NameID = ReadU16(Buffer, RecordOffset + 6);
+            Record.Length = ReadU16(Buffer, RecordOffset + 8);
+            Record.Offset = ReadU16(Buffer, RecordOffset + 10);
+
+            if((Record.NameID == 1) || (Record.NameID == 4))
+            {
+                u32 StringPos = NameTableOffset + StringOffset + Record.Offset;
+                Copy(Record.Length, Buffer + StringPos, Dest);
+                Dest[Record.Length] = 0;
+                break;
+            }
         }
     }
-
-    Assert(NameTableOffset != -1);
-
-    u16 NameTableCount = ReadU16(Buffer, NameTableOffset + 2);
-    u16 StringOffset = ReadU16(Buffer, NameTableOffset + 4);
-    for(u16 RecordIndex = 0;
-        RecordIndex < NameTableCount;
-        ++RecordIndex)
-    {
-        u32 RecordOffset = NameTableOffset + 6 + RecordIndex*sizeof(ttf_name_record);
-        ttf_name_record Record = {};
-        Record.PlatformID = ReadU16(Buffer, RecordOffset);
-        Record.EncodingID = ReadU16(Buffer, RecordOffset + 2);
-        Record.LanguageID = ReadU16(Buffer, RecordOffset + 4);
-        Record.NameID = ReadU16(Buffer, RecordOffset + 6);
-        Record.Length = ReadU16(Buffer, RecordOffset + 8);
-        Record.Offset = ReadU16(Buffer, RecordOffset + 10);
-
-        if((Record.NameID == 1) || (Record.NameID == 4))
-        {
-            u32 StringPos = NameTableOffset + StringOffset + Record.Offset;
-            Copy(Record.Length, Buffer + StringPos, Dest);
-            Dest[Record.Length] = 0;
-            break;
-        }
-    }
-
+    
     Win32PlatformFreeFileMemory(Arena ? 0 : ReadResult.Contents);
 }
 
