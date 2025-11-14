@@ -87,13 +87,11 @@ enum stored_asset_type
 
 struct stored_asset_bitmap
 {
-    char FileName[256];
     v2 AlignPercentage;
 };
 
 struct stored_asset_spritesheet
 {
-    char SourceFileName[256];
     u32 SpriteCount;
     u32 SpriteWidth;
     u32 SpriteHeight;
@@ -102,7 +100,6 @@ struct stored_asset_spritesheet
 
 struct stored_asset_tileset
 {
-    char SourceFileName[256];
     char MergeTileFileName[256];
 
     b32 MergedTile;
@@ -117,19 +114,17 @@ struct stored_asset_tileset
 
 struct stored_asset_sound
 {
-    char SourceFileName[256];
     u32 FirstSampleIndex;
     u32 Chain;
 };
 
 struct stored_asset_text
 {
-    char SourceFileName[256];
+    u32 PLACEHOLDER;
 };
 
 struct stored_asset_font
 {
-    char SourceFileName[256];
     u32 CodePointCount;
     u32 FirstCodePoint;
     u32 LastCodePoint;
@@ -138,25 +133,23 @@ struct stored_asset_font
 
 struct stored_asset_binary_file
 {
-    char SourceFileName[256];
     u32 FileSize;
 };
 
 struct stored_asset_sswm_file
 {
-    char SourceFileName[256];
     u32 FileSize;
 };
 
 struct stored_asset
 {
-    u32 GUID;
+    u64 GUID;
 
-    u32 TypeID;
     stored_asset_type Type;
 
     u32 TagCount;
     kea_tag AssetTags[32];
+    char SourceFileName[256];
     union
     {
         stored_asset_bitmap Bitmap;
@@ -292,7 +285,6 @@ struct editor_mode_assets
     u32 LastShowStoredAssetIndex;
     stored_asset *StoredAssets;
 
-    u32 NextStoredAssetID;
     u32 AddAssetCount;
     stored_asset AssetsToAdd[256];
     

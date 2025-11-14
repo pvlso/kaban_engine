@@ -327,19 +327,20 @@ AddTagToCurrentAsset(editor_mode_assets *AssetsMode, stored_asset *CurrentAsset)
 {
     kea_tag *Tag = CurrentAsset->AssetTags + CurrentAsset->TagCount++;
     tag_map_list *Map = GetTagMapByIndex(AssetsMode, AssetsMode->CurrentTagID);
-    Tag->GUID = Map->Tag.GUID;
+
     StringCopy(Map->Tag.Key, Tag->Key);
     StringCopy(Map->Tag.Values[AssetsMode->CurrentTagValue], Tag->Value);
+
+    char Buffer[256];
+    FormatString(ArrayCount(Buffer), Buffer, "%s%s", Tag->Key, Tag->Value);
+    Tag->GUID = GUIDFromString(Buffer);
 }
 
 internal void
 AddCurrentAsset(editor_mode_assets *AssetsMode)
 {
-//    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].ID = AssetsMode->NextStoredAssetID;
-//    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount + 1] = AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount];
-//    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount + 1].ID = 0;
-//    ++AssetsMode->AddAssetCount;
-//    ++AssetsMode->NextStoredAssetID;
+    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
+    ++AssetsMode->AddAssetCount;
 }
 
 internal void
@@ -347,7 +348,6 @@ RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, stored_asset *CurrentAsset
 {
     if(CurrentAsset->TagCount)
     {
-#if 0
         for(u32 TagIndex = AssetsMode->CurrentTag;
             TagIndex < (ArrayCount(CurrentAsset->AssetTags) - 1);
             ++TagIndex)
@@ -355,12 +355,12 @@ RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, stored_asset *CurrentAsset
             CurrentAsset->AssetTags[TagIndex] = CurrentAsset->AssetTags[TagIndex + 1];        
         }
 
-        ssa_tag *Tag = CurrentAsset->AssetTags + (ArrayCount(CurrentAsset->AssetTags) - 1);
-        Tag->ID = 0;
-        Tag->Value = 0;
+        kea_tag *Tag = CurrentAsset->AssetTags + (ArrayCount(CurrentAsset->AssetTags) - 1);
+        Tag->GUID = 0;
+        ZeroSize(StringLength(Tag->Key), Tag->Key);
+        ZeroSize(StringLength(Tag->Value), Tag->Value);
 
         --CurrentAsset->TagCount;
-#endif
     }
 }
 
@@ -631,7 +631,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
             stored_asset_bitmap *StoredBitmap = &StoredAsset->Bitmap;
     
-            BitmapMode->Bitmap = LoadBMP(StoredBitmap->FileName, PlatformFileType_BMP, 0);
+            BitmapMode->Bitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_BMP, 0);
             if(BitmapMode->Bitmap.Memory)
             {
                 loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
@@ -644,7 +644,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
             stored_asset_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
 
-            SpriteSheetMode->SpriteSheetBitmap = LoadBMP(SpriteSheet->SourceFileName, PlatformFileType_SSBMP, 0);
+            SpriteSheetMode->SpriteSheetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_SSBMP, 0);
 
             loaded_bitmap *Bitmap = &SpriteSheetMode->SpriteSheetBitmap;
             AllocateBitmap(Assets, Bitmap);
@@ -656,7 +656,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
             stored_asset_tileset *StoredTileset = &StoredAsset->Tileset;
     
-            TilesetMode->TilesetBitmap = LoadBMP(StoredTileset->SourceFileName, PlatformFileType_TSBMP, 0);
+            TilesetMode->TilesetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
             loaded_bitmap *Bitmap = &TilesetMode->TilesetBitmap;
             AllocateBitmap(Assets, Bitmap);
 
@@ -674,15 +674,14 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
         {
             sound_mode *SoundMode = &AssetsMode->SoundMode;
             stored_asset_sound *StoredSound = &StoredAsset->Sound;
-            SoundMode->Sound = LoadWAV(StoredSound->SourceFileName, StoredSound->FirstSampleIndex, 0,
+            SoundMode->Sound = LoadWAV(StoredAsset->SourceFileName, StoredSound->FirstSampleIndex, 0,
                                        &SoundMode->FreeSound, 0);
         } break;
 
         case StoredAssetType_Text:
         {
             text_mode *TextMode = &AssetsMode->TextMode;
-            stored_asset_text *StoredText = &StoredAsset->Text;
-            TextMode->Text = LoadText(StoredText->SourceFileName, 0);
+            TextMode->Text = LoadText(StoredAsset->SourceFileName, 0);
         } break;
 
         case StoredAssetType_Font:
@@ -691,9 +690,9 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             stored_asset_font *StoredFont = &StoredAsset->Font;
             u32 StandardFontSize = 24;
 
-            if(*StoredFont->SourceFileName)
+            if(*StoredAsset->SourceFileName)
             {
-                FontMode->Font = Platform.LoadFontAsset(StoredFont->SourceFileName, StandardFontSize, 0);
+                FontMode->Font = Platform.LoadFontAsset(StoredAsset->SourceFileName, StandardFontSize, 0);
                 for(u32 GlyphIndex = 1;
                     GlyphIndex < FontMode->Font.GlyphCount;
                     ++GlyphIndex)
@@ -709,7 +708,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
             stored_asset_binary_file *StoredFile = &StoredAsset->File;
             read_file_result ReadResult =
-                Platform.ReadEntireFile(StoredFile->SourceFileName, PlatformFileType_BIN, 0);    
+                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_BIN, 0);    
             FileMode->FileData = (u8 *)ReadResult.Contents;
             StoredFile->FileSize = ReadResult.Size;
         } break;
@@ -719,7 +718,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
             stored_asset_sswm_file *StoredFile = &StoredAsset->SSWM;
             read_file_result ReadResult =
-                Platform.ReadEntireFile(StoredFile->SourceFileName, PlatformFileType_SSWM, 0);    
+                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_SSWM, 0);    
             SSWMMode->FileData = (u8 *)ReadResult.Contents;
             StoredFile->FileSize = ReadResult.Size;
         } break;
@@ -731,35 +730,28 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 internal void
 LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
 {
+    if(AssetsMode->SourceFileCounts[Asset->Type])
+        StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SourceFileName);
+
     switch(Asset->Type)
     {
         case StoredAssetType_None:
-        {
-        } break;
+            break;
 
         case StoredAssetType_Bitmap:
         {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->Bitmap.FileName);
-
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             Asset->Bitmap.AlignPercentage = AssetsMode->BitmapMode.Bitmap.AlignPercentage;
         } break;
 
         case StoredAssetType_SpriteSheet:
         {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SpriteSheet.SourceFileName);
-
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             Asset->SpriteSheet.SpriteHeight = AssetsMode->SpriteSheetMode.SpriteSheetBitmap.Height;
         } break;
 
         case StoredAssetType_Tileset:
         {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->Tileset.SourceFileName);
-
             if(AssetsMode->SolidTileFileCount)
             {
                 char *SolidTileFileName = AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex];
@@ -770,27 +762,8 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             Asset->Tileset.TileWidth = Asset->Tileset.TileHeight = 32;
         } break;
 
-        case StoredAssetType_Sound:
-        {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->Sound.SourceFileName);
-
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
-        } break;
-
-        case StoredAssetType_Text:
-        {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->Text.SourceFileName);
-            
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
-        } break;
-
         case StoredAssetType_Font:
         {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->Font.SourceFileName);
-            
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             font_mode *FontMode = &AssetsMode->FontMode;
             if(FontMode->Font.Glyphs)
@@ -802,19 +775,11 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             }
         } break;
 
+        case StoredAssetType_Sound:
+        case StoredAssetType_Text:
         case StoredAssetType_File:
-        {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->File.SourceFileName);
-
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
-        } break;
-
         case StoredAssetType_SSWM:
         {
-            if(AssetsMode->SourceFileCounts[Asset->Type])
-                StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SSWM.SourceFileName);
-
             LoadStoredAssetData(AssetsMode, Assets, Asset);
         } break;
 
@@ -1241,14 +1206,12 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
         AssetsMode->StoredAssets = (stored_asset *)Platform.AllocateMemory(StoredHeader->SizeOfStoredAsset);
 
         fwrite(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
-
+        
         stored_asset NullAsset = {};
         fwrite(&NullAsset, sizeof(stored_asset), 1, StoredAssetsFile);
 
         fclose(StoredAssetsFile);
     }
-
-    AssetsMode->NextStoredAssetID = StoredHeader->AssetCount;
 }
 
 internal void
@@ -1393,6 +1356,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
 
                         AssetsMode->LastEditMode = AssetsMode->EditMode;            
                         AssetsMode->StoredAssetChanged = true;
+                        AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
                     else if((AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex) ||
                             AssetsMode->RemoveStoredAsset)

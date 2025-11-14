@@ -189,7 +189,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         else
         {
             fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
-            EditorState->Version.MinorLow = 76;
+            EditorState->Version.MinorLow = 0;
             fwrite(&EditorState->Version, 4, 1, VersionFile);
             fclose(VersionFile);
         }

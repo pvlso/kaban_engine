@@ -6,8 +6,6 @@
    $Notice:  $
    ======================================================================== */
 
-#define BITMAP_BYTES_PER_PIXEL 4
-
 internal loaded_bitmap
 LoadBMP(char *FileName, platform_file_type Type, memory_arena *Arena)
 {
@@ -262,6 +260,7 @@ LoadWAV(char *FileName, u32 SectionFirstSampleIndex, u32 SectionSampleCount, voi
     return(Result);
 }
 
+#if 0
 internal void
 LoadSprites(builder_assets *Assets, builder_loaded_spritesheet *Sheet, memory_arena *Arena)
 {
@@ -299,6 +298,7 @@ LoadSprites(builder_assets *Assets, builder_loaded_spritesheet *Sheet, memory_ar
         }
     }
 }
+#endif
 
 internal loaded_text
 LoadText(char *FileName, memory_arena *Arena)
@@ -765,7 +765,6 @@ AddFontAsset(builder_assets *Assets, builder_loaded_font *Font, ssa_font_glyph *
 
     return(Result);
 }
-#endif
 
 inline void
 BeginWritingLog(FILE *LogFile, char *FileName = 0)
@@ -1168,6 +1167,7 @@ BuilderWriteSSA(builder_assets *Assets, working_version Version, memory_arena *T
 
     fclose(LogFile);
 }
+#endif
 
 #if 0
 internal void

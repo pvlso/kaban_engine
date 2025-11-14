@@ -56,6 +56,8 @@
 #define Minimum(A, B) ((A < B) ? (A) : (B))
 #define Maximum(A, B) ((A > B) ? (A) : (B))
 
+#define BITMAP_BYTES_PER_PIXEL 4
+
 #include "engine_render.h"
 #include "engine_render_group.h"
 #include "engine_asset.h"
