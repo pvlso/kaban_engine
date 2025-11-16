@@ -62,76 +62,24 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     EditorState->EditorMode = EditorMode;
 }
 
-inline working_version 
-UpdateVersion(u32 Version)
-{
-    u8 MajorHigh = (Version >> 24) & 0xFF;
-    u8 MajorLow = (Version >> 16) & 0xFF;
-    u8 MinorHigh = (Version >> 8) & 0xFF;
-    u8 MinorLow = Version & 0xFF;
-
-    if((MinorLow + 1) == 255)
-    {
-        MinorLow = 0;
-        if((MinorHigh + 1) == 255)
-        {
-            MinorHigh = 0;
-            if((MajorLow + 1) == 255)
-            {
-                MajorLow = 0;
-                if((MajorHigh + 1) == 255)
-                {
-                    MajorHigh = 0;
-                }
-                else
-                {
-                    MajorHigh += 1;
-                }
-            }
-            else
-            {
-                MajorLow += 1;
-            }
-        }
-        else
-        {
-            MinorHigh += 1;
-        }
-    }
-    else
-    {
-        MinorLow += 1;
-    }
-
-    working_version Result = {MajorHigh, MajorLow, MinorHigh, MinorLow};
-
-    return(Result);
-}
-
 internal u32
 UpdateEditorVersionFile(editor_state *EditorState)
 {
     u32 Result = 0;
     
+    editor_meta *EditorMeta = &EditorState->EditorMeta;
+    Result = *(u32 *)(EditorMeta->KESAVersion) + 1;
+    EditorMeta->KESAVersion[0] = (Result >> 24) & 0xff;
+    EditorMeta->KESAVersion[1] = (Result >> 16) & 0xff;
+    EditorMeta->KESAVersion[2] = (Result >> 8)  & 0xff;
+    EditorMeta->KESAVersion[3] = (Result)       & 0xff;
+#if 0
+    
     FILE *VersionFile;
-    fopen_s(&VersionFile, "editor_version_file.ssev", "rb");
-    fread(&EditorState->Version, sizeof(working_version), 1, VersionFile);
-    fclose(VersionFile);
-
-    EditorState->Version = UpdateVersion((u32)((EditorState->Version.MajorHigh << 24) |
-                                               (EditorState->Version.MajorLow << 16) |
-                                               (EditorState->Version.MinorHigh << 8) |
-                                               EditorState->Version.MinorLow));
-
-    Result = (u32)((EditorState->Version.MajorHigh << 24) |
-                   (EditorState->Version.MajorLow << 16) |
-                   (EditorState->Version.MinorHigh << 8) |
-                   EditorState->Version.MinorLow);
-        
     fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
     fwrite(&EditorState->Version, sizeof(working_version), 1, VersionFile);
     fclose(VersionFile);
-
+#endif
     return(Result);
 }
 
@@ -146,7 +94,36 @@ platform_api Platform;
 #include "editor_assets_mode.cpp"
 #include "engine_game_simulate.cpp"
 #include "engine_navigation_mesh.cpp"
-#include "engine_map_editor_mode.cpp"
+//#include "engine_map_editor_mode.cpp"
+
+internal void
+EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(&EditorState->TotalArena);
+    json_object *Metadata = ParseJson(MetadataSource, TempMem.Arena, true);
+    if(Metadata)
+    {
+        json_value *KEASVersion = JsonLookupObjectElement(Metadata, "keas_version");
+        Assert(KEASVersion->Type == JsonValue_Array);
+
+        for(u32 I = 0; I < KEASVersion->Array.Count; ++I)
+        {
+            EditorState->EditorMeta.KESAVersion[I] =
+                (u8)KEASVersion->Array.Items[I]->Int;
+        }
+    }
+    else
+    {
+        FILE *MetaFile;
+        fopen_s(&MetaFile, MetadataSource, "wb");
+        char Data[256];
+        FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
+        fwrite(Data, StringLength(Data), 1, MetaFile);
+        fclose(MetaFile);
+    }
+    
+    EndTemporaryMemory(TempMem);
+}
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -178,26 +155,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     {
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
-        
-        FILE *VersionFile;
-        fopen_s(&VersionFile, "editor_version_file.ssev", "rb");
-        if(VersionFile)
-        {
-            fread(&EditorState->Version, 4, 1, VersionFile);
-            fclose(VersionFile);
-        }
-        else
-        {
-            fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
-            EditorState->Version.MinorLow = 0;
-            fwrite(&EditorState->Version, 4, 1, VersionFile);
-            fclose(VersionFile);
-        }
 
-        EditorState->MapStartup.MapVersion = EditorState->Version;
-        EditorState->MapStartup.MapWidth = 48;
-        EditorState->MapStartup.MapHeight = 48;
-        EditorState->MapStartup.NewMap = false;
+        EngineLoadEditorMetadata(EditorState, "..\\editor_metadata.json");
 
         EditorState->UIEnable = true;
     }
@@ -243,8 +202,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-        PlayMapEditor(EditorState, TranState);
-//        PlayTitleScreen(EditorState, TranState);
+//        PlayMapEditor(EditorState, TranState);
+        PlayTitleScreen(EditorState, TranState);
     }
 
     if(EditorState->SimulationQuit)
@@ -304,8 +263,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
-                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
-                                                     Input, RenderWidth, RenderHeight);
+//                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
+//                                                     Input, RenderWidth, RenderHeight);
                 } break;
 
                 case EditorMode_SimulateGame:

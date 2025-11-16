@@ -49,7 +49,7 @@ internal void
 BuildTagMap(editor_mode_assets *AssetsMode, memory_arena *ModeArena, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
-    json_object *TagsObject = ParseJson("kea_tags.json", TempMem.Arena);
+    json_object *TagsObject = ParseJson("..\\kea_tags.json", TempMem.Arena, true);
     json_value *TagCount = JsonLookupObjectElement(TagsObject, "tag_count");
     json_value *TagArray = JsonLookupObjectElement(TagsObject, "tag_array");
 
@@ -112,7 +112,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     // NOTE(pvlso): Setting it to one because first stored asset is always zero
     Result->ShowStoredAssetIndex = 1;
 
-    for(u32 I = 1; I < StoredAssetType_Count; ++I)
+    for(u32 I = 1; I < KESA_Count; ++I)
     {
         Result->SourceFileCounts[I] =
             Platform.ListFilesInDirectory(StoredToSourceTypeMap[I], 0, 0);
@@ -122,7 +122,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
             Platform.ListFilesInDirectory(StoredToSourceTypeMap[I], Result->SourceFiles[I], &EditorState->ModeArena);
         }
 
-        if(I == StoredAssetType_Tileset)
+        if(I == KESA_Tileset)
         {
             Result->SolidTileFileCount = Platform.ListFilesInDirectory(PlatformFileType_STBMP, 0, 0);
             if(Result->SolidTileFileCount)
@@ -141,7 +141,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
 
 internal void
 CutSpriteSheet(editor_assets *Assets, spritesheet_mode *SpriteSheetMode,
-               stored_asset_spritesheet *Asset)
+               kesa_spritesheet *Asset)
 {
     loaded_bitmap *SpriteSheet = &SpriteSheetMode->SpriteSheetBitmap;
     for(u32 SpriteIndex = 0;
@@ -187,7 +187,7 @@ CutSpriteSheet(editor_assets *Assets, spritesheet_mode *SpriteSheetMode,
 }
 
 internal void
-LoadTileBitmap(editor_assets *Assets, tileset_mode *TilesetMode, stored_asset_tileset *Tileset,
+LoadTileBitmap(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Tileset,
                loaded_bitmap *TilesetBitmap, u32 TileIndex, loaded_bitmap *MergeTile = 0)
 {
     loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
@@ -271,9 +271,9 @@ LoadTileBitmap(editor_assets *Assets, tileset_mode *TilesetMode, stored_asset_ti
 }
 
 internal void
-CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, stored_asset_tileset *Asset, b32 CutWithMerge)
+CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Asset, b32 CutWithMerge)
 {
-    stored_asset_tileset *Tileset = Asset;
+    kesa_tileset *Tileset = Asset;
     loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
     u32 TileCountX = (TilesetBitmap->Width / Tileset->TileWidth);
     u32 TileCountY = (TilesetBitmap->Height / Tileset->TileHeight);
@@ -323,7 +323,7 @@ CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, stored_asset_tilese
 }
 
 internal void
-AddTagToCurrentAsset(editor_mode_assets *AssetsMode, stored_asset *CurrentAsset)
+AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 {
     kea_tag *Tag = CurrentAsset->AssetTags + CurrentAsset->TagCount++;
     tag_map_list *Map = GetTagMapByIndex(AssetsMode, AssetsMode->CurrentTagID);
@@ -344,7 +344,7 @@ AddCurrentAsset(editor_mode_assets *AssetsMode)
 }
 
 internal void
-RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, stored_asset *CurrentAsset)
+RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 {
     if(CurrentAsset->TagCount)
     {
@@ -469,23 +469,23 @@ ClearTilesetTiles(editor_assets *Assets, tileset_mode *TilesetMode)
 }
 
 internal void
-ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset_type Type,
+ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_type Type,
                      audio_state *AudioState = 0)
 {
     switch(Type)
     {
-        case StoredAssetType_None:
+        case KESA_None:
         {
         } break;
 
-        case StoredAssetType_Bitmap:
+        case KESA_Bitmap:
         {
             // NOTE(paul): Clear Bitmap Mode data
             bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
             DeallocateBitmap(Assets, &BitmapMode->Bitmap);
         } break;
 
-        case StoredAssetType_SpriteSheet:
+        case KESA_SpriteSheet:
         {
             // NOTE(paul): Clear SpriteSheet Mode data
             spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
@@ -494,7 +494,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             ClearSpriteSheetSprites(Assets, SpriteSheetMode);
         } break;
 
-        case StoredAssetType_Tileset:
+        case KESA_Tileset:
         {
             // NOTE(paul): Clear Tileset Mode data
             tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
@@ -504,7 +504,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             ClearTilesetTiles(Assets, TilesetMode);
         } break;
 
-        case StoredAssetType_Sound:
+        case KESA_Sound:
         {
             // NOTE(paul): Clear Sound Mode data 
             sound_mode *SoundMode = &AssetsMode->SoundMode;
@@ -513,14 +513,14 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             Platform.DeallocateMemory(SoundMode->FreeSound);
         } break;
         
-        case StoredAssetType_Text:
+        case KESA_Text:
         {
             // NOTE(paul): Clear Text Mode Data
             text_mode *TextMode = &AssetsMode->TextMode;
             Platform.DeallocateMemory(TextMode->Text.String);
         } break;
 
-        case StoredAssetType_Font:
+        case KESA_Font:
         {
             // NOTE(paul): Clear Font Mode Data
             font_mode *FontMode = &AssetsMode->FontMode;
@@ -540,14 +540,14 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
             Platform.DeallocateMemory(FontMode->Font.UnicodeMap);
         } break;
         
-        case StoredAssetType_File:
+        case KESA_File:
         {
             // NOTE(paul): Clear File Mode Data
             binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
             Platform.DeallocateMemory(FileMode->FileData);
         } break;
         
-        case StoredAssetType_SSWM:
+        case KESA_SSWM:
         {
             // NOTE(paul): Clear File Mode Data
             sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
@@ -555,7 +555,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
         } break;
     }
 
-    u32 ModeSizes[StoredAssetType_Count] =
+    u32 ModeSizes[KESA_Count] =
         {
             sizeof(bitmap_mode), sizeof(spritesheet_mode), sizeof(tileset_mode),
             sizeof(sound_mode), sizeof(text_mode), sizeof(font_mode), sizeof(binary_file_mode),
@@ -564,7 +564,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
 
     u32 LargestModeSize = 0;
     for(u32 ModeIndex = 0;
-        ModeIndex < StoredAssetType_Count;
+        ModeIndex < KESA_Count;
         ++ModeIndex)
     {
         if(ModeSizes[ModeIndex] > LargestModeSize)
@@ -577,9 +577,9 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stor
 }
 
 inline void
-ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
-    stored_asset_type Type = Asset->Type;
+    kesa_type Type = Asset->Type;
 
     AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount] = {};
     AssetsMode->AddAsset = false;
@@ -602,7 +602,7 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, edi
 }
 
 inline b32
-AbleToCut(u32 TilesetBitmapWidth, u32 TilesetBitmapHeight, stored_asset_tileset *Asset)
+AbleToCut(u32 TilesetBitmapWidth, u32 TilesetBitmapHeight, kesa_tileset *Asset)
 {
     b32 Result = ((Asset->TileWidth >= 32) && (Asset->TileHeight >= 32) &&
                   ((TilesetBitmapWidth % Asset->TileWidth) == 0) &&
@@ -612,7 +612,7 @@ AbleToCut(u32 TilesetBitmapWidth, u32 TilesetBitmapHeight, stored_asset_tileset 
 }
 
 inline void
-LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *StoredAsset,
+LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *StoredAsset,
                     b32 RememberEditMode = false)
 {
     if(RememberEditMode)
@@ -622,14 +622,14 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 
     switch(StoredAsset->Type)
     {
-        case StoredAssetType_None:
+        case KESA_None:
         {
         } break;
         
-        case StoredAssetType_Bitmap:
+        case KESA_Bitmap:
         {
             bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-            stored_asset_bitmap *StoredBitmap = &StoredAsset->Bitmap;
+            kesa_bitmap *StoredBitmap = &StoredAsset->Bitmap;
     
             BitmapMode->Bitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_BMP, 0);
             if(BitmapMode->Bitmap.Memory)
@@ -639,10 +639,10 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             }
         } break;
 
-        case StoredAssetType_SpriteSheet:
+        case KESA_SpriteSheet:
         {
             spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
-            stored_asset_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
+            kesa_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
 
             SpriteSheetMode->SpriteSheetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_SSBMP, 0);
 
@@ -651,10 +651,10 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             CutSpriteSheet(Assets, SpriteSheetMode, SpriteSheet);
         } break;
 
-        case StoredAssetType_Tileset:
+        case KESA_Tileset:
         {
             tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-            stored_asset_tileset *StoredTileset = &StoredAsset->Tileset;
+            kesa_tileset *StoredTileset = &StoredAsset->Tileset;
     
             TilesetMode->TilesetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
             loaded_bitmap *Bitmap = &TilesetMode->TilesetBitmap;
@@ -670,24 +670,24 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             }
         } break;
 
-        case StoredAssetType_Sound:
+        case KESA_Sound:
         {
             sound_mode *SoundMode = &AssetsMode->SoundMode;
-            stored_asset_sound *StoredSound = &StoredAsset->Sound;
+            kesa_sound *StoredSound = &StoredAsset->Sound;
             SoundMode->Sound = LoadWAV(StoredAsset->SourceFileName, StoredSound->FirstSampleIndex, 0,
                                        &SoundMode->FreeSound, 0);
         } break;
 
-        case StoredAssetType_Text:
+        case KESA_Text:
         {
             text_mode *TextMode = &AssetsMode->TextMode;
             TextMode->Text = LoadText(StoredAsset->SourceFileName, 0);
         } break;
 
-        case StoredAssetType_Font:
+        case KESA_Font:
         {
             font_mode *FontMode = &AssetsMode->FontMode;
-            stored_asset_font *StoredFont = &StoredAsset->Font;
+            kesa_font *StoredFont = &StoredAsset->Font;
             u32 StandardFontSize = 24;
 
             if(*StoredAsset->SourceFileName)
@@ -703,22 +703,22 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
             }
         } break;
 
-        case StoredAssetType_File:
+        case KESA_File:
         {
             binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
-            stored_asset_binary_file *StoredFile = &StoredAsset->File;
+            kesa_binary_file *StoredFile = &StoredAsset->File;
             read_file_result ReadResult =
-                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_BIN, 0);    
+                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_BIN, 0, 0);    
             FileMode->FileData = (u8 *)ReadResult.Contents;
             StoredFile->FileSize = ReadResult.Size;
         } break;
 
-        case StoredAssetType_SSWM:
+        case KESA_SSWM:
         {
             sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
-            stored_asset_sswm_file *StoredFile = &StoredAsset->SSWM;
+            kesa_sswm_file *StoredFile = &StoredAsset->SSWM;
             read_file_result ReadResult =
-                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_SSWM, 0);    
+                Platform.ReadEntireFile(StoredAsset->SourceFileName, PlatformFileType_SSWM, 0, 0);    
             SSWMMode->FileData = (u8 *)ReadResult.Contents;
             StoredFile->FileSize = ReadResult.Size;
         } break;
@@ -728,29 +728,29 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, store
 }
 
 internal void
-LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
     if(AssetsMode->SourceFileCounts[Asset->Type])
         StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SourceFileName);
 
     switch(Asset->Type)
     {
-        case StoredAssetType_None:
+        case KESA_None:
             break;
 
-        case StoredAssetType_Bitmap:
+        case KESA_Bitmap:
         {
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             Asset->Bitmap.AlignPercentage = AssetsMode->BitmapMode.Bitmap.AlignPercentage;
         } break;
 
-        case StoredAssetType_SpriteSheet:
+        case KESA_SpriteSheet:
         {
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             Asset->SpriteSheet.SpriteHeight = AssetsMode->SpriteSheetMode.SpriteSheetBitmap.Height;
         } break;
 
-        case StoredAssetType_Tileset:
+        case KESA_Tileset:
         {
             if(AssetsMode->SolidTileFileCount)
             {
@@ -762,7 +762,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             Asset->Tileset.TileWidth = Asset->Tileset.TileHeight = 32;
         } break;
 
-        case StoredAssetType_Font:
+        case KESA_Font:
         {
             LoadStoredAssetData(AssetsMode, Assets, Asset);
             font_mode *FontMode = &AssetsMode->FontMode;
@@ -775,10 +775,10 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
             }
         } break;
 
-        case StoredAssetType_Sound:
-        case StoredAssetType_Text:
-        case StoredAssetType_File:
-        case StoredAssetType_SSWM:
+        case KESA_Sound:
+        case KESA_Text:
+        case KESA_File:
+        case KESA_SSWM:
         {
             LoadStoredAssetData(AssetsMode, Assets, Asset);
         } break;
@@ -788,9 +788,9 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, stored
 }
 
 inline void
-InitAssetsMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+InitAssetsMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
-    Asset->Type = StoredAssetTypeFromEditMode(AssetsMode->EditMode);
+    Asset->Type = KESAFromEditMode(AssetsMode->EditMode);
     LoadNewStoredAsset(AssetsMode, Assets, Asset);
 }
 
@@ -819,7 +819,7 @@ UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, engine_
 internal void
 UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                               render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                              rectangle2 CanvasRect, r32 TileDim, stored_asset *Asset)
+                              rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
 {
     v2 CanvasDim = GetDim(CanvasRect);
     v2 CanvasCenter = GetCenter(CanvasRect);
@@ -828,11 +828,11 @@ UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Inpu
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, CanvasCenter);
 
     bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-    stored_asset_bitmap *StoredBitmap = &Asset->Bitmap;
+    kesa_bitmap *StoredBitmap = &Asset->Bitmap;
                 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_Bitmap);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_Bitmap);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
@@ -876,7 +876,7 @@ DrawSpriteOutlines(render_group *RenderGroup, object_transform *Flat, r32 Scale,
 internal void
 UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                                   rectangle2 CanvasRect, r32 TileDim, stored_asset *CurrentAsset)
+                                   rectangle2 CanvasRect, r32 TileDim, kesa_asset *CurrentAsset)
 {
     v2 CanvasDim = GetDim(CanvasRect);
     v2 CanvasCenter = GetCenter(CanvasRect);
@@ -885,11 +885,11 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, CanvasCenter);
 
     spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
-    stored_asset_spritesheet *SpriteSheet = &CurrentAsset->SpriteSheet;
+    kesa_spritesheet *SpriteSheet = &CurrentAsset->SpriteSheet;
 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_SpriteSheet);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_SpriteSheet);
         SpriteSheet->SpriteCount = 0;
 
         LoadNewStoredAsset(AssetsMode, Assets, CurrentAsset);
@@ -965,7 +965,7 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
 
 inline void
 DrawTileOutlines(render_group *RenderGroup, object_transform *Flat, r32 TilesetBitmapScale,
-                 stored_asset_tileset *Tileset, r32 TileWidthOverHeight, v2 TilesetDim)
+                 kesa_tileset *Tileset, r32 TileWidthOverHeight, v2 TilesetDim)
 {
     r32 TileHeight = TilesetBitmapScale*Tileset->TileHeight;
     r32 TileWidth = TileHeight*TileWidthOverHeight;
@@ -985,7 +985,7 @@ DrawTileOutlines(render_group *RenderGroup, object_transform *Flat, r32 TilesetB
 internal void
 UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                                   rectangle2 CanvasRect, r32 TileDim, stored_asset *Asset)
+                                   rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
 {
     v2 CanvasDim = GetDim(CanvasRect);
     v2 CanvasCenter = GetCenter(CanvasRect);
@@ -994,12 +994,12 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
 
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, V2(0, 0));
 
-    stored_asset_tileset *StoredTileset = &Asset->Tileset;
+    kesa_tileset *StoredTileset = &Asset->Tileset;
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
     if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) ||
        (AssetsMode->SubFileIndex != AssetsMode->LastSubFileIndex))
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_Tileset);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_Tileset);
         StoredTileset->TileCount = 0;
 
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
@@ -1067,13 +1067,13 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
 
 internal void
 UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets,
-                             audio_state *AudioState, stored_asset *Asset)
+                             audio_state *AudioState, kesa_asset *Asset)
 {
     sound_mode *SoundMode = &AssetsMode->SoundMode;
-    stored_asset_sound *StoredSound = &Asset->Sound;
+    kesa_sound *StoredSound = &Asset->Sound;
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_Sound, AudioState);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_Sound, AudioState);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
@@ -1096,23 +1096,23 @@ UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, editor_assets *Asse
 }
 
 internal void
-UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
     text_mode *TextMode = &AssetsMode->TextMode;
-    stored_asset_text *StoredText = &Asset->Text;
+    kesa_text *StoredText = &Asset->Text;
                 
     if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) || TextMode->Reload)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_Text);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_Text);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         TextMode->Reload = false;
     }
 
-    if(TextMode->EditTextFile && AssetsMode->SourceFileCounts[StoredAssetType_Text])
+    if(TextMode->EditTextFile && AssetsMode->SourceFileCounts[KESA_Text])
     {
-        char *FileName = AssetsMode->SourceFiles[StoredAssetType_Text][AssetsMode->FileIndex];
+        char *FileName = AssetsMode->SourceFiles[KESA_Text][AssetsMode->FileIndex];
         char CommandLine[512];
         FormatString(ArrayCount(CommandLine), CommandLine,
                      "openwithnotepad.bat txts/%s", FileName);
@@ -1123,14 +1123,14 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
 }
 
 internal void
-UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
     font_mode *FontMode = &AssetsMode->FontMode;
-    stored_asset_font *StoredFont = &Asset->Font;
+    kesa_font *StoredFont = &Asset->Font;
                 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_Font);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_Font);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
@@ -1138,28 +1138,28 @@ UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
 }
 
 internal void
-UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
-    stored_asset_binary_file *StoredFile = &Asset->File;
+    kesa_binary_file *StoredFile = &Asset->File;
     binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
     
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_File);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_File);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
 
 internal void
-UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, stored_asset *Asset)
+UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
 {
-    stored_asset_sswm_file *StoredFile = &Asset->SSWM;
+    kesa_sswm_file *StoredFile = &Asset->SSWM;
     sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
     
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, StoredAssetType_SSWM);
+        ClearStoredAssetData(AssetsMode, Assets, KESA_SSWM);
         LoadNewStoredAsset(AssetsMode, Assets, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
@@ -1168,29 +1168,30 @@ UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
 internal void
 ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 {
-    stored_asset_file_header *StoredHeader = &AssetsMode->StoredHeader;
+    kesa_header *StoredHeader = &AssetsMode->StoredHeader;
 
-    working_version *Version = &EditorState->Version;
+    editor_meta *EditorMeta = &EditorState->EditorMeta;
     char StoredFileName[256];
     FormatString(ArrayCount(StoredFileName), StoredFileName, "sseas\\stored_assets_%d.%d.%d.%d.ssea",
-                 Version->MajorHigh, Version->MajorLow, Version->MinorHigh, Version->MinorLow);
+                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
 
-    u32 FullVersion = (u32)((Version->MajorHigh << 24) | (Version->MajorLow << 16) | (Version->MinorHigh << 8) | Version->MinorLow);
+    u32 FullVersion = *(u32 *)(EditorMeta->KESAVersion);
     
     FILE *StoredAssetsFile;
     fopen_s(&StoredAssetsFile, StoredFileName, "rb");
     if(StoredAssetsFile)
     {
-        fread(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
+        fread(StoredHeader, sizeof(kesa_header), 1, StoredAssetsFile);
 
-        Assert(StoredHeader->SizeOfStoredAsset == sizeof(stored_asset));
+        Assert(StoredHeader->SizeOfStoredAsset == sizeof(kesa_asset));
         Assert(StoredHeader->Version == FullVersion);
         Assert(StoredHeader->AssetCount);
         
         u32 AssetsSize = StoredHeader->AssetCount*StoredHeader->SizeOfStoredAsset;
 
         Platform.DeallocateMemory(AssetsMode->StoredAssets);
-        AssetsMode->StoredAssets = (stored_asset *)Platform.AllocateMemory(AssetsSize);
+        AssetsMode->StoredAssets = (kesa_asset *)Platform.AllocateMemory(AssetsSize);
         
         fread(AssetsMode->StoredAssets, StoredHeader->SizeOfStoredAsset,
               StoredHeader->AssetCount, StoredAssetsFile);
@@ -1200,19 +1201,40 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
     else
     {
         fopen_s(&StoredAssetsFile, StoredFileName, "wb");
-        StoredHeader->SizeOfStoredAsset = sizeof(stored_asset);
+        StoredHeader->MagicValue = KESA_MAGIC_VALUE;
         StoredHeader->Version = FullVersion;
+        StoredHeader->SizeOfStoredAsset = sizeof(kesa_asset);
         StoredHeader->AssetCount = 1;
-        AssetsMode->StoredAssets = (stored_asset *)Platform.AllocateMemory(StoredHeader->SizeOfStoredAsset);
+        StoredHeader->TagCount = AssetsMode->TagMapListCount;
+        StoredHeader->TagsOffset = sizeof(kesa_header);
+        u32 TagArraySize = sizeof(u64)*StoredHeader->TagCount;
+        StoredHeader->AssetsOffset = StoredHeader->TagsOffset + TagArraySize;
 
-        fwrite(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
+        temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+        u64 *GUIDArray = PushArray(TempMem.Arena, StoredHeader->TagCount, u64); 
         
-        stored_asset NullAsset = {};
-        fwrite(&NullAsset, sizeof(stored_asset), 1, StoredAssetsFile);
+        u32 I = 0;
+        for(tag_map_list *Iter = 0;
+            Iter;
+            Iter = Iter->Next)
+        {
+            GUIDArray[I] = Iter->Tag.GUID;
+        }
+
+        fwrite(StoredHeader, sizeof(kesa_header), 1, StoredAssetsFile);
+        fwrite(GUIDArray, TagArraySize, 1, StoredAssetsFile);
+        
+        kesa_asset NullAsset = {};
+        fwrite(&NullAsset, sizeof(kesa_asset), 1, StoredAssetsFile);
+        
+        AssetsMode->StoredAssets = (kesa_asset *)Platform.AllocateMemory(StoredHeader->SizeOfStoredAsset);
 
         fclose(StoredAssetsFile);
+        EndTemporaryMemory(TempMem);
     }
 }
+
+
 
 internal void
 WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
@@ -1220,13 +1242,14 @@ WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
     if(AssetsMode->AddAssetCount || AssetsMode->StoredAssetChanged)
     {
         char FileName[256];
-        stored_asset_file_header *StoredHeader = &AssetsMode->StoredHeader;
+        kesa_header *StoredHeader = &AssetsMode->StoredHeader;
 
         u32 FullVersion = UpdateEditorVersionFile(EditorState);
     
+        editor_meta *EditorMeta = &EditorState->EditorMeta;
         FormatString(ArrayCount(FileName), FileName, "sseas\\stored_assets_%d.%d.%d.%d.ssea",
-                     EditorState->Version.MajorHigh, EditorState->Version.MajorLow,
-                     EditorState->Version.MinorHigh, EditorState->Version.MinorLow);
+                     EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                     EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
 
         u32 ExistingAssetsCount = StoredHeader->AssetCount;
         StoredHeader->AssetCount += AssetsMode->AddAssetCount;
@@ -1235,7 +1258,7 @@ WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
         FILE *StoredAssetsFile;
         fopen_s(&StoredAssetsFile, FileName, "wb");
 
-        fwrite(StoredHeader, sizeof(stored_asset_file_header), 1, StoredAssetsFile);
+        fwrite(StoredHeader, sizeof(kesa_header), 1, StoredAssetsFile);
 
         if(ExistingAssetsCount)
         {
@@ -1256,7 +1279,7 @@ RemoveStoredAsset(editor_mode_assets *AssetsMode)
 {
     if(AssetsMode->ShowStoredAssetIndex)
     {
-        stored_asset *AssetToRemove = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
+        kesa_asset *AssetToRemove = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
         *AssetToRemove = {};
         for(u32 StoredIndex = AssetsMode->ShowStoredAssetIndex;
             StoredIndex < AssetsMode->StoredHeader.AssetCount - 1;
@@ -1308,7 +1331,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 AssetsMode->LastEditMode = AssetsMode->EditMode;            
 
                 AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-                if(AssetsMode->CurrentAsset->Type == StoredAssetType_None)
+                if(AssetsMode->CurrentAsset->Type == KESA_None)
                 {
                     InitAssetsMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
                 }
@@ -1361,7 +1384,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     else if((AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex) ||
                             AssetsMode->RemoveStoredAsset)
                     {
-                        stored_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
+                        kesa_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
 
                         ClearStoredAssetData(AssetsMode, Assets, PreviousAsset->Type,
@@ -1449,6 +1472,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         }
         else
         {
+            ClearStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset->Type,
+                                 &EditorState->AudioState);
+            Platform.DeallocateMemory(AssetsMode->StoredAssets);
             PlayTitleScreen(EditorState, TranState);
         }
     }

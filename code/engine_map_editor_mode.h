@@ -152,7 +152,7 @@ ToggleMEFlag(engine_map_editor *MapEditor, u32 Flag)
     }
 }
 
-internal void PlayMapEditor(editor_state *EditorState, transient_state *TranState);
+//internal void PlayMapEditor(editor_state *EditorState, transient_state *TranState);
 
 #define ENGINE_MAP_EDITOR_MODE_H
 #endif

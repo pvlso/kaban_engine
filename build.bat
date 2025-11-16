@@ -45,20 +45,3 @@ if %BuildDebug% == true (
 )
 
 popd
-
-:: Creating Directory Skeleton for assets
-IF NOT EXIST data_ mkdir data_
-IF NOT EXIST data_\binaryfiles  mkdir data_\binaryfiles
-IF NOT EXIST data_\bmps         mkdir data_\bmps
-IF NOT EXIST data_\fonts        mkdir data_\fonts
-IF NOT EXIST data_\jsons        mkdir data_\jsons
-IF NOT EXIST data_\logs         mkdir data_\logs
-IF NOT EXIST data_\nmps         mkdir data_\nmps
-IF NOT EXIST data_\solid_tiles  mkdir data_\solid_tiles
-IF NOT EXIST data_\spritesheets mkdir data_\spritesheets
-IF NOT EXIST data_\ssas 	mkdir data_\ssas
-IF NOT EXIST data_\sseas 	mkdir data_\sseas
-IF NOT EXIST data_\sswms 	mkdir data_\sswms
-IF NOT EXIST data_\tilesets 	mkdir data_\tilesets
-IF NOT EXIST data_\txts 	mkdir data_\txts
-IF NOT EXIST data_\wavs 	mkdir data_\wavs

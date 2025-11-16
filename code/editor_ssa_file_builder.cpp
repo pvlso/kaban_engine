@@ -11,7 +11,7 @@ LoadBMP(char *FileName, platform_file_type Type, memory_arena *Arena)
 {
     loaded_bitmap Result = {};
     
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena);    
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena, 0);    
     if(ReadResult.Size != 0)
     {
         bitmap_header *Header = (bitmap_header *)ReadResult.Contents;
@@ -156,7 +156,7 @@ LoadWAV(char *FileName, u32 SectionFirstSampleIndex, u32 SectionSampleCount, voi
 {
     loaded_sound Result = {};
     
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_WAV, Arena);    
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_WAV, Arena, 0);    
     if(ReadResult.Size != 0)
     {
         if(!Arena)
@@ -304,7 +304,7 @@ internal loaded_text
 LoadText(char *FileName, memory_arena *Arena)
 {
     loaded_text Result = {};
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena);    
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, 0);    
     Result.String = (char *)ReadResult.Contents;
 
     return(Result);

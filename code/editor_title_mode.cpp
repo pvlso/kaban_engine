@@ -42,8 +42,8 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(UI->NkButtonLabel(Nk, "Map Editor"))
             {
-                PlayMapEditor(EditorState, TranState);
-                Result = true;
+//                PlayMapEditor(EditorState, TranState);
+//                Result = true;
                 return(Result);
             }
 
@@ -64,12 +64,14 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
         UI->NkLayoutRowDynamic(Nk, 40, 1);
         UI->NkSpacer(Nk);
 
-        FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d", EditorState->Version.MajorHigh,
-                     EditorState->Version.MajorLow, EditorState->Version.MinorHigh, EditorState->Version.MinorLow);
+        editor_meta EditorMeta = EditorState->EditorMeta;
+        FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d",
+                     EditorMeta.KESAVersion[0], EditorMeta.KESAVersion[1],
+                     EditorMeta.KESAVersion[2], EditorMeta.KESAVersion[3]);
         UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
         UI->NkSpacer(Nk);
 
-        
+#if 0        
         if(EditorState->MapStartup.NewMap)
         {
             UI->NkCheckboxLabel(Nk, "Create New Map", &EditorState->MapStartup.NewMap);
@@ -103,7 +105,8 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
             UI->NkPropertyInt(Nk, "#Map ID: ", 0, (int *)&EditorState->MapStartup.MapID, 255, 1, 0.1f);
         }
         UI->NkLayoutRowEnd(Nk);
+#endif
     }
-
+    
     return(Result);
 }

@@ -32,6 +32,7 @@ global_variable b32 GlobalRunning;
 global_variable b32 GlobalPause;
 global_variable b32 GlobalAppIsActive;
 global_variable s64 GlobalPerfCountFrequency;
+global_variable wchar_t GlobalDATAPath[WIN32_STATE_FILE_NAME_COUNT];
 
 global_variable win32_window_dimension GlobalFramebufferDim;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
@@ -990,6 +991,69 @@ Win32GetEXEFileName(win32_state *State)
             State->OnePastLastEXEFileNameSlash = Scan + 1;
         }
     }
+}
+
+internal b32
+Win32DirectoryExists(wchar_t *Path)
+{
+    b32 Result = false;
+    DWORD Attribs = GetFileAttributesW(Path);
+
+    if(Attribs != INVALID_FILE_ATTRIBUTES)
+        Result = (Attribs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+    return(Result);
+}
+
+internal void
+Win32GetDATAPath(win32_state *State)
+{
+    wchar_t *SlashBeforeBuild = 0;
+    wchar_t *BuildString = L"build";
+    for(wchar_t *Scan = State->EXEFileName;
+        *Scan;
+        ++Scan)
+    {
+        if(*Scan == '\\')
+        {
+            wchar_t *Test = Scan + 1;
+            wchar_t *C = BuildString;
+            while((*Test == *C) && *C)
+            {
+                Test++;
+                C++;
+            }
+
+            if((*Test == '\\') && (*C == 0))
+            {
+                SlashBeforeBuild = Scan + 1;
+                break;
+            }
+        }
+    }
+
+    wchar_t *At = State->EXEFileName;
+    wchar_t *Dest = GlobalDATAPath;
+    u32 Length = 0;
+    while(At != SlashBeforeBuild)
+    {
+        *Dest++ = *At++;
+        ++Length;
+    }
+
+    Length += 6;
+    
+    Assert(Length <= WIN32_STATE_FILE_NAME_COUNT);
+
+    *Dest++ = 'd';
+    *Dest++ = 'a';
+    *Dest++ = 't';
+    *Dest++ = 'a';
+    *Dest++ = '\\';
+    *Dest++ = 0;
+    
+    if(!Win32DirectoryExists(GlobalDATAPath))
+        CreateDirectoryW(GlobalDATAPath, NULL);
 }
 
 internal void
@@ -2438,14 +2502,9 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(Win32GetAllFilesOfTypeBegin)
     wchar_t *WildCard = L"*.*";
     switch(Type)
     {
-        case PlatformFileType_AssetFile:
+        case PlatformFileType_KEA:
         {
             WildCard = L"*.ssa";
-        } break;
-
-        case PlatformFileType_SavedEditorFile:
-        {
-            WildCard = L"*.hhs";
         } break;
 
         InvalidDefaultCase;
@@ -2559,19 +2618,9 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
         case PlatformFileType_None:
             break;
 
-        case PlatformFileType_AssetFile:
+        case PlatformFileType_KEA:
         {
             WildCard = "*.ssa";
-        } break;
-
-        case PlatformFileType_SavedEditorFile:
-        {
-            WildCard = "*.hhs";
-        } break;
-
-        case PlatformFileType_PNG:
-        {
-            WildCard = "*.png";
         } break;
 
         case PlatformFileType_BMP:
@@ -2604,8 +2653,7 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
             WildCard = "txts\\*.txt";
         } break;
 
-        case PlatformFileType_TTF
-            :
+        case PlatformFileType_TTF:
         {
             WildCard = "fonts\\*.ttf";
         } break;
@@ -2656,24 +2704,15 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 {
     read_file_result Result = {};
 
-    b32 IsTXT = false;
-
-    char *WildCard = "*.*";
+    char *WildCard = "";
     switch(Type)
     {
-        case PlatformFileType_AssetFile:
+        case PlatformFileType_None:
+            break;
+            
+        case PlatformFileType_KEA:
         {
             WildCard = "*.ssa";
-        } break;
-
-        case PlatformFileType_SavedEditorFile:
-        {
-            WildCard = "*.hhs";
-        } break;
-
-        case PlatformFileType_PNG:
-        {
-            WildCard = "*.png";
         } break;
 
         case PlatformFileType_BMP:
@@ -3048,7 +3087,7 @@ Win32AddFontGlyph(win32_loaded_font *Font, u32 CodePoint)
 internal void
 Win32FindFontName(char *FileName, char *Dest, memory_arena *Arena)
 {
-    read_file_result ReadResult = Win32PlatformReadEntireFile(FileName, PlatformFileType_TTF, Arena);
+    read_file_result ReadResult = Win32PlatformReadEntireFile(FileName, PlatformFileType_TTF, Arena, 0);
     if(ReadResult.Contents != 0)
     {
         u8 *Buffer = (u8 *)ReadResult.Contents;
@@ -3168,6 +3207,11 @@ internal PLATFORM_LOAD_FONT_ASSET(Win32LoadFontAsset)
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+internal void
+Win32InitDataLayout(win32_state *Win32State)
+{
+}
+
 internal inline void
 Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
                      platform_work_queue *LowPQ)
@@ -3235,6 +3279,8 @@ WinMain(HINSTANCE Instance,
     wchar_t EditorCodeLockFullPath[WIN32_STATE_FILE_NAME_COUNT];
     Win32BuildEXEPathFileName(&Win32State, L"lock.tmp",
                               sizeof(EditorCodeLockFullPath), EditorCodeLockFullPath);
+
+    Win32GetDATAPath(&Win32State);
 
     // NOTE(casey): Set the Windows scheduler granularity to 1ms
     // so that our Sleep() can be more granular.

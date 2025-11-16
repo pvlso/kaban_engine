@@ -27,14 +27,14 @@ struct builder_loaded_tileset
     ssa_tile *Tiles;
     loaded_bitmap TilesetBitmap;
     loaded_bitmap MergeTile;
-    stored_asset_tileset *StoredTileset;
+    kesa_tileset *StoredTileset;
 };
 
 struct builder_loaded_spritesheet
 {
     bitmap_id *SpriteIDs;
     loaded_bitmap *Sprites;
-    stored_asset_spritesheet *StoredSheet;
+    kesa_spritesheet *StoredSheet;
 };
 
 struct builder_asset_source_font
@@ -51,12 +51,12 @@ struct builder_asset_source_font_glyph
 
 struct builder_asset_source_sound
 {
-    stored_asset_sound *Sound;
+    kesa_sound *Sound;
 };
 
 struct builder_asset_source_bitmap
 {
-    stored_asset_bitmap *Bitmap;
+    kesa_bitmap *Bitmap;
 };
 
 struct builder_asset_source_tile
@@ -82,17 +82,17 @@ struct builder_asset_source_spritesheet
 
 struct builder_asset_source_text
 {
-    stored_asset_text *Text;
+    kesa_text *Text;
 };
 
 struct builder_asset_source_binary_file
 {
-    stored_asset_binary_file *File;
+    kesa_binary_file *File;
 };
 
 struct builder_asset_source_sswm_file
 {
-    stored_asset_sswm_file *File;
+    kesa_sswm_file *File;
 };
 
 struct builder_asset_source
@@ -129,7 +129,7 @@ struct builder_assets
 
     u32 AssetIndex;
 
-    u32 StoredAssetCounts[StoredAssetType_Count];
+    u32 StoredAssetCounts[KESA_Count];
     u32 TypeAddingCount;
     ssa_asset_type *TypeAddingOrder[Asset_Count];
 };

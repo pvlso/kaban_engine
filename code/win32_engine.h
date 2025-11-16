@@ -84,7 +84,7 @@ struct win32_state
 {
     wchar_t EXEFileName[WIN32_STATE_FILE_NAME_COUNT];
     wchar_t *OnePastLastEXEFileNameSlash;
-    
+
     HWND WindowHandle;
 
     WCHAR highSurrogate;

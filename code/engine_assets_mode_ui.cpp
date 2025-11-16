@@ -107,7 +107,7 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
             AssetIndex < AssetsMode->StoredHeader.AssetCount;
             ++AssetIndex)
         {
-            stored_asset Asset = AssetsMode->StoredAssets[AssetIndex];
+            kesa_asset Asset = AssetsMode->StoredAssets[AssetIndex];
 
             FormatString(ArrayCount(Text), Text, "Asset%d", AssetIndex);
             struct nk_rect Bounds = UI->NkWidgetBounds(Nk);
@@ -323,7 +323,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
     if(UI->NkGroupBegin(Nk, "Asset Advance View", NK_WINDOW_NO_SCROLLBAR))
     {
-        stored_asset *StoredAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex; 
+        kesa_asset *StoredAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex; 
         UI->NkLayoutRowDynamic(Nk, 40, 1);
         UI->NkPropertyInt(Nk, "Stored Asset: ", 0,
                           (int *)&AssetsMode->ShowStoredAssetIndex,
@@ -334,10 +334,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
         {
             switch(StoredAsset->Type)
             {
-                case StoredAssetType_Bitmap:
+                case KESA_Bitmap:
                 {
                     bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-                    stored_asset_bitmap *StoredBitmap = &StoredAsset->Bitmap;
+                    kesa_bitmap *StoredBitmap = &StoredAsset->Bitmap;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -381,10 +381,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     UI->NkLayoutSpaceEnd(Nk);
                 } break;
 
-                case StoredAssetType_SpriteSheet:
+                case KESA_SpriteSheet:
                 {
                     spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
-                    stored_asset_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
+                    kesa_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -441,10 +441,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     UI->NkLayoutSpaceEnd(Nk);
                 } break;
 
-                case StoredAssetType_Tileset:
+                case KESA_Tileset:
                 {
                     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-                    stored_asset_tileset *StoredTileset = &StoredAsset->Tileset;
+                    kesa_tileset *StoredTileset = &StoredAsset->Tileset;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -499,10 +499,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     UI->NkLayoutSpaceEnd(Nk);
                 } break;
 
-                case StoredAssetType_Font:
+                case KESA_Font:
                 {
                     font_mode *FontMode = &AssetsMode->FontMode;
-                    stored_asset_font *StoredFont = &StoredAsset->Font;
+                    kesa_font *StoredFont = &StoredAsset->Font;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -531,10 +531,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     }
                 } break;
 
-                case StoredAssetType_Text:
+                case KESA_Text:
                 {
                     text_mode *TextMode = &AssetsMode->TextMode;
-                    stored_asset_text *StoredText = &StoredAsset->Text;
+                    kesa_text *StoredText = &StoredAsset->Text;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -546,10 +546,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
 //                    UISpace(&WindowLayout, V2(1512.0f, 30.0f));
                 } break;
 
-                case StoredAssetType_Sound:
+                case KESA_Sound:
                 {
                     sound_mode *SoundMode = &AssetsMode->SoundMode;
-                    stored_asset_sound *StoredSound = &StoredAsset->Sound;
+                    kesa_sound *StoredSound = &StoredAsset->Sound;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -571,11 +571,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Channel Count: %d", SoundMode->Sound.ChannelCount);
                 } break;
 
-                case StoredAssetType_File:
+                case KESA_File:
                 {
                     // TODO(paul): Add a feature to listen to the sound saved
                     binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
-                    stored_asset_binary_file *StoredFile = &StoredAsset->File;
+                    kesa_binary_file *StoredFile = &StoredAsset->File;
 
                     UI->NkLayoutRowDynamic(Nk, 30, 1);
                     struct nk_rect Rect = UI->NkWidgetBounds(Nk);
@@ -744,11 +744,11 @@ ExtractTagValues(kea_tag_map *Tag, memory_arena *TempArena)
     
 inline void
 DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                       stored_asset *CurrentAsset)
+                       kesa_asset *CurrentAsset)
 {
     temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
 
-    stored_asset_type StoredType = StoredAssetTypeFromEditMode(AssetsMode->EditMode);
+    kesa_type StoredType = KESAFromEditMode(AssetsMode->EditMode);
     u32 FileCount = AssetsMode->SourceFileCounts[StoredType];
     char **FileStrings = AssetsMode->SourceFiles[StoredType];
 
@@ -943,10 +943,10 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
 
 internal void
 DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                         stored_asset *CurrentAsset)
+                         kesa_asset *CurrentAsset)
 {
     bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-    stored_asset_bitmap *StoredBitmap = &CurrentAsset->Bitmap;
+    kesa_bitmap *StoredBitmap = &CurrentAsset->Bitmap;
     loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
     
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
@@ -967,7 +967,7 @@ DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_u
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "Source: %s",
-                         AssetsMode->SourceFiles[StoredAssetType_Bitmap][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_Bitmap][AssetsMode->FileIndex]);
 
             UI->NkLayoutRowDynamic(Nk, 30, 2);
             Rect = UI->NkWidgetBounds(Nk);
@@ -992,10 +992,10 @@ DrawAssetsBitmapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_u
 
 internal void
 DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                              stored_asset *CurrentAsset)
+                              kesa_asset *CurrentAsset)
 {
     spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
-    stored_asset_spritesheet *StoredSpriteSheet = &CurrentAsset->SpriteSheet;
+    kesa_spritesheet *StoredSpriteSheet = &CurrentAsset->SpriteSheet;
     loaded_bitmap *SpriteSheetBitmap = &SpriteSheetMode->SpriteSheetBitmap;
 
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
@@ -1012,7 +1012,7 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[StoredAssetType_SpriteSheet][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_SpriteSheet][AssetsMode->FileIndex]);
 
             UI->NkLayoutRowDynamic(Nk, 30, 2);
             Rect = UI->NkWidgetBounds(Nk);
@@ -1082,10 +1082,10 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
 
 internal void
 DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                          stored_asset *CurrentAsset)
+                          kesa_asset *CurrentAsset)
 {
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-    stored_asset_tileset *StoredTileset = &CurrentAsset->Tileset;
+    kesa_tileset *StoredTileset = &CurrentAsset->Tileset;
     loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
 
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
@@ -1102,7 +1102,7 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[StoredAssetType_Tileset][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_Tileset][AssetsMode->FileIndex]);
             UI->NkLayoutRowDynamic(Nk, 30, 2);
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
@@ -1220,13 +1220,13 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
 
 internal void
 DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                        stored_asset *CurrentAsset)
+                        kesa_asset *CurrentAsset)
 {
     // TODO(paul): Make it more comfortable to use, like in a music player,
     // a button to stop and resume, a progress bar, and a bit more information
     // about sound itself: length, frequency, volume, etc.
     sound_mode *SoundMode = &AssetsMode->SoundMode;
-    stored_asset_sound *StoredSound = &CurrentAsset->Sound;
+    kesa_sound *StoredSound = &CurrentAsset->Sound;
     
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
@@ -1243,7 +1243,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[StoredAssetType_Sound][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_Sound][AssetsMode->FileIndex]);
 
             string_array *SoundChainStringArray =
                 GetOrCreateStringArray(UIState, "SSASoundChain", SSASoundChain_Count);
@@ -1289,7 +1289,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui
 
 internal void
 DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                       stored_asset *CurrentAsset)
+                       kesa_asset *CurrentAsset)
 {
     text_mode *TextMode = &AssetsMode->TextMode;
 
@@ -1322,13 +1322,13 @@ DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
 
 internal void
 DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                       stored_asset *CurrentAsset)
+                       kesa_asset *CurrentAsset)
 {
     // TODO(paul): Decide what to do with font assets, should I remove them completely,
     // or leave functionality, I just don't now yet if I am going to use it because,
     // nuklear provides fonts to the engine.
     font_mode *FontMode = &AssetsMode->FontMode;
-    stored_asset_font *StoredFont = &CurrentAsset->Font;
+    kesa_font *StoredFont = &CurrentAsset->Font;
 
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
@@ -1343,7 +1343,7 @@ DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
             UI->NkLayoutRowDynamic(Nk, 30, 1);
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ", AssetsMode->SourceFiles[StoredAssetType_Font][AssetsMode->FileIndex]);
+            UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ", AssetsMode->SourceFiles[KESA_Font][AssetsMode->FileIndex]);
 
             UI->NkLayoutRowDynamic(Nk, 30, 1);
             Rect = UI->NkWidgetBounds(Nk);
@@ -1367,11 +1367,11 @@ DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
 
 internal void
 DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                       stored_asset *CurrentAsset)
+                       kesa_asset *CurrentAsset)
 {
     // TODO(paul): Advance on this one, what file is loaded what data it containce,
     // visualize all the data posiable?
-    stored_asset_binary_file *StoredFile = &CurrentAsset->File;
+    kesa_binary_file *StoredFile = &CurrentAsset->File;
     
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
@@ -1387,7 +1387,7 @@ DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[StoredAssetType_File][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_File][AssetsMode->FileIndex]);
 
             UI->NkLayoutRowDynamic(Nk, 30, 1);
             Rect = UI->NkWidgetBounds(Nk);
@@ -1401,10 +1401,10 @@ DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
 
 internal void
 DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *UI, nk_context *Nk,
-                       stored_asset *CurrentAsset)
+                       kesa_asset *CurrentAsset)
 {
     // TODO(paul): Advance on this one, visualize all the data posiable
-    stored_asset_sswm_file *StoredFile = &CurrentAsset->SSWM;
+    kesa_sswm_file *StoredFile = &CurrentAsset->SSWM;
     
     DrawStandardEditLayout(AssetsMode, UIState, UI, Nk, CurrentAsset);
 
@@ -1420,7 +1420,7 @@ DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui 
             Rect = UI->NkWidgetBounds(Nk);
             UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             UI->NkLabelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[StoredAssetType_SSWM][AssetsMode->FileIndex]);
+                         AssetsMode->SourceFiles[KESA_SSWM][AssetsMode->FileIndex]);
 
             UI->NkLayoutRowDynamic(Nk, 30, 1);
             Rect = UI->NkWidgetBounds(Nk);
@@ -1440,7 +1440,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
     nk_ui *UI = UIState->UI;
     nk_context *Nk = UIState->Nk;
     
-    stored_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
+    kesa_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
     if(AssetsMode->EditStoredAsset)
     {
         CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;

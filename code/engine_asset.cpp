@@ -844,7 +844,7 @@ AllocateEditorAssets(memory_arena *Arena, umm Size, transient_state *TranState,
 
     // NOTE(casey): This code was written using Snuffleupagus-Oriented Programming (SOP)
     {
-        platform_file_group FileGroup = Platform.GetAllFilesOfTypeBegin(PlatformFileType_AssetFile);
+        platform_file_group FileGroup = Platform.GetAllFilesOfTypeBegin(PlatformFileType_KEA);
         Assets->FileCount = FileGroup.FileCount;
         Assets->Files = PushArray(Arena, Assets->FileCount, asset_file);
         for(u32 FileIndex = 0;

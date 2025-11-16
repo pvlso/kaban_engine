@@ -6,169 +6,6 @@
    $Creator: BabyKaban $
    $Notice: $
    ======================================================================== */
-#pragma pack(push, 1)
-struct bitmap_header
-{
-    uint16 FileType;
-    uint32 FileSize;
-    uint16 Reserved1;
-    uint16 Reserved2;
-    uint32 BitmapOffset;
-    uint32 Size;
-    int32 Width;
-    int32 Height;
-    uint16 Planes;
-    uint16 BitsPerPixel;
-    uint32 Compression;
-    uint32 SizeOfBitmap;
-    int32 HorzResolution;
-    int32 VertResolution;
-    uint32 ColorsUsed;
-    uint32 ColorsImportant;
-
-    uint32 RedMask;
-    uint32 GreenMask;
-    uint32 BlueMask;
-};
-
-struct WAVE_header
-{
-    uint32 RIFFID;
-    uint32 Size;
-    uint32 WAVEID;
-};
-
-#define RIFF_CODE(a, b, c, d) (((uint32)(a) << 0) | ((uint32)(b) << 8) | ((uint32)(c) << 16) | ((uint32)(d) << 24))
-enum
-{
-    WAVE_ChunkID_fmt = RIFF_CODE('f', 'm', 't', ' '),
-    WAVE_ChunkID_data = RIFF_CODE('d', 'a', 't', 'a'),
-    WAVE_ChunkID_RIFF = RIFF_CODE('R', 'I', 'F', 'F'),
-    WAVE_ChunkID_WAVE = RIFF_CODE('W', 'A', 'V', 'E'),
-};
-
-struct WAVE_chunk
-{
-    uint32 ID;
-    uint32 Size;
-};
-
-struct WAVE_fmt
-{
-    uint16 wFormatTag;
-    uint16 nChannels;
-    uint32 nSamplesPerSec;
-    uint32 nAvgBytesPerSec;
-    uint16 nBlockAlign;
-    uint16 wBitsPerSample;
-    uint16 cbSize;
-    uint16 wValidBitsPerSample;
-    uint32 dwChannelMask;
-    uint8 SubFormat[16];
-};
-
-#pragma pack(pop)
-
-enum stored_asset_type
-{
-    StoredAssetType_None,
-
-    StoredAssetType_Bitmap,
-    StoredAssetType_SpriteSheet,
-    StoredAssetType_Tileset,
-    StoredAssetType_Sound,
-    StoredAssetType_Text,
-    StoredAssetType_Font,
-    StoredAssetType_File,
-    StoredAssetType_SSWM,
-
-    StoredAssetType_Count,
-};
-
-struct stored_asset_bitmap
-{
-    v2 AlignPercentage;
-};
-
-struct stored_asset_spritesheet
-{
-    u32 SpriteCount;
-    u32 SpriteWidth;
-    u32 SpriteHeight;
-    v2 SpriteAlignPercentage;
-};
-
-struct stored_asset_tileset
-{
-    char MergeTileFileName[256];
-
-    b32 MergedTile;
-    u32 TileCount;
-
-    u32 TileWidth;
-    u32 TileHeight;
-
-    u32 TileOffsetsX[512];
-    u32 TileOffsetsY[512];
-};
-
-struct stored_asset_sound
-{
-    u32 FirstSampleIndex;
-    u32 Chain;
-};
-
-struct stored_asset_text
-{
-    u32 PLACEHOLDER;
-};
-
-struct stored_asset_font
-{
-    u32 CodePointCount;
-    u32 FirstCodePoint;
-    u32 LastCodePoint;
-    u32 FontSizeInPixels;
-};
-
-struct stored_asset_binary_file
-{
-    u32 FileSize;
-};
-
-struct stored_asset_sswm_file
-{
-    u32 FileSize;
-};
-
-struct stored_asset
-{
-    u64 GUID;
-
-    stored_asset_type Type;
-
-    u32 TagCount;
-    kea_tag AssetTags[32];
-    char SourceFileName[256];
-    union
-    {
-        stored_asset_bitmap Bitmap;
-        stored_asset_spritesheet SpriteSheet;
-        stored_asset_tileset Tileset;
-        stored_asset_sound Sound;
-        stored_asset_text Text;
-        stored_asset_font Font;
-        stored_asset_binary_file File;
-        stored_asset_sswm_file SSWM;
-    };
-};
-
-struct stored_asset_file_header
-{
-    u32 SizeOfStoredAsset;
-    u32 AssetCount;
-    u32 Version;
-};
 
 enum assets_edit_mode
 {
@@ -249,7 +86,7 @@ struct sswm_mode
     u8 *FileData;
 };
 
-static platform_file_type StoredToSourceTypeMap[StoredAssetType_Count] =
+static platform_file_type StoredToSourceTypeMap[KESA_Count] =
 {
     PlatformFileType_None, PlatformFileType_BMP,
     PlatformFileType_SSBMP, PlatformFileType_TSBMP,
@@ -275,7 +112,7 @@ struct editor_mode_assets
     memory_arena UtilityArena;
     memory_arena UtilityTempArena;
     
-    stored_asset_file_header StoredHeader;
+    kesa_header StoredHeader;
     b32 StoredAssetChanged;
     b32 EditStoredAsset;
     b32 RemoveStoredAsset;
@@ -283,15 +120,15 @@ struct editor_mode_assets
     b32 ShowStoredAssets;
     u32 ShowStoredAssetIndex;
     u32 LastShowStoredAssetIndex;
-    stored_asset *StoredAssets;
+    kesa_asset *StoredAssets;
 
     u32 AddAssetCount;
-    stored_asset AssetsToAdd[256];
+    kesa_asset AssetsToAdd[256];
     
     b32 WriteSSA;
     b32 WriteAssets;
 
-    stored_asset *CurrentAsset;
+    kesa_asset *CurrentAsset;
     
     b32 AddAsset;
     b32 RemoveTag;
@@ -310,8 +147,8 @@ struct editor_mode_assets
     u32 SubFileIndex;
     u32 LastSubFileIndex;
 
-    u32 SourceFileCounts[StoredAssetType_Count];
-    char **SourceFiles[StoredAssetType_Count];
+    u32 SourceFileCounts[KESA_Count];
+    char **SourceFiles[KESA_Count];
     u32 SolidTileFileCount;
     char **SolidTileFiles;
     
@@ -337,36 +174,36 @@ AssetsEditModeFromStoredType(u32 StoredType)
     assets_edit_mode Result = EditMode_None;
     switch(StoredType)
     {
-        case StoredAssetType_None:        {}                               break;
-        case StoredAssetType_Bitmap:      {Result = EditMode_Bitmap;}      break;
-        case StoredAssetType_SpriteSheet: {Result = EditMode_SpriteSheet;} break;
-        case StoredAssetType_Tileset:     {Result = EditMode_Tileset;}     break;
-        case StoredAssetType_Sound:       {Result = EditMode_Sound;}       break;
-        case StoredAssetType_Text:        {Result = EditMode_Text;}        break;
-        case StoredAssetType_Font:        {Result = EditMode_Font;}        break;
-        case StoredAssetType_File:        {Result = EditMode_File;}        break;
-        case StoredAssetType_SSWM:        {Result = EditMode_SSWM;}        break;
+        case KESA_None:        {}                               break;
+        case KESA_Bitmap:      {Result = EditMode_Bitmap;}      break;
+        case KESA_SpriteSheet: {Result = EditMode_SpriteSheet;} break;
+        case KESA_Tileset:     {Result = EditMode_Tileset;}     break;
+        case KESA_Sound:       {Result = EditMode_Sound;}       break;
+        case KESA_Text:        {Result = EditMode_Text;}        break;
+        case KESA_Font:        {Result = EditMode_Font;}        break;
+        case KESA_File:        {Result = EditMode_File;}        break;
+        case KESA_SSWM:        {Result = EditMode_SSWM;}        break;
         InvalidDefaultCase;
     }
 
     return(Result);
 }
 
-inline stored_asset_type
-StoredAssetTypeFromEditMode(u32 EditMode)
+inline kesa_type
+KESAFromEditMode(u32 EditMode)
 {
-    stored_asset_type Result = StoredAssetType_None;
+    kesa_type Result = KESA_None;
     switch(EditMode)
     {
         case EditMode_None:        {}                                      break;
-        case EditMode_Bitmap:      {Result = StoredAssetType_Bitmap;}      break;
-        case EditMode_SpriteSheet: {Result = StoredAssetType_SpriteSheet;} break;
-        case EditMode_Tileset:     {Result = StoredAssetType_Tileset;}     break;
-        case EditMode_Sound:       {Result = StoredAssetType_Sound;}       break;
-        case EditMode_Text:        {Result = StoredAssetType_Text;}        break;
-        case EditMode_Font:        {Result = StoredAssetType_Font;}        break;
-        case EditMode_File:        {Result = StoredAssetType_File;}        break;
-        case EditMode_SSWM:        {Result = StoredAssetType_SSWM;}        break;
+        case EditMode_Bitmap:      {Result = KESA_Bitmap;}      break;
+        case EditMode_SpriteSheet: {Result = KESA_SpriteSheet;} break;
+        case EditMode_Tileset:     {Result = KESA_Tileset;}     break;
+        case EditMode_Sound:       {Result = KESA_Sound;}       break;
+        case EditMode_Text:        {Result = KESA_Text;}        break;
+        case EditMode_Font:        {Result = KESA_Font;}        break;
+        case EditMode_File:        {Result = KESA_File;}        break;
+        case EditMode_SSWM:        {Result = KESA_SSWM;}        break;
         InvalidDefaultCase;
     }
 

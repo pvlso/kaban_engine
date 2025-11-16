@@ -90,23 +90,9 @@ enum editor_mode
     EditorMode_SimulateGame,
 };
 
-struct working_version
+struct editor_meta
 {
-    u8 MajorHigh;
-    u8 MajorLow;
-    u8 MinorHigh;
-    u8 MinorLow;
-};
-
-struct world_map_startup
-{
-    b32 NewMap;
-    u32 MapID;
-    s32 MapWidth;
-    s32 MapHeight;
-
-    working_version MapVersion;
-    sswm_id ID;
+    u8 KESAVersion[4];
 };
 
 struct editor_state
@@ -120,9 +106,8 @@ struct editor_state
     b32 Play;
     playing_sound *Sound;
 
-    working_version Version;
-    world_map_startup MapStartup;
-
+    editor_meta EditorMeta;
+    
     b32 UIEnable;
     ui_state UIState;
     
