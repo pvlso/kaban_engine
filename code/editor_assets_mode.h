@@ -92,7 +92,7 @@ static platform_file_type StoredToSourceTypeMap[KESA_Count] =
     PlatformFileType_SSBMP, PlatformFileType_TSBMP,
     PlatformFileType_WAV, PlatformFileType_TXT,
     PlatformFileType_TTF, PlatformFileType_BIN,
-    PlatformFileType_SSWM
+    PlatformFileType_KEWM
 };
 
 struct tag_map_list
@@ -112,7 +112,6 @@ struct editor_mode_assets
     memory_arena UtilityArena;
     memory_arena UtilityTempArena;
     
-    kesa_header StoredHeader;
     b32 StoredAssetChanged;
     b32 EditStoredAsset;
     b32 RemoveStoredAsset;
@@ -120,7 +119,10 @@ struct editor_mode_assets
     b32 ShowStoredAssets;
     u32 ShowStoredAssetIndex;
     u32 LastShowStoredAssetIndex;
+
+    kesa_header StoredHeader;
     kesa_asset *StoredAssets;
+    u64 *TagGUIDs;
 
     u32 AddAssetCount;
     kesa_asset AssetsToAdd[256];

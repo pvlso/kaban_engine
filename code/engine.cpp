@@ -68,18 +68,28 @@ UpdateEditorVersionFile(editor_state *EditorState)
     u32 Result = 0;
     
     editor_meta *EditorMeta = &EditorState->EditorMeta;
-    Result = *(u32 *)(EditorMeta->KESAVersion) + 1;
+
+    u32 FullVersion = (((u32)EditorMeta->KESAVersion[0] << 24) |
+                       ((u32)EditorMeta->KESAVersion[1] << 16) |
+                       ((u32)EditorMeta->KESAVersion[2] <<  8) |
+                       ((u32)EditorMeta->KESAVersion[3]));
+
+    Result = FullVersion + 1;
     EditorMeta->KESAVersion[0] = (Result >> 24) & 0xff;
     EditorMeta->KESAVersion[1] = (Result >> 16) & 0xff;
     EditorMeta->KESAVersion[2] = (Result >> 8)  & 0xff;
     EditorMeta->KESAVersion[3] = (Result)       & 0xff;
-#if 0
-    
-    FILE *VersionFile;
-    fopen_s(&VersionFile, "editor_version_file.ssev", "wb");
-    fwrite(&EditorState->Version, sizeof(working_version), 1, VersionFile);
-    fclose(VersionFile);
-#endif
+
+    platform_file_handle EditorMetaHandle =
+        Platform.OpenFile("..\\editor_metadata.json", PlatformFileType_None, PlatformFileOp_Write);
+
+    char Data[256];
+    FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [%d, %d, %d, %d]\n}",
+                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+    Platform.WriteDataToFile(&EditorMetaHandle, 0, StringLength(Data), Data);
+    Platform.CloseFile(&EditorMetaHandle);
+
     return(Result);
 }
 

@@ -473,10 +473,6 @@ BeginUI(ui_state *UIState, editor_render_commands *Commands, editor_assets *Asse
 {
     if(!UIState->Initialized)
     {
-//        InitializeStrings(&UIState->StringsArena);
-
-        UIState->JsonStringsHead = ParseJson("enum_strings.json", &UIState->UIArena);
-
         UIState->UI = UI;
         UIState->Nk = Nk;
         

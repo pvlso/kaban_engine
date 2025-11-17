@@ -1086,22 +1086,38 @@ typedef enum platform_file_type
     PlatformFileType_JSON,
     PlatformFileType_TTF,
     PlatformFileType_BIN,
-    PlatformFileType_SSWM,
     
     PlatformFileType_Count,
 } platform_file_type;
-    
+
+typedef enum platform_file_op
+{
+    PlatformFileOp_Read,
+    PlatformFileOp_Write,
+    PlatformFileOp_WriteExisting,
+
+} platform_file_op;
+
 #define PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(name) platform_file_group name(platform_file_type Type)
 typedef PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(platform_get_all_files_of_type_begin);
 
 #define PLATFORM_GET_ALL_FILE_OF_TYPE_END(name) void name(platform_file_group *FileGroup)
 typedef PLATFORM_GET_ALL_FILE_OF_TYPE_END(platform_get_all_files_of_type_end);
 
-#define PLATFORM_OPEN_FILE(name) platform_file_handle name(platform_file_group *FileGroup)
-typedef PLATFORM_OPEN_FILE(platform_open_next_file);
+#define PLATFORM_OPEN_NEXT_FILE(name) platform_file_handle name(platform_file_group *FileGroup)
+typedef PLATFORM_OPEN_NEXT_FILE(platform_open_next_file);
+
+#define PLATFORM_OPEN_FILE(name) platform_file_handle name(char *FileName, platform_file_type Type, platform_file_op Op)
+typedef PLATFORM_OPEN_FILE(platform_open_file);
+
+#define PLATFORM_CLOSE_FILE(name) void name(platform_file_handle *Handle)
+typedef PLATFORM_CLOSE_FILE(platform_close_file);
 
 #define PLATFORM_READ_DATA_FROM_FILE(name) void name(platform_file_handle *Source, u64 Offset, u64 Size, void *Dest)
 typedef PLATFORM_READ_DATA_FROM_FILE(platform_read_data_from_file);
+
+#define PLATFORM_WRITE_DATA_TO_FILE(name) void name(platform_file_handle *Source, u64 Offset, u64 Size, void *Data)
+typedef PLATFORM_WRITE_DATA_TO_FILE(platform_write_data_to_file);
 
 #define PLATFORM_FILE_ERROR(name) void name(platform_file_handle *Handle, char *Message)
 typedef PLATFORM_FILE_ERROR(platform_file_error);
@@ -1121,6 +1137,9 @@ typedef PLATFORM_FREE_FILE_MEMORY(platform_free_file_memory);
 
 #define PLATFORM_READ_ENTIRE_FILE(name) read_file_result name(char *FileName, platform_file_type Type, memory_arena *Arena, b32 IsTXT)
 typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);
+
+#define PLATFORM_WRITE_ENTIRE_FILE(name) u32 name(char *FileName, platform_file_type Type, u8 *Data, u32 Size)
+typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
 #define PlatformNoFileErrors(Handle) ((Handle)->NoErrors)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1189,13 +1208,18 @@ typedef struct platform_api
     platform_get_all_files_of_type_begin *GetAllFilesOfTypeBegin;
     platform_get_all_files_of_type_end *GetAllFilesOfTypeEnd;
     platform_open_next_file *OpenNextFile;
+    platform_open_file *OpenFile;
+    platform_close_file *CloseFile;
     platform_read_data_from_file *ReadDataFromFile;
+    platform_write_data_to_file *WriteDataToFile;
     platform_file_error *FileError;
 
     platform_list_files_in_directory *ListFilesInDirectory;
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
+    platform_write_entire_file *WriteEntireFile;
 
+    
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
 

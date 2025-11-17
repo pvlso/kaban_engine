@@ -2,7 +2,7 @@
    $File: $
    $Date: 2024 $
    $Revision: $
-   $Creator: BabyKaban $
+   $Creator: pvlso $
    $Notice:  $
    ======================================================================== */
 
@@ -10,6 +10,7 @@
 #include "engine_shared.h"
 
 #include <windows.h>
+#include <strsafe.h>
 #include <malloc.h>
 #include <dsound.h>
 
@@ -24,7 +25,7 @@
 #include "win32_engine.h"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): GLOBAL VARIABLES
+// NOTE(pvlso): GLOBAL VARIABLES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 platform_api Platform;
 
@@ -32,7 +33,21 @@ global_variable b32 GlobalRunning;
 global_variable b32 GlobalPause;
 global_variable b32 GlobalAppIsActive;
 global_variable s64 GlobalPerfCountFrequency;
+
 global_variable wchar_t GlobalDATAPath[WIN32_STATE_FILE_NAME_COUNT];
+global_variable wchar_t *GlobalDataDirs[PlatformFileType_Count] =
+{
+    L"",             L"keas",       L"kesas",      L"kewms", L"bmps",
+    L"spritesheets", L"tilesets",   L"solidtiles", L"wavs",  L"txts",
+    L"jsons",        L"ttfs",       L"bins"
+};
+
+global_variable wchar_t *GlobalFileExtentionsForType[PlatformFileType_Count] =
+{
+    L".*",    L".kea",  L".kesa", L".kewm", L".bmp",
+    L".bmp",  L".bmp",  L".bmp",  L".wav",  L".txt",
+    L".json", L".ttf",  L".bin"
+};
 
 global_variable win32_window_dimension GlobalFramebufferDim;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
@@ -40,7 +55,7 @@ global_variable WINDOWPLACEMENT GlobalWindowPosition = {sizeof(GlobalWindowPosit
 
 global_variable b32 DEBUGGlobalShowCursor;
 
-// NOTE(paul): Font loading
+// NOTE(pvlso): Font loading
 global_variable HDC GlobalFontDeviceContext;
 global_variable VOID *GlobalFontBits;
 
@@ -58,7 +73,7 @@ global_variable GLuint GlobalBlitTextureHandle;
 #include "engine_render.cpp"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WIN32 MEMORY
+// NOTE(pvlso): WIN32 MEMORY
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 PLATFORM_ALLOCATE_MEMORY(Win32AllocateMemory)
 {
@@ -78,9 +93,52 @@ PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): WIN32 STRINGS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+inline s32
+Win32WideToUTF8(wchar_t *Source, char *Dest, s32 DestSize)
+{
+    s32 Result = 0;
+    if(Source)
+    {
+        Result = WideCharToMultiByte(CP_UTF8, 0, Source, -1, 0, 0, 0, 0);
+        if(Dest && (DestSize != 0) && (Result <= DestSize))
+        {
+            Result = WideCharToMultiByte(CP_UTF8, 0, Source, -1,
+                                         Dest, DestSize, 0, 0);
+        }
+    }
+
+    return(Result);
+}
+
+inline s32
+Win32UTF8ToWide(char *Source, wchar_t *Dest, s32 DestCount)
+{
+    s32 Result = 0;
+    if(Source)
+    {
+        Result = MultiByteToWideChar(CP_UTF8, 0, Source, -1, 0, 0);
+        if(Dest && (DestCount != 0) && (Result <= DestCount))
+        {
+            Result = MultiByteToWideChar(CP_UTF8, 0, Source, -1,
+                                         Dest, DestCount);
+        }
+    }
+
+    return(Result);
+}
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WIN32 API
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): WIN32 API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 inline LARGE_INTEGER
 Win32GetWallClock(void)
@@ -111,7 +169,7 @@ inline void
 Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
 {
     /*
-       NOTE(paul): The implementation of this function is based on
+       NOTE(pvlso): The implementation of this function is based on
        implementation in GLFW library
     */
 
@@ -137,7 +195,7 @@ internal void
 Win32SetClipboardString(win32_state *State, const char* string)
 {
     /*
-       NOTE(paul): The implementation of this function is based on
+       NOTE(pvlso): The implementation of this function is based on
        implementation in GLFW library
     */
 
@@ -193,7 +251,7 @@ internal char *
 Win32CreateUTF8FromWideString(const WCHAR* source)
 {
     /*
-       NOTE(paul): The implementation of this function is based on
+       NOTE(pvlso): The implementation of this function is based on
        implementation in GLFW library
     */
 
@@ -224,7 +282,7 @@ internal const char*
 Win32ClipboardGetString(win32_state *State)
 {
     /*
-       NOTE(paul): The implementation of this function is based on
+       NOTE(pvlso): The implementation of this function is based on
        implementation in GLFW library
     */
 
@@ -275,7 +333,7 @@ inline s32
 Win32GetKey(win32_state *State, s32 key)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -293,7 +351,7 @@ inline void
 Win32SetCursorPos(win32_state *State, double xpos, double ypos)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -319,7 +377,7 @@ inline s32
 Win32GetMouseButton(win32_state *State, int button)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -338,7 +396,7 @@ Win32GetMouseButton(win32_state *State, int button)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): NUKLEAR CALLBACKS & Setup
+// NOTE(pvlso): NUKLEAR CALLBACKS & Setup
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal inline void
 Win32NkScrollCallback(nk_win32 *NkWin32, double xoff, double yoff)
@@ -351,7 +409,7 @@ internal inline void
 Win32NkMouseButtonCallback(nk_win32 *NkWin32, win32_state *State, int button, int action)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -387,7 +445,7 @@ inline void
 Win32NkKeyCallback(nk_win32 *NkWin32, int key, int scancode, int action, int mods)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -442,7 +500,7 @@ internal void
 Win32NkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -458,7 +516,7 @@ internal void
 Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -480,7 +538,7 @@ internal struct nk_context*
 Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -504,7 +562,7 @@ internal void
 Win32NkFontStashBegin(nk_win32 *NkWin32, struct nk_font_atlas **atlas)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -518,7 +576,7 @@ internal void
 Win32NkFontStashEnd(nk_win32 *NkWin32)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -536,7 +594,7 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
                     rectangle2i DrawRegion, f32 dt)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -633,7 +691,7 @@ internal void
 Win32NkShutdown(nk_win32 *NkWin32)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
@@ -944,7 +1002,7 @@ Win32SetUIPointers(nk_ui *UI)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): CODE LOADING
+// NOTE(pvlso): CODE LOADING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 inline u32
 StringLengthW(wchar_t *String)
@@ -1052,8 +1110,21 @@ Win32GetDATAPath(win32_state *State)
     *Dest++ = '\\';
     *Dest++ = 0;
     
-    if(!Win32DirectoryExists(GlobalDATAPath))
-        CreateDirectoryW(GlobalDATAPath, NULL);
+    CreateDirectoryW(GlobalDATAPath, NULL);
+}
+
+internal void
+Win32CreateDataDirectoryStructure(win32_state *State)
+{
+    wchar_t DirPath[WIN32_STATE_FILE_NAME_COUNT];
+    for(u32 I = 0;
+        I < PlatformFileType_Count;
+        ++I)
+    {
+        wchar_t *WildCard = GlobalDataDirs[I];
+        StringCchPrintfW(DirPath, ArrayCount(DirPath), L"%s\\%s", GlobalDATAPath, WildCard);
+        CreateDirectoryW(DirPath, NULL);
+    }
 }
 
 internal void
@@ -1154,7 +1225,7 @@ Win32UnloadEngineCode(win32_engine_code *EditorCode)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): SOUND
+// NOTE(pvlso): SOUND
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
@@ -1322,7 +1393,7 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock, DWORD By
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): DEBUG
+// NOTE(pvlso): DEBUG
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 #if EDITOR_INTERNAL
 DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(DEBUGExecuteSystemCommand)
@@ -1389,7 +1460,7 @@ DEBUG_PLATFORM_GET_PROCESS_STATE(DEBUGGetProcessState)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): OPENGL INIT
+// NOTE(pvlso): OPENGL INIT
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32SetPixelFormat(HDC WindowDC)
@@ -1539,7 +1610,7 @@ Win32InitOpenGL(HDC WindowDC)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WINDOW AND DISPLAY
+// NOTE(pvlso): WINDOW AND DISPLAY
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32DisplayBufferInWindow(platform_work_queue *RenderQueue, editor_render_commands *Commands,
@@ -1611,7 +1682,7 @@ ToggleFullscreen(HWND Window)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WINDOW CALLBACKS / INPUT PROCESSING
+// NOTE(pvlso): WINDOW CALLBACKS / INPUT PROCESSING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // Retrieves and translates modifier keys
@@ -1620,7 +1691,7 @@ internal inline s32
 Win32GetKeyMods(void)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -1648,7 +1719,7 @@ internal void
 Win32CreateKeyTables(win32_state *State)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -1903,7 +1974,7 @@ internal inline void
 Win32InputScroll(win32_state *State, double xoffset, double yoffset)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -1926,7 +1997,7 @@ internal inline void
 Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -1954,7 +2025,7 @@ internal inline void
 Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -1995,7 +2066,7 @@ internal inline void
 Win32InputMouseClick(win32_state *State, int button, int action, int mods)
 {
     /*
-      NOTE(paul): The implementation of this function is based on
+      NOTE(pvlso): The implementation of this function is based on
       implementation in GLFW library
     */
 
@@ -2374,7 +2445,7 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): MULTITHREADING & QUEUES
+// NOTE(pvlso): MULTITHREADING & QUEUES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
 Win32AddEntry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data)
@@ -2488,7 +2559,7 @@ Win32MakeQueue(platform_work_queue *Queue, uint32 ThreadCount, win32_thread_star
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WIN32 FILE API
+// NOTE(pvlso): WIN32 FILE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(Win32GetAllFilesOfTypeBegin)
 {
@@ -2541,7 +2612,7 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_END(Win32GetAllFilesOfTypeEnd)
     }
 }
 
-internal PLATFORM_OPEN_FILE(Win32OpenNextFile)
+internal PLATFORM_OPEN_NEXT_FILE(Win32OpenNextFile)
 {
     win32_platform_file_group *Win32FileGroup = (win32_platform_file_group *)FileGroup->Platform;
     platform_file_handle Result = {};
@@ -2568,6 +2639,50 @@ internal PLATFORM_OPEN_FILE(Win32OpenNextFile)
     }
 
     return(Result);
+}
+
+internal PLATFORM_OPEN_FILE(Win32OpenFile)
+{
+    platform_file_handle Result = {};
+    win32_platform_file_handle *Win32FileHandle = (win32_platform_file_handle *)VirtualAlloc(
+            0, sizeof(win32_platform_file_handle),
+            MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+    Result.Platform = Win32FileHandle;
+
+    if(Win32FileHandle != INVALID_HANDLE_VALUE)
+    {    
+        wchar_t Path[WIN32_STATE_FILE_NAME_COUNT];
+
+        s32 FileNameWCount = Win32UTF8ToWide(FileName, 0, 0);
+        wchar_t *FileNameW = (wchar_t *)Win32AllocateMemory(sizeof(wchar_t)*FileNameWCount);
+        Win32UTF8ToWide(FileName, FileNameW, FileNameWCount);
+
+        wchar_t *Dir = GlobalDataDirs[Type];
+        StringCchPrintfW(Path, ArrayCount(Path), L"%s%s\\%s", GlobalDATAPath, Dir, FileNameW);
+
+        b32 ReadOp = (Op == PlatformFileOp_Read);
+        Win32FileHandle->Win32Handle = CreateFileW(Path,
+                                                   (ReadOp ? GENERIC_READ : GENERIC_WRITE),
+                                                   (ReadOp ? FILE_SHARE_READ : FILE_SHARE_WRITE),
+                                                   0,
+                                                   (ReadOp ? OPEN_EXISTING : CREATE_ALWAYS),
+                                                   0, 0);
+        Result.NoErrors = (Win32FileHandle->Win32Handle != INVALID_HANDLE_VALUE);
+        Win32DeallocateMemory(FileNameW);
+    }
+
+    return(Result);
+}
+
+internal PLATFORM_CLOSE_FILE(Win32CloseFile)
+{
+    win32_platform_file_handle *Win32FileHandle = (win32_platform_file_handle *)Handle->Platform;
+    if(Win32FileHandle)
+    {
+        CloseHandle(Win32FileHandle->Win32Handle);
+
+        VirtualFree(Win32FileHandle, 0, MEM_RELEASE);
+    }
 }
 
 internal PLATFORM_FILE_ERROR(Win32FileError)
@@ -2605,73 +2720,45 @@ internal PLATFORM_READ_DATA_FROM_FILE(Win32ReadDataFromFile)
     }
 }
 
+internal PLATFORM_WRITE_DATA_TO_FILE(Win32WriteDataToFile)
+{
+    if(PlatformNoFileErrors(Source))
+    {
+        win32_platform_file_handle *Handle = (win32_platform_file_handle *)Source->Platform;
+        OVERLAPPED Overlapped = {};
+        Overlapped.Offset = (u32)((Offset >> 0) & 0xFFFFFFFF);
+        Overlapped.OffsetHigh = (u32)((Offset >> 32) & 0xFFFFFFFF);
+
+        uint32 FileSize32 = SafeTruncateUInt64(Size);
+
+        DWORD BytesWritten;
+        if(WriteFile(Handle->Win32Handle, Data, FileSize32, &BytesWritten, &Overlapped) &&
+           (FileSize32 == BytesWritten))
+        {
+            // NOTE(pvlso): File write succeeded!
+        }
+        else
+        {
+            Win32FileError(Source, "Write file failed.");
+        }
+    }
+}
+
+
 internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
 {
     u32 FileCount = 0;
 
-    WIN32_FIND_DATA Data;
+    WIN32_FIND_DATAW Data;
     HANDLE FileHandle;
 
-    char *WildCard = "*.*";
-    switch(Type)
-    {
-        case PlatformFileType_None:
-            break;
+    wchar_t *Dir = GlobalDataDirs[Type];
+    wchar_t *Extention = GlobalFileExtentionsForType[Type];
 
-        case PlatformFileType_KEA:
-        {
-            WildCard = "*.ssa";
-        } break;
+    wchar_t Path[WIN32_STATE_FILE_NAME_COUNT];
+    StringCchPrintfW(Path, ArrayCount(Path), L"%s%s\\*%s", GlobalDATAPath, Dir, Extention);
 
-        case PlatformFileType_BMP:
-        {
-            WildCard = "bmps\\*.bmp";
-        } break;
-
-        case PlatformFileType_SSBMP:
-        {
-            WildCard = "spritesheets\\*.bmp";
-        } break;
-
-        case PlatformFileType_TSBMP:
-        {
-            WildCard = "tilesets\\*.bmp";
-        } break;
-
-        case PlatformFileType_STBMP:
-        {
-            WildCard = "solid_tiles\\*.bmp";
-        } break;
-
-        case PlatformFileType_WAV:
-        {
-            WildCard = "wavs\\*.wav";
-        } break;
-
-        case PlatformFileType_TXT:
-        {
-            WildCard = "txts\\*.txt";
-        } break;
-
-        case PlatformFileType_TTF:
-        {
-            WildCard = "fonts\\*.ttf";
-        } break;
-
-        case PlatformFileType_BIN:
-        {
-            WildCard = "binaryfiles\\*.bin";
-        } break;
-
-        case PlatformFileType_SSWM:
-        {
-            WildCard = "sswms\\*.sswm";
-        } break;
-
-        InvalidDefaultCase;
-    }
-
-    FileHandle = FindFirstFile(WildCard, &Data);
+    FileHandle = FindFirstFileW(Path, &Data);
 
     if(FileHandle != INVALID_HANDLE_VALUE)
     {
@@ -2679,12 +2766,14 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
         {
             if(Dest && Arena)
             {
-                Dest[FileCount] = PushString(Arena, Data.cFileName);
+                u32 Size = Win32WideToUTF8(Data.cFileName, 0, 0);
+                Dest[FileCount] = (char *)PushSize(Arena, Size);
+                Win32WideToUTF8(Data.cFileName, Dest[FileCount], Size);
             }
 
             ++FileCount;
             
-        } while(FindNextFile(FileHandle, &Data) != 0);
+        } while(FindNextFileW(FileHandle, &Data) != 0);
     }
 
     FindClose(FileHandle);
@@ -2704,76 +2793,24 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 {
     read_file_result Result = {};
 
-    char *WildCard = "";
-    switch(Type)
+    wchar_t *WildCard = GlobalDataDirs[Type];
+
+    s32 FileNameWCount = Win32UTF8ToWide(FileName, 0, 0);
+    wchar_t *FileNameW = (wchar_t *)Win32AllocateMemory(FileNameWCount*sizeof(wchar_t));
+    Win32UTF8ToWide(FileName, FileNameW, FileNameWCount);
+
+    HANDLE FileHandle;
+    wchar_t FilePath[WIN32_STATE_FILE_NAME_COUNT];
+    if(Type != PlatformFileType_None)
     {
-        case PlatformFileType_None:
-            break;
-            
-        case PlatformFileType_KEA:
-        {
-            WildCard = "*.ssa";
-        } break;
-
-        case PlatformFileType_BMP:
-        {
-            WildCard = "bmps\\";
-        } break;
-
-        case PlatformFileType_SSBMP:
-        {
-            WildCard = "spritesheets\\";
-        } break;
-
-        case PlatformFileType_TSBMP:
-        {
-            WildCard = "tilesets\\";
-        } break;
-
-        case PlatformFileType_STBMP:
-        {
-            WildCard = "solid_tiles\\";
-        } break;
-
-        case PlatformFileType_WAV:
-        {
-            WildCard = "wavs\\";
-        } break;
-
-        case PlatformFileType_TXT:
-        {
-            WildCard = "txts\\";
-            IsTXT = true;
-        } break;
-
-        case PlatformFileType_JSON:
-        {
-            WildCard = "jsons\\";
-            IsTXT = true;
-        } break;
-
-        case PlatformFileType_TTF:
-        {
-            WildCard = "fonts\\";
-        } break;
-
-        case PlatformFileType_BIN:
-        {
-            WildCard = "binaryfiles\\";
-        } break;
-
-        case PlatformFileType_SSWM:
-        {
-            WildCard = "sswms\\";
-        } break;
-
-        InvalidDefaultCase;
+        StringCchPrintfW(FilePath, ArrayCount(FilePath), L"%s%s\\%s", GlobalDATAPath, WildCard, FileNameW);
+        FileHandle = CreateFileW(FilePath, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     }
-
-    char FilePath[WIN32_STATE_FILE_NAME_COUNT];
-    FormatString(ArrayCount(FilePath), FilePath, "%s%s", WildCard, FileName);
-
-    HANDLE FileHandle = CreateFileA(FilePath, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    else
+    {
+        FileHandle = CreateFileW(FileNameW, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    }
+    
     if(FileHandle != INVALID_HANDLE_VALUE)
     {
         LARGE_INTEGER FileSize;
@@ -2816,6 +2853,57 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
         // TODO: Logging
     }
 
+    Win32DeallocateMemory(FileNameW);
+
+    return(Result);
+}
+
+PLATFORM_WRITE_ENTIRE_FILE(Win32PlatformWriteEntireFile)
+{
+    u32 Result = 0;
+
+    wchar_t *WildCard = GlobalDataDirs[Type];
+
+    s32 FileNameWCount = Win32UTF8ToWide(FileName, 0, 0);
+    wchar_t *FileNameW = (wchar_t *)Win32AllocateMemory(FileNameWCount*sizeof(wchar_t));
+    Win32UTF8ToWide(FileName, FileNameW, FileNameWCount);
+
+    HANDLE FileHandle;
+    wchar_t FilePath[WIN32_STATE_FILE_NAME_COUNT];
+    if(Type != PlatformFileType_None)
+    {
+        StringCchPrintfW(FilePath, ArrayCount(FilePath), L"%s%s\\%s", GlobalDATAPath, WildCard, FileNameW);
+        FileHandle = CreateFileW(FilePath, GENERIC_WRITE, FILE_SHARE_WRITE, 0, CREATE_ALWAYS, 0, 0);
+    }
+    else
+    {
+        FileHandle = CreateFileW(FileNameW, GENERIC_WRITE, FILE_SHARE_WRITE, 0, CREATE_ALWAYS, 0, 0);
+    }
+    
+    if(FileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD BytesWritten;
+        if(WriteFile(FileHandle, Data, Size, &BytesWritten, 0) &&
+           (Size == BytesWritten))
+        {
+            // NOTE(casey): File read successfully
+            Result = BytesWritten;
+        }
+        else
+        {                    
+            // TODO: Logging
+            Result = 0;
+        }
+
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // TODO: Logging
+    }
+
+    Win32DeallocateMemory(FileNameW);
+
     return(Result);
 }
 
@@ -2825,7 +2913,7 @@ PLATFORM_READ_ENTIRE_FILE(Win32PlatformReadEntireFile)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): WIN32 FONT LOADING
+// NOTE(pvlso): WIN32 FONT LOADING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal win32_loaded_font *
 Win32LoadFont(char *FileName, char *FontName, int PixelHeight)
@@ -3099,7 +3187,7 @@ Win32FindFontName(char *FileName, char *Dest, memory_arena *Arena)
         {
             u32 TableOffset = sizeof(ttf_offset_subtable) + Index*sizeof(ttf_table_directory);
             u32 Tag = ReadU32(Buffer, TableOffset);
-            if(Tag == 0x6E616D65) // NOTE(paul): 'name' in hex
+            if(Tag == 0x6E616D65) // NOTE(pvlso): 'name' in hex
             {
                 NameTableOffset = ReadU32(Buffer, TableOffset + 8);
                 break;
@@ -3207,11 +3295,6 @@ internal PLATFORM_LOAD_FONT_ASSET(Win32LoadFontAsset)
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-internal void
-Win32InitDataLayout(win32_state *Win32State)
-{
-}
-
 internal inline void
 Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
                      platform_work_queue *LowPQ)
@@ -3224,12 +3307,16 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
     Memory->PlatformAPI.GetAllFilesOfTypeBegin = Win32GetAllFilesOfTypeBegin;
     Memory->PlatformAPI.GetAllFilesOfTypeEnd = Win32GetAllFilesOfTypeEnd;
     Memory->PlatformAPI.OpenNextFile = Win32OpenNextFile;
+    Memory->PlatformAPI.OpenFile = Win32OpenFile;
+    Memory->PlatformAPI.CloseFile = Win32CloseFile;
     Memory->PlatformAPI.ReadDataFromFile = Win32ReadDataFromFile;
+    Memory->PlatformAPI.WriteDataToFile = Win32WriteDataToFile;
     Memory->PlatformAPI.FileError = Win32FileError;
     Memory->PlatformAPI.ListFilesInDirectory = Win32ListFilesInDirectory;
 
-    Memory->PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
     Memory->PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
+    Memory->PlatformAPI.WriteEntireFile = Win32PlatformWriteEntireFile;
+    Memory->PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
 
     Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
@@ -3281,6 +3368,7 @@ WinMain(HINSTANCE Instance,
                               sizeof(EditorCodeLockFullPath), EditorCodeLockFullPath);
 
     Win32GetDATAPath(&Win32State);
+    Win32CreateDataDirectoryStructure(&Win32State);
 
     // NOTE(casey): Set the Windows scheduler granularity to 1ms
     // so that our Sleep() can be more granular.
@@ -3291,11 +3379,11 @@ WinMain(HINSTANCE Instance,
     DEBUGGlobalShowCursor = true;
 #endif
 
-    // NOTE(paul): Set intitial dimentions 
+    // NOTE(pvlso): Set intitial dimentions 
     GlobalFramebufferDim.Width = GetSystemMetrics(SM_CXSCREEN);
     GlobalFramebufferDim.Height = GetSystemMetrics(SM_CYSCREEN);
 
-    // NOTE(paul): Init window class 
+    // NOTE(pvlso): Init window class 
     WNDCLASSA WindowClass = {};
     WindowClass.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
     WindowClass.lpfnWndProc = Win32MainWindowCallback;
@@ -3325,12 +3413,12 @@ WinMain(HINSTANCE Instance,
             Win32State.WindowHandle = Window;
             ToggleFullscreen(Window);
 
-            // NOTE(paul): Init OpenGLRC
+            // NOTE(pvlso): Init OpenGLRC
             HDC OpenGLDC = GetDC(Window);
             HGLRC OpenGLRC = 0;
             OpenGLRC = Win32InitOpenGL(OpenGLDC);
 
-            // NOTE(paul): Init multithreading queues
+            // NOTE(pvlso): Init multithreading queues
             win32_thread_startup HighPriStartups[3] = {};
             platform_work_queue HighPriorityQueue = {};
             Win32MakeQueue(&HighPriorityQueue, ArrayCount(HighPriStartups), HighPriStartups);
@@ -3339,7 +3427,7 @@ WinMain(HINSTANCE Instance,
             platform_work_queue LowPriorityQueue = {};
             Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
 
-            // NOTE(paul): Set fixed refresh rate
+            // NOTE(pvlso): Set fixed refresh rate
             f32 EditorUpdateHz = 60.0f;
             f32 TargetSecondsPerFrame = 1.0f / EditorUpdateHz;
 
@@ -3365,12 +3453,12 @@ WinMain(HINSTANCE Instance,
             LPVOID BaseAddress = 0;
 #endif
 
-            // NOTE(paul): Initialize Engine Memory and Platform API
+            // NOTE(pvlso): Initialize Engine Memory and Platform API
             engine_memory EditorMemory = {};
             Win32InitPlatformAPI(&EditorMemory, &HighPriorityQueue, &LowPriorityQueue);
             Platform = EditorMemory.PlatformAPI;
 
-            // NOTE(paul): Init render memory
+            // NOTE(pvlso): Init render memory
             // TODO(casey): Decide what our pushbuffer size is!
             u32 PushBufferSize = Megabytes(64);
             void *PushBuffer = Win32AllocateMemory(PushBufferSize);
@@ -3387,7 +3475,7 @@ WinMain(HINSTANCE Instance,
                 Op->Next = TextureOpQueue->FirstFree + TextureOpIndex + 1;
             }
 
-            // NOTE(paul): Init Input
+            // NOTE(pvlso): Init Input
             engine_input Input[2] = {};
             engine_input *NewInput = &Input[0];
             engine_input *OldInput = &Input[1];
@@ -3422,7 +3510,7 @@ WinMain(HINSTANCE Instance,
             GlobalRunning = true;
             while(GlobalRunning)
             {
-                // NOTE(paul): Init Render Commands and Handle Aspect Ratio
+                // NOTE(pvlso): Init Render Commands and Handle Aspect Ratio
                 editor_render_commands RenderCommands = RenderCommandStruct(
                     PushBufferSize, PushBuffer,
                     (u32)GlobalFramebufferDim.Width, (u32)GlobalFramebufferDim.Height);
@@ -3432,11 +3520,11 @@ WinMain(HINSTANCE Instance,
                 rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                         Dimension.Width, Dimension.Height);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Input Processing
+// NOTE(pvlso): Input Processing
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 BEGIN_BLOCK("Input Processing");
 
-                // NOTE(paul): Set Delta Time
+                // NOTE(pvlso): Set Delta Time
                 NewInput->dtForFrame = TargetSecondsPerFrame;
                         
                 // TODO(casey): Zeroing macro
@@ -3514,7 +3602,7 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Engine Update
+// NOTE(pvlso): Engine Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
                 Win32NkUpdateInputs(&Win32State, &Win32State.Main,
@@ -3550,7 +3638,7 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Audio Update
+// NOTE(pvlso): Audio Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 BEGIN_BLOCK("Audio Update");
 
@@ -3660,7 +3748,7 @@ WinMain(HINSTANCE Instance,
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Debug Collation
+// NOTE(pvlso): Debug Collation
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 #if EDITOR_INTERNAL
                 BEGIN_BLOCK("Debug Collation");
@@ -3708,7 +3796,7 @@ WinMain(HINSTANCE Instance,
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(paul): Frame Display
+// NOTE(pvlso): Frame Display
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
                 
                 BEGIN_BLOCK("Frame Display");
@@ -3747,7 +3835,7 @@ WinMain(HINSTANCE Instance,
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                // NOTE(paul): Swap Inputs
+                // NOTE(pvlso): Swap Inputs
                 FlipWallClock = Win32GetWallClock();
 
                 engine_input *Temp = NewInput;
@@ -3796,7 +3884,7 @@ WinMain(HINSTANCE Instance,
 
                 END_BLOCK();
 #endif
-                // NOTE(paul): Record frame time
+                // NOTE(pvlso): Record frame time
                 LARGE_INTEGER EndCounter = Win32GetWallClock();                    
                 FRAME_MARKER(Win32GetSecondsElapsed(LastCounter, EndCounter));
                 LastCounter = EndCounter;

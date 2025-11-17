@@ -6,6 +6,24 @@
    $Notice:  $
    ======================================================================== */
 
+inline void
+InsertionSort(u32 Count, u64 *Nodes)
+{
+    for(u32 I = 1; I < Count; ++I)
+    {
+        u64 Node = Nodes[I];
+        s32 J = I - 1;
+
+        while((J >= 0) && (Node < Nodes[J]))
+        {
+            Nodes[J + 1] = Nodes[J];
+            J = J - 1;
+        }
+
+        Nodes[J + 1] = Node;
+    }
+}
+
 internal void
 MergeSort(u32 Count, sort_entry *First, sort_entry *Temp)
 {

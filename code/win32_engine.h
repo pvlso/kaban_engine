@@ -140,40 +140,6 @@ struct win32_platform_file_group
     WIN32_FIND_DATAW FindData;
 };
 
-// NOTE(paul): FONT
-#define ONE_PAST_MAX_FONT_CODEPOINT (0x10FFFF + 1)
-#define MAX_FONT_WIDTH 1024
-#define MAX_FONT_HEIGHT 1024
-
-#pragma pack(push, 1)
-struct ttf_offset_subtable
-{
-    u32 ScalerType;
-    u16 NumTables;
-    u16 SearchRange;
-    u16 EntrySelector;
-    u16 RangeShift;
-};
-
-struct ttf_table_directory
-{
-    u32 Tag;
-    u32 CheckSum;
-    u32 Offset;
-    u32 Length;
-};
-
-struct ttf_name_record
-{
-    u16 PlatformID;
-    u16 EncodingID;
-    u16 LanguageID;
-    u16 NameID;
-    u16 Length;
-    u16 Offset;
-};
-#pragma pack(pop)
-
 inline u16
 ReadU16(u8 *Data, u32 Offset)
 {
