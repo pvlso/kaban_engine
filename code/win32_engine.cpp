@@ -2553,6 +2553,55 @@ Win32MakeQueue(platform_work_queue *Queue, uint32 ThreadCount, win32_thread_star
         CloseHandle(ThreadHandle);
     }
 }
+
+struct win32_watcher_context
+{
+    wchar_t Path[WIN32_STATE_FILE_NAME_COUNT];
+    platform_work_queue *Q;
+};
+
+internal DWORD WINAPI
+DirectoryWatcherThread(LPVOID Param)
+{
+    win32_watcher_context *Context = (win32_watcher_context *)Param;
+    HANDLE DirHandle = CreateFileW(Context->Path,
+                                   FILE_LIST_DIRECTORY,
+                                   FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                                   0,
+                                   OPEN_EXISTING,
+                                   FILE_FLAG_BACKUP_SEMANTICS,
+                                   0);
+
+    BYTE Buffer[4096];
+
+    for(;;)
+    {
+        DWORD BytesReturned = 0;
+        BOOL Succsess = ReadDirectoryChangesW(DirHandle,
+                                              Buffer,
+                                              sizeof(Buffer),
+                                              FALSE,
+                                              FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_LAST_WRITE|
+                                              FILE_NOTIFY_CHANGE_SIZE,
+                                              &BytesReturned, 0, 0);
+
+        if(!Succsess)
+            continue;
+
+        FILE_NOTIFY_INFORMATION *Info = (FILE_NOTIFY_INFORMATION *)Buffer;        
+
+        // TODO(pvlso): Add new entry to the HighPriorityQueue
+    }
+}
+
+internal void
+Win32StartDirectoryWatcher(void)
+{
+    win32_watcher_context *Context = (win32_watcher_context *)Win32AllocateMemory(sizeof(win32_watcher_context));
+    StringCchPrintfW(Context->Path, ArrayCount(Context->Path), L"%s%s", GlobalDATAPath, L"txts");
+
+    CreateThread(0, 0, DirectoryWatcherThread, Context, 0, 0);
+}
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3426,6 +3475,8 @@ WinMain(HINSTANCE Instance,
             win32_thread_startup LowPriStartups[3] = {};
             platform_work_queue LowPriorityQueue = {};
             Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
+
+            Win32StartDirectoryWatcher();
 
             // NOTE(pvlso): Set fixed refresh rate
             f32 EditorUpdateHz = 60.0f;
