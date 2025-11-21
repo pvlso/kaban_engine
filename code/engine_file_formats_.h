@@ -380,8 +380,8 @@ struct kesa_tileset
     u32 TileWidth;
     u32 TileHeight;
 
-    u32 TileOffsetsX[512];
-    u32 TileOffsetsY[512];
+    u8 TileOffsetsX[512];
+    u8 TileOffsetsY[512];
 };
 
 struct kesa_sound

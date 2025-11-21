@@ -344,7 +344,9 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_ui *U
                     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     UI->NkLabel(Nk, StoredAsset->SourceFileName, NK_TEXT_CENTERED);
 
-                    UI->NkLayoutRowStatic(Nk, 520, 520, 1);
+
+                    f32 WidthOverHeight = (f32)BitmapMode->Bitmap.Width/(f32)BitmapMode->Bitmap.Height;
+                    UI->NkLayoutRowStatic(Nk, 520, (s32)(520*WidthOverHeight), 1);
                     Rect = UI->NkWidgetBounds(Nk);
                     UI->NkFillRect(&Nk->current->buffer, Rect, 10.0f, ColorTable[14]);
                     UI->NkStrokeRect(&Nk->current->buffer, Rect, 10.0f, 3.0f, ColorTable[2]);

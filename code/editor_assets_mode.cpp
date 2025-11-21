@@ -280,11 +280,11 @@ CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Asset
     Tileset->TileCount = TileCountX*TileCountY;
 
     u32 TileIndex = 0;
-    for(u32 Y = 0;
+    for(u8 Y = 0;
         Y < TileCountY;
         ++Y)
     {
-        for(u32 X = 0;
+        for(u8 X = 0;
             X < TileCountX;
             ++X)
         {
@@ -1380,16 +1380,24 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         {
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
-                AssetsMode->EditStoredAsset = false;
-
                 ClearEditModeData(EditorState, AssetsMode, Assets, AssetsMode->CurrentAsset);
-                AssetsMode->LastEditMode = AssetsMode->EditMode;            
-
-                AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-                if(AssetsMode->CurrentAsset->Type == KESA_None)
+                if(AssetsMode->LastEditMode == EditMode_None)
                 {
-                    InitAssetsMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    AssetsMode->EditStoredAsset = false;
+
+                    AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
+                    if(AssetsMode->CurrentAsset->Type == KESA_None)
+                    {
+                        InitAssetsMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    }
                 }
+                else
+                {
+                    AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
+                    LoadStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                }
+
+                AssetsMode->LastEditMode = AssetsMode->EditMode;            
             }
 
             if(AssetsMode->RemoveTag)
