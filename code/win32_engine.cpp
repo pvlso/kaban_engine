@@ -2595,11 +2595,12 @@ DirectoryWatcherThread(LPVOID Param)
 }
 
 internal void
-Win32StartDirectoryWatcher(void)
+Win32StartDirectoryWatcher(platform_work_queue *HPQ)
 {
     win32_watcher_context *Context = (win32_watcher_context *)Win32AllocateMemory(sizeof(win32_watcher_context));
     StringCchPrintfW(Context->Path, ArrayCount(Context->Path), L"%s%s", GlobalDATAPath, L"txts");
-
+    Context->Q = HPQ;
+    
     CreateThread(0, 0, DirectoryWatcherThread, Context, 0, 0);
 }
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3476,7 +3477,7 @@ WinMain(HINSTANCE Instance,
             platform_work_queue LowPriorityQueue = {};
             Win32MakeQueue(&LowPriorityQueue, ArrayCount(LowPriStartups), LowPriStartups);
 
-            Win32StartDirectoryWatcher();
+            Win32StartDirectoryWatcher(&HighPriorityQueue);
 
             // NOTE(pvlso): Set fixed refresh rate
             f32 EditorUpdateHz = 60.0f;

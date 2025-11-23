@@ -45,18 +45,34 @@ GUIDFromString(char *s)
     return(Result); 
 }
 
+inline void
+FreeTagMap(editor_mode_assets *AssetsMode)
+{
+    if(AssetsMode->TagMapListHead)
+    {
+        tag_map_list *Current = 0;
+        while(AssetsMode->TagMapListHead)
+        {
+            Current = AssetsMode->TagMapListHead->Next;
+            Platform.DeallocateMemory(AssetsMode->TagMapListHead);
+            AssetsMode->TagMapListHead = Current;
+        }
+    }
+}
+
 internal void
 BuildTagMap(editor_mode_assets *AssetsMode, memory_arena *ModeArena, memory_arena *Arena)
 {
-    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    FreeTagMap(AssetsMode);
+
+        temporary_memory TempMem = BeginTemporaryMemory(Arena);
     json_object *TagsObject = ParseJson("..\\kea_tags.json", TempMem.Arena, true);
-    json_value *TagCount = JsonLookupObjectElement(TagsObject, "tag_count");
     json_value *TagArray = JsonLookupObjectElement(TagsObject, "tag_array");
 
     AssetsMode->TagMapListCount = 1;
-    AssetsMode->TagMapListHead = PushStruct(ModeArena, tag_map_list);
+    AssetsMode->TagMapListHead = (tag_map_list *)Platform.AllocateMemory(sizeof(tag_map_list));
     tag_map_list *Current = 0;
-    for(s32 I = 0; I < TagCount->Int; ++I)
+    for(u32 I = 0; I < TagArray->Array.Count; ++I)
     {
         char *TagKey = TagArray->Array.Items[I]->String;
         json_value *TagObject = JsonLookupObjectElement(TagsObject, TagKey);
@@ -76,7 +92,7 @@ BuildTagMap(editor_mode_assets *AssetsMode, memory_arena *ModeArena, memory_aren
         }
         else
         {
-            Current = PushStruct(ModeArena, tag_map_list);
+            Current = (tag_map_list *)Platform.AllocateMemory(sizeof(tag_map_list));
             if(TagGUID->Int == 0)
                 Current->Tag.GUID = GUIDFromString(TagKey);
             else
@@ -134,6 +150,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
     }
 
     
+    BuildTagMap(Result, &EditorState->ModeArena, &TranState->TranArena);
     BuildTagMap(Result, &EditorState->ModeArena, &TranState->TranArena);
 
     EditorState->AssetsMode = Result;
@@ -1381,10 +1398,10 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
                 ClearEditModeData(EditorState, AssetsMode, Assets, AssetsMode->CurrentAsset);
+                AssetsMode->EditStoredAsset = false;
+
                 if(AssetsMode->LastEditMode == EditMode_None)
                 {
-                    AssetsMode->EditStoredAsset = false;
-
                     AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
                     if(AssetsMode->CurrentAsset->Type == KESA_None)
                     {
@@ -1412,11 +1429,12 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 AssetsMode->AddTag = false;
             }
 
-            if(AssetsMode->AddAsset)
+            if(AssetsMode->AddAsset && !AssetsMode->EditStoredAsset)
             {
                 AddCurrentAsset(AssetsMode);
                 AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
                 AssetsMode->AddAsset = false;
+                WriteStoredAssets(EditorState, AssetsMode);
             }
         
             r32 TileDim = 32.0f;
