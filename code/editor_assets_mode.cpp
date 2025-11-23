@@ -1445,7 +1445,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             rectangle2 CanvasRect = RectCenterDim(V2(0, 0), CanvasDim);
 
 
-            nk_ui *UI = &Platform.UI;
             switch(AssetsMode->EditMode)
             {
                 case EditMode_None:

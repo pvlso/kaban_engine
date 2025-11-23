@@ -1178,7 +1178,9 @@ struct platform_texture_op_queue
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): NUKLEAR API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-#include "engine_platform_nuklear.h"
+//#include "engine_platform_nuklear.h"
+#define UI_BASE_RESOLUTION_X 1920
+#define UI_BASE_RESOLUTION_Y 1080
 
 typedef struct builder_loaded_font
 {
@@ -1223,8 +1225,6 @@ typedef struct platform_api
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
 
-    nk_ui UI;
-
     platform_load_font_asset *LoadFontAsset;    
     
 #if EDITOR_INTERNAL
@@ -1262,7 +1262,7 @@ typedef struct engine_memory
     platform_api PlatformAPI;
 } engine_memory;
 
-#define ENGINE_UPDATE_AND_RENDER(name) void name(struct nk_context *nk, engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
+#define ENGINE_UPDATE_AND_RENDER(name) void name(struct nk_context *nk, v2 UIScale, engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
 typedef ENGINE_UPDATE_AND_RENDER(engine_update_and_render);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................

@@ -14,13 +14,13 @@
 #include <malloc.h>
 #include <dsound.h>
 
-#include "GL/glew.h"
-#include "GL/wglew.h"
+#include "glew/glew.h"
+#include "glew/wglew.h"
 
 #include "win32_defines.h"
 
-#define NK_IMPLEMENTATION
-#include "nuklear.h"
+//#define NK_IMPLEMENTATION
+//#include "nuklear.h"
 
 #include "win32_engine.h"
 
@@ -614,7 +614,6 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     NkWin32->display_height = GetHeight(DrawRegion);
     NkWin32->fb_scale.x = (float)NkWin32->display_width/(float)NkWin32->width;
     NkWin32->fb_scale.y = (float)NkWin32->display_height/(float)NkWin32->height;
-    NkWin32->ctx.Scale = V2(NkWin32->fb_scale.x, NkWin32->fb_scale.y);
 
     nk_input_begin(ctx);
     for (i = 0; i < NkWin32->text_len; ++i)
@@ -709,8 +708,6 @@ Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height
 {
     struct nk_context *Result = 0;
     Result = Win32InitNkContext(State, NkWin32);
-    Result->BaseWidth = Width;
-    Result->BaseHeight = Height;
     {
         struct nk_font_atlas *atlas;
         Win32NkFontStashBegin(NkWin32, &atlas);
@@ -732,268 +729,6 @@ Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height
     }
 
     return(Result);
-}
-
-internal inline void
-Win32SetUIPointers(nk_ui *UI)
-{
-    UI->NkBegin = nk_begin;
-    UI->NkEnd = nk_end;
-    UI->NkSpacer = nk_spacer;
- 
-    UI->NkWindowSetFocus = nk_window_set_focus;
-    UI->NkWindowCollapse = nk_window_collapse;
-    UI->NkWindowShow = nk_window_show;
-    UI->NkWindowIsActive = nk_window_is_active;
-    UI->NkWindowIsHidden = nk_window_is_hidden;
-
-    UI->NkGroupBegin = nk_group_begin;
-    UI->NkGroupEnd = nk_group_end;
-
-    UI->NkFilterDefault = nk_filter_default;
-    UI->NkFilterASCII = nk_filter_ascii;
-    UI->NkFilterFloat = nk_filter_float;
-    UI->NkFilterDecimal = nk_filter_decimal;
-    UI->NkFilterHEX = nk_filter_hex;
-    UI->NkFilterOCT = nk_filter_oct;
-    UI->NkFilterBIN = nk_filter_binary;
-
-    UI->NkInputHasMouseClick = nk_input_has_mouse_click;
-    UI->NkInputHasMouseClickInRect = nk_input_has_mouse_click_in_rect;
-    UI->NkInputHasMouseClickInButtonRect = nk_input_has_mouse_click_in_button_rect;
-    UI->NkInputHasMouseClickDownInRect = nk_input_has_mouse_click_down_in_rect;
-    UI->NkInputIsMouseClickInRect = nk_input_is_mouse_click_in_rect;
-    UI->NkInputIsMouseClickDownInRect = nk_input_is_mouse_click_down_in_rect;
-    UI->NkInputAnyMouseClickInRect = nk_input_any_mouse_click_in_rect;
-    UI->NkInputIsMousePrevHoveringRect = nk_input_is_mouse_prev_hovering_rect;
-    UI->NkInputIsMouseHoveringRect = nk_input_is_mouse_hovering_rect;
-    UI->NkInputMouseClicked = nk_input_mouse_clicked;
-    UI->NkInputIsMouseDown = nk_input_is_mouse_down;
-    UI->NkInputIsMousePressed = nk_input_is_mouse_pressed;
-    UI->NkInputIsMouseReleased = nk_input_is_mouse_released;
-    UI->NkInputIsKeyPressed = nk_input_is_key_pressed;
-    UI->NkInputIsKeyReleased = nk_input_is_key_released;
-    UI->NkInputIsKeyDown = nk_input_is_key_down;
-
-    UI->NkLayoutRowDynamic = nk_layout_row_dynamic;
-    UI->NkLayoutRowBegin = nk_layout_row_begin;
-    UI->NkLayoutRowPush = nk_layout_row_push;
-    UI->NkLayoutRowEnd = nk_layout_row_end;
-    UI->NkLayoutRowStatic = nk_layout_row_static;
-
-    UI->NkLayoutSpaceBegin = nk_layout_space_begin;
-    UI->NkLayoutSpacePush = nk_layout_space_push;
-    UI->NkLayoutSpaceEnd = nk_layout_space_end;
-    UI->NkLayoutSpaceBounds = nk_layout_space_bounds;
-    UI->NkLayoutSpaceRectToLocal = nk_layout_space_rect_to_local;
-
-    UI->NkText = nk_text;
-    UI->NkTextColored = nk_text_colored;
-    UI->NkTextWrap = nk_text_wrap;
-    UI->NkTextWrapColored = nk_text_wrap_colored;
-    UI->NkLabel = nk_label;
-    UI->NkLabelColored = nk_label_colored;
-    UI->NkLabelWrap = nk_label_wrap;
-    UI->NkLabelColoredWrap = nk_label_colored_wrap;
-    UI->NkImage = nk_image;
-    UI->NkImageColor = nk_image_color;
-
-    UI->NkLabelf = nk_labelf;
-    UI->NkLabelfColored = nk_labelf_colored;
-    UI->NkLabelfWrap = nk_labelf_wrap;
-    UI->NkLabelfColoredWrap = nk_labelf_colored_wrap;
-    UI->NkLabelfv = nk_labelfv;
-    UI->NkLabelfvColored = nk_labelfv_colored;
-    UI->NkLabelfvWrap = nk_labelfv_wrap;
-    UI->NkLabelfvColoredWrap = nk_labelfv_colored_wrap;
-    UI->NkValueBool = nk_value_bool;
-    UI->NkValueInt = nk_value_int;
-    UI->NkValueUint = nk_value_uint;
-    UI->NkValueFloat = nk_value_float;
-    UI->NkValueColorByte = nk_value_color_byte;
-    UI->NkValueColorFloat = nk_value_color_float;
-    UI->NkValueColorHex = nk_value_color_hex;
-
-    UI->NkButtonText = nk_button_text;
-    UI->NkButtonLabel = nk_button_label;
-    UI->NkButtonColor = nk_button_color;
-    UI->NkButtonSymbol = nk_button_symbol;
-    UI->NkButtonImage = nk_button_image;
-    UI->NkButtonSymbolLabel = nk_button_symbol_label;
-    UI->NkButtonSymbolText = nk_button_symbol_text;
-    UI->NkButtonImageLabel = nk_button_image_label;
-    UI->NkButtonImageText = nk_button_image_text;
-    UI->NkButtonTextStyled = nk_button_text_styled;
-    UI->NkButtonLabelStyled = nk_button_label_styled;
-    UI->NkButtonSymbolStyled = nk_button_symbol_styled;
-    UI->NkButtonImageStyled = nk_button_image_styled;
-    UI->NkButtonSymbolTextStyled = nk_button_symbol_text_styled;
-    UI->NkButtonSymbolLabelStyled = nk_button_symbol_label_styled;
-    UI->NkButtonImageLabelStyled = nk_button_image_label_styled;
-    UI->NkButtonImageTextStyled = nk_button_image_text_styled;
-    UI->NkButtonSetBehavior = nk_button_set_behavior;
-    UI->NkButtonPushBehavior = nk_button_push_behavior;
-    UI->NkButtonPopBehavior = nk_button_pop_behavior;
-
-    UI->NkCheckLabel = nk_check_label;
-    UI->NkCheckText = nk_check_text;
-    UI->NkCheckTextAlign = nk_check_text_align;
-    UI->NkCheckFlagsLabel = nk_check_flags_label;
-    UI->NkCheckFlagsText = nk_check_flags_text;
-    UI->NkCheckboxLabel = nk_checkbox_label;
-    UI->NkCheckboxLabelAlign = nk_checkbox_label_align;
-    UI->NkCheckboxText = nk_checkbox_text;
-    UI->NkCheckboxTextAlign = nk_checkbox_text_align;
-    UI->NkCheckboxFlagsLabel = nk_checkbox_flags_label;
-    UI->NkCheckboxFlagsText = nk_checkbox_flags_text;
-
-    UI->NkSelectableLabel = nk_selectable_label;
-    UI->NkSelectableText = nk_selectable_text;
-    UI->NkSelectableImageLabel = nk_selectable_image_label;
-    UI->NkSelectableImageText = nk_selectable_image_text;
-    UI->NkSelectableSymbolLabel = nk_selectable_symbol_label;
-    UI->NkSelectableSymbolText = nk_selectable_symbol_text;
-
-    UI->NkEditString = nk_edit_string;
-    UI->NkEditStringZeroTerminated = nk_edit_string_zero_terminated;
-    UI->NkEditBuffer = nk_edit_buffer;
-    UI->NkEditFocus = nk_edit_focus;
-    UI->NkEditUnfocus = nk_edit_unfocus;
-
-    UI->NkMurmurHash = nk_murmur_hash;
-    UI->NkTriangleFromDirection = nk_triangle_from_direction;
-
-    UI->NkVec2 = nk_vec2;
-    UI->NkVec2i = nk_vec2i;
-    UI->NkVec2v = nk_vec2v;
-    UI->NkVec2iv = nk_vec2iv;
-
-    UI->NkGetNullRect = nk_get_null_rect;
-    UI->NkRect = nk_rect;
-    UI->NkRecti = nk_recti;
-    UI->NkRecta = nk_recta;
-    UI->NkRectv = nk_rectv;
-    UI->NkRectiv = nk_rectiv;
-    UI->NkRectPos = nk_rect_pos;
-    UI->NkRectSize = nk_rect_size;
-
-    UI->NkStrokeLine = nk_stroke_line;
-    UI->NkStrokeCurve = nk_stroke_curve;
-    UI->NkStrokeRect = nk_stroke_rect;
-    UI->NkStrokeCircle = nk_stroke_circle;
-    UI->NkStrokeArc = nk_stroke_arc;
-    UI->NkStrokeTriangle = nk_stroke_triangle;
-    UI->NkStrokePolyLine = nk_stroke_polyline;
-    UI->NkStrokePolygon = nk_stroke_polygon;
-
-    UI->NkTreePushHashed = nk_tree_push_hashed;
-    UI->NkTreePop = nk_tree_pop;
-
-    UI->NkStrlen = nk_strlen;
-    UI->NkStricmp = nk_stricmp;
-    UI->NkStricmpn = nk_stricmpn;
-    UI->NkStrtoi = nk_strtoi;
-    UI->NkStrtof = nk_strtof;
-
-    UI->NkProgress = nk_progress;
-    UI->NkProg = nk_prog;
-
-    UI->NkChartBegin = nk_chart_begin;
-    UI->NkChartBeginColored = nk_chart_begin_colored;
-    UI->NkChartAddSlot = nk_chart_add_slot;
-    UI->NkChartAddSlotColored = nk_chart_add_slot_colored;
-    UI->NkChartPush = nk_chart_push;
-    UI->NkChartPushSlot = nk_chart_push_slot;
-    UI->NkChartEnd = nk_chart_end;
-    UI->NkPlot = nk_plot;
-    UI->NkPlotFunction = nk_plot_function;
-
-    UI->NkWindowGetCanvas = nk_window_get_canvas;
-
-    UI->NkWidget = nk_widget;
-    UI->NkWidgetFitting = nk_widget_fitting;
-    UI->NkWidgetBounds = nk_widget_bounds;
-    UI->NkWidgetPosition = nk_widget_position;
-    UI->NkWidgetSize = nk_widget_size;
-    UI->NkWidgetWidth = nk_widget_width;
-    UI->NkWidgetHeight = nk_widget_height;
-    UI->NkWidgetIsHovered = nk_widget_is_hovered;
-    UI->NkWidgetIsMouseClicked = nk_widget_is_mouse_clicked;
-    UI->NkWidgetHasMouseClickDowm = nk_widget_has_mouse_click_down;
-    UI->NkSpacing = nk_spacing;
-    UI->NkWidgetDisableBegin = nk_widget_disable_begin;
-    UI->NkWidgetDisableEnd = nk_widget_disable_end;
-
-    UI->NkFillRect = nk_fill_rect;
-    UI->NkFillRectMultiColor = nk_fill_rect_multi_color;
-    UI->NkFillCircle = nk_fill_circle;
-    UI->NkFillArc = nk_fill_arc;
-    UI->NkFillTriangle = nk_fill_triangle;
-    UI->NkFillPolygon = nk_fill_polygon;
-
-    UI->NkCombo = nk_combo;
-    UI->NkComboSeparator = nk_combo_separator;
-    UI->NkComboString = nk_combo_string;
-    UI->NkComboCallback = nk_combo_callback;
-    UI->NkCombobox = nk_combobox;
-    UI->NkComboboxString = nk_combobox_string;
-    UI->NkComboboxSeparator = nk_combobox_separator;
-    UI->NkComboboxCallback = nk_combobox_callback;
-
-    UI->NkComboBeginText = nk_combo_begin_text;
-    UI->NkComboBeginLabel = nk_combo_begin_label;
-    UI->NkComboBeginColor = nk_combo_begin_color;
-    UI->NkComboBeginSymbol = nk_combo_begin_symbol;
-    UI->NkComboBeginSymbolLabel = nk_combo_begin_symbol_label;
-    UI->NkComboBeginSymbolText = nk_combo_begin_symbol_text;
-    UI->NkComboBeginImage = nk_combo_begin_image;
-    UI->NkComboBeginImageLabel = nk_combo_begin_image_label;
-    UI->NkComboBeginImageText = nk_combo_begin_image_text;
-    UI->NkComboItemLabel = nk_combo_item_label;
-    UI->NkComboItemText = nk_combo_item_text;
-    UI->NkComboItemImageLabel = nk_combo_item_image_label;
-    UI->NkComboItemImageText = nk_combo_item_image_text;
-    UI->NkComboItemSymbolLabel = nk_combo_item_symbol_label;
-    UI->NkComboItemSymbolText = nk_combo_item_symbol_text;
-    UI->NkComboClose = nk_combo_close;
-    UI->NkComboEnd = nk_combo_end;
-
-    UI->NkTooltip = nk_tooltip;
-#ifdef NK_INCLUDE_STANDARD_VARARGS
-    UI->NkTooltipf = nk_tooltipf;
-    UI->NkTooltipfv = nk_tooltipfv;
-#endif
-    UI->NkTooltipBegin = nk_tooltip_begin;
-    UI->NkTooltipEnd = nk_tooltip_end;
-
-    UI->NkPropertyInt = nk_property_int;
-    UI->NkPropertyU8 = nk_property_u8;
-
-    UI->NkHandlePtr = nk_handle_ptr;
-    UI->NkHandleID = nk_handle_id;
-    UI->NkImageHandle = nk_image_handle;
-    UI->NkImagePtr = nk_image_ptr;
-    UI->NkImageID = nk_image_id;
-    UI->NkImageIsSubimage = nk_image_is_subimage;
-    UI->NkSubimagePtr = nk_subimage_ptr;
-    UI->NkSubimageID = nk_subimage_id;
-    UI->NkSubimageHandle = nk_subimage_handle;
-
-    UI->NkContextualBegin = nk_contextual_begin;
-    UI->NkContextualItemText = nk_contextual_item_text;
-    UI->NkContextualItemLabel = nk_contextual_item_label;
-    UI->NkContextualItemImageLabel = nk_contextual_item_image_label;
-    UI->NkContextualItemImageText = nk_contextual_item_image_text;
-    UI->NkContextualItemSymbolLabel = nk_contextual_item_symbol_label;
-    UI->NkContextualItemSymbolText = nk_contextual_item_symbol_text;
-    UI->NkContextualClose = nk_contextual_close;
-    UI->NkContextualEnd = nk_contextual_end;
-
-    UI->NkPopupBegin = nk_popup_begin;
-    UI->NkPopupClose = nk_popup_close;
-    UI->NkPopupEnd = nk_popup_end;
-    UI->NkPopupGetScroll = nk_popup_get_scroll;
-    UI->NkPopupSetScroll = nk_popup_set_scroll;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1664,7 +1399,7 @@ ToggleFullscreen(HWND Window)
                          MonitorInfo.rcMonitor.left, MonitorInfo.rcMonitor.top,
                          MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left,
                          MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top,
-                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_NOSENDCHANGING);
         }
     }
     else
@@ -1875,7 +1610,7 @@ Win32MainWindowCallback(HWND Window,
 
         case WM_WINDOWPOSCHANGING:
         {
-            if(GetKeyState(VK_SHIFT) & 0x8000)
+//            if(GetKeyState(VK_SHIFT) & 0x8000)
             {
                 WINDOWPOS *NewPos = (WINDOWPOS *)LParam;
 
@@ -1983,9 +1718,9 @@ Win32InputScroll(win32_state *State, double xoffset, double yoffset)
     Assert(yoffset > -FLT_MAX);
     Assert(yoffset < FLT_MAX);
 
-    Win32NkScrollCallback(&State->Main, xoffset, yoffset);
+    Win32NkScrollCallback(&State->NkMain, xoffset, yoffset);
 #if EDITOR_INTERNAL
-    Win32NkScrollCallback(&State->Debug, xoffset, yoffset);
+    Win32NkScrollCallback(&State->NkDebug, xoffset, yoffset);
 #endif
 }
 
@@ -2012,9 +1747,9 @@ Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
 
     if (plain)
     {
-        Win32NkCharCallback(&State->Main, codepoint);
+        Win32NkCharCallback(&State->NkMain, codepoint);
 #if EDITOR_INTERNAL
-        Win32NkCharCallback(&State->Debug, codepoint);
+        Win32NkCharCallback(&State->NkDebug, codepoint);
 #endif
     }
 }
@@ -2053,10 +1788,10 @@ Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
     if (!State->lockKeyMods)
         mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
-    Win32NkKeyCallback(&State->Main, key, scancode, action, mods);
+    Win32NkKeyCallback(&State->NkMain, key, scancode, action, mods);
 
 #if EDITOR_INTERNAL
-    Win32NkKeyCallback(&State->Debug, key, scancode, action, mods);
+    Win32NkKeyCallback(&State->NkDebug, key, scancode, action, mods);
 #endif
 }
 
@@ -2083,9 +1818,9 @@ Win32InputMouseClick(win32_state *State, int button, int action, int mods)
 
     State->MouseButtons[button] = (char) action;
 
-    Win32NkMouseButtonCallback(&State->Main, State, button, action);
+    Win32NkMouseButtonCallback(&State->NkMain, State, button, action);
 #if EDITOR_INTERNAL
-    Win32NkMouseButtonCallback(&State->Debug, State, button, action);
+    Win32NkMouseButtonCallback(&State->NkDebug, State, button, action);
 #endif
 }
 
@@ -3378,8 +3113,6 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
     Memory->PlatformAPI.DEBUGExecuteSystemCommand = DEBUGExecuteSystemCommand;
     Memory->PlatformAPI.DEBUGGetProcessState = DEBUGGetProcessState;
 #endif
-
-    Win32SetUIPointers(&Memory->PlatformAPI.UI);
 }
 
 #if EDITOR_INTERNAL
@@ -3551,10 +3284,10 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.Main,
+            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.NkMain,
                                                  UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
 #if EDITOR_INTERNAL
-            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.Debug,
+            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.NkDebug,
                                                        UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
 #endif
             nk_colorf bg = {};
@@ -3657,12 +3390,12 @@ WinMain(HINSTANCE Instance,
 // NOTE(pvlso): Engine Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                Win32NkUpdateInputs(&Win32State, &Win32State.Main,
+                Win32NkUpdateInputs(&Win32State, &Win32State.NkMain,
                                     UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                                     DrawRegion,
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
-                Win32NkUpdateInputs(&Win32State, &Win32State.Debug,
+                Win32NkUpdateInputs(&Win32State, &Win32State.NkDebug,
                                     UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                                     DrawRegion,
                                     TargetSecondsPerFrame);
@@ -3672,7 +3405,8 @@ WinMain(HINSTANCE Instance,
                 {
                     if(Engine.UpdateAndRender)
                     {
-                        Engine.UpdateAndRender(nk, &EditorMemory, NewInput, &RenderCommands);
+                        v2 UIScale = V2(Win32State.NkMain.fb_scale.x, Win32State.NkMain.fb_scale.y);
+                        Engine.UpdateAndRender(nk, UIScale, &EditorMemory, NewInput, &RenderCommands);
                         if(NewInput->QuitRequested)
                         {
                             GlobalRunning = false;
@@ -3874,9 +3608,9 @@ WinMain(HINSTANCE Instance,
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                NKOpenGLRenderCommands(&Win32State.Main, DrawRegion, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.NkMain, DrawRegion, NK_ANTI_ALIASING_ON);
 #if EDITOR_INTERNAL
-                NKOpenGLRenderCommands(&Win32State.Debug, DrawRegion, NK_ANTI_ALIASING_ON);
+                NKOpenGLRenderCommands(&Win32State.NkDebug, DrawRegion, NK_ANTI_ALIASING_ON);
 #endif
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);

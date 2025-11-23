@@ -157,7 +157,7 @@ struct editor_game_simulate_mode
     memory_arena GameTranArena;
 };
 
-internal void PlaySimulation(editor_state *EditorState, transient_state *TranState);
+//internal void PlaySimulation(editor_state *EditorState, transient_state *TranState);
 
 #define ENGINE_GAME_SIMULATE_H
 #endif

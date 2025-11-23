@@ -469,11 +469,10 @@ UIDrawWindowOutline(ui_state *UIState, v2 Center, v2 Dim, b32 StandardLable = tr
 
 internal void
 BeginUI(ui_state *UIState, editor_render_commands *Commands, editor_assets *Assets, u32 MainGenerationID,
-        u32 Width, u32 Height, nk_ui *UI, nk_context *Nk)
+        u32 Width, u32 Height, nk_context *Nk, v2 UIScale)
 {
     if(!UIState->Initialized)
     {
-        UIState->UI = UI;
         UIState->Nk = Nk;
         
         UIState->Initialized = true;
@@ -495,8 +494,8 @@ BeginUI(ui_state *UIState, editor_render_commands *Commands, editor_assets *Asse
 
     UIState->FontScale = 1.25f;
 
-    f32 Ratio = (f32)Nk->BaseHeight/(f32)Nk->BaseWidth;
-    Orthographic(&UIState->RenderGroup, Nk->Scale.x);
+    f32 Ratio = (f32)UI_BASE_RESOLUTION_X/(f32)UI_BASE_RESOLUTION_Y;
+    Orthographic(&UIState->RenderGroup, UIScale.x);
     Clear(&UIState->RenderGroup, UI_COLOR_RGBA1_4D3020FF);
 
     UIState->LeftEdge = -0.5f*Width;

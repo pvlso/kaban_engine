@@ -156,7 +156,6 @@ struct ui_state
     r32 GlobalWidth;
     r32 GlobalHeight;
 
-    nk_ui *UI;
     nk_context *Nk;
 };
 

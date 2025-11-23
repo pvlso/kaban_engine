@@ -100,9 +100,9 @@ struct win32_state
     s32 lastCursorPosX, lastCursorPosY;
     char *clipboardString;
 
-    nk_win32 Main;
+    nk_win32 NkMain;
 #if EDITOR_INTERNAL
-    nk_win32 Debug;
+    nk_win32 NkDebug;
 #endif
 };
 

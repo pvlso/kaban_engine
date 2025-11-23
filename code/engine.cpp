@@ -102,8 +102,8 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-#include "engine_game_simulate.cpp"
-#include "engine_navigation_mesh.cpp"
+//#include "engine_game_simulate.cpp"
+//#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
 
 internal void
@@ -138,8 +138,6 @@ EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
     Platform = Memory->PlatformAPI;    
-    nk_ui UI = Platform.UI;
-
     GenerateCRC64Table();
    
 #if EDITOR_INTERNAL
@@ -212,7 +210,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
     if(EditorState->EditorMode == EditorMode_None)
     {
-//        PlayMapEditor(EditorState, TranState);
         PlayTitleScreen(EditorState, TranState);
     }
 
@@ -248,9 +245,9 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     }
 
     BeginUI(&EditorState->UIState, RenderCommands, TranState->Assets, TranState->MainGenerationID,
-            RenderWidth, RenderHeight, &UI, nk);
-    if(UI.NkBegin(nk, "UI Window", UI.NkRect(0, 0, (f32)nk->BaseWidth, (f32)nk->BaseHeight),
-                  (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
+            RenderWidth, RenderHeight, nk, UIScale);
+    if(nk_begin(nk, "UI Window", nk_rect(0, 0, (f32)1920, (f32)1080),
+                (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
         b32 Rerun = false;
         do
@@ -289,7 +286,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             }
         } while(Rerun);
     }
-    UI.NkEnd(nk);
+    nk_end(nk);
     EndUI(EditorState, &EditorState->UIState, Input);
     
     EndRenderGroup(RenderGroup);

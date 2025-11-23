@@ -25,51 +25,50 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
 
     ui_state *UIState = &EditorState->UIState;
-    nk_ui *UI = UIState->UI;
     nk_context *Nk = UIState->Nk;
     if(!Result)
     {
         char Buffer[256];
-        UI->NkLayoutRowBegin(Nk, NK_STATIC, 40, 8);
+        nk_layout_row_begin(Nk, NK_STATIC, 40, 8);
         {
-            UI->NkLayoutRowPush(Nk, 130);
-            if(UI->NkButtonLabel(Nk, "Assets Mode"))
+            nk_layout_row_push(Nk, 130);
+            if(nk_button_label(Nk, "Assets Mode"))
             {
                 PlayAssetsMode(EditorState, TranState);
                 Result = true;
                 return(Result);
             }
 
-            if(UI->NkButtonLabel(Nk, "Map Editor"))
+            if(nk_button_label(Nk, "Map Editor"))
             {
 //                PlayMapEditor(EditorState, TranState);
 //                Result = true;
                 return(Result);
             }
 
-            if(UI->NkButtonLabel(Nk, "Simulate"))
+            if(nk_button_label(Nk, "Simulate"))
             {
-                PlaySimulation(EditorState, TranState);
+//                PlaySimulation(EditorState, TranState);
                 Result = true;
                 return(Result);
             }
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
-            if(UI->NkButtonLabel(Nk, "PlaceHolder")) {}
+            if(nk_button_label(Nk, "PlaceHolder")) {}
+            if(nk_button_label(Nk, "PlaceHolder")) {}
+            if(nk_button_label(Nk, "PlaceHolder")) {}
+            if(nk_button_label(Nk, "PlaceHolder")) {}
+            if(nk_button_label(Nk, "PlaceHolder")) {}
         }
-        UI->NkLayoutRowEnd(Nk);
+        nk_layout_row_end(Nk);
 
-        UI->NkLayoutRowDynamic(Nk, 40, 1);
-        UI->NkSpacer(Nk);
+        nk_layout_row_dynamic(Nk, 40, 1);
+        nk_spacer(Nk);
 
         editor_meta EditorMeta = EditorState->EditorMeta;
         FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d",
                      EditorMeta.KESAVersion[0], EditorMeta.KESAVersion[1],
                      EditorMeta.KESAVersion[2], EditorMeta.KESAVersion[3]);
-        UI->NkLabel(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-        UI->NkSpacer(Nk);
+        nk_label(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
+        nk_spacer(Nk);
 
 #if 0        
         if(EditorState->MapStartup.NewMap)

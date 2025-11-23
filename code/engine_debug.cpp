@@ -390,7 +390,7 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
 
         u32 LaneIndex = Node->ThreadOrdinal;
         r32 LaneY = ProfileRect.y - LaneStride*LaneIndex;
-        struct nk_rect RegionRect = Platform.UI.NkRect(ThisMinX, LaneY, ThisMaxX, LaneHeight);
+        struct nk_rect RegionRect = nk_rect(ThisMinX, LaneY, ThisMaxX, LaneHeight);
 
         nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
 
@@ -425,14 +425,14 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
                 *At++;
             }
 
-            Platform.UI.NkTooltip(nk, OnePastLastBackSlash);
+            nk_tooltip(nk, OnePastLastBackSlash);
         }
                     
 
-        Platform.UI.NkFillRect(&nk->current->buffer,
-                               RegionRect, 0.0f, C);
-        Platform.UI.NkStrokeRect(&nk->current->buffer,
-                                 RegionRect, 0.0f, 0.15f, {0, 0, 0, 255});
+        nk_fill_rect(&nk->current->buffer,
+                     RegionRect, 0.0f, C);
+        nk_stroke_rect(&nk->current->buffer,
+                       RegionRect, 0.0f, 0.15f, {0, 0, 0, 255});
 
         if(ret & NK_CHART_CLICKED)
         {
@@ -452,14 +452,14 @@ internal void
 DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
     nk_context *nk = DebugState->nk;
-    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
-    Platform.UI.NkSpacer(nk);
-    Platform.UI.NkLayoutRowDynamic(nk, 310, 1);
+    nk_layout_row_dynamic(nk, 5, 1);
+    nk_spacer(nk);
+    nk_layout_row_dynamic(nk, 310, 1);
 
     struct nk_rect Rect = {};
-    Platform.UI.NkWidget(&Rect, nk);
+    nk_widget(&Rect, nk);
 
-    Platform.UI.NkFillRect(&nk->current->buffer,
+    nk_fill_rect(&nk->current->buffer,
                            Rect, 0.0f, {255, 0, 0, 100});
 
     u32 LaneCount = DebugState->FrameBarLaneCount;
@@ -494,12 +494,12 @@ internal void
 DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
 {
     nk_context *nk = DebugState->nk;
-    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
-    Platform.UI.NkSpacer(nk);
-    Platform.UI.NkLayoutRowDynamic(nk, 310, 1);
+    nk_layout_row_dynamic(nk, 5, 1);
+    nk_spacer(nk);
+    nk_layout_row_dynamic(nk, 310, 1);
 
     struct nk_rect Rect = {};
-    Platform.UI.NkWidget(&Rect, nk);
+    nk_widget(&Rect, nk);
     
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
@@ -536,7 +536,7 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
                     r32 ThisMinY = Rect.y + Scale*(r32)(Node->ParentRelativeClock);
                     r32 ThisMaxY = Scale*(r32)(Node->Duration);
 
-                    struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX, ThisMinY, BarWidth, ThisMaxY);
+                    struct nk_rect RegionRectnk = nk_rect(AtX, ThisMinY, BarWidth, ThisMaxY);
 
                     nk_color C = {(u8)(Color.r*255.0f), (u8)(Color.g*255.0f), (u8)(Color.b*255.0f), 255};
                     nk_flags ret = 0;
@@ -570,12 +570,12 @@ DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
                             *At++;
                         }
 
-                        Platform.UI.NkTooltip(nk, OnePastLastBackSlash);
+                        nk_tooltip(nk, OnePastLastBackSlash);
                     }
                     
-                    Platform.UI.NkFillRect(&nk->current->buffer,
+                    nk_fill_rect(&nk->current->buffer,
                                            RegionRectnk, 0.0f, C);
-                    Platform.UI.NkStrokeRect(&nk->current->buffer,
+                    nk_stroke_rect(&nk->current->buffer,
                                              RegionRectnk, 0.0f, 0.15f, {0, 0, 0, 255});
 
                     if(ret & NK_CHART_CLICKED)
@@ -653,7 +653,7 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *Root
     }
 
     nk_context *nk = DebugState->nk;
-    Platform.UI.NkLayoutRowDynamic(nk, 20, 1);
+    nk_layout_row_dynamic(nk, 20, 1);
     for(Index = 0;
         (Index < LinkCount);
         ++Index)
@@ -668,7 +668,7 @@ DrawTopClocksList(debug_state *DebugState, debug_id GraphID, debug_element *Root
 
         if(Stats->Sum > 0)
         {
-            Platform.UI.NkLabel(nk, TextBuffer, NK_TEXT_LEFT);
+            nk_label(nk, TextBuffer, NK_TEXT_LEFT);
         }
     }
     
@@ -679,18 +679,18 @@ internal void
 DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootElement)
 {
     nk_context *nk = DebugState->nk;
-    Platform.UI.NkLayoutRowDynamic(nk, 5, 1);
-    Platform.UI.NkSpacer(nk);
-    Platform.UI.NkLayoutRowDynamic(nk, 60, 1);
+    nk_layout_row_dynamic(nk, 5, 1);
+    nk_spacer(nk);
+    nk_layout_row_dynamic(nk, 60, 1);
 
     struct nk_rect Rect = {};
-    Platform.UI.NkWidget(&Rect, nk);
+    nk_widget(&Rect, nk);
 
     u32 FrameCount = ArrayCount(RootElement->Frames);
     if(FrameCount > 0)
     {
         const struct nk_input *in = nk->current->widgets_disabled ? 0 : &nk->input;
-        Platform.UI.NkFillRect(&nk->current->buffer,
+        nk_fill_rect(&nk->current->buffer,
                                Rect, 0.0f, {0, 0, 0, 64});
 
         r32 BarWidth = (Rect.w / (r32)FrameCount);
@@ -702,7 +702,7 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
             ++FrameIndex)
         {
             rectangle2 RegionRect = RectMinMax(V2(AtX, ThisMinY), V2(AtX + BarWidth, ThisMaxY));
-            struct nk_rect RegionRectnk = Platform.UI.NkRect(AtX - BarWidth, ThisMinY, BarWidth, ThisMaxY);
+            struct nk_rect RegionRectnk = nk_rect(AtX - BarWidth, ThisMinY, BarWidth, ThisMaxY);
             
             nk_color C = {};
             nk_color OC = {128, 128, 128, 255};
@@ -745,17 +745,17 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
                 char TextBuffer[256];
                 FormatString(sizeof(TextBuffer), TextBuffer, "%u", FrameIndex);
 
-                Platform.UI.NkTooltip(nk, TextBuffer);
+                nk_tooltip(nk, TextBuffer);
             }
 
             if(Highlight)
             {
-                Platform.UI.NkFillRect(&nk->current->buffer,
+                nk_fill_rect(&nk->current->buffer,
                                        RegionRectnk, 0.0f, C);
             }
 
-            Platform.UI.NkStrokeRect(&nk->current->buffer,
-                                     RegionRectnk, 0.0f, 0.15f, OC);
+            nk_stroke_rect(&nk->current->buffer,
+                           RegionRectnk, 0.0f, 0.15f, OC);
 
             if(ret & NK_CHART_CLICKED)
             {
@@ -811,12 +811,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
         case DebugType_memory_arena_p:
         case DebugType_ArenaOccupancy:
         {
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(nk, 80);
-                Platform.UI.NkLabel(nk, GetName(Element), NK_TEXT_LEFT);
+                nk_layout_row_push(nk, 80);
+                nk_label(nk, GetName(Element), NK_TEXT_LEFT);
 
-                Platform.UI.NkLayoutRowPush(nk, 200);
+                nk_layout_row_push(nk, 200);
                 debug_element_frame *RootFrame = Element->Frames + DebugState->ViewingFrameOrdinal;
                 debug_stored_event *Event = RootFrame->OldestEvent;
                 if(Event)
@@ -824,11 +824,11 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                     memory_arena *Arena = Event->Event.Value_memory_arena_p;
                     if(Arena->Base)
                     {
-                        Platform.UI.NkProg(nk, Arena->Used, Arena->Size, nk_false);
+                        nk_prog(nk, Arena->Used, Arena->Size, nk_false);
                     }
                 }
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
 
         } break;
 
@@ -838,30 +838,30 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
         {
             debug_view_profile_graph *Graph = &View->ProfileGraph;
 
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 4);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 4);
             {
-                Platform.UI.NkLayoutRowPush(nk, 80);
-                if(Platform.UI.NkButtonLabel(nk, "Root"))
+                nk_layout_row_push(nk, 80);
+                if(nk_button_label(nk, "Root"))
                 {
                     Graph->GUID = 0;
                 }
 
-                if(Platform.UI.NkButtonLabel(nk, "Threads"))
+                if(nk_button_label(nk, "Threads"))
                 {
                     Element->Type = DebugType_ThreadIntervalGraph;
                 }
 
-                if(Platform.UI.NkButtonLabel(nk, "Frames"))
+                if(nk_button_label(nk, "Frames"))
                 {
                     Element->Type = DebugType_FrameBarGraph;
                 }
 
-                if(Platform.UI.NkButtonLabel(nk, "Clocks"))
+                if(nk_button_label(nk, "Clocks"))
                 {
                     Element->Type = DebugType_TopClocksList;
                 }
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
             
             u32 ViewingFrameOrdinal = DebugState->ViewingFrameOrdinal;
             debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
@@ -891,25 +891,25 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
 
         case DebugType_FrameSlider:
         {
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 3);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 3);
             {
-                Platform.UI.NkLayoutRowPush(nk, 108);
-                if(Platform.UI.NkButtonLabel(nk, "Pause"))
+                    nk_layout_row_push(nk, 108);
+                if(nk_button_label(nk, "Pause"))
                 {
                     DebugState->Paused = !DebugState->Paused;
                 }
 
-                if(Platform.UI.NkButtonLabel(nk, "Oldest"))
+                if(nk_button_label(nk, "Oldest"))
                 {
                     DebugState->ViewingFrameOrdinal = DebugState->OldestFrameOrdinal;
                 }
 
-                if(Platform.UI.NkButtonLabel(nk, "Most Recent"))
+                if(nk_button_label(nk, "Most Recent"))
                 {
                     DebugState->ViewingFrameOrdinal = DebugState->MostRecentFrameOrdinal;
                 }
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
 
             DrawFrameSlider(DebugState, DebugID, Element);
         } break;
@@ -923,12 +923,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                          MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
                          MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
 
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(nk, 400);
-                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
+                nk_layout_row_push(nk, 400);
+                nk_label(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
         } break;
 
         case DebugType_DebugMemoryInfo:
@@ -936,12 +936,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
             char Text[256];
             FormatString(sizeof(Text), Text, "Per-frame arena space remaining: %ukb",
                          (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(nk, 400);
-                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
+                nk_layout_row_push(nk, 400);
+                nk_label(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
         } break;
 
         default:
@@ -959,12 +959,12 @@ DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Eleme
                     DEBUGVarToText_Colon|
                     DEBUGVarToText_PrettyBools);
 
-            Platform.UI.NkLayoutRowBegin(nk, NK_STATIC, 30, 1);
+            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
             {
-                Platform.UI.NkLayoutRowPush(nk, 400);
-                Platform.UI.NkLabel(nk, Text, NK_TEXT_LEFT);
+                nk_layout_row_push(nk, 400);
+                nk_label(nk, Text, NK_TEXT_LEFT);
             }
-            Platform.UI.NkLayoutRowEnd(nk);
+            nk_layout_row_end(nk);
         } break;
     }
 }
@@ -980,7 +980,7 @@ DrawTreeLink(debug_state *DebugState, debug_tree *Tree, debug_variable_link *Lin
 
         char *Text = Link->Name;
         int id = *(int *)ID.Value[1];
-        if(NkTreePushId(Platform.UI, DebugState->nk, NK_TREE_NODE, Text, NK_MINIMIZED, id))
+        if(nk_tree_push_id(DebugState->nk, NK_TREE_NODE, Text, NK_MINIMIZED, id))
         {
             for(debug_variable_link *SubLink = Link->FirstChild;
                 SubLink != GetSentinel(Link);
@@ -989,7 +989,7 @@ DrawTreeLink(debug_state *DebugState, debug_tree *Tree, debug_variable_link *Lin
                 DrawTreeLink(DebugState, Tree, SubLink);
             }
 
-            Platform.UI.NkTreePop(DebugState->nk);
+            nk_tree_pop(DebugState->nk);
         }
     }
     else
@@ -1610,29 +1610,28 @@ DEBUGEnd(debug_state *DebugState, engine_input *Input)
     Assert((&Input->Controllers[0].Terminator - &Input->Controllers[0].Buttons[0]) ==
            (ArrayCount(Input->Controllers[0].Buttons)));
 
-    nk_ui UI = Platform.UI;
     nk_context *nk = DebugState->nk;
 
     if(WasPressed(Input->Controllers[0].ShowProfiler))
     {
-        if(UI.NkWindowIsHidden(nk, "Profiler"))
+        if(nk_window_is_hidden(nk, "Profiler"))
             DebugState->ShowProfiler = true;
         else
             DebugState->ShowProfiler = false;
     }
-    if (UI.NkBegin(nk, "Profiler", UI.NkRect(0, 0, 200, 70),
+    if (nk_begin(nk, "Profiler", nk_rect(0, 0, 200, 70),
                    NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
                    NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
     {
         if(DebugState->ShowProfiler)
-            UI.NkWindowShow(nk, "Profiler", NK_SHOWN);
+            nk_window_show(nk, "Profiler", NK_SHOWN);
         else
-            UI.NkWindowShow(nk, "Profiler", NK_HIDDEN);
+            nk_window_show(nk, "Profiler", NK_HIDDEN);
 
 
         DrawTrees(DebugState);
     }
-    UI.NkEnd(nk);
+    nk_end(nk);
 }
 
 extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
