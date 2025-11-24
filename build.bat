@@ -1,7 +1,7 @@
 @echo off
 
 set BuildDebug=true
-set BuildGLEW=true
+set BuildGLEW=false
 
 set CommonCompilerFlagsD= -DEDITOR_INTERNAL=1 -DEDITOR_SLOW=1 -DEDITOR_WIN32=1 -EHsc -Od -MTd -nologo -fp:fast -fp:except- -Gm- -GR- -EHa- -Zo -Oi -WX -W4 -FC -Z7 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4127 -wd4996
 set CommonCompilerFlagsO= -DEDITOR_INTERNAL=0 -DEDITOR_SLOW=0 -DEDITOR_WIN32=1 -EHsc -O2 -Oi -MT -nologo -fp:fast -fp:except- -Gm- -GR- -EHa- -WX -W4 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4127

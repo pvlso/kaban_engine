@@ -792,7 +792,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         InvalidDefaultCase;
     }
 
-    nk_layout_row_static(Nk, 280, 450, 1);
+    nk_layout_row_static(Nk, 480, 450, 1);
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
@@ -858,6 +858,96 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         if(nk_button_label(Nk, "Add Tag"))
             AssetsMode->AddTag = true;
 
+        if(nk_button_label(Nk, "Create New Tag"))
+        {
+            ZeroStruct(AssetsMode->NewTag);
+            AssetsMode->NewTag.ValueCount = 1;
+            FormatString(ArrayCount(AssetsMode->NewTag.Key),
+                         AssetsMode->NewTag.Key,
+                         "Tag_None");
+            FormatString(ArrayCount(AssetsMode->NewTag.Values[0]),
+                         AssetsMode->NewTag.Values[0],
+                         "None");
+            AssetsMode->CreatingNewTag = true;
+        }
+
+        if(AssetsMode->CreatingNewTag)
+        {
+            struct nk_rect PopupBounds;
+            nk_window *Win = nk_window_find(Nk, "UI Window");
+            struct nk_rect WinBounds = Win->bounds;
+            PopupBounds.w = 420;
+            PopupBounds.h = 320;
+            PopupBounds.x = (WinBounds.w - PopupBounds.w)*0.5f;
+            PopupBounds.y = (WinBounds.h - PopupBounds.h)*0.5f;
+
+            Nk->style.window.fixed_background.data.color = ColorTable[2];
+            if(nk_popup_begin(Nk, NK_POPUP_STATIC,
+                              "Create Tag",
+                              NK_WINDOW_TITLE|NK_WINDOW_BORDER,
+                              PopupBounds))
+            {
+                nk_layout_row_dynamic(Nk, 30, 1);
+
+                struct nk_rect EditBounds = nk_widget_bounds(Nk);
+                nk_flags Active = nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD,
+                                                                 AssetsMode->NewTag.Key,
+                                                                 ArrayCount(AssetsMode->NewTag.Key),
+                                                                 nk_filter_ascii);
+
+                if((AssetsMode->NewTag.Key[0] == 0) && (Active & NK_EDIT_INACTIVE))
+                {
+                    nk_color placeholder = nk_rgba(150, 150, 150, 128);
+                    nk_draw_text(nk_window_get_canvas(Nk),
+                                 EditBounds,
+                                 "Enter Tag Key...", 16,
+                                 Nk->style.font, placeholder, placeholder);
+                }
+
+                nk_layout_row_dynamic(Nk, 200, 1);
+                struct nk_rect Rect = nk_widget_bounds(Nk);
+                nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+                if(nk_group_begin(Nk, "Tag Values", NK_WINDOW_TITLE))
+                {
+                    nk_layout_row_begin(Nk, NK_STATIC, 30, 2);
+                    for(u32 I = 0;
+                        I < AssetsMode->NewTag.ValueCount;
+                        ++I)
+                    {
+                        nk_layout_row_push(Nk, 20);
+                        Rect = nk_widget_bounds(Nk);
+                        nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
+                        nk_labelf(Nk, NK_TEXT_CENTERED, "%d.", I);
+                        nk_layout_row_push(Nk, 358);
+                        nk_flags Active = nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD,
+                                                                         AssetsMode->NewTag.Values[I],
+                                                                         ArrayCount(AssetsMode->NewTag.Values[I]),
+                                                                         nk_filter_ascii);
+                    }
+                    nk_layout_row_end(Nk);
+
+                    nk_layout_row_dynamic(Nk, 30, 2);
+                    if(nk_button_label(Nk, "Add") &&
+                       (AssetsMode->NewTag.ValueCount < ArrayCount(AssetsMode->NewTag.Values)))
+                        AssetsMode->NewTag.ValueCount++;
+
+                    if(nk_button_label(Nk, "Remove") && (AssetsMode->NewTag.ValueCount > 0))
+                        AssetsMode->NewTag.ValueCount--;
+
+                    nk_group_end(Nk);
+                }
+                
+                nk_layout_row_dynamic(Nk, 30, 2);
+                if(nk_button_label(Nk, "Save"))
+                    AssetsMode->CreatingNewTag = true;
+                if(nk_button_label(Nk, "Close"))
+                    AssetsMode->CreatingNewTag = false;
+
+                Nk->style.window.fixed_background.data.color.a = 0;
+                nk_popup_end(Nk);
+            }
+        }
+        
         nk_group_end(Nk);
     }
 
@@ -926,7 +1016,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     nk_layout_space_end(Nk);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {-5, 720, 450, 50});
+    nk_layout_space_push(Nk, {-5, 520, 450, 50});
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {        
         nk_layout_row_dynamic(Nk, 40, 2);

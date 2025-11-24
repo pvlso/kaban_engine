@@ -153,6 +153,14 @@ struct editor_mode_assets
     char **SourceFiles[KESA_Count];
     u32 SolidTileFileCount;
     char **SolidTileFiles;
+
+
+    b32 CreatingNewTag;
+    kea_tag_map NewTag;
+    s32 TagKeyLen;
+    char TagKeyBuffer[128];
+    s32 TagValuesLen;
+    char TagValuesBuffer[4096];
     
     v2 PixelPosition;
     r32 Time;
