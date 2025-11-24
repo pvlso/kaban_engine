@@ -636,11 +636,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
             // NOTE(paul): Action on Current Stored Asset 
             nk_layout_row_dynamic(Nk, 30, 2);
             if(nk_button_label(Nk, "Edit Stored Asset"))
-                AssetsMode->EditStoredAsset = true;
+                AddAction(AssetsMode, AM_EditStoredAsset);
 
             nk_layout_space_push(Nk, nk_rect(790, 12, 470, 40));
             if(nk_button_label(Nk, "Remove Stored Asset"))
-                AssetsMode->RemoveStoredAsset = true;
+                AddAction(AssetsMode, AM_RemoveStoredAsset);
 
             nk_group_end(Nk);
         }
@@ -792,7 +792,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         InvalidDefaultCase;
     }
 
-    nk_layout_row_static(Nk, 480, 450, 1);
+    nk_layout_row_static(Nk, 310, 450, 1);
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
@@ -856,7 +856,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                              CurrentTag->Tag.ValueCount, 30, {460, 460});
 
         if(nk_button_label(Nk, "Add Tag"))
-            AssetsMode->AddTag = true;
+            AddAction(AssetsMode, AM_AddTag);
 
         if(nk_button_label(Nk, "Create New Tag"))
         {
@@ -939,7 +939,12 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                 
                 nk_layout_row_dynamic(Nk, 30, 2);
                 if(nk_button_label(Nk, "Save"))
-                    AssetsMode->CreatingNewTag = true;
+                {
+                    AssetsMode->CreatingNewTag = false;
+                    AddAction(AssetsMode, AM_AddNewTag);
+                    
+                }
+
                 if(nk_button_label(Nk, "Close"))
                     AssetsMode->CreatingNewTag = false;
 
@@ -952,7 +957,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -284, 450, 320});
+    nk_layout_space_push(Nk, {1460, -314, 450, 320});
     Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
@@ -1009,14 +1014,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_labelf(Nk, NK_TEXT_CENTERED, "Value: %s", CurrentTag->Value);
 
         if(nk_button_label(Nk, "Remove Current Tag"))
-            AssetsMode->RemoveTag = true;
+            AddAction(AssetsMode, AM_RemoveTag);
         
         nk_group_end(Nk);
     }
     nk_layout_space_end(Nk);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {-5, 520, 450, 50});
+    nk_layout_space_push(Nk, {-5, 690, 450, 50});
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {        
         nk_layout_row_dynamic(Nk, 40, 2);
@@ -1024,7 +1029,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
             AssetsMode->EditMode = EditMode_None;
 
         if(nk_button_label(Nk, "Add Asset"))
-            AssetsMode->AddAsset = true;
+            AddAction(AssetsMode, AM_AddAsset);
         
         nk_group_end(Nk);
     }
@@ -1532,7 +1537,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
     nk_context *Nk = UIState->Nk;
     
     kesa_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-    if(AssetsMode->EditStoredAsset)
+    if(IsAction(AssetsMode, AM_EditStoredAsset))
     {
         CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
     }
@@ -1600,21 +1605,15 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
             nk_layout_space_begin(Nk, NK_STATIC, 40, INT_MAX);
             nk_layout_space_push(Nk, nk_rect(0, 238, 130, 40));
             if(nk_button_label(Nk, "Exit"))
-            {
-                AssetsMode->Exit = true;
-            }
+                AddAction(AssetsMode, AM_Exit);
 
             nk_layout_space_push(Nk, nk_rect(134, 238, 130, 40));
             if(nk_button_label(Nk, "Write Assets"))
-            {
-                AssetsMode->WriteAssets = true;
-            }
+                AddAction(AssetsMode, AM_WriteAssets);
 
             nk_layout_space_push(Nk, nk_rect(268, 238, 130, 40));
             if(nk_button_label(Nk, "Write SSA"))
-            {
-                AssetsMode->WriteSSA = true;
-            }
+                AddAction(AssetsMode, AM_WriteSSA);
             nk_layout_space_end(Nk);
 
             DrawAssetAdvanceView(AssetsMode, UIState, Nk);

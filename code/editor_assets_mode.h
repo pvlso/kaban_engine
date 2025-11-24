@@ -101,11 +101,27 @@ struct tag_map_list
     tag_map_list *Next;
 };
 
+enum assets_mode_action
+{
+    AM_Exit              = (1 << 0),
+    AM_EditStoredAsset   = (1 << 1),
+    AM_RemoveStoredAsset = (1 << 2),
+
+    AM_ShowStoredAssets  = (1 << 3),
+    AM_WriteSSA          = (1 << 4),
+    AM_WriteAssets       = (1 << 5),
+    
+    AM_AddAsset          = (1 << 6),
+    AM_RemoveTag         = (1 << 7),
+    AM_AddTag            = (1 << 8),
+    AM_AddNewTag         = (1 << 9),
+};
+
 struct editor_mode_assets
 {
     b32 AssetsInitialized;
     
-    b32 Exit;
+    u32 Actions;
     assets_edit_mode LastEditMode;
     assets_edit_mode EditMode;
 
@@ -113,10 +129,7 @@ struct editor_mode_assets
     memory_arena UtilityTempArena;
     
     b32 StoredAssetChanged;
-    b32 EditStoredAsset;
-    b32 RemoveStoredAsset;
 
-    b32 ShowStoredAssets;
     u32 ShowStoredAssetIndex;
     u32 LastShowStoredAssetIndex;
 
@@ -126,15 +139,8 @@ struct editor_mode_assets
 
     u32 AddAssetCount;
     kesa_asset AssetsToAdd[256];
-    
-    b32 WriteSSA;
-    b32 WriteAssets;
 
     kesa_asset *CurrentAsset;
-    
-    b32 AddAsset;
-    b32 RemoveTag;
-    b32 AddTag;
 
     u32 LastTagID;
     u32 CurrentTagID;
@@ -153,7 +159,6 @@ struct editor_mode_assets
     char **SourceFiles[KESA_Count];
     u32 SolidTileFileCount;
     char **SolidTileFiles;
-
 
     b32 CreatingNewTag;
     kea_tag_map NewTag;
@@ -177,6 +182,33 @@ struct editor_mode_assets
         sswm_mode SSWMMode;
     };
 };
+
+inline void
+AddAction(editor_mode_assets *AssetsMode, u32 Action)
+{
+    AssetsMode->Actions |= Action;
+}
+
+inline void
+RemoveAction(editor_mode_assets *AssetsMode, u32 Action)
+{
+    AssetsMode->Actions &= ~Action;
+}
+
+inline b32
+IsAction(editor_mode_assets *AssetsMode, u32 Action)
+{
+    b32 Result = (AssetsMode->Actions & Action);
+    return(Result);
+}
+
+inline b32
+CheckRemoveAction(editor_mode_assets *AssetsMode, u32 Action)
+{
+    b32 Result = IsAction(AssetsMode, Action);
+    RemoveAction(AssetsMode, Action);
+    return(Result);
+}
 
 inline assets_edit_mode
 AssetsEditModeFromStoredType(u32 StoredType)

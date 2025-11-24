@@ -599,9 +599,9 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, edi
     kesa_type Type = Asset->Type;
 
     AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount] = {};
-    AssetsMode->AddAsset = false;
-    AssetsMode->RemoveTag = false;
-    AssetsMode->AddTag = false;
+    RemoveAction(AssetsMode, AM_AddAsset); 
+    RemoveAction(AssetsMode, AM_RemoveTag); 
+    RemoveAction(AssetsMode, AM_AddTag); 
 
     AssetsMode->LastTagID = 0;
     AssetsMode->CurrentTagID = 0;
@@ -1393,12 +1393,12 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             AssetsMode->AssetsInitialized = true;
         }
 
-        if(!AssetsMode->Exit)
+        if(!IsAction(AssetsMode, AM_Exit))
         {
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
                 ClearEditModeData(EditorState, AssetsMode, Assets, AssetsMode->CurrentAsset);
-                AssetsMode->EditStoredAsset = false;
+                RemoveAction(AssetsMode, AM_EditStoredAsset);
 
                 if(AssetsMode->LastEditMode == EditMode_None)
                 {
@@ -1417,23 +1417,18 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 AssetsMode->LastEditMode = AssetsMode->EditMode;            
             }
 
-            if(AssetsMode->RemoveTag)
-            {
+            if(CheckRemoveAction(AssetsMode, AM_RemoveTag))
                 RemoveCurrentAssetTag(AssetsMode, AssetsMode->CurrentAsset);
-                AssetsMode->RemoveTag = false;
-            }
         
-            if(AssetsMode->AddTag)
-            {
+            if(CheckRemoveAction(AssetsMode, AM_AddTag))
                 AddTagToCurrentAsset(AssetsMode, AssetsMode->CurrentAsset);
-                AssetsMode->AddTag = false;
-            }
 
-            if(AssetsMode->AddAsset && !AssetsMode->EditStoredAsset)
+            if(IsAction(AssetsMode, AM_AddAsset) &&
+               !IsAction(AssetsMode, AM_EditStoredAsset))
             {
                 AddCurrentAsset(AssetsMode);
                 AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-                AssetsMode->AddAsset = false;
+                RemoveAction(AssetsMode, AM_AddAsset);
                 WriteStoredAssets(EditorState, AssetsMode);
             }
         
@@ -1449,7 +1444,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             {
                 case EditMode_None:
                 {
-                    if(AssetsMode->EditStoredAsset)
+                    if(IsAction(AssetsMode, AM_EditStoredAsset))
                     {
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
 
@@ -1462,7 +1457,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
                     else if((AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex) ||
-                            AssetsMode->RemoveStoredAsset)
+                            IsAction(AssetsMode, AM_RemoveStoredAsset))
                     {
                         kesa_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
@@ -1474,26 +1469,23 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
                     
-                    if(AssetsMode->WriteAssets)
+                    if(CheckRemoveAction(AssetsMode, AM_WriteAssets))
                     {
                         WriteStoredAssets(EditorState, AssetsMode);
                         AssetsMode->StoredAssetChanged = false;
-                        AssetsMode->WriteAssets = false;
                     }
 
-                    if(AssetsMode->RemoveStoredAsset)
+                    if(CheckRemoveAction(AssetsMode, AM_RemoveStoredAsset))
                     {
                         RemoveStoredAsset(AssetsMode);
                         AssetsMode->StoredAssetChanged = true;
-                        AssetsMode->RemoveStoredAsset = false;
                     }
 
-                    if(AssetsMode->WriteSSA)
+                    if(CheckRemoveAction(AssetsMode, AM_WriteSSA))
                     {
                         temporary_memory TempMemory = BeginTemporaryMemory(&TranState->TranArena);
 //                        BuildSSAFile(AssetsMode, EditorState->Version, TempMemory.Arena);
                         EndTemporaryMemory(TempMemory);
-                        AssetsMode->WriteSSA = false;
                     }
 
                 } break;
