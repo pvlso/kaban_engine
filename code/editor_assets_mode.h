@@ -137,6 +137,10 @@ struct editor_mode_assets
     kesa_asset *StoredAssets;
     u64 *TagGUIDs;
 
+    ket_header TagHeader;
+    char *TagKeys[TAG_KEY_LENGTH];
+    kea_tag_map *Tags;
+
     u32 AddAssetCount;
     kesa_asset AssetsToAdd[256];
 

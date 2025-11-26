@@ -1076,6 +1076,7 @@ typedef enum platform_file_type
     PlatformFileType_KEA,
     PlatformFileType_KESA,
     PlatformFileType_KEWM,
+    PlatformFileType_KET,
 
     PlatformFileType_BMP,
     PlatformFileType_SSBMP, // Sprite Sheet

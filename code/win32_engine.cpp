@@ -37,16 +37,16 @@ global_variable s64 GlobalPerfCountFrequency;
 global_variable wchar_t GlobalDATAPath[WIN32_STATE_FILE_NAME_COUNT];
 global_variable wchar_t *GlobalDataDirs[PlatformFileType_Count] =
 {
-    L"",             L"keas",       L"kesas",      L"kewms", L"bmps",
-    L"spritesheets", L"tilesets",   L"solidtiles", L"wavs",  L"txts",
-    L"jsons",        L"ttfs",       L"bins"
+    L"",             L"keas",         L"kesas",      L"kewms",      L"kets",
+    L"bmps",         L"spritesheets", L"tilesets",   L"solidtiles", L"wavs",
+    L"txts",         L"jsons",        L"ttfs",       L"bins"
 };
 
 global_variable wchar_t *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
-    L".*",    L".kea",  L".kesa", L".kewm", L".bmp",
-    L".bmp",  L".bmp",  L".bmp",  L".wav",  L".txt",
-    L".json", L".ttf",  L".bin"
+    L".*",    L".kea",  L".kesa", L".kewm", L".ket",
+    L".bmp",  L".bmp",  L".bmp",  L".bmp",  L".wav",
+    L".txt",  L".json", L".ttf",  L".bin"
 };
 
 global_variable win32_window_dimension GlobalFramebufferDim;
@@ -852,12 +852,12 @@ internal void
 Win32CreateDataDirectoryStructure(win32_state *State)
 {
     wchar_t DirPath[WIN32_STATE_FILE_NAME_COUNT];
-    for(u32 I = 0;
+    for(u32 I = 1;
         I < PlatformFileType_Count;
         ++I)
     {
         wchar_t *WildCard = GlobalDataDirs[I];
-        StringCchPrintfW(DirPath, ArrayCount(DirPath), L"%s\\%s", GlobalDATAPath, WildCard);
+        StringCchPrintfW(DirPath, ArrayCount(DirPath), L"%s%s", GlobalDATAPath, WildCard);
         CreateDirectoryW(DirPath, NULL);
     }
 }
