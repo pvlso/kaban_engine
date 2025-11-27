@@ -73,7 +73,7 @@ You may share derivative works publicly, but **commercial use is prohibited**.
 Some parts of this engine contain code influenced by **Handmade Hero**, which is also shared for educational purposes only. Third-party libraries remain under their own licenses.
 
 For complete terms, see:
-→ **[`LICENSE.txt`](./LICENSE.txt)**
+→ **[`LICENSE.txt`](./LICENSE.md)**
 
 ---
 
