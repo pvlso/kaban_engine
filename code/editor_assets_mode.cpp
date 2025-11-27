@@ -342,6 +342,7 @@ CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Asset
 internal void
 AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 {
+#if 0
     kea_tag *Tag = CurrentAsset->AssetTags + CurrentAsset->TagCount++;
     tag_map_list *Map = GetTagMapByIndex(AssetsMode, AssetsMode->CurrentTagID);
 
@@ -351,6 +352,7 @@ AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
     char Buffer[256];
     FormatString(ArrayCount(Buffer), Buffer, "%s%s", Tag->Key, Tag->Value);
     Tag->GUID = GUIDFromString(Buffer);
+#endif
 }
 
 internal void
@@ -358,6 +360,92 @@ AddCurrentAsset(editor_mode_assets *AssetsMode)
 {
     AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
     ++AssetsMode->AddAssetCount;
+}
+
+inline void
+TagInsertionSort(u32 Count, kea_tag_map *Nodes)
+{
+    for(u32 I = 1; I < Count; ++I)
+    {
+        kea_tag_map Node = Nodes[I];
+        s32 J = I - 1;
+
+        while((J >= 0) && (Node.GUID < Nodes[J].GUID))
+        {
+            Nodes[J + 1] = Nodes[J];
+            J = J - 1;
+        }
+
+        Nodes[J + 1] = Node;
+    }
+}
+
+internal void
+AddNewTag(editor_mode_assets *AssetsMode)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+    b32 Result = true;
+    Assert(AssetsMode->StoredHeader.MagicValue);
+    ket_header *Header = &AssetsMode->TagHeader;
+   
+    u32 TagFullVersion = ++AssetsMode->StoredHeader.TagsVersion;
+    u8 TagVersion[4] =
+        {
+            (u8)((TagFullVersion >> 24) & 0xff),
+            (u8)((TagFullVersion >> 16) & 0xff),
+            (u8)((TagFullVersion >>  8) & 0xff),
+            (u8)((TagFullVersion >>  0) & 0xff),
+        };
+
+    char TagsFileName[256];
+    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
+                 TagVersion[0], TagVersion[1],
+                 TagVersion[2], TagVersion[3]);
+    
+    platform_file_handle KETHandle =
+        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
+    if(PlatformNoFileErrors(&KETHandle))
+    {
+        if(PlatformNoFileErrors(&KETHandle))
+        {
+            kea_tag_map *ExistingTags = PushArray(TempMem.Arena, Header->TagCount + 1, kea_tag_map);
+            Copy(sizeof(kea_tag_map)*Header->TagCount, AssetsMode->Tags, ExistingTags);
+
+            AssetsMode->NewTag.GUID = GUIDFromString(AssetsMode->NewTag.Key);
+            ExistingTags[Header->TagCount] = AssetsMode->NewTag;
+            
+            char *TagKeys = PushArray(TempMem.Arena, (Header->TagCount + 1)*TAG_KEY_LENGTH, char);
+            char *Dest = TagKeys;
+            for(u32 I = 0; I < Header->TagCount; ++I)
+            {
+                Copy(TAG_KEY_LENGTH, AssetsMode->TagKeys[I], Dest);
+                Dest += TAG_KEY_LENGTH;
+            }
+
+            Copy(TAG_KEY_LENGTH, AssetsMode->NewTag.Key, Dest);
+            ++Header->TagCount;
+
+            TagInsertionSort(Header->TagCount, ExistingTags);
+            
+            Header->Version = TagFullVersion;
+            u32 TagKeyArraySize = TAG_KEY_LENGTH*Header->TagCount;
+            Header->TagArrayOffset = Header->TagKeyArrayOffset + TagKeyArraySize;
+
+            Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
+            Platform.WriteDataToFile(&KETHandle, Header->TagKeyArrayOffset, TagKeyArraySize, TagKeys);
+        
+            Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset,
+                                     sizeof(kea_tag_map)*Header->TagCount, ExistingTags);
+
+            Platform.CloseFile(&KETHandle);
+        }
+        else
+        {
+            // TODO(pvlso): Logging
+        }
+    }
+
+    EndTemporaryMemory(TempMem);
 }
 
 internal void
@@ -371,12 +459,12 @@ RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
         {
             CurrentAsset->AssetTags[TagIndex] = CurrentAsset->AssetTags[TagIndex + 1];        
         }
-
+#if 0
         kea_tag *Tag = CurrentAsset->AssetTags + (ArrayCount(CurrentAsset->AssetTags) - 1);
         Tag->GUID = 0;
         ZeroSize(StringLength(Tag->Key), Tag->Key);
         ZeroSize(StringLength(Tag->Value), Tag->Value);
-
+#endif
         --CurrentAsset->TagCount;
     }
 }
@@ -1189,6 +1277,12 @@ ReadTags(editor_state *EditorState, editor_mode_assets *AssetsMode)
     Assert(AssetsMode->StoredHeader.MagicValue);
     ket_header *Header = &AssetsMode->TagHeader;
 
+    for(u32 I = 0; I < Header->TagCount; ++I)
+    {
+        Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
+    }
+    Platform.DeallocateMemory(AssetsMode->TagKeys);
+    
     u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
     u8 TagVersion[4] =
         {
@@ -1213,15 +1307,15 @@ ReadTags(editor_state *EditorState, editor_mode_assets *AssetsMode)
         Assert(Header->TagCount);
         
         u32 TagArraySize = TAG_KEY_LENGTH*Header->TagCount;
-        Platform.DeallocateMemory(*AssetsMode->TagKeys);
         char *TagKeysString = (char *)Platform.AllocateMemory(TagArraySize);
         
         Platform.ReadDataFromFile(&KETHandle, Header->TagKeyArrayOffset,
                                   TagArraySize, TagKeysString);
 
-        *AssetsMode->TagKeys = (char *)Platform.AllocateMemory(Header->TagCount*TAG_KEY_LENGTH);
+        AssetsMode->TagKeys = (char **)Platform.AllocateMemory(Header->TagCount);
         for(u32 I = 0; I < Header->TagCount; ++I)
         {
+            AssetsMode->TagKeys[I] = (char *)Platform.AllocateMemory(TAG_KEY_LENGTH);            
             Copy(TAG_KEY_LENGTH, TagKeysString, AssetsMode->TagKeys[I]);
             TagKeysString += TAG_KEY_LENGTH;
         }
@@ -1467,6 +1561,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         
             if(CheckRemoveAction(AssetsMode, AM_AddTag))
                 AddTagToCurrentAsset(AssetsMode, AssetsMode->CurrentAsset);
+
+            if(CheckRemoveAction(AssetsMode, AM_AddNewTag))
+                AddNewTag(AssetsMode);
 
             if(IsAction(AssetsMode, AM_AddAsset) &&
                !IsAction(AssetsMode, AM_EditStoredAsset))

@@ -438,6 +438,12 @@ struct kesa_sswm_file
     u32 FileSize;
 };
 
+struct kesa_tag
+{
+    u64 TagGUID;
+    u32 TagValueIndex;
+};
+
 struct kesa_asset
 {
     // NOTE(pvlso): made of SourceFileName, for
@@ -447,7 +453,7 @@ struct kesa_asset
     kesa_type Type;
 
     u32 TagCount;
-    kea_tag AssetTags[32];
+    kesa_tag AssetTags[32];
     char SourceFileName[256];
     union
     {

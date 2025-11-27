@@ -617,7 +617,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                 
                 nk_group_end(Nk);
             }
-
+#if 0
             if(nk_group_begin(Nk, "Stored Asset Preview Tags", NK_WINDOW_TITLE))
             {
                 nk_layout_row_dynamic(Nk, 30, 1);
@@ -632,7 +632,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                 }
                 nk_group_end(Nk);
             }
-
+#endif
             // NOTE(paul): Action on Current Stored Asset 
             nk_layout_row_dynamic(Nk, 30, 2);
             if(nk_button_label(Nk, "Edit Stored Asset"))
@@ -942,7 +942,6 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                 {
                     AssetsMode->CreatingNewTag = false;
                     AddAction(AssetsMode, AM_AddNewTag);
-                    
                 }
 
                 if(nk_button_label(Nk, "Close"))
@@ -968,7 +967,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_CENTERED, "%s", StoredTypeString);
-
+#if 0
         char *TagsString = 0;
         u32 TotalSize = 0;
         for(u32 I = 0;
@@ -992,7 +991,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
             *At = 0;
             *At++;
         }
-        
+
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
         nk_label(Nk, "Stored Asset Tags", NK_TEXT_CENTERED);
@@ -1012,6 +1011,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_CENTERED, "Value: %s", CurrentTag->Value);
+#endif        
 
         if(nk_button_label(Nk, "Remove Current Tag"))
             AddAction(AssetsMode, AM_RemoveTag);

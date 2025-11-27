@@ -138,7 +138,7 @@ struct editor_mode_assets
     u64 *TagGUIDs;
 
     ket_header TagHeader;
-    char *TagKeys[TAG_KEY_LENGTH];
+    char **TagKeys;
     kea_tag_map *Tags;
 
     u32 AddAssetCount;
@@ -166,10 +166,6 @@ struct editor_mode_assets
 
     b32 CreatingNewTag;
     kea_tag_map NewTag;
-    s32 TagKeyLen;
-    char TagKeyBuffer[128];
-    s32 TagValuesLen;
-    char TagValuesBuffer[4096];
     
     v2 PixelPosition;
     r32 Time;
