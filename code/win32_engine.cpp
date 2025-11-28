@@ -2445,13 +2445,35 @@ internal PLATFORM_OPEN_FILE(Win32OpenFile)
         wchar_t *Dir = GlobalDataDirs[Type];
         StringCchPrintfW(Path, ArrayCount(Path), L"%s%s\\%s", GlobalDATAPath, Dir, FileNameW);
 
-        b32 ReadOp = (Op == PlatformFileOp_Read);
-        Win32FileHandle->Win32Handle = CreateFileW(Path,
-                                                   (ReadOp ? GENERIC_READ : GENERIC_WRITE),
-                                                   (ReadOp ? FILE_SHARE_READ : FILE_SHARE_WRITE),
-                                                   0,
-                                                   (ReadOp ? OPEN_EXISTING : CREATE_ALWAYS),
-                                                   0, 0);
+        switch(Op)
+        {
+            case PlatformFileOp_Read:
+                Win32FileHandle->Win32Handle = CreateFileW(Path, GENERIC_READ,
+                                                           FILE_SHARE_READ,
+                                                           0,
+                                                           OPEN_EXISTING,
+                                                           0, 0);
+                break;
+            case PlatformFileOp_Write:
+                Win32FileHandle->Win32Handle = CreateFileW(Path,
+                                                           GENERIC_WRITE,
+                                                           FILE_SHARE_WRITE,
+                                                           0,
+                                                           CREATE_ALWAYS,
+                                                           0, 0);
+                break;
+            case PlatformFileOp_WriteExisting:
+                Win32FileHandle->Win32Handle = CreateFileW(Path,
+                                                           GENERIC_WRITE,
+                                                           FILE_SHARE_WRITE,
+                                                           0,
+                                                           OPEN_EXISTING,
+                                                           0, 0);
+                break;
+
+                InvalidDefaultCase;
+        };
+
         Result.NoErrors = (Win32FileHandle->Win32Handle != INVALID_HANDLE_VALUE);
         Win32DeallocateMemory(FileNameW);
     }

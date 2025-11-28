@@ -115,6 +115,216 @@ BuildTagMap(editor_mode_assets *AssetsMode, memory_arena *ModeArena, memory_aren
     EndTemporaryMemory(TempMem);
 }
 
+internal b32
+ReadTags(editor_mode_assets *AssetsMode)
+{
+    b32 Result = true;
+    Assert(AssetsMode->StoredHeader.MagicValue);
+    ket_header *Header = &AssetsMode->TagHeader;
+
+    for(u32 I = 0; I < Header->TagCount; ++I)
+    {
+        Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
+    }
+    Platform.DeallocateMemory(AssetsMode->TagKeys);
+    
+    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
+    u8 TagVersion[4] =
+        {
+            (u8)((TagFullVersion >> 24) & 0xff),
+            (u8)((TagFullVersion >> 16) & 0xff),
+            (u8)((TagFullVersion >>  8) & 0xff),
+            (u8)((TagFullVersion >>  0) & 0xff),
+        };
+
+    char TagsFileName[256];
+    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
+                 TagVersion[0], TagVersion[1],
+                 TagVersion[2], TagVersion[3]);
+    
+    platform_file_handle KETHandle =
+        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Read);
+    if(PlatformNoFileErrors(&KETHandle))
+    {
+        Platform.ReadDataFromFile(&KETHandle, 0, sizeof(ket_header), Header);
+
+        Assert(Header->Version == AssetsMode->StoredHeader.TagsVersion);
+        Assert(Header->TagCount);
+        
+        u32 TagArraySize = TAG_KEY_LENGTH*Header->TagCount;
+        char *TagKeysString = (char *)Platform.AllocateMemory(TagArraySize);
+        
+        Platform.ReadDataFromFile(&KETHandle, Header->TagKeyArrayOffset,
+                                  TagArraySize, TagKeysString);
+
+        AssetsMode->TagKeys = (char **)Platform.AllocateMemory(Header->TagCount);
+        for(u32 I = 0; I < Header->TagCount; ++I)
+        {
+            AssetsMode->TagKeys[I] = (char *)Platform.AllocateMemory(TAG_KEY_LENGTH);            
+            Copy(TAG_KEY_LENGTH, TagKeysString, AssetsMode->TagKeys[I]);
+            TagKeysString += TAG_KEY_LENGTH;
+        }
+        Platform.DeallocateMemory(TagKeysString);
+
+        u32 TagsSize = Header->TagCount*sizeof(kea_tag_map);
+        Platform.DeallocateMemory(AssetsMode->Tags);
+        AssetsMode->Tags = (kea_tag_map *)Platform.AllocateMemory(TagsSize);
+
+        Platform.ReadDataFromFile(&KETHandle, Header->TagArrayOffset,
+                                  TagsSize, AssetsMode->Tags);
+        
+        Platform.CloseFile(&KETHandle);
+    }
+    else
+    {
+        Result = false;
+        KETHandle = Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
+        if(PlatformNoFileErrors(&KETHandle))
+        {
+            Header->MagicValue = KET_MAGIC_VALUE;
+            Header->Version = TagFullVersion;
+            Header->TagCount = 1;
+            Header->TagKeyArrayOffset = sizeof(ket_header);
+            u32 TagKeyArraySize = TAG_KEY_LENGTH*Header->TagCount;
+            Header->TagArrayOffset = Header->TagKeyArrayOffset + TagKeyArraySize;
+
+            kea_tag_map NullTag = {};
+            FormatString(ArrayCount(NullTag.Key), NullTag.Key, "Tag_None");
+            NullTag.ValueCount = 1;
+            FormatString(ArrayCount(NullTag.Values[0]), NullTag.Values[0], "None");
+
+            Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
+            Platform.WriteDataToFile(&KETHandle, Header->TagKeyArrayOffset,
+                                     TagKeyArraySize, NullTag.Key);
+        
+            Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset, sizeof(kea_tag_map), &NullTag);
+
+            Platform.CloseFile(&KETHandle);
+        }
+        else
+        {
+            // TODO(pvlso): Logging
+        }
+    }
+
+    return(Result);
+}
+
+internal b32
+ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
+{
+    b32 Result = true;
+    kesa_header *StoredHeader = &AssetsMode->StoredHeader;
+
+    editor_meta *EditorMeta = &EditorState->EditorMeta;
+    char StoredFileName[256];
+    FormatString(ArrayCount(StoredFileName), StoredFileName, "stored_assets_%d.%d.%d.%d.kesa",
+                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+
+    u32 FullVersion = (((u32)EditorMeta->KESAVersion[0] << 24) |
+                       ((u32)EditorMeta->KESAVersion[1] << 16) |
+                       ((u32)EditorMeta->KESAVersion[2] <<  8) |
+                       ((u32)EditorMeta->KESAVersion[3]));
+    
+    platform_file_handle KESAHandle =
+        Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Read);
+    if(PlatformNoFileErrors(&KESAHandle))
+    {
+        Platform.ReadDataFromFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
+
+        Assert(StoredHeader->SizeOfStoredAsset == sizeof(kesa_asset));
+        Assert(StoredHeader->Version == FullVersion);
+        Assert(StoredHeader->AssetCount);
+
+        u32 AssetsSize = StoredHeader->AssetCount*StoredHeader->SizeOfStoredAsset;
+        Platform.DeallocateMemory(AssetsMode->StoredAssets);
+        AssetsMode->StoredAssets = (kesa_asset *)Platform.AllocateMemory(AssetsSize);
+
+        Platform.ReadDataFromFile(&KESAHandle, StoredHeader->AssetsOffset,
+                                  AssetsSize, AssetsMode->StoredAssets);
+        
+        Platform.CloseFile(&KESAHandle);
+    }
+    else
+    {
+        Result = false;
+        KESAHandle = Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Write);
+        if(PlatformNoFileErrors(&KESAHandle))
+        {
+            StoredHeader->MagicValue = KESA_MAGIC_VALUE;
+            StoredHeader->Version = FullVersion;
+            StoredHeader->TagsVersion = 0;
+            StoredHeader->SizeOfStoredAsset = sizeof(kesa_asset);
+            StoredHeader->AssetCount = 1;
+            StoredHeader->AssetsOffset = sizeof(kesa_header);
+
+            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
+        
+            kesa_asset NullAsset = {};
+            Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
+                                     sizeof(kesa_asset), &NullAsset);
+
+            Platform.CloseFile(&KESAHandle);
+        }
+        else
+        {
+            // TODO(pvlso): Logging
+        }
+    }
+
+    return(Result);
+}
+
+
+
+internal void
+WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
+{
+    if(AssetsMode->AddAssetCount || AssetsMode->StoredAssetChanged)
+    {
+        char FileName[256];
+        kesa_header *StoredHeader = &AssetsMode->StoredHeader;
+
+        u32 FullVersion = UpdateEditorVersionFile(EditorState);
+    
+        editor_meta *EditorMeta = &EditorState->EditorMeta;
+        FormatString(ArrayCount(FileName), FileName, "stored_assets_%d.%d.%d.%d.kesa",
+                     EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                     EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+
+        platform_file_handle KESAHandle =
+            Platform.OpenFile(FileName, PlatformFileType_KESA, PlatformFileOp_Write);
+        if(PlatformNoFileErrors(&KESAHandle))
+        {
+            StoredHeader->Version = FullVersion;
+            StoredHeader->TagsVersion = AssetsMode->TagHeader.Version;
+
+            u32 ExistingAssetsCount = StoredHeader->AssetCount;
+            StoredHeader->AssetCount += AssetsMode->AddAssetCount;
+
+            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
+
+            u32 ExistingAssetsSize = ExistingAssetsCount*sizeof(kesa_asset);
+            if(ExistingAssetsCount)
+            {
+                Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
+                                         ExistingAssetsSize, AssetsMode->StoredAssets);
+            }
+
+            u32 AssetsSize = AssetsMode->AddAssetCount*sizeof(kesa_asset);
+            u64 Offset = StoredHeader->AssetsOffset + ExistingAssetsSize;
+            Platform.WriteDataToFile(&KESAHandle, Offset, AssetsSize, AssetsMode->AssetsToAdd);
+
+            Platform.CloseFile(&KESAHandle);
+        }
+    }
+
+    AssetsMode->AddAssetCount = 0;
+    ZeroArray(ArrayCount(AssetsMode->AssetsToAdd), AssetsMode->AssetsToAdd);
+    ReadStoredAssets(EditorState, AssetsMode);
+}
+
 internal void
 PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
 {
@@ -397,54 +607,74 @@ AddNewTag(editor_mode_assets *AssetsMode)
             (u8)((TagFullVersion >>  0) & 0xff),
         };
 
-    char TagsFileName[256];
-    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
+    char FileName[256];
+    FormatString(ArrayCount(FileName), FileName, "asset_tags_%d.%d.%d.%d.ket",
                  TagVersion[0], TagVersion[1],
                  TagVersion[2], TagVersion[3]);
     
     platform_file_handle KETHandle =
-        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
+        Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Write);
     if(PlatformNoFileErrors(&KETHandle))
     {
-        if(PlatformNoFileErrors(&KETHandle))
+        kea_tag_map *ExistingTags = PushArray(TempMem.Arena, Header->TagCount + 1, kea_tag_map);
+        Copy(sizeof(kea_tag_map)*Header->TagCount, AssetsMode->Tags, ExistingTags);
+
+        AssetsMode->NewTag.GUID = GUIDFromString(AssetsMode->NewTag.Key);
+        ExistingTags[Header->TagCount] = AssetsMode->NewTag;
+            
+        char *TagKeys = PushArray(TempMem.Arena, (Header->TagCount + 1)*TAG_KEY_LENGTH, char);
+        char *Dest = TagKeys;
+        for(u32 I = 0; I < Header->TagCount; ++I)
         {
-            kea_tag_map *ExistingTags = PushArray(TempMem.Arena, Header->TagCount + 1, kea_tag_map);
-            Copy(sizeof(kea_tag_map)*Header->TagCount, AssetsMode->Tags, ExistingTags);
+            Copy(TAG_KEY_LENGTH, AssetsMode->TagKeys[I], Dest);
+            Dest += TAG_KEY_LENGTH;
+        }
 
-            AssetsMode->NewTag.GUID = GUIDFromString(AssetsMode->NewTag.Key);
-            ExistingTags[Header->TagCount] = AssetsMode->NewTag;
+        Copy(TAG_KEY_LENGTH, AssetsMode->NewTag.Key, Dest);
+        ++Header->TagCount;
+
+        TagInsertionSort(Header->TagCount, ExistingTags);
             
-            char *TagKeys = PushArray(TempMem.Arena, (Header->TagCount + 1)*TAG_KEY_LENGTH, char);
-            char *Dest = TagKeys;
-            for(u32 I = 0; I < Header->TagCount; ++I)
-            {
-                Copy(TAG_KEY_LENGTH, AssetsMode->TagKeys[I], Dest);
-                Dest += TAG_KEY_LENGTH;
-            }
+        Header->Version = TagFullVersion;
+        u32 TagKeyArraySize = TAG_KEY_LENGTH*Header->TagCount;
+        Header->TagArrayOffset = Header->TagKeyArrayOffset + TagKeyArraySize;
 
-            Copy(TAG_KEY_LENGTH, AssetsMode->NewTag.Key, Dest);
-            ++Header->TagCount;
-
-            TagInsertionSort(Header->TagCount, ExistingTags);
-            
-            Header->Version = TagFullVersion;
-            u32 TagKeyArraySize = TAG_KEY_LENGTH*Header->TagCount;
-            Header->TagArrayOffset = Header->TagKeyArrayOffset + TagKeyArraySize;
-
-            Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
-            Platform.WriteDataToFile(&KETHandle, Header->TagKeyArrayOffset, TagKeyArraySize, TagKeys);
+        Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
+        Platform.WriteDataToFile(&KETHandle, Header->TagKeyArrayOffset, TagKeyArraySize, TagKeys);
         
-            Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset,
-                                     sizeof(kea_tag_map)*Header->TagCount, ExistingTags);
-
-            Platform.CloseFile(&KETHandle);
-        }
-        else
-        {
-            // TODO(pvlso): Logging
-        }
+        Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset,
+                                 sizeof(kea_tag_map)*Header->TagCount, ExistingTags);
+        Platform.CloseFile(&KETHandle);
+    }
+    else
+    {
+        // TODO(pvlso): Logging
     }
 
+    u8 StoredVersion[4] =
+        {
+            (u8)((AssetsMode->StoredHeader.Version >> 24) & 0xff),
+            (u8)((AssetsMode->StoredHeader.Version >> 16) & 0xff),
+            (u8)((AssetsMode->StoredHeader.Version >>  8) & 0xff),
+            (u8)((AssetsMode->StoredHeader.Version >>  0) & 0xff),
+        };
+
+    FormatString(ArrayCount(FileName), FileName, "stored_assets_%d.%d.%d.%d.kesa",
+                 StoredVersion[0], StoredVersion[1],
+                 StoredVersion[2], StoredVersion[3]);
+
+    //NOTE(pvlso): Update stored assets file header
+    platform_file_handle KESAHandle =
+        Platform.OpenFile(FileName, PlatformFileType_KESA, PlatformFileOp_WriteExisting);
+    if(PlatformNoFileErrors(&KESAHandle))
+    {
+        Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), &AssetsMode->StoredHeader);
+        Platform.CloseFile(&KESAHandle);
+    }
+
+    //NOTE(pvlso): Update tags
+    ReadTags(AssetsMode);
+    
     EndTemporaryMemory(TempMem);
 }
 
@@ -1270,216 +1500,6 @@ UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
     }
 }
 
-internal b32
-ReadTags(editor_state *EditorState, editor_mode_assets *AssetsMode)
-{
-    b32 Result = true;
-    Assert(AssetsMode->StoredHeader.MagicValue);
-    ket_header *Header = &AssetsMode->TagHeader;
-
-    for(u32 I = 0; I < Header->TagCount; ++I)
-    {
-        Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
-    }
-    Platform.DeallocateMemory(AssetsMode->TagKeys);
-    
-    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
-    u8 TagVersion[4] =
-        {
-            (u8)((TagFullVersion >> 24) & 0xff),
-            (u8)((TagFullVersion >> 16) & 0xff),
-            (u8)((TagFullVersion >>  8) & 0xff),
-            (u8)((TagFullVersion >>  0) & 0xff),
-        };
-
-    char TagsFileName[256];
-    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
-                 TagVersion[0], TagVersion[1],
-                 TagVersion[2], TagVersion[3]);
-    
-    platform_file_handle KETHandle =
-        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Read);
-    if(PlatformNoFileErrors(&KETHandle))
-    {
-        Platform.ReadDataFromFile(&KETHandle, 0, sizeof(ket_header), Header);
-
-        Assert(Header->Version == AssetsMode->StoredHeader.TagsVersion);
-        Assert(Header->TagCount);
-        
-        u32 TagArraySize = TAG_KEY_LENGTH*Header->TagCount;
-        char *TagKeysString = (char *)Platform.AllocateMemory(TagArraySize);
-        
-        Platform.ReadDataFromFile(&KETHandle, Header->TagKeyArrayOffset,
-                                  TagArraySize, TagKeysString);
-
-        AssetsMode->TagKeys = (char **)Platform.AllocateMemory(Header->TagCount);
-        for(u32 I = 0; I < Header->TagCount; ++I)
-        {
-            AssetsMode->TagKeys[I] = (char *)Platform.AllocateMemory(TAG_KEY_LENGTH);            
-            Copy(TAG_KEY_LENGTH, TagKeysString, AssetsMode->TagKeys[I]);
-            TagKeysString += TAG_KEY_LENGTH;
-        }
-        Platform.DeallocateMemory(TagKeysString);
-
-        u32 TagsSize = Header->TagCount*sizeof(kea_tag_map);
-        Platform.DeallocateMemory(AssetsMode->Tags);
-        AssetsMode->Tags = (kea_tag_map *)Platform.AllocateMemory(TagsSize);
-
-        Platform.ReadDataFromFile(&KETHandle, Header->TagArrayOffset,
-                                  TagsSize, AssetsMode->Tags);
-        
-        Platform.CloseFile(&KETHandle);
-    }
-    else
-    {
-        Result = false;
-        KETHandle = Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
-        if(PlatformNoFileErrors(&KETHandle))
-        {
-            Header->MagicValue = KET_MAGIC_VALUE;
-            Header->Version = TagFullVersion;
-            Header->TagCount = 1;
-            Header->TagKeyArrayOffset = sizeof(ket_header);
-            u32 TagKeyArraySize = TAG_KEY_LENGTH*Header->TagCount;
-            Header->TagArrayOffset = Header->TagKeyArrayOffset + TagKeyArraySize;
-
-            kea_tag_map NullTag = {};
-            FormatString(ArrayCount(NullTag.Key), NullTag.Key, "Tag_None");
-            NullTag.ValueCount = 1;
-            FormatString(ArrayCount(NullTag.Values[0]), NullTag.Values[0], "None");
-
-            Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
-            Platform.WriteDataToFile(&KETHandle, Header->TagKeyArrayOffset,
-                                     TagKeyArraySize, NullTag.Key);
-        
-            Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset, sizeof(kea_tag_map), &NullTag);
-
-            Platform.CloseFile(&KETHandle);
-        }
-        else
-        {
-            // TODO(pvlso): Logging
-        }
-    }
-
-    return(Result);
-}
-
-internal b32
-ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
-{
-    b32 Result = true;
-    kesa_header *StoredHeader = &AssetsMode->StoredHeader;
-
-    editor_meta *EditorMeta = &EditorState->EditorMeta;
-    char StoredFileName[256];
-    FormatString(ArrayCount(StoredFileName), StoredFileName, "stored_assets_%d.%d.%d.%d.kesa",
-                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
-                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
-
-    u32 FullVersion = (((u32)EditorMeta->KESAVersion[0] << 24) |
-                       ((u32)EditorMeta->KESAVersion[1] << 16) |
-                       ((u32)EditorMeta->KESAVersion[2] <<  8) |
-                       ((u32)EditorMeta->KESAVersion[3]));
-    
-    platform_file_handle KESAHandle =
-        Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Read);
-    if(PlatformNoFileErrors(&KESAHandle))
-    {
-        Platform.ReadDataFromFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-
-        Assert(StoredHeader->SizeOfStoredAsset == sizeof(kesa_asset));
-        Assert(StoredHeader->Version == FullVersion);
-        Assert(StoredHeader->AssetCount);
-
-        u32 AssetsSize = StoredHeader->AssetCount*StoredHeader->SizeOfStoredAsset;
-        Platform.DeallocateMemory(AssetsMode->StoredAssets);
-        AssetsMode->StoredAssets = (kesa_asset *)Platform.AllocateMemory(AssetsSize);
-
-        Platform.ReadDataFromFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                  AssetsSize, AssetsMode->StoredAssets);
-        
-        Platform.CloseFile(&KESAHandle);
-    }
-    else
-    {
-        Result = false;
-        KESAHandle = Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Write);
-        if(PlatformNoFileErrors(&KESAHandle))
-        {
-            StoredHeader->MagicValue = KESA_MAGIC_VALUE;
-            StoredHeader->Version = FullVersion;
-            StoredHeader->TagsVersion = 0;
-            StoredHeader->SizeOfStoredAsset = sizeof(kesa_asset);
-            StoredHeader->AssetCount = 1;
-            StoredHeader->AssetsOffset = sizeof(kesa_header);
-
-            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-        
-            kesa_asset NullAsset = {};
-            Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                     sizeof(kesa_asset), &NullAsset);
-
-            Platform.CloseFile(&KESAHandle);
-        }
-        else
-        {
-            // TODO(pvlso): Logging
-        }
-    }
-
-    return(Result);
-}
-
-
-
-internal void
-WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
-{
-    if(AssetsMode->AddAssetCount || AssetsMode->StoredAssetChanged)
-    {
-        char FileName[256];
-        kesa_header *StoredHeader = &AssetsMode->StoredHeader;
-
-        u32 FullVersion = UpdateEditorVersionFile(EditorState);
-    
-        editor_meta *EditorMeta = &EditorState->EditorMeta;
-        FormatString(ArrayCount(FileName), FileName, "stored_assets_%d.%d.%d.%d.kesa",
-                     EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
-                     EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
-
-        platform_file_handle KESAHandle =
-            Platform.OpenFile(FileName, PlatformFileType_KESA, PlatformFileOp_Write);
-        if(PlatformNoFileErrors(&KESAHandle))
-        {
-            StoredHeader->Version = FullVersion;
-            StoredHeader->TagsVersion = AssetsMode->TagHeader.Version;
-
-            u32 ExistingAssetsCount = StoredHeader->AssetCount;
-            StoredHeader->AssetCount += AssetsMode->AddAssetCount;
-
-            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-
-            u32 ExistingAssetsSize = ExistingAssetsCount*sizeof(kesa_asset);
-            if(ExistingAssetsCount)
-            {
-                Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                         ExistingAssetsSize, AssetsMode->StoredAssets);
-            }
-
-            u32 AssetsSize = AssetsMode->AddAssetCount*sizeof(kesa_asset);
-            u64 Offset = StoredHeader->AssetsOffset + ExistingAssetsSize;
-            Platform.WriteDataToFile(&KESAHandle, Offset, AssetsSize, AssetsMode->AssetsToAdd);
-
-            Platform.CloseFile(&KESAHandle);
-        }
-    }
-
-    AssetsMode->AddAssetCount = 0;
-    ZeroArray(ArrayCount(AssetsMode->AssetsToAdd), AssetsMode->AssetsToAdd);
-    ReadStoredAssets(EditorState, AssetsMode);
-}
-
 internal void
 RemoveStoredAsset(editor_mode_assets *AssetsMode)
 {
@@ -1528,7 +1548,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 Assert(ReadStoredAssets(EditorState, AssetsMode));
             }
 
-            ReadTags(EditorState, AssetsMode);
+            ReadTags(AssetsMode);
             AssetsMode->AssetsInitialized = true;
         }
 
