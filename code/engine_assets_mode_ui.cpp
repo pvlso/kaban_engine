@@ -135,185 +135,6 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
     }
 }
 
-#if 0
-internal rectangle2
-UITextOpWithInEditorFont(ui_state *UIState, ui_text_op Op, v2 P, char *String, builder_loaded_font *Font,
-                         r32 FontScale, v4 Color = V4(1, 1, 1, 1), r32 AtZ = 0.0f)
-{
-    rectangle2 Result = InvertedInfinityRectangle2();
-    if(UIState)
-    {
-        render_group *RenderGroup = &UIState->RenderGroup;
-
-        u32 PrevCodePoint = 0;
-        r32 CharScale = FontScale;
-        r32 AtY = P.y;
-        r32 AtX = P.x;
-        b32 FirstInLine = true;
-        for(char *At = String;
-            *At;
-            )
-        {
-            u32 CodePoint = *At;
-
-            u32 PrevGlyph = Font->UnicodeMap[PrevCodePoint];
-            u32 Glyph = Font->UnicodeMap[CodePoint];
-
-            r32 AdvanceX = CharScale*Font->HorizontalAdvance[PrevGlyph*Font->GlyphCount + Glyph];
-            AtX += FirstInLine ? 0.0f : AdvanceX;
-            FirstInLine = false;
-
-            if(IsEndOfLine(*At))
-            {
-                AtY -= CharScale*(Font->AscenderHeight + Font->DescenderHeight + Font->ExternalLeading);
-                AtX = P.x;
-                FirstInLine = true;
-            }
-            else if(CodePoint != ' ')
-            {
-                loaded_bitmap *Bitmap = &Font->Glyphs[Glyph];
-
-                r32 BitmapScale = CharScale*Bitmap->Height;
-                v3 BitmapOffset = V3(AtX, AtY, 10.0f);
-
-                if(Op == UITextOp_DrawText)
-                {
-                    PushBitmap(RenderGroup, &UIState->TextTransform, Bitmap, BitmapScale,
-                               BitmapOffset, Color, 1.0f);
-                    PushBitmap(RenderGroup, &UIState->ShadowTransform, Bitmap, BitmapScale,
-                               BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
-                }
-                else                    
-                {
-                    Assert(Op == UITextOp_SizeText);
-
-                    if(Bitmap)
-                    {
-                        object_transform Flat = DefaultFlatTransform();
-                        used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &Flat,
-                                                           Bitmap, BitmapScale, BitmapOffset, 1.0f);
-                        rectangle2 GlyphDim = RectMinDim(Dim.P.xy, Dim.Size);
-                        Result = Union(Result, GlyphDim);
-                    }
-                }
-            }
-
-            PrevCodePoint = CodePoint;
-            ++At;
-        }
-    }
-
-    return(Result);
-}
-#endif
-
-#if 0
-internal void
-UITextOpWithInEditorFont(nk_ui *UI, nk_context *Nk, char *Text)
-{
-    u32 L = StringLength(Text);
-    UI->Nk
-    rectangle2 Result = InvertedInfinityRectangle2();
-    u32 PrevCodePoint = 0;
-    r32 CharScale = FontScale;
-    r32 AtY = P.y;
-    r32 AtX = P.x;
-    b32 FirstInLine = true;
-    for(char *At = String;
-        *At;
-        )
-    {
-        u32 CodePoint = *At;
-
-        u32 PrevGlyph = Font->UnicodeMap[PrevCodePoint];
-        u32 Glyph = Font->UnicodeMap[CodePoint];
-
-        r32 AdvanceX = CharScale*Font->HorizontalAdvance[PrevGlyph*Font->GlyphCount + Glyph];
-        AtX += FirstInLine ? 0.0f : AdvanceX;
-        FirstInLine = false;
-
-        if(IsEndOfLine(*At))
-        {
-            AtY -= CharScale*(Font->AscenderHeight + Font->DescenderHeight + Font->ExternalLeading);
-            AtX = P.x;
-            FirstInLine = true;
-        }
-        else if(CodePoint != ' ')
-        {
-            loaded_bitmap *Bitmap = &Font->Glyphs[Glyph];
-
-            r32 BitmapScale = CharScale*Bitmap->Height;
-            v3 BitmapOffset = V3(AtX, AtY, 10.0f);
-//                PushBitmap(RenderGroup, &UIState->TextTransform, Bitmap, BitmapScale,
-//                           BitmapOffset, Color, 1.0f);
-//                PushBitmap(RenderGroup, &UIState->ShadowTransform, Bitmap, BitmapScale,
-//                           BitmapOffset + V3(2.0f, -2.0f, 0.0f), V4(0, 0, 0, 1.0f), 1.0f);
-        }
-
-        PrevCodePoint = CodePoint;
-        ++At;
-    }
-
-    return(Result);
-}
-#endif
-
-#if 0
-internal void
-UILabelWithInEditorFont(ui_layout *Layout, char *Name, r32 Width, builder_loaded_font *Font, r32 FontScale = 1.0f, r32 Border = 20.0f)
-{
-    ui_state *UIState = Layout->UIState;
-    interaction NullInteraction = {};
-
-    rectangle2 StandardBound = UITextOpWithInEditorFont(UIState, UITextOp_SizeText, V2(0, 0), Name, Font, FontScale);
-    v2 StandardDim = GetDim(StandardBound);
-
-    rectangle2 TextBounds = {};
-    if(StandardDim.x > Width)
-    {
-        FontScale = Width / StandardDim.x; 
-        TextBounds = UITextOpWithInEditorFont(UIState, UITextOp_SizeText, V2(0, 0), Name, Font, FontScale);
-    }
-    else
-    {
-        TextBounds = StandardBound;
-    }
-    
-    v2 TextDim = GetDim(TextBounds);
-    v2 ElementDim = {TextDim.x + Border, TextDim.y + Border};
-    
-    ui_layout_element Element = UIBeginElementRectangle(Layout, &ElementDim);
-    UIDefaultInteraction(&Element, NullInteraction);
-    UIEndElement(&Element);
-
-    v2 P = V2(GetMinCorner(Element.Bounds).x + 0.5f*ElementDim.x - 0.5f*TextDim.x,
-              GetMaxCorner(Element.Bounds).y - 0.5f*ElementDim.y + 0.5f*TextDim.y - 
-              FontScale*Font->AscenderHeight);
-
-    UITextOpWithInEditorFont(UIState, UITextOp_DrawText, P, Name, Font, FontScale);
-
-    v2 ButtonDim = GetDim(Element.Bounds);
-    v2 ButtonCenter = GetCenter(Element.Bounds);
-
-    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 0),
-             ButtonDim,
-             UI_COLOR_RGBA1_4D3020FF);
-
-    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 1.0f),
-             ButtonDim - V2(4.0f, 4.0f),
-             UI_COLOR_RGBA1_B97A57FF);
-
-    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 2.0f),
-             ButtonDim - V2(8.0f, 8.0f),
-             UI_COLOR_RGBA1_4D3020FF);
-
-    PushRect(&UIState->RenderGroup, &UIState->BackingTransform, V3(ButtonCenter, 3.0f),
-             ButtonDim - V2(12.0f, 12.0f),
-             UI_COLOR_RGBA1_CB9C83FF);
-
-}
-#endif
-
 inline void
 DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk)
 {
@@ -617,7 +438,8 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                 
                 nk_group_end(Nk);
             }
-#if 0
+
+            char ResultingString[128];
             if(nk_group_begin(Nk, "Stored Asset Preview Tags", NK_WINDOW_TITLE))
             {
                 nk_layout_row_dynamic(Nk, 30, 1);
@@ -625,14 +447,21 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     TagIndex < StoredAsset->TagCount;
                     ++TagIndex)
                 {
-                    kea_tag Tag = StoredAsset->AssetTags[TagIndex];
+                    kesa_tag StoredTag = StoredAsset->AssetTags[TagIndex];
+                    kea_tag_map *Tag = GetTag(AssetsMode, StoredTag.TagGUID);
+
+                    FormatString(ArrayCount(ResultingString), ResultingString, "%s%s", Tag->Key, Tag->Values[StoredTag.TagValueIndex]);
+                    u64 KEATagGUID = GUIDFromString(ResultingString);
+
                     struct nk_rect Rect = nk_widget_bounds(Nk);
                     nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
-                    nk_labelf(Nk, NK_TEXT_LEFT, "  %d. %s, %s", TagIndex, Tag.Key, Tag.Value);
+                    nk_labelf(Nk, NK_TEXT_LEFT, "  %d. %s, %s, kea_tag_GUID: 0x%016x",
+                              TagIndex, Tag->Key, Tag->Values[StoredTag.TagValueIndex],
+                              KEATagGUID);
                 }
                 nk_group_end(Nk);
             }
-#endif
+
             // NOTE(paul): Action on Current Stored Asset 
             nk_layout_row_dynamic(Nk, 30, 2);
             if(nk_button_label(Nk, "Edit Stored Asset"))
@@ -716,21 +545,6 @@ AssambleStrings(memory_arena *Arena, char **Strings, u32 *Count, b32 Filter = fa
 
     *Count = ResultCount;
     
-    return(Result);
-}
-
-inline char **
-ExtractTagKeys(editor_mode_assets *AssetsMode, memory_arena *TempArena)
-{
-    char **Result = PushArray(TempArena, AssetsMode->TagMapListCount, char *);
-    u32 I = 0;
-    for(tag_map_list *Iter = AssetsMode->TagMapListHead;
-        Iter;
-        Iter = Iter->Next)
-    {
-        Result[I++] = Iter->Tag.Key;
-    }
-
     return(Result);
 }
 
@@ -825,16 +639,15 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_label(Nk, "Choose Tag To Add \\|/", NK_TEXT_CENTERED);
 
-        u32 Count = AssetsMode->TagMapListCount;
-        char **TagRawStrings = ExtractTagKeys(AssetsMode, TempMem.Arena);
-        char *TagStrings = AssambleStrings(TempMem.Arena, TagRawStrings, &Count, false);
-        nk_combobox_string(Nk, TagStrings, (int *)&AssetsMode->CurrentTagID, Count, 30, {460, 460});
+        u32 Count = AssetsMode->TagHeader.TagCount;
+        char *TagStrings = AssambleStrings(TempMem.Arena, AssetsMode->TagKeys, &Count, false);
+        nk_combobox_string(Nk, TagStrings, (int *)&AssetsMode->CurrentTagIndex, Count, 30, {460, 460});
 
-        tag_map_list *CurrentTag = GetTagMapByIndex(AssetsMode, AssetsMode->CurrentTagID);
+        kea_tag_map *CurrentTag = AssetsMode->Tags + AssetsMode->CurrentTagIndex;
         
-        if(AssetsMode->CurrentTagID != AssetsMode->LastTagID)
+        if(AssetsMode->CurrentTagIndex != AssetsMode->LastTagIndex)
         {
-            AssetsMode->LastTagID = AssetsMode->CurrentTagID;
+            AssetsMode->LastTagIndex = AssetsMode->CurrentTagIndex;
             AssetsMode->CurrentTagValue = 0;
         }
 
@@ -843,17 +656,17 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_label(Nk, "Choose Tag Value", NK_TEXT_CENTERED);
         char *TagValues = AssambleStrings(TempMem.Arena,
-                                          ExtractTagValues(&CurrentTag->Tag, TempMem.Arena),
-                                          &CurrentTag->Tag.ValueCount);
+                                          ExtractTagValues(CurrentTag, TempMem.Arena),
+                                          &CurrentTag->ValueCount);
 
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_LEFT, "  Current Value: %s|%d",
-                     CurrentTag->Tag.Values[AssetsMode->CurrentTagValue], AssetsMode->CurrentTagValue);
+                     CurrentTag->Values[AssetsMode->CurrentTagValue], AssetsMode->CurrentTagValue);
 
         nk_combobox_string(Nk, TagValues,
                              (int *)&AssetsMode->CurrentTagValue,
-                             CurrentTag->Tag.ValueCount, 30, {460, 460});
+                             CurrentTag->ValueCount, 30, {460, 460});
 
         if(nk_button_label(Nk, "Add Tag"))
             AddAction(AssetsMode, AM_AddTag);
@@ -967,14 +780,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_CENTERED, "%s", StoredTypeString);
-#if 0
+
         char *TagsString = 0;
         u32 TotalSize = 0;
         for(u32 I = 0;
             I < CurrentAsset->TagCount;
             ++I)
         {
-            kea_tag *CurrentTag = CurrentAsset->AssetTags + I;
+            kea_tag_map *CurrentTag = GetTag(AssetsMode, CurrentAsset->AssetTags[I].TagGUID);
             u32 L = StringLength(CurrentTag->Key);
             TotalSize += L + 1;
         }
@@ -984,7 +797,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
             I < CurrentAsset->TagCount;
             ++I)
         {
-            kea_tag *CurrentTag = CurrentAsset->AssetTags + I;
+            kea_tag_map *CurrentTag = GetTag(AssetsMode, CurrentAsset->AssetTags[I].TagGUID);
             u32 L = StringLength(CurrentTag->Key);
             Copy(L, CurrentTag->Key, At);
             At += L;
@@ -996,22 +809,22 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
         nk_label(Nk, "Stored Asset Tags", NK_TEXT_CENTERED);
 
+        kesa_tag StoredTag = CurrentAsset->AssetTags[AssetsMode->CurrentStoredTagIndex];
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_CENTERED, "TagCount: %d", CurrentAsset->TagCount);
-        nk_combobox_string(Nk, TagsString, (int *)&AssetsMode->CurrentTag,
+        nk_combobox_string(Nk, TagsString, (int *)&AssetsMode->CurrentStoredTagIndex,
                              CurrentAsset->TagCount, 30, {440, 380});
 
-        kea_tag *CurrentTag = CurrentAsset->AssetTags + AssetsMode->CurrentTag;
+        kea_tag_map *CurrentTag = GetTag(AssetsMode, StoredTag.TagGUID);
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_CENTERED, "Current Tag: %d. %s",
-                     AssetsMode->CurrentTag, CurrentTag->Key);
+                     AssetsMode->CurrentStoredTagIndex, CurrentTag->Key);
 
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-        nk_labelf(Nk, NK_TEXT_CENTERED, "Value: %s", CurrentTag->Value);
-#endif        
+        nk_labelf(Nk, NK_TEXT_CENTERED, "Value: %s", CurrentTag->Values[StoredTag.TagValueIndex]);
 
         if(nk_button_label(Nk, "Remove Current Tag"))
             AddAction(AssetsMode, AM_RemoveTag);

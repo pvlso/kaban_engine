@@ -95,12 +95,6 @@ static platform_file_type StoredToSourceTypeMap[KESA_Count] =
     PlatformFileType_KEWM
 };
 
-struct tag_map_list
-{
-    kea_tag_map Tag;
-    tag_map_list *Next;
-};
-
 enum assets_mode_action
 {
     AM_Exit              = (1 << 0),
@@ -135,10 +129,10 @@ struct editor_mode_assets
 
     kesa_header StoredHeader;
     kesa_asset *StoredAssets;
-    u64 *TagGUIDs;
 
     ket_header TagHeader;
     char **TagKeys;
+    // NOTE(pvlso): Sorted by GUID
     kea_tag_map *Tags;
 
     u32 AddAssetCount;
@@ -146,13 +140,10 @@ struct editor_mode_assets
 
     kesa_asset *CurrentAsset;
 
-    u32 LastTagID;
-    u32 CurrentTagID;
+    u32 LastTagIndex;
+    u32 CurrentTagIndex;
     u32 CurrentTagValue;
-    u32 CurrentTag;
-
-    u32 TagMapListCount;
-    tag_map_list *TagMapListHead;
+    u32 CurrentStoredTagIndex;
     
     u32 FileIndex;
     u32 LastFileIndex;
@@ -252,17 +243,18 @@ KESAFromEditMode(u32 EditMode)
     return(Result);
 }
 
-inline tag_map_list *
-GetTagMapByIndex(editor_mode_assets *AssetsMode, u32 Index)
+inline kea_tag_map *
+GetTag(editor_mode_assets *AssetsMode, u64 GUID)
 {
-    tag_map_list *Result = AssetsMode->TagMapListHead;
+    kea_tag_map *Result = 0;
+    // TODO(pvlso): Eventually replace this with binary search
     for(u32 I = 0;
-        I < AssetsMode->TagMapListCount;
+        I < AssetsMode->TagHeader.TagCount;
         ++I)
     {
-        if(I == Index)
+        Result = AssetsMode->Tags + I;
+        if(Result->GUID == GUID)
             break;
-        Result = Result->Next;
     }
 
     return(Result);

@@ -341,7 +341,6 @@ struct ket_header
     
     u32 TagCount;
 
-    u64 TagKeyArrayOffset;
     u64 TagArrayOffset;
 };
 

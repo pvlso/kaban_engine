@@ -173,5 +173,41 @@ CalculateBitmapScaleForSquareCanvas(r32 CanvasSize, u32 Width, u32 Height)
     return(Result);
 }
 
+inline u64
+rotl64(u64 x, s32 r)
+{
+    u64 Result = (x << r) | (x >> (64 - r));
+    return(Result);
+}
+
+internal u64
+xxhash64(void *input, size_t len, u64 seed)
+{
+    u8 *p = (u8 *)input;
+    u8 *end = p + len;
+    u64 Result = seed + len;
+
+    while(p < end)
+    {
+        Result ^= (*p++);
+        Result = rotl64(Result, 13);
+        Result *= 0x9E3779B185EBCA87ULL;
+        Result ^= (Result >> 7);
+    }
+
+    return(Result);
+}
+
+inline u64
+GUIDFromString(char *s)
+{
+    size_t len = 0;
+    while (s[len])
+        len++;
+
+    u64 Result = xxhash64(s, len, 0xDEADBEEFCAFEBABEULL);
+    return(Result); 
+}
+
 #define ENGINE_SHARED_H
 #endif
