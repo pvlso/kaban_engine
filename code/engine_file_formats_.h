@@ -210,6 +210,13 @@ enum kea_sound_chain
     KEASoundChain_Count,
 };
 
+static char *SoundChainStringArray[KEASoundChain_Count] =
+{
+    "KEASoundChain_None",
+    "KEASoundChain_Loop",
+    "KEASoundChain_Advance"
+};
+
 struct kea_bitmap
 {
     u32 Dim[2];

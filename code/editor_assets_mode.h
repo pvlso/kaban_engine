@@ -65,6 +65,12 @@ struct text_mode
 {
     b32 EditTextFile;
     b32 Reload;
+    b32 Save;
+
+    s32 EditBufferLength;
+    u32 EditBufferMaxLength;
+    char EditBuffer[4096];
+
     loaded_text Text;
 };
 

@@ -965,8 +965,17 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
             }
         } break;
 
-        case KESA_Sound:
         case KESA_Text:
+        {
+            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            text_mode *TextMode = &AssetsMode->TextMode;
+            
+            TextMode->EditBufferLength = StringLength(TextMode->Text.String);
+            Copy(TextMode->EditBufferLength, TextMode->Text.String, TextMode->EditBuffer);
+            TextMode->EditBufferMaxLength = 4096;
+        } break;
+
+        case KESA_Sound:
         case KESA_File:
         case KESA_SSWM:
         {

@@ -910,19 +910,19 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
 
     DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
 
-    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -170, 450, 420});
-    struct nk_rect Rect = nk_widget_bounds(Nk);
-    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-    if(nk_group_begin(Nk, "SpriteSheet Attributes", NK_WINDOW_NO_SCROLLBAR))
+    if(SpriteSheetBitmap->Memory)
     {
-        if(SpriteSheetBitmap->Memory)
+        nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+        nk_layout_space_push(Nk, {1460, -70, 450, 420});
+        struct nk_rect Rect = nk_widget_bounds(Nk);
+        nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+        if(nk_group_begin(Nk, "SpriteSheet Attributes", NK_WINDOW_NO_SCROLLBAR))
         {
             nk_layout_row_dynamic(Nk, 30, 1);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[KESA_SpriteSheet][AssetsMode->FileIndex]);
+                      AssetsMode->SourceFiles[KESA_SpriteSheet][AssetsMode->FileIndex]);
 
             nk_layout_row_dynamic(Nk, 30, 2);
             Rect = nk_widget_bounds(Nk);
@@ -948,13 +948,13 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "V2(%.02f, %.02f)",
-                         StoredSpriteSheet->SpriteAlignPercentage.x,
-                         StoredSpriteSheet->SpriteAlignPercentage.y);
+                      StoredSpriteSheet->SpriteAlignPercentage.x,
+                      StoredSpriteSheet->SpriteAlignPercentage.y);
 
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "Sprite Count: %d",
-                         StoredSpriteSheet->SpriteCount);
+                      StoredSpriteSheet->SpriteCount);
 
             nk_layout_row_dynamic(Nk, 30, 2);
             Rect = nk_widget_bounds(Nk);
@@ -967,27 +967,27 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "%d pixels",
-                         StoredSpriteSheet->SpriteWidth);
+                      StoredSpriteSheet->SpriteWidth);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "%d pixels",
-                         StoredSpriteSheet->SpriteHeight);
+                      StoredSpriteSheet->SpriteHeight);
 
             nk_layout_row_dynamic(Nk, 30, 1);
             nk_property_int(Nk, "Adjust Width: ", 0,
-                              (int *)&StoredSpriteSheet->SpriteWidth,
-                              SpriteSheetBitmap->Width, 1, 0.1f);
+                            (int *)&StoredSpriteSheet->SpriteWidth,
+                            SpriteSheetBitmap->Width, 1, 0);
 
             if(nk_button_label(Nk, "Cut SpriteSheet"))
                 SpriteSheetMode->CutSpriteSheet = true;
 
             if(nk_button_label(Nk, SpriteSheetMode->ShowAnimated ? "Show Bitmap" : "Show Animated"))
                 SpriteSheetMode->ShowAnimated = !SpriteSheetMode->ShowAnimated;
-        }
         
-        nk_group_end(Nk);
+            nk_group_end(Nk);
+        }
+        nk_layout_space_end(Nk);
     }
-    nk_layout_space_end(Nk);
 }
 
 internal void
@@ -1000,19 +1000,19 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
 
     DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
 
-    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -170, 450, 420});
-    struct nk_rect Rect = nk_widget_bounds(Nk);
-    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-    if(nk_group_begin(Nk, "Tileset Attributes", NK_WINDOW_NO_SCROLLBAR))
+    if(TilesetBitmap->Memory)
     {
-        if(TilesetBitmap->Memory)
+        nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+        nk_layout_space_push(Nk, {1460, -70, 450, 420});
+        struct nk_rect Rect = nk_widget_bounds(Nk);
+        nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+        if(nk_group_begin(Nk, "Tileset Attributes", NK_WINDOW_NO_SCROLLBAR))
         {
             nk_layout_row_dynamic(Nk, 30, 1);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[KESA_Tileset][AssetsMode->FileIndex]);
+                      AssetsMode->SourceFiles[KESA_Tileset][AssetsMode->FileIndex]);
             nk_layout_row_dynamic(Nk, 30, 2);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
@@ -1051,9 +1051,9 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
 
             nk_layout_row_dynamic(Nk, 30, 1);
             nk_property_int(Nk, "Adjust Width: ", 0, (int *)&StoredTileset->TileWidth,
-                              TilesetBitmap->Width, 1, 0.1f);
+                            TilesetBitmap->Width, 1, 0.1f);
             nk_property_int(Nk, "Adjust Height: ", 0, (int *)&StoredTileset->TileHeight,
-                              TilesetBitmap->Height, 1, 0.1f);
+                            TilesetBitmap->Height, 1, 0.1f);
 
 
             nk_layout_row_dynamic(Nk, 30, 2);
@@ -1068,64 +1068,64 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_label(Nk, IsMerged ? "Tileset is Merged" : "Tileset is not Merged",
-                        NK_TEXT_CENTERED);
+                     NK_TEXT_CENTERED);
 
             if(nk_button_label(Nk, TilesetMode->ShowTiles ? "Show Bitmap" : "Show Tiles"))
                 TilesetMode->ShowTiles = !TilesetMode->ShowTiles;
+
+            nk_group_end(Nk);
         }
+        nk_layout_space_end(Nk);
 
-        nk_group_end(Nk);
-    }
-    nk_layout_space_end(Nk);
-
-    nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
-    if(TilesetMode->ShowTiles)
-    {
-        nk_layout_space_push(Nk, {480, -466, 40, 40});
-        if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_LEFT) &&
-           (TilesetMode->CurrentTileIndex != 0))
+        nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
+        if(TilesetMode->ShowTiles)
         {
-            TilesetMode->CurrentTileIndex -= 1;
+            nk_layout_space_push(Nk, {480, -326, 40, 40});
+            if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_LEFT) &&
+               (TilesetMode->CurrentTileIndex != 0))
+            {
+                TilesetMode->CurrentTileIndex -= 1;
+            }
+
+            nk_layout_space_push(Nk, {525, -326, 860, 40});
+            Rect = nk_widget_bounds(Nk);
+            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Index: %d",
+                      TilesetMode->CurrentTileIndex);
+
+            nk_layout_space_push(Nk, {1390, -326, 40, 40});
+            if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_RIGHT) &&
+               (TilesetMode->CurrentTileIndex < (StoredTileset->TileCount - 1)))
+            {
+                TilesetMode->CurrentTileIndex += 1;
+            }
         }
+        nk_layout_space_end(Nk);
 
-        nk_layout_space_push(Nk, {525, -466, 860, 40});
-        Rect = nk_widget_bounds(Nk);
-        nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-        nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Index: %d",
-                     TilesetMode->CurrentTileIndex);
-
-        nk_layout_space_push(Nk, {1390, -466, 40, 40});
-        if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_RIGHT) &&
-           (TilesetMode->CurrentTileIndex < (StoredTileset->TileCount - 1)))
+        if(TilesetMode->MergeTileBitmap.Memory)
         {
-            TilesetMode->CurrentTileIndex += 1;
+            nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
+            nk_layout_space_push(Nk, {0, -90, 460, 30});
+            Rect = nk_widget_bounds(Nk);
+            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            nk_labelf(Nk, NK_TEXT_CENTERED, "Merge Tile: %s",
+                      AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex]);
+
+            nk_layout_space_push(Nk, {0, -55, 460, 460});
+            Rect = nk_widget_bounds(Nk);
+            nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
+            nk_stroke_rect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
+
+            nk_layout_space_push(Nk, {5, -50, 450, 450});
+            if(TilesetMode->MergeTileBitmap.TextureHandle)
+            {
+                struct nk_image Img =
+                    nk_image_ptr(TilesetMode->MergeTileBitmap.TextureHandle);
+                nk_image(Nk, Img);
+            }
+            nk_layout_space_end(Nk);
         }
     }
-    nk_layout_space_end(Nk);
-
-    nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
-    nk_layout_space_push(Nk, {0, -90, 460, 30});
-    Rect = nk_widget_bounds(Nk);
-    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-    if(TilesetMode->MergeTileBitmap.Memory)
-    {
-        nk_labelf(Nk, NK_TEXT_CENTERED, "Merge Tile: %s",
-                     AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex]);
-
-        nk_layout_space_push(Nk, {0, -55, 460, 460});
-        Rect = nk_widget_bounds(Nk);
-        nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
-        nk_stroke_rect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
-
-        nk_layout_space_push(Nk, {5, -50, 450, 450});
-        if(TilesetMode->MergeTileBitmap.TextureHandle)
-        {
-            struct nk_image Img =
-                nk_image_ptr(TilesetMode->MergeTileBitmap.TextureHandle);
-            nk_image(Nk, Img);
-        }
-    }
-    nk_layout_space_end(Nk);
 }
 
 internal void
@@ -1140,44 +1140,43 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_co
     
     DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
 
-    temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
-    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -170, 450, 140});
-    struct nk_rect Rect = nk_widget_bounds(Nk);
-    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-    if(nk_group_begin(Nk, "Bitmap Attributes", NK_WINDOW_NO_SCROLLBAR))
+    if(SoundMode->Sound.Samples[0])
     {
-        if(SoundMode->Sound.Samples[0])
+        temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+        nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+        nk_layout_space_push(Nk, {1460, -70, 450, 140});
+        struct nk_rect Rect = nk_widget_bounds(Nk);
+        nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+        if(nk_group_begin(Nk, "Bitmap Attributes", NK_WINDOW_NO_SCROLLBAR))
         {
             nk_layout_row_dynamic(Nk, 30, 1);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                         AssetsMode->SourceFiles[KESA_Sound][AssetsMode->FileIndex]);
+                      AssetsMode->SourceFiles[KESA_Sound][AssetsMode->FileIndex]);
 
-            string_array *SoundChainStringArray =
-                GetOrCreateStringArray(UIState, "SSASoundChain", SSASoundChain_Count);
-            char *ChainString = SoundChainStringArray->Strings[StoredSound->Chain];
+            char *ChainString = SoundChainStringArray[StoredSound->Chain];
             nk_layout_row_dynamic(Nk, 30, 1);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "Current Chain: %s", ChainString);
 
+            u32 Count = KEASoundChain_Count;
             char *TagValues = AssambleStrings(TempMem.Arena,
-                                              SoundChainStringArray->Strings,
-                                              &SoundChainStringArray->StringCount);
+                                              SoundChainStringArray,
+                                              &Count);
             nk_combobox_string(Nk, TagValues, (int *)&StoredSound->Chain,
-                                 SoundChainStringArray->StringCount, 30, {460, 460});
-        }
+                               Count, 30, {460, 460});
 
-        nk_group_end(Nk);
+            nk_group_end(Nk);
+        }
+        nk_layout_space_end(Nk);
+        EndTemporaryMemory(TempMem);
     }
-    nk_layout_space_end(Nk);
-    EndTemporaryMemory(TempMem);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {460, -460, 990, 140});
-    Rect = nk_widget_bounds(Nk);
+    nk_layout_space_push(Nk, {460, -340, 990, 110});
+    struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {
@@ -1210,18 +1209,22 @@ DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     nk_layout_space_push(Nk, {1460, -170, 450, 140});
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {460, -460, 990, 140});
+    nk_layout_space_push(Nk, {460, -340, 990, 450});
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {
-        nk_layout_row_dynamic(Nk, 30, 1);
+        nk_layout_row_dynamic(Nk, 400, 1);
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-        nk_label(Nk, "Actions", NK_TEXT_CENTERED);
+        nk_edit_string(Nk, NK_EDIT_BOX,
+                       TextMode->EditBuffer,
+                       &TextMode->EditBufferLength,
+                       TextMode->EditBufferMaxLength,
+                       nk_filter_default);
 
-        nk_layout_row_dynamic(Nk, 40, 2);
-        if(nk_button_label(Nk, "Edit"))
+        nk_layout_row_dynamic(Nk, 30, 2);
+        if(nk_button_label(Nk, "Save"))
             TextMode->EditTextFile = true;
         if(nk_button_label(Nk, "Reload"))
             TextMode->Reload = true;
