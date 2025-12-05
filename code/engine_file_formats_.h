@@ -305,14 +305,6 @@ struct kea_binary_file
     */
 };
 
-struct kea_sswm_file
-{
-    u32 Size;
-    /* NOTE(paul): Data is:
-       u8 Data[Size];
-    */
-};
-
 struct kea_asset
 {
     u64 DataOffset;
@@ -328,7 +320,6 @@ struct kea_asset
         kea_spritesheet SpriteSheet;
         kea_text Text;
         kea_binary_file BinaryFile;
-        kea_sswm_file SSWMFile;
     };
 };
 

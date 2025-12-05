@@ -606,7 +606,9 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         InvalidDefaultCase;
     }
 
-    nk_layout_row_static(Nk, 310, 450, 1);
+    f32 UIOffsetY = (AssetsMode->EditMode == EditMode_Tileset) ? 70.0f : 0.0f;
+    
+    nk_layout_row_static(Nk, 310.0f + UIOffsetY, 450, 1);
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
@@ -769,7 +771,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -314, 450, 320});
+    nk_layout_space_push(Nk, {1460, -314 - UIOffsetY, 450, 275});
     Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
@@ -834,7 +836,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     nk_layout_space_end(Nk);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {-5, 690, 450, 50});
+    nk_layout_space_push(Nk, {-5, 690 - UIOffsetY, 450, 50});
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {        
         nk_layout_row_dynamic(Nk, 40, 2);
@@ -1003,7 +1005,7 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
     if(TilesetBitmap->Memory)
     {
         nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-        nk_layout_space_push(Nk, {1460, -70, 450, 420});
+        nk_layout_space_push(Nk, {1460, -140, 450, 420});
         struct nk_rect Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
         if(nk_group_begin(Nk, "Tileset Attributes", NK_WINDOW_NO_SCROLLBAR))
@@ -1080,20 +1082,20 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
         nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
         if(TilesetMode->ShowTiles)
         {
-            nk_layout_space_push(Nk, {480, -326, 40, 40});
+            nk_layout_space_push(Nk, {480, -396, 40, 40});
             if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_LEFT) &&
                (TilesetMode->CurrentTileIndex != 0))
             {
                 TilesetMode->CurrentTileIndex -= 1;
             }
 
-            nk_layout_space_push(Nk, {525, -326, 860, 40});
+            nk_layout_space_push(Nk, {525, -396, 860, 40});
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Index: %d",
                       TilesetMode->CurrentTileIndex);
 
-            nk_layout_space_push(Nk, {1390, -326, 40, 40});
+            nk_layout_space_push(Nk, {1390, -396, 40, 40});
             if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_RIGHT) &&
                (TilesetMode->CurrentTileIndex < (StoredTileset->TileCount - 1)))
             {
@@ -1105,18 +1107,18 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
         if(TilesetMode->MergeTileBitmap.Memory)
         {
             nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
-            nk_layout_space_push(Nk, {0, -90, 460, 30});
+            nk_layout_space_push(Nk, {0, 20, 460, 30});
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "Merge Tile: %s",
                       AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex]);
 
-            nk_layout_space_push(Nk, {0, -55, 460, 460});
+            nk_layout_space_push(Nk, {0, 55, 460, 460});
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
             nk_stroke_rect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
 
-            nk_layout_space_push(Nk, {5, -50, 450, 450});
+            nk_layout_space_push(Nk, {5, 60, 450, 450});
             if(TilesetMode->MergeTileBitmap.TextureHandle)
             {
                 struct nk_image Img =
@@ -1144,7 +1146,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_co
     {
         temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
         nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-        nk_layout_space_push(Nk, {1460, -70, 450, 140});
+        nk_layout_space_push(Nk, {1460, -70, 450, 110});
         struct nk_rect Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
         if(nk_group_begin(Nk, "Bitmap Attributes", NK_WINDOW_NO_SCROLLBAR))
@@ -1175,7 +1177,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_co
     }
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {460, -340, 990, 110});
+    nk_layout_space_push(Nk, {460, -340, 990, 85});
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
@@ -1429,7 +1431,7 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
             nk_layout_space_push(Nk, nk_rect(268, 238, 130, 40));
             if(nk_button_label(Nk, "Write SSA"))
-                AddAction(AssetsMode, AM_WriteSSA);
+                AddAction(AssetsMode, AM_WriteKEA);
             nk_layout_space_end(Nk);
 
             DrawAssetAdvanceView(AssetsMode, UIState, Nk);

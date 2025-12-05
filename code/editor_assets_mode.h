@@ -108,7 +108,7 @@ enum assets_mode_action
     AM_RemoveStoredAsset = (1 << 2),
 
     AM_ShowStoredAssets  = (1 << 3),
-    AM_WriteSSA          = (1 << 4),
+    AM_WriteKEA          = (1 << 4),
     AM_WriteAssets       = (1 << 5),
     
     AM_AddAsset          = (1 << 6),

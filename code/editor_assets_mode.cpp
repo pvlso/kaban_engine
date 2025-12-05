@@ -244,7 +244,7 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
 }
 
 internal void
-CutSpriteSheet(editor_assets *Assets, spritesheet_mode *SpriteSheetMode,
+CutSpriteSheet(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *SpriteSheetMode,
                kesa_spritesheet *Asset)
 {
     loaded_bitmap *SpriteSheet = &SpriteSheetMode->SpriteSheetBitmap;
@@ -286,12 +286,12 @@ CutSpriteSheet(editor_assets *Assets, spritesheet_mode *SpriteSheetMode,
         Op.Allocate.Height = Sprite->Height;
         Op.Allocate.Data = Sprite->Memory;
         Op.Allocate.ResultHandle = &Sprite->TextureHandle;
-        AddOp(Assets->TextureOpQueue, &Op);
+        AddOp(TextureOpQueue, &Op);
     }
 }
 
 internal void
-LoadTileBitmap(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Tileset,
+LoadTileBitmap(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_tileset *Tileset,
                loaded_bitmap *TilesetBitmap, u32 TileIndex, loaded_bitmap *MergeTile = 0)
 {
     loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
@@ -371,11 +371,11 @@ LoadTileBitmap(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *T
     Op.Allocate.Height = Tile->Height;
     Op.Allocate.Data = Tile->Memory;
     Op.Allocate.ResultHandle = &Tile->TextureHandle;
-    AddOp(Assets->TextureOpQueue, &Op);
+    AddOp(TextureOpQueue, &Op);
 }
 
 internal void
-CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Asset, b32 CutWithMerge)
+CutTileset(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_tileset *Asset, b32 CutWithMerge)
 {
     kesa_tileset *Tileset = Asset;
     loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
@@ -422,7 +422,7 @@ CutTileset(editor_assets *Assets, tileset_mode *TilesetMode, kesa_tileset *Asset
         TileIndex < Tileset->TileCount;
         ++TileIndex)
     {
-        LoadTileBitmap(Assets, TilesetMode, Tileset, TilesetBitmap, TileIndex, MergeTile);
+        LoadTileBitmap(TextureOpQueue, TilesetMode, Tileset, TilesetBitmap, TileIndex, MergeTile);
     }
 }
 
@@ -555,7 +555,7 @@ RemoveCurrentAssetTag(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 }
 
 internal void
-DeallocateBitmap(editor_assets *Assets, loaded_bitmap *Bitmap)
+DeallocateBitmap(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Bitmap)
 {
     if(Bitmap)
     {
@@ -564,7 +564,7 @@ DeallocateBitmap(editor_assets *Assets, loaded_bitmap *Bitmap)
             texture_op Op = {};
             Op.IsAllocate = false;
             Op.Deallocate.Handle = Bitmap->TextureHandle;
-            AddOp(Assets->TextureOpQueue, &Op);
+            AddOp(TextureOpQueue, &Op);
         }
 
         Platform.FreeFileMemory(Bitmap->Memory);
@@ -572,7 +572,7 @@ DeallocateBitmap(editor_assets *Assets, loaded_bitmap *Bitmap)
 }
 
 internal void
-AllocateBitmap(editor_assets *Assets, loaded_bitmap *Bitmap)
+AllocateBitmap(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Bitmap)
 {
     texture_op Op = {};
     Op.IsAllocate = true;
@@ -580,7 +580,7 @@ AllocateBitmap(editor_assets *Assets, loaded_bitmap *Bitmap)
     Op.Allocate.Height = Bitmap->Height;
     Op.Allocate.Data = Bitmap->Memory;
     Op.Allocate.ResultHandle = &Bitmap->TextureHandle;
-    AddOp(Assets->TextureOpQueue, &Op);
+    AddOp(TextureOpQueue, &Op);
 }
 
 inline void
@@ -631,36 +631,36 @@ DrawCanvasOutline(render_group *RenderGroup, object_transform *Transform, v2 Can
 }
 
 inline void
-ClearSpriteSheetSprites(editor_assets *Assets, spritesheet_mode *SpriteSheetMode)
+ClearSpriteSheetSprites(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *SpriteSheetMode)
 {
     for(u32 SpriteIndex = 0;
         SpriteIndex < ArrayCount(SpriteSheetMode->Sprites);
         ++SpriteIndex)
     {
         loaded_bitmap *Sprite = SpriteSheetMode->Sprites + SpriteIndex;
-        DeallocateBitmap(Assets, Sprite);
+        DeallocateBitmap(TextureOpQueue, Sprite);
     }
                                 
     ZeroArray(ArrayCount(SpriteSheetMode->Sprites), SpriteSheetMode->Sprites);
 }
 
 inline void
-ClearTilesetTiles(editor_assets *Assets, tileset_mode *TilesetMode)
+ClearTilesetTiles(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
 {
     for(u32 TileIndex = 0;
         TileIndex < ArrayCount(TilesetMode->Tiles);
         ++TileIndex)
     {
         loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        DeallocateBitmap(Assets, Tile);
+        DeallocateBitmap(TextureOpQueue, Tile);
     }
                                 
     ZeroArray(ArrayCount(TilesetMode->Tiles), TilesetMode->Tiles);
 }
 
 internal void
-ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_type Type,
-                     audio_state *AudioState = 0)
+ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue,
+                     kesa_type Type, audio_state *AudioState = 0)
 {
     switch(Type)
     {
@@ -672,7 +672,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa
         {
             // NOTE(paul): Clear Bitmap Mode data
             bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-            DeallocateBitmap(Assets, &BitmapMode->Bitmap);
+            DeallocateBitmap(TextureOpQueue, &BitmapMode->Bitmap);
         } break;
 
         case KESA_SpriteSheet:
@@ -680,18 +680,18 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa
             // NOTE(paul): Clear SpriteSheet Mode data
             spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
 
-            DeallocateBitmap(Assets, &SpriteSheetMode->SpriteSheetBitmap);
-            ClearSpriteSheetSprites(Assets, SpriteSheetMode);
+            DeallocateBitmap(TextureOpQueue, &SpriteSheetMode->SpriteSheetBitmap);
+            ClearSpriteSheetSprites(TextureOpQueue, SpriteSheetMode);
         } break;
 
         case KESA_Tileset:
         {
             // NOTE(paul): Clear Tileset Mode data
             tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-            DeallocateBitmap(Assets, &TilesetMode->MergeTileBitmap);
-            DeallocateBitmap(Assets, &TilesetMode->TilesetBitmap);
+            DeallocateBitmap(TextureOpQueue, &TilesetMode->MergeTileBitmap);
+            DeallocateBitmap(TextureOpQueue, &TilesetMode->TilesetBitmap);
 
-            ClearTilesetTiles(Assets, TilesetMode);
+            ClearTilesetTiles(TextureOpQueue, TilesetMode);
         } break;
 
         case KESA_Sound:
@@ -721,7 +721,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa
                 loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
                 if(Bitmap)
                 {
-                    DeallocateBitmap(Assets, Bitmap);
+                    DeallocateBitmap(TextureOpQueue, Bitmap);
                 }
             }
 
@@ -767,7 +767,8 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa
 }
 
 inline void
-ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode,
+                  platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     kesa_type Type = Asset->Type;
 
@@ -788,7 +789,7 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode, edi
     AssetsMode->PixelPosition = {};
     AssetsMode->Time = 0.0f;
 
-    ClearStoredAssetData(AssetsMode, Assets, Type, &EditorState->AudioState);
+    ClearStoredAssetData(AssetsMode, TextureOpQueue, Type, &EditorState->AudioState);
 }
 
 inline b32
@@ -802,7 +803,7 @@ AbleToCut(u32 TilesetBitmapWidth, u32 TilesetBitmapHeight, kesa_tileset *Asset)
 }
 
 inline void
-LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *StoredAsset,
+LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *StoredAsset,
                     b32 RememberEditMode = false)
 {
     if(RememberEditMode)
@@ -825,7 +826,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_
             if(BitmapMode->Bitmap.Memory)
             {
                 loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
-                AllocateBitmap(Assets, Bitmap);
+                AllocateBitmap(TextureOpQueue, Bitmap);
             }
         } break;
 
@@ -837,8 +838,8 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_
             SpriteSheetMode->SpriteSheetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_SSBMP, 0);
 
             loaded_bitmap *Bitmap = &SpriteSheetMode->SpriteSheetBitmap;
-            AllocateBitmap(Assets, Bitmap);
-            CutSpriteSheet(Assets, SpriteSheetMode, SpriteSheet);
+            AllocateBitmap(TextureOpQueue, Bitmap);
+            CutSpriteSheet(TextureOpQueue, SpriteSheetMode, SpriteSheet);
         } break;
 
         case KESA_Tileset:
@@ -848,15 +849,15 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_
     
             TilesetMode->TilesetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
             loaded_bitmap *Bitmap = &TilesetMode->TilesetBitmap;
-            AllocateBitmap(Assets, Bitmap);
+            AllocateBitmap(TextureOpQueue, Bitmap);
 
             TilesetMode->MergeTileBitmap = LoadBMP(StoredTileset->MergeTileFileName, PlatformFileType_STBMP, 0);
             Bitmap = &TilesetMode->MergeTileBitmap;
-            AllocateBitmap(Assets, Bitmap);
+            AllocateBitmap(TextureOpQueue, Bitmap);
 
             if(AbleToCut(TilesetMode->TilesetBitmap.Width, TilesetMode->TilesetBitmap.Height, StoredTileset))
             {
-                CutTileset(Assets, TilesetMode, StoredTileset, StoredTileset->MergedTile);
+                CutTileset(TextureOpQueue, TilesetMode, StoredTileset, StoredTileset->MergedTile);
             }
         } break;
 
@@ -888,7 +889,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_
                     ++GlyphIndex)
                 {
                     loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
-                    AllocateBitmap(Assets, Bitmap);
+                    AllocateBitmap(TextureOpQueue, Bitmap);
                 }
             }
         } break;
@@ -918,7 +919,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_
 }
 
 internal void
-LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+LoadNewStoredAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     if(AssetsMode->SourceFileCounts[Asset->Type])
         StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SourceFileName);
@@ -930,13 +931,13 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
 
         case KESA_Bitmap:
         {
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             Asset->Bitmap.AlignPercentage = AssetsMode->BitmapMode.Bitmap.AlignPercentage;
         } break;
 
         case KESA_SpriteSheet:
         {
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             Asset->SpriteSheet.SpriteHeight = AssetsMode->SpriteSheetMode.SpriteSheetBitmap.Height;
         } break;
 
@@ -948,13 +949,13 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
                 StringCopy(SolidTileFileName, Asset->Tileset.MergeTileFileName);
             }
             
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             Asset->Tileset.TileWidth = Asset->Tileset.TileHeight = 32;
         } break;
 
         case KESA_Font:
         {
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             font_mode *FontMode = &AssetsMode->FontMode;
             if(FontMode->Font.Glyphs)
             {
@@ -967,7 +968,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
 
         case KESA_Text:
         {
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             text_mode *TextMode = &AssetsMode->TextMode;
             
             TextMode->EditBufferLength = StringLength(TextMode->Text.String);
@@ -979,7 +980,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
         case KESA_File:
         case KESA_SSWM:
         {
-            LoadStoredAssetData(AssetsMode, Assets, Asset);
+            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
         } break;
 
         InvalidDefaultCase;
@@ -987,10 +988,10 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_a
 }
 
 inline void
-InitAssetsMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+InitAssetsMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     Asset->Type = KESAFromEditMode(AssetsMode->EditMode);
-    LoadNewStoredAsset(AssetsMode, Assets, Asset);
+    LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
 }
 
 inline void
@@ -1016,7 +1017,7 @@ UpdateAlignmentCursor(render_group *RenderGroup, object_transform *Flat, engine_
 }
 
 internal void
-UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
+UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Input, platform_texture_op_queue *TextureOpQueue,
                               render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                               rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
 {
@@ -1031,8 +1032,8 @@ UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Inpu
                 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_Bitmap);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Bitmap);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 
@@ -1073,7 +1074,7 @@ DrawSpriteOutlines(render_group *RenderGroup, object_transform *Flat, r32 Scale,
 }
 
 internal void
-UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
+UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, platform_texture_op_queue *TextureOpQueue,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                                    rectangle2 CanvasRect, r32 TileDim, kesa_asset *CurrentAsset)
 {
@@ -1088,10 +1089,10 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_SpriteSheet);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_SpriteSheet);
         SpriteSheet->SpriteCount = 0;
 
-        LoadNewStoredAsset(AssetsMode, Assets, CurrentAsset);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, CurrentAsset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         SpriteSheetMode->ShowAnimated = false;
     }
@@ -1103,10 +1104,10 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
         {
             if((SpriteSheetBitmap->Width % SpriteSheet->SpriteWidth) == 0)
             {
-                ClearSpriteSheetSprites(Assets, SpriteSheetMode);
+                ClearSpriteSheetSprites(TextureOpQueue, SpriteSheetMode);
 
                 SpriteSheet->SpriteCount = (SpriteSheetBitmap->Width / SpriteSheet->SpriteWidth);
-                CutSpriteSheet(Assets, SpriteSheetMode, SpriteSheet);
+                CutSpriteSheet(TextureOpQueue, SpriteSheetMode, SpriteSheet);
             }
         }
 
@@ -1182,7 +1183,7 @@ DrawTileOutlines(render_group *RenderGroup, object_transform *Flat, r32 TilesetB
 }
 
 internal void
-UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, editor_assets *Assets,
+UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, platform_texture_op_queue *TextureOpQueue,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                                    rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
 {
@@ -1198,10 +1199,10 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
     if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) ||
        (AssetsMode->SubFileIndex != AssetsMode->LastSubFileIndex))
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_Tileset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Tileset);
         StoredTileset->TileCount = 0;
 
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         AssetsMode->LastSubFileIndex = AssetsMode->SubFileIndex;
@@ -1214,8 +1215,8 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
     {
         if(AbleToCut(TilesetBitmap->Width, TilesetBitmap->Height, StoredTileset))
         {
-            ClearTilesetTiles(Assets, TilesetMode);
-            CutTileset(Assets, TilesetMode, StoredTileset, TilesetMode->CutWithMergeTileset);
+            ClearTilesetTiles(TextureOpQueue, TilesetMode);
+            CutTileset(TextureOpQueue, TilesetMode, StoredTileset, TilesetMode->CutWithMergeTileset);
         }
 
         TilesetMode->CutTileset = false;
@@ -1265,15 +1266,15 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
 }
 
 internal void
-UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets,
+UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue,
                              audio_state *AudioState, kesa_asset *Asset)
 {
     sound_mode *SoundMode = &AssetsMode->SoundMode;
     kesa_sound *StoredSound = &Asset->Sound;
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_Sound, AudioState);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Sound, AudioState);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 
@@ -1295,15 +1296,15 @@ UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, editor_assets *Asse
 }
 
 internal void
-UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     text_mode *TextMode = &AssetsMode->TextMode;
     kesa_text *StoredText = &Asset->Text;
                 
     if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) || TextMode->Reload)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_Text);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Text);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         TextMode->Reload = false;
@@ -1322,44 +1323,44 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, editor_assets *Asset
 }
 
 internal void
-UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     font_mode *FontMode = &AssetsMode->FontMode;
     kesa_font *StoredFont = &Asset->Font;
                 
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_Font);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Font);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
 
 internal void
-UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     kesa_binary_file *StoredFile = &Asset->File;
     binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
     
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_File);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_File);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
 
 internal void
-UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, editor_assets *Assets, kesa_asset *Asset)
+UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     kesa_sswm_file *StoredFile = &Asset->SSWM;
     sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
     
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
-        ClearStoredAssetData(AssetsMode, Assets, KESA_SSWM);
-        LoadNewStoredAsset(AssetsMode, Assets, Asset);
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_SSWM);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
@@ -1392,10 +1393,9 @@ RemoveStoredAsset(editor_mode_assets *AssetsMode)
 }
 
 internal b32
-UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState, engine_input *Input)
+UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState, engine_input *Input,
+                          platform_texture_op_queue *TextureOpQueue)
 {
-    editor_assets *Assets = TranState->Assets;
-
     editor_mode_assets *AssetsMode = EditorState->AssetsMode;
     ui_state *UIState = &EditorState->UIState;
 
@@ -1419,7 +1419,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         {
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
-                ClearEditModeData(EditorState, AssetsMode, Assets, AssetsMode->CurrentAsset);
+                ClearEditModeData(EditorState, AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 RemoveAction(AssetsMode, AM_EditStoredAsset);
 
                 if(AssetsMode->LastEditMode == EditMode_None)
@@ -1427,13 +1427,13 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
                     if(AssetsMode->CurrentAsset->Type == KESA_None)
                     {
-                        InitAssetsMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                        InitAssetsMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                     }
                 }
                 else
                 {
                     AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
-                    LoadStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 }
 
                 AssetsMode->LastEditMode = AssetsMode->EditMode;            
@@ -1472,9 +1472,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     {
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
 
-                        ClearStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset->Type,
+                        ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
                                              &EditorState->AudioState);
-                        LoadStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset, true);
+                        LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset, true);
 
                         AssetsMode->LastEditMode = AssetsMode->EditMode;            
                         AssetsMode->StoredAssetChanged = true;
@@ -1486,9 +1486,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         kesa_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
 
-                        ClearStoredAssetData(AssetsMode, Assets, PreviousAsset->Type,
+                        ClearStoredAssetData(AssetsMode, TextureOpQueue, PreviousAsset->Type,
                                              &EditorState->AudioState);
-                        LoadStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                        LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
 
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
@@ -1505,7 +1505,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->StoredAssetChanged = true;
                     }
 
-                    if(CheckRemoveAction(AssetsMode, AM_WriteSSA))
+                    if(CheckRemoveAction(AssetsMode, AM_WriteKEA))
                     {
                         temporary_memory TempMemory = BeginTemporaryMemory(&TranState->TranArena);
 //                        BuildSSAFile(AssetsMode, EditorState->Version, TempMemory.Arena);
@@ -1516,46 +1516,46 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
 
                 case EditMode_Bitmap:
                 {
-                    UpdateAndRenderBitmapEditMode(AssetsMode, Input, Assets, RenderGroup, &Flat, MouseP,
+                    UpdateAndRenderBitmapEditMode(AssetsMode, Input, TextureOpQueue, RenderGroup, &Flat, MouseP,
                                                   CanvasRect, TileDim, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_SpriteSheet:
                 {
-                    UpdateAndRenderSpriteSheetEditMode(AssetsMode, Input, Assets, RenderGroup, &Flat, MouseP,
+                    UpdateAndRenderSpriteSheetEditMode(AssetsMode, Input, TextureOpQueue, RenderGroup, &Flat, MouseP,
                                                        CanvasRect, TileDim, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_Tileset:
                 {
-                    UpdateAndRenderTilesetEditMode(AssetsMode, Input, Assets, RenderGroup, &Flat, MouseP,
+                    UpdateAndRenderTilesetEditMode(AssetsMode, Input, TextureOpQueue, RenderGroup, &Flat, MouseP,
                                                    CanvasRect, TileDim, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_Sound:
                 {
-                    UpdateAndRenderSoundEditMode(AssetsMode, Assets, &EditorState->AudioState,
+                    UpdateAndRenderSoundEditMode(AssetsMode, TextureOpQueue, &EditorState->AudioState,
                                                  AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_Text:
                 {
-                    UpdateAndRenderTextEditMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    UpdateAndRenderTextEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_Font:
                 {
-                    UpdateAndRenderFontEditMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    UpdateAndRenderFontEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_File:
                 {
-                    UpdateAndRenderFileEditMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    UpdateAndRenderFileEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_SSWM:
                 {
-                    UpdateAndRenderSSWMEditMode(AssetsMode, Assets, AssetsMode->CurrentAsset);
+                    UpdateAndRenderSSWMEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
             
                 InvalidDefaultCase;
@@ -1568,7 +1568,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         }
         else
         {
-            ClearStoredAssetData(AssetsMode, Assets, AssetsMode->CurrentAsset->Type,
+            ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
                                  &EditorState->AudioState);
             Platform.DeallocateMemory(AssetsMode->StoredAssets);
             PlayTitleScreen(EditorState, TranState);

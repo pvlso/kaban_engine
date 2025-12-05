@@ -200,14 +200,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         memory_arena *TranArena = &TranState->TranArena;
         DEBUG_VALUE(TranArena);
     }
-
+#if 0
     if(TranState->MainGenerationID)
     {
         EndGeneration(TranState->Assets, TranState->MainGenerationID);
     }
 
     TranState->MainGenerationID = BeginGeneration(TranState->Assets);
-
+#endif
     if(EditorState->EditorMode == EditorMode_None)
     {
         PlayTitleScreen(EditorState, TranState);
@@ -265,7 +265,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             
                 case EditorMode_AssetsMode:
                 {
-                    Rerun = UpdateAndRenderAssetsMode(EditorState, TranState, Input);
+                    Rerun = UpdateAndRenderAssetsMode(EditorState, TranState,
+                                                      Input, &Memory->TextureOpQueue);
                 } break;
 
                 case EditorMode_MapEditor:
