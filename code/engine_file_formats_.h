@@ -8,6 +8,7 @@
    ======================================================================== */
 
 #define TAG_KEY_LENGTH 64
+#define MAX_NUMBER_OF_TAGS 32
 
 /*
   NOTE(paul): Current Formats
@@ -164,18 +165,34 @@ enum kea_asset_type
     KEAType_Count,
 };
 
-struct kea_asset_map
+struct kea_tag
 {
-    u64 GUID;
+    u64 GUID; // NOTE(pvlso): made of Key + Value
     char Key[TAG_KEY_LENGTH];
+    char Value[TAG_KEY_LENGTH];
 };
 
 struct kea_tag_map
 {
     u64 GUID; // NOTE(pvlso): made of Key
     char Key[TAG_KEY_LENGTH];
+
     u32 ValueCount;
     char Values[32][TAG_KEY_LENGTH];
+//    u64 TagValueGUIDs[32]; // NOTE(pvlso): Made of TagMap->Key + TagMap->Values[I]
+};
+
+struct kea_tag_table_entry
+{
+    u64 GUID; // NOTE(pvlso): Tag pair GUID: Tag->Key + Tag->Value
+    u64 BitSetOffset;
+};
+
+struct kea_asset_type_table_entry
+{
+    u32 Type;
+    u32 TypeCount;
+    u64 AssetsIndeciesOffset;
 };
 
 struct kea_header
@@ -183,23 +200,18 @@ struct kea_header
     u32 MagicValue;
     u32 Version;
 
-    u32 AssetCount;
     u32 TagCount;
-    kea_asset_map AssetMap;
-    kea_tag_map TagMap;
+    u64 TagMapsOffset; // NOTE(pvlso): Sorted array of kea_tag_map by GUID
 
-    u64 AssetMapOffset;
-    u64 AssetsOffset;
+    u32 UsedTagsCount;
+    u64 UsedTagsArrayOffset; // NOTE(pvlso): Sorted array of kea_tag by GUID
+    u64 TagTableOffset; // NOTE(pvlso): Sorted array of kea_tag_table_entry by GUID
 
-    u64 TagMapOffset;
-    u64 TagsOffset;
-};
+    u32 AssetTypeCount;
+    u64 AssetTypeTableOffset; // NOTE(pvlso): Sorted array of kea_asset_type_table_entry by Type -> enum
 
-struct kea_tag
-{
-    u64 GUID; // NOTE(pvlso): made of Key + Value
-    char Key[128];
-    char Value[128];
+    u32 AssetCount;
+    u64 AssetsOffset; // NOTE(pvlso): Sorted array of kea_asset by GUID
 };
 
 enum kea_sound_chain
@@ -308,9 +320,12 @@ struct kea_binary_file
 struct kea_asset
 {
     u64 DataOffset;
+    u64 GUID;
 
-    u32 FirstTagIndex;
-    u32 OnePastLastTagIndex;
+    u32 AssetIndex;
+    u32 TagIndecies[MAX_NUMBER_OF_TAGS];
+
+    u32 Type;
     union
     {
         kea_bitmap Bitmap;
@@ -450,7 +465,7 @@ struct kesa_asset
     kesa_type Type;
 
     u32 TagCount;
-    kesa_tag AssetTags[32];
+    kesa_tag AssetTags[MAX_NUMBER_OF_TAGS];
     char SourceFileName[256];
     union
     {

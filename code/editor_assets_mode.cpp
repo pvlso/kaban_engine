@@ -7,6 +7,7 @@
    ======================================================================== */
 
 #include "editor_ssa_file_builder.cpp"
+#include "engine_kea_builder.cpp"
 #include "engine_assets_mode_ui.cpp"
 
 internal b32
@@ -439,8 +440,21 @@ AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 internal void
 AddCurrentAsset(editor_mode_assets *AssetsMode)
 {
-    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
-    ++AssetsMode->AddAssetCount;
+    if((AssetsMode->CurrentAsset->Type == KESA_Tileset) &&
+       AssetsMode->CurrentAsset->Tileset.MergedTile)
+    {
+        char Buffer[512];
+        FormatString(ArrayCount(Buffer), Buffer, "%s%s",
+                     AssetsMode->CurrentAsset->SourceFileName,
+                     AssetsMode->CurrentAsset->Tileset.MergeTileFileName);
+        AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(Buffer);
+        ++AssetsMode->AddAssetCount;
+    }
+    else
+    {
+        AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
+        ++AssetsMode->AddAssetCount;
+    }
 }
 
 inline void
@@ -1508,7 +1522,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     if(CheckRemoveAction(AssetsMode, AM_WriteKEA))
                     {
                         temporary_memory TempMemory = BeginTemporaryMemory(&TranState->TranArena);
-//                        BuildSSAFile(AssetsMode, EditorState->Version, TempMemory.Arena);
+                        BuildKEA(AssetsMode, TempMemory.Arena);
                         EndTemporaryMemory(TempMemory);
                     }
 
