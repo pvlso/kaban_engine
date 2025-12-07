@@ -17,12 +17,15 @@ ReadTags(editor_mode_assets *AssetsMode)
     Assert(AssetsMode->StoredHeader.MagicValue);
     ket_header *Header = &AssetsMode->TagHeader;
 
-    for(u32 I = 0; I < Header->TagCount; ++I)
+    if(AssetsMode->TagKeys)
     {
-        Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
+        for(u32 I = 0; I < Header->TagCount; ++I)
+        {
+            Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
+        }
+        Platform.DeallocateMemory(AssetsMode->TagKeys);    
     }
-    Platform.DeallocateMemory(AssetsMode->TagKeys);    
-
+        
     u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
     u8 TagVersion[4] =
         {
@@ -77,6 +80,9 @@ ReadTags(editor_mode_assets *AssetsMode)
             FormatString(ArrayCount(NullTag.Key), NullTag.Key, "Tag_None");
             NullTag.ValueCount = 1;
             FormatString(ArrayCount(NullTag.Values[0]), NullTag.Values[0], "None");
+
+            // TODO(pvlso): Should be Key + Values[I]
+            NullTag.ValueGUIDs[0] = GUIDFromString(NullTag.Values[0]);
 
             Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
             Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset, sizeof(kea_tag_map), &NullTag);
@@ -505,6 +511,15 @@ AddNewTag(editor_mode_assets *AssetsMode)
         Copy(sizeof(kea_tag_map)*Header->TagCount, AssetsMode->Tags, ExistingTags);
 
         AssetsMode->NewTag.GUID = GUIDFromString(AssetsMode->NewTag.Key);
+        char Buffer[TAG_KEY_LENGTH*2];
+        for(u32 I = 0;
+            I < AssetsMode->NewTag.ValueCount;
+            ++I)
+        {
+            FormatString(ArrayCount(Buffer), Buffer, "%s%s", AssetsMode->NewTag.Key, AssetsMode->NewTag.Values[I]);
+            AssetsMode->NewTag.ValueGUIDs[I] = GUIDFromString(Buffer);            
+        }
+
         ExistingTags[Header->TagCount] = AssetsMode->NewTag;
         ++Header->TagCount;
 

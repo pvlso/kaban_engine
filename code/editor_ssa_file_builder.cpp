@@ -1176,7 +1176,6 @@ BuildSSAFile(editor_mode_assets *AssetsMode, working_version Version, memory_are
     builder_assets *Assets = PushStruct(TempArena, builder_assets);
     InitializeBuilder(Assets, TempArena);
 
-    
     stored_asset_file_header *StoredHeader = &AssetsMode->StoredHeader;
     stored_asset *StoredAssets = AssetsMode->StoredAssets;
     u32 TileID = 1;

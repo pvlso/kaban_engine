@@ -7,21 +7,39 @@
    $Notice: $
    ======================================================================== */
 
+struct kea_builder_added_asset_list
+{
+    kea_asset KEAAsset;
+    kesa_asset *StoredAsset;
+
+    kea_builder_added_asset_list *Next;    
+};
+
+struct kea_builder_tag_list
+{
+    u32 TagIndex;
+    kea_tag Tag;
+
+    kea_builder_tag_list *Next;
+};
+
 struct kea_builder
 {
+    memory_arena *TempMem;
+
     kesa_header *KESAHeader;
-    kesa_asset *KESAAssets;
+    kesa_asset *KESAAssets; // NOTE(pvlso): Sorted array of stored assets
 
     ket_header *KETHeader;
     kea_tag_map *TagMaps;
 
-    kea_header KEAHeader;
-    kea_tag *UsedTags;
-    kea_tag_table_entry *TagTable;
+    u32 TagCount;
+    kea_builder_tag_list *Tags;
+    kea_builder_tag_list *CurrentTag;
 
-    kea_asset_type_table_entry *AssetTypeTable;
-
-    kea_asset *KEAAssets;
+    u32 AssetCount;
+    kea_builder_added_asset_list *BuilderAssets;
+    kea_builder_added_asset_list *CurrentAsset;
 };
 
 #define ENGINE_KEA_BUILDER_H

@@ -439,7 +439,6 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                 nk_group_end(Nk);
             }
 
-            char ResultingString[128];
             if(nk_group_begin(Nk, "Stored Asset Preview Tags", NK_WINDOW_TITLE))
             {
                 nk_layout_row_dynamic(Nk, 30, 1);
@@ -450,14 +449,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     kesa_tag StoredTag = StoredAsset->AssetTags[TagIndex];
                     kea_tag_map *Tag = GetTag(AssetsMode, StoredTag.TagGUID);
 
-                    FormatString(ArrayCount(ResultingString), ResultingString, "%s%s", Tag->Key, Tag->Values[StoredTag.TagValueIndex]);
-                    u64 KEATagGUID = GUIDFromString(ResultingString);
-
                     struct nk_rect Rect = nk_widget_bounds(Nk);
                     nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                     nk_labelf(Nk, NK_TEXT_LEFT, "  %d. %s, %s, kea_tag_GUID: 0x%016x",
                               TagIndex, Tag->Key, Tag->Values[StoredTag.TagValueIndex],
-                              KEATagGUID);
+                              Tag->ValueGUIDs[StoredTag.TagValueIndex]);
                 }
                 nk_group_end(Nk);
             }

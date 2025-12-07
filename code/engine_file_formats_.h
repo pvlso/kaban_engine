@@ -167,9 +167,9 @@ enum kea_asset_type
 
 struct kea_tag
 {
-    u64 GUID; // NOTE(pvlso): made of Key + Value
-    char Key[TAG_KEY_LENGTH];
-    char Value[TAG_KEY_LENGTH];
+    u32 TagIndex;
+    u32 TagValueIndex;
+    u64 BitSetOffset;
 };
 
 struct kea_tag_map
@@ -179,13 +179,7 @@ struct kea_tag_map
 
     u32 ValueCount;
     char Values[32][TAG_KEY_LENGTH];
-//    u64 TagValueGUIDs[32]; // NOTE(pvlso): Made of TagMap->Key + TagMap->Values[I]
-};
-
-struct kea_tag_table_entry
-{
-    u64 GUID; // NOTE(pvlso): Tag pair GUID: Tag->Key + Tag->Value
-    u64 BitSetOffset;
+    u64 ValueGUIDs[32]; // NOTE(pvlso): Made of TagMap->Key + TagMap->Values[I]
 };
 
 struct kea_asset_type_table_entry
@@ -199,13 +193,12 @@ struct kea_header
 {
     u32 MagicValue;
     u32 Version;
-
+    
     u32 TagCount;
     u64 TagMapsOffset; // NOTE(pvlso): Sorted array of kea_tag_map by GUID
 
     u32 UsedTagsCount;
     u64 UsedTagsArrayOffset; // NOTE(pvlso): Sorted array of kea_tag by GUID
-    u64 TagTableOffset; // NOTE(pvlso): Sorted array of kea_tag_table_entry by GUID
 
     u32 AssetTypeCount;
     u64 AssetTypeTableOffset; // NOTE(pvlso): Sorted array of kea_asset_type_table_entry by Type -> enum
@@ -273,10 +266,16 @@ struct kea_font
     */
 };
 
+struct kea_sprite
+{
+    u64 SpriteSheetGUID;
+    u64 BitmapGUID;
+};
+
 struct kea_tile
 {
-    u32 BitmapGUID;
-    u32 CheckSum;
+    u64 TilesetGUID;
+    u64 BitmapGUID;
 };
 
 struct kea_tileset
@@ -323,7 +322,9 @@ struct kea_asset
     u64 GUID;
 
     u32 AssetIndex;
-    u32 TagIndecies[MAX_NUMBER_OF_TAGS];
+
+    u32 FirstTagIndex;
+    u32 OnePastLastTagIndex;
 
     u32 Type;
     union
