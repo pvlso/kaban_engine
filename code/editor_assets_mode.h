@@ -15,7 +15,6 @@ enum assets_edit_mode
     EditMode_Tileset,
     EditMode_Sound,
     EditMode_Text,
-    EditMode_Font,
     EditMode_File,
     EditMode_SSWM,
 };
@@ -74,12 +73,6 @@ struct text_mode
     loaded_text Text;
 };
 
-// NOTE(paul): Fonts
-struct font_mode
-{
-    builder_loaded_font Font;
-};
-
 // NOTE(paul): Files
 struct binary_file_mode
 {
@@ -97,8 +90,7 @@ static platform_file_type StoredToSourceTypeMap[KESA_Count] =
     PlatformFileType_None, PlatformFileType_BMP,
     PlatformFileType_SSBMP, PlatformFileType_TSBMP,
     PlatformFileType_WAV, PlatformFileType_TXT,
-    PlatformFileType_TTF, PlatformFileType_BIN,
-    PlatformFileType_KEWM
+    PlatformFileType_BIN, PlatformFileType_KEWM
 };
 
 enum assets_mode_action
@@ -174,7 +166,6 @@ struct editor_mode_assets
         tileset_mode TilesetMode;
         sound_mode SoundMode;
         text_mode TextMode;
-        font_mode FontMode;
         binary_file_mode BinaryFileMode;
         sswm_mode SSWMMode;
     };
@@ -219,7 +210,6 @@ AssetsEditModeFromStoredType(u32 StoredType)
         case KESA_Tileset:     {Result = EditMode_Tileset;}     break;
         case KESA_Sound:       {Result = EditMode_Sound;}       break;
         case KESA_Text:        {Result = EditMode_Text;}        break;
-        case KESA_Font:        {Result = EditMode_Font;}        break;
         case KESA_File:        {Result = EditMode_File;}        break;
         case KESA_SSWM:        {Result = EditMode_SSWM;}        break;
         InvalidDefaultCase;
@@ -240,7 +230,6 @@ KESAFromEditMode(u32 EditMode)
         case EditMode_Tileset:     {Result = KESA_Tileset;}     break;
         case EditMode_Sound:       {Result = KESA_Sound;}       break;
         case EditMode_Text:        {Result = KESA_Text;}        break;
-        case EditMode_Font:        {Result = KESA_Font;}        break;
         case EditMode_File:        {Result = KESA_File;}        break;
         case EditMode_SSWM:        {Result = KESA_SSWM;}        break;
         InvalidDefaultCase;

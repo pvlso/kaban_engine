@@ -738,26 +738,6 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *
             text_mode *TextMode = &AssetsMode->TextMode;
             Platform.DeallocateMemory(TextMode->Text.String);
         } break;
-
-        case KESA_Font:
-        {
-            // NOTE(paul): Clear Font Mode Data
-            font_mode *FontMode = &AssetsMode->FontMode;
-            for(u32 GlyphIndex = 1;
-                GlyphIndex < FontMode->Font.GlyphCount;
-                ++GlyphIndex)
-            {
-                loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
-                if(Bitmap)
-                {
-                    DeallocateBitmap(TextureOpQueue, Bitmap);
-                }
-            }
-
-            Platform.DeallocateMemory(FontMode->Font.UnicodeCodePoints);
-            Platform.DeallocateMemory(FontMode->Font.HorizontalAdvance);
-            Platform.DeallocateMemory(FontMode->Font.UnicodeMap);
-        } break;
         
         case KESA_File:
         {
@@ -777,7 +757,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *
     u32 ModeSizes[KESA_Count] =
         {
             sizeof(bitmap_mode), sizeof(spritesheet_mode), sizeof(tileset_mode),
-            sizeof(sound_mode), sizeof(text_mode), sizeof(font_mode), sizeof(binary_file_mode),
+            sizeof(sound_mode), sizeof(text_mode), sizeof(binary_file_mode),
             sizeof(sswm_mode),
         };
 
@@ -904,25 +884,6 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
             TextMode->Text = LoadText(StoredAsset->SourceFileName, 0);
         } break;
 
-        case KESA_Font:
-        {
-            font_mode *FontMode = &AssetsMode->FontMode;
-            kesa_font *StoredFont = &StoredAsset->Font;
-            u32 StandardFontSize = 24;
-
-            if(*StoredAsset->SourceFileName)
-            {
-                FontMode->Font = Platform.LoadFontAsset(StoredAsset->SourceFileName, StandardFontSize, 0);
-                for(u32 GlyphIndex = 1;
-                    GlyphIndex < FontMode->Font.GlyphCount;
-                    ++GlyphIndex)
-                {
-                    loaded_bitmap *Bitmap = FontMode->Font.Glyphs + GlyphIndex;
-                    AllocateBitmap(TextureOpQueue, Bitmap);
-                }
-            }
-        } break;
-
         case KESA_File:
         {
             binary_file_mode *FileMode = &AssetsMode->BinaryFileMode;
@@ -980,19 +941,6 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *Te
             
             LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
             Asset->Tileset.TileWidth = Asset->Tileset.TileHeight = 32;
-        } break;
-
-        case KESA_Font:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-            font_mode *FontMode = &AssetsMode->FontMode;
-            if(FontMode->Font.Glyphs)
-            {
-                Asset->Font.CodePointCount = FontMode->Font.GlyphCount - 1;
-                Asset->Font.FirstCodePoint = FontMode->Font.UnicodeCodePoints[1];
-                Asset->Font.LastCodePoint = FontMode->Font.UnicodeCodePoints[FontMode->Font.GlyphCount - 1];
-                Asset->Font.FontSizeInPixels = 24;
-            }
         } break;
 
         case KESA_Text:
@@ -1352,21 +1300,6 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
 }
 
 internal void
-UpdateAndRenderFontEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
-{
-    font_mode *FontMode = &AssetsMode->FontMode;
-    kesa_font *StoredFont = &Asset->Font;
-                
-    if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
-    {
-        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Font);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
-
-        AssetsMode->LastFileIndex = AssetsMode->FileIndex;
-    }
-}
-
-internal void
 UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
 {
     kesa_binary_file *StoredFile = &Asset->File;
@@ -1570,11 +1503,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 case EditMode_Text:
                 {
                     UpdateAndRenderTextEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
-                } break;
-
-                case EditMode_Font:
-                {
-                    UpdateAndRenderFontEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
 
                 case EditMode_File:

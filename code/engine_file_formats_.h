@@ -153,8 +153,6 @@ enum kea_asset_type
     KEAType_None,
     KEAType_Bitmap,
     KEAType_Sound,
-    KEAType_Font,
-    KEAType_FontGlyph,
     KEAType_SpriteSheet,
     KEAType_Sprite,
     KEAType_Tileset,
@@ -245,39 +243,6 @@ struct kea_sound
     */
 };
 
-struct kea_font_glyph
-{
-    u32 UnicodeCodePoint;
-    u32 BitmapGUID;
-};
-
-struct kea_font
-{
-    u32 OnePastHighestCodePoint;
-    u32 GlyphCount;
-    r32 AscenderHeight;
-    r32 DescenderHeight;
-    r32 ExternalLeading;
-
-    /* NOTE(casey): Data is:
-
-       ssa_font_glyph CodePoints[GlyphCount];
-       r32 HorizontalAdvance[GlyphCount][GlyphCount];
-    */
-};
-
-struct kea_sprite
-{
-    u64 SpriteSheetGUID;
-    u64 BitmapGUID;
-};
-
-struct kea_tile
-{
-    u64 TilesetGUID;
-    u64 BitmapGUID;
-};
-
 struct kea_tileset
 {
     u32 TileCount;
@@ -331,7 +296,6 @@ struct kea_asset
     {
         kea_bitmap Bitmap;
         kea_sound Sound;
-        kea_font Font;
         kea_tileset Tileset;
         kea_spritesheet SpriteSheet;
         kea_text Text;
@@ -388,7 +352,6 @@ enum kesa_type
     KESA_Tileset,
     KESA_Sound,
     KESA_Text,
-    KESA_Font,
     KESA_File,
     KESA_SSWM,
 
@@ -433,14 +396,6 @@ struct kesa_text
     u32 PLACEHOLDER;
 };
 
-struct kesa_font
-{
-    u32 CodePointCount;
-    u32 FirstCodePoint;
-    u32 LastCodePoint;
-    u32 FontSizeInPixels;
-};
-
 struct kesa_binary_file
 {
     u32 FileSize;
@@ -475,7 +430,6 @@ struct kesa_asset
         kesa_tileset Tileset;
         kesa_sound Sound;
         kesa_text Text;
-        kesa_font Font;
         kesa_binary_file File;
         kesa_sswm_file SSWM;
     };

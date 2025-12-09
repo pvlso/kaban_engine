@@ -322,38 +322,6 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     nk_layout_space_end(Nk);
                 } break;
 
-                case KESA_Font:
-                {
-                    font_mode *FontMode = &AssetsMode->FontMode;
-                    kesa_font *StoredFont = &StoredAsset->Font;
-
-                    nk_layout_row_dynamic(Nk, 30, 1);
-                    struct nk_rect Rect = nk_widget_bounds(Nk);
-                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    nk_labelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredAsset->SourceFileName);
-
-                    Rect = nk_widget_bounds(Nk);
-                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    nk_labelf(Nk, NK_TEXT_CENTERED, "Code Point Count: %d", StoredFont->CodePointCount);
-                    Rect = nk_widget_bounds(Nk);
-                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    nk_labelf(Nk, NK_TEXT_CENTERED, "Font Size: %d pixels", StoredFont->FontSizeInPixels);
-
-                    Rect = nk_widget_bounds(Nk);
-                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    nk_labelf(Nk, NK_TEXT_CENTERED, "First Code Point: %#x", StoredFont->FirstCodePoint);
-                    Rect = nk_widget_bounds(Nk);
-                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                    nk_labelf(Nk, NK_TEXT_CENTERED, "Last Code Point: %#x", StoredFont->LastCodePoint);
-
-                    // TODO(paul): Font Handling ?? may be removed
-                    if(FontMode->Font.GlyphCount)
-                    {
-//                        UILabelWithInEditorFont(&WindowLayout, "abcdefghijklmnopqrstuvwxyz\nABCDEFGHIJKLMNOPQRSTUVWXYZ\n123456789.:,;'\"(!?)+-*/=",
-//                                                1512.0f, &FontMode->Font, 3.0f);
-                    }
-                } break;
-
                 case KESA_Text:
                 {
                     text_mode *TextMode = &AssetsMode->TextMode;
@@ -585,10 +553,6 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
 
         case EditMode_Text:
             Text = "Pick Text Source \\|/";
-            break;
-
-        case EditMode_Font:
-            Text = "Pick Font Source \\|/";
             break;
 
         case EditMode_File:
@@ -1232,51 +1196,6 @@ DrawAssetsTextEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
 }
 
 internal void
-DrawAssetsFontEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
-                       kesa_asset *CurrentAsset)
-{
-    // TODO(paul): Decide what to do with font assets, should I remove them completely,
-    // or leave functionality, I just don't now yet if I am going to use it because,
-    // nuklear provides fonts to the engine.
-    font_mode *FontMode = &AssetsMode->FontMode;
-    kesa_font *StoredFont = &CurrentAsset->Font;
-
-    DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
-
-    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -170, 450, 140});
-    struct nk_rect Rect = nk_widget_bounds(Nk);
-    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-    if(nk_group_begin(Nk, "Font Attributes", NK_WINDOW_NO_SCROLLBAR))
-    {
-        if(FontMode->Font.Glyphs)
-        {
-            nk_layout_row_dynamic(Nk, 30, 1);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "%s attribs: ", AssetsMode->SourceFiles[KESA_Font][AssetsMode->FileIndex]);
-
-            nk_layout_row_dynamic(Nk, 30, 1);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "CodePointCount: %d", StoredFont->CodePointCount);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "FirstCodePoint: %#x", StoredFont->FirstCodePoint);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "LastCodePoint: %#x", StoredFont->LastCodePoint);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "FontSize: %d pixels", StoredFont->FontSizeInPixels);
-        }
-
-        nk_group_end(Nk);
-    }
-    nk_layout_space_end(Nk);
-}
-
-internal void
 DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                        kesa_asset *CurrentAsset)
 {
@@ -1375,9 +1294,6 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                 if(nk_button_label(Nk, "Edit Tilesets"))
                     AssetsMode->EditMode = EditMode_Tileset;
 
-                if(nk_button_label(Nk, "Edit Fonts"))
-                    AssetsMode->EditMode = EditMode_Font;
-
                 if(nk_button_label(Nk, "Edit Texts"))
                     AssetsMode->EditMode = EditMode_Text;
 
@@ -1451,10 +1367,6 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
         case EditMode_Text:
             DrawAssetsTextEditMode(AssetsMode, UIState, Nk, CurrentAsset);
-            break;
-
-        case EditMode_Font:
-            DrawAssetsFontEditMode(AssetsMode, UIState, Nk, CurrentAsset);
             break;
 
         case EditMode_File:

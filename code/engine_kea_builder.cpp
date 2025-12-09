@@ -38,7 +38,7 @@ GetTagMapByGUID(kea_tag_map *TagMaps, u32 Count, u64 GUID)
         if(MidMap->GUID < GUID)
             Low = Mid + 1;
         else if(MidMap->GUID > GUID)
-            High = Mid + 1;
+            High = Mid - 1;
         else
         {
             ResultIndex = Mid;
@@ -182,31 +182,90 @@ BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
     
     Builder->CurrentAsset->Next = Builder->BuilderAssets->Next;
     Builder->BuilderAssets->Next = Builder->CurrentAsset;
+
     return(Builder->CurrentAsset);
 }
 
 internal void
-AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, u32 SpriteIndex)
+AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_data *Data, u32 TileIndex)
 {
-    builder_added_asset Asset = BuilderAddAsset(Assets, Asset_Sprite);
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Tileset);
 
-    Asset.SSA->Bitmap.AlignPercentage[0] = SpriteSheet->StoredSheet->SpriteAlignPercentage.x;
-    Asset.SSA->Bitmap.AlignPercentage[1] = SpriteSheet->StoredSheet->SpriteAlignPercentage.y;
-    Asset.Source->Type = BuilderAssetType_Sprite;
-    Asset.Source->Sprite.Bitmap = SpriteSheet->Sprites[SpriteIndex];
- 
-    bitmap_id Result = {};
-    Result.Value = Asset.ID;
-    SpriteSheet->SpriteIDs[SpriteIndex] = Result;
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+
+    if(KESAAsset->Tileset.MergedTile)
+    {
+        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%s%d",
+                     Tileset->SourceFileName, Tileset->Tileset.MergeTileFileName, "Tile", TileIndex);
+    }
+    else
+    {
+        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%d",
+                     Tileset->SourceFileName, "Tile", TileIndex);
+    }
     
-    return(Result);
+    KEAAsset->GUID = GUIDFromString(Builder->Buffer);
+    KEAAsset->Type = KEAType_Tile;
+    KEAAsset->Bitmap.AlignPercentage[0] = 0.5f;
+    KEAAsset->Bitmap.AlignPercentage[1] = 0.5f;
+    
+    Data->Tileset.TileGUIDs[TileIndex] = KEAAsset->GUID;
+
+    Builder->CurrentAsset = 0;
+}
+
+internal void
+AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+    
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+    
+    KEAAsset->GUID = KESAAsset->GUID;
+    KEAAsset->Type = KEAType_Tileset;
+    KEAAsset->Tileset.TileCount = KESAAsset->Tileset.TileCount;
+
+    BuilderAsset->Data.Tileset.TileGUIDs = PushArray(Builder->TempMem, KEAAsset->Tileset.TileCount, u64);
+    
+    Builder->CurrentAsset = 0;
+    for(u32 I = 0;
+        I < KESAAsset->Tileset.TileCount;
+        ++I)
+    {
+        AddTileAsset(Builder, Asset, &BuilderAsset->Data, I);
+    }
+
+    Builder->CurrentAsset = BuilderAsset;
+}
+
+internal void
+AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data, u32 SpriteIndex)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, SpriteSheet);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+
+    FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%d",
+                 SpriteSheet->SourceFileName, "Sprite", SpriteIndex);
+
+    KEAAsset->GUID = GUIDFromString(Builder->Buffer);
+    KEAAsset->Type = KEAType_Sprite;
+    KEAAsset->Bitmap.AlignPercentage[0] = KESAAsset->SpriteSheet.SpriteAlignPercentage.x;
+    KEAAsset->Bitmap.AlignPercentage[1] = KESAAsset->SpriteSheet.SpriteAlignPercentage.y;
+    
+    Data->SpriteSheet.SpriteGUIDs[SpriteIndex] = KEAAsset->GUID;
+
+    Builder->CurrentAsset = 0;
 }
 
 internal void
 AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
-
+    
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
     kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
     
@@ -214,12 +273,17 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     KEAAsset->Type = KEAType_SpriteSheet;
     KEAAsset->SpriteSheet.SpriteCount = KESAAsset->SpriteSheet.SpriteCount;
 
+    BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, KEAAsset->SpriteSheet.SpriteCount, u64);
+    
+    Builder->CurrentAsset = 0;
     for(u32 I = 0;
         I < KESAAsset->SpriteSheet.SpriteCount;
         ++I)
     {
-        AddSpriteAsset(Builder, Asset);
+        AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I);
     }
+
+    Builder->CurrentAsset = BuilderAsset;
 }
 
 internal void
@@ -297,10 +361,13 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
             case KESA_SpriteSheet:
             {
                 AddSpriteSheetAsset(KEABuilder, StoredAsset);
+                AddStoredAssetTags(KEABuilder, StoredAsset);
             } break;
 
             case KESA_Tileset:
             {
+                AddTilesetAsset(KEABuilder, StoredAsset);
+                AddStoredAssetTags(KEABuilder, StoredAsset);
             } break;
 
             case KESA_Sound:
@@ -308,10 +375,6 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
             } break;
 
             case KESA_Text:
-            {
-            } break;
-
-            case KESA_Font:
             {
             } break;
 
