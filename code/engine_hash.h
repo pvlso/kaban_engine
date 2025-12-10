@@ -22,6 +22,7 @@ enum hash_data_type
     HashDataType_POLY_MESH_ADJACENCY,
 };
 
+#if 0
 struct hash_key_world_edge
 {
     world_position A;
@@ -38,17 +39,18 @@ struct hash_data_poly_mesh_adjacency
     world_position BLeft;
     world_position BRight;
 };
+#endif
 
 union hash_key
 {
     char *String;
-    hash_key_world_edge WorldEdge;
+//    hash_key_world_edge WorldEdge;
 };
 
 union hash_data
 {
     u32 Check;
-    hash_data_poly_mesh_adjacency PolyMeshAdjacency;
+//    hash_data_poly_mesh_adjacency PolyMeshAdjacency;
 };
 
 struct hash_table_entry
@@ -104,6 +106,7 @@ HashCompareStrings(void *Key1, void *Key2)
     return(Result);
 }
 
+#if 0
 inline u32
 HashWorldPosition(world_position *P)
 {
@@ -154,6 +157,7 @@ HashWorldEdgesAreEqual(hash_key_world_edge *A, hash_key_world_edge *B)
                    HashWorldPosAreEqual(&A->B, &B->A)));
     return(Result);
 }
+#endif
 
 inline u32
 CalculateHash(hash_key Key, hash_key_type KeyType)
@@ -170,7 +174,7 @@ CalculateHash(hash_key Key, hash_key_type KeyType)
         } break;
 
         case HashKeyType_WORLD_EDGE:
-            Result = HashWorldEdge(&Key.WorldEdge);
+//            Result = HashWorldEdge(&Key.WorldEdge);
             break;
 
         InvalidDefaultCase;
@@ -197,7 +201,7 @@ CompareKeys(hash_key Key0, hash_key Key1, hash_key_type KeyType0, hash_key_type 
             } break;
 
             case HashKeyType_WORLD_EDGE:
-                Result = HashWorldEdgesAreEqual(&Key0.WorldEdge, &Key1.WorldEdge);
+//                Result = HashWorldEdgesAreEqual(&Key0.WorldEdge, &Key1.WorldEdge);
                 break;
                 
             InvalidDefaultCase;

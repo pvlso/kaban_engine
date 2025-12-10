@@ -68,17 +68,17 @@
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 
-#include "spellweaver\spellweaver_shared.h"
-#include "spellweaver\spellweaver_world.h"
-#include "spellweaver\spellweaver_entity.h"
-#include "spellweaver\spellweaver_sim_region.h"
+//#include "spellweaver\spellweaver_shared.h"
+//#include "spellweaver\spellweaver_world.h"
+//#include "spellweaver\spellweaver_entity.h"
+//#include "spellweaver\spellweaver_sim_region.h"
 
 #include "engine_hash.h"
-#include "engine_navigation_mesh.h"
+//#include "engine_navigation_mesh.h"
 
-#include "engine_game_simulate.h"
+//#include "engine_game_simulate.h"
 
-#include "engine_map_editor_mode.h"
+//#include "engine_map_editor_mode.h"
 #include "editor_ssa_file_builder.h"
 
 enum editor_mode
@@ -117,8 +117,8 @@ struct editor_state
     {
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
-        engine_map_editor *MapEditor;
-        editor_game_simulate_mode *SimulateGame;
+//        engine_map_editor *MapEditor;
+//        editor_game_simulate_mode *SimulateGame;
     };
 };
 
