@@ -329,6 +329,7 @@ PushBlendRenderTarget(render_group *Group, r32 Alpha, u32 SourceRenderTargetInde
     Blend->Alpha = Alpha;
 }
 
+#if 0
 inline loaded_tileset *
 PushTileset(render_group *Group, tileset_id ID, b32 Immidiate = false)
 {
@@ -423,6 +424,7 @@ PushText(render_group *Group, text_id ID, b32 Immidiate = false)
 
     return(Text);
 }
+#endif
 
 inline v3
 Unproject(render_group *Group, object_transform *ObjectTransform, v2 PixelsXY)

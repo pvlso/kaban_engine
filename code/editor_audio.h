@@ -27,6 +27,9 @@ struct playing_sound
 struct audio_state
 {
     memory_arena *PermArena;
+
+    engine_assets *Assets;
+    
     playing_sound *FirstPlayingSound;
     playing_sound *FirstFreePlayingSound;
 

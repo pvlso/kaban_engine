@@ -112,12 +112,6 @@ struct asset
     u32 FileIndex;
 };
 
-struct asset_type
-{
-    uint32 FirstAssetIndex;
-    uint32 OnePastLastAssetIndex;
-};
-
 struct asset_file
 {
     platform_file_handle Handle;
@@ -140,11 +134,12 @@ struct asset_memory_block
 struct engine_assets
 {
     platform_texture_op_queue *TextureOpQueue;
-    u32 NextGenerationID;
-    
-    // TODO(casey): Not thrilled about this back-pointer
-    struct transient_state *TranState;
 
+    u32 TaskCount;
+    task_with_memory *Tasks;
+    platform_work_queue *LowPriorityQueue;
+
+    u32 NextGenerationID;
     asset_memory_block MemorySentinel;
     asset_memory_header LoadedAssetSentinel;
 
@@ -164,7 +159,6 @@ struct engine_assets
     asset *Assets;
     
     u32 OperationLock;
-
     u32 InFlightGenerationCount;
     u32 InFlightGenerations[16];
 };
@@ -460,7 +454,10 @@ inline sound_id GetNextSoundInChain(engine_assets *Assets, sound_id ID)
 
         case KEASoundChain_Advance:
         {
-            Result.Value = ID.Value + 1;
+            // TODO(pvlso): Instead of incrementing the id we need to get the
+            // GUID of the next piece
+//            Result.Value = ID.Value + 1;
+            Assert(!"Not Implemented");
         } break;
 
         default:

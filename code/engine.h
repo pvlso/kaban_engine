@@ -58,28 +58,27 @@
 
 #define BITMAP_BYTES_PER_PIXEL 4
 
+struct task_with_memory
+{
+    b32 BeingUsed;
+    memory_arena Arena;
+
+    temporary_memory MemoryFlush;
+};
+
 #include "engine_render.h"
 #include "engine_render_group.h"
 #include "engine_asset.h"
 #include "editor_audio.h"
 #include "engine_json_parser.h"
 #include "engine_ui.h"
+#include "engine_hash.h"
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 
-//#include "spellweaver\spellweaver_shared.h"
-//#include "spellweaver\spellweaver_world.h"
-//#include "spellweaver\spellweaver_entity.h"
-//#include "spellweaver\spellweaver_sim_region.h"
-
-#include "engine_hash.h"
 //#include "engine_navigation_mesh.h"
-
-//#include "engine_game_simulate.h"
-
 //#include "engine_map_editor_mode.h"
-#include "editor_ssa_file_builder.h"
 
 enum editor_mode
 {
@@ -87,7 +86,6 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_MapEditor,
-    EditorMode_SimulateGame,
 };
 
 struct editor_meta
@@ -102,7 +100,6 @@ struct editor_state
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
     audio_state AudioState;
 
-    b32 SimulationQuit;
     b32 Play;
     playing_sound *Sound;
 
@@ -122,29 +119,17 @@ struct editor_state
     };
 };
 
-struct task_with_memory
-{
-    b32 BeingUsed;
-    b32 DependsOnEditorMode;
-    memory_arena Arena;
-
-    temporary_memory MemoryFlush;
-};
-
 struct transient_state
 {
     memory_arena TranArena;    
 
     task_with_memory Tasks[4];
 
-    engine_assets *Assets;
-    u32 MainGenerationID;
-
     platform_work_queue *HighPriorityQueue;
     platform_work_queue *LowPriorityQueue;
 };
 
-internal task_with_memory *BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode);
+internal task_with_memory *BeginTaskWithMemory(u32 TaskCount, task_with_memory *Tasks);
 internal void EndTaskWithMemory(task_with_memory *Task);
 internal void SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode EditorMode);
 

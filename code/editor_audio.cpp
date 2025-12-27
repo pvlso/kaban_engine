@@ -95,14 +95,14 @@ ChangePitch(audio_state *AudioState, playing_sound *Sound, real32 dSample)
 
 internal void
 OutputPlayingSounds(audio_state *AudioState,
-                    engine_sound_output_buffer *SoundBuffer, engine_assets *Assets,
+                    engine_sound_output_buffer *SoundBuffer,
                     memory_arena *TempArena)
 {    
     TIMED_FUNCTION();
 
     temporary_memory MixerMemory = BeginTemporaryMemory(TempArena);
 
-    u32 GenerationID = BeginGeneration(Assets);
+    u32 GenerationID = BeginGeneration(AudioState->Assets);
 
     Assert((SoundBuffer->SampleCount & 3) == 0);
     u32 ChunkCount = SoundBuffer->SampleCount / 4;
@@ -144,11 +144,11 @@ OutputPlayingSounds(audio_state *AudioState,
         while(TotalChunksToMix && !SoundFinished)
         {
             loaded_sound *LoadedSound = (PlayingSound->Sound ? PlayingSound->Sound :
-                                         GetSound(Assets, PlayingSound->ID, GenerationID));
+                                         GetSound(AudioState->Assets, PlayingSound->ID, GenerationID));
             if(LoadedSound)
             {
-                sound_id NextSoundInChain = GetNextSoundInChain(Assets, PlayingSound->ID);
-                PrefetchSound(Assets, NextSoundInChain);
+                sound_id NextSoundInChain = GetNextSoundInChain(AudioState->Assets, PlayingSound->ID);
+                PrefetchSound(AudioState->Assets, NextSoundInChain);
 
                 v2 Volume = PlayingSound->CurrentVolume;
                 v2 dVolume = SecondsPerSample*PlayingSound->dCurrentVolume;
@@ -288,7 +288,7 @@ OutputPlayingSounds(audio_state *AudioState,
             }
             else
             {
-                LoadSound(Assets, PlayingSound->ID, false);
+                LoadSound(AudioState->Assets, PlayingSound->ID, false);
                 break;
             }
         }
@@ -331,7 +331,7 @@ OutputPlayingSounds(audio_state *AudioState,
         }
     }
 
-    EndGeneration(Assets, GenerationID);
+    EndGeneration(AudioState->Assets, GenerationID);
     EndTemporaryMemory(MixerMemory);
 }
 

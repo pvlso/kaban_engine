@@ -5,8 +5,6 @@
    $Creator: BabyKaban $
    $Notice:  $
    ======================================================================== */
-// TODO(paul): Use file API for this
-#include <stdio.h>
 
 #include "engine.h"
 #include "engine_sort.cpp"
@@ -18,24 +16,22 @@
 #include "engine_math.cpp"
 
 #include "polypartition.cpp"
-
 #include "engine_poly_partition.cpp"
 
 internal task_with_memory *
-BeginTaskWithMemory(transient_state *TranState, b32 DependsOnEditorMode)
+BeginTaskWithMemory(u32 TaskCount, task_with_memory *Tasks)
 {
     task_with_memory *FoundTask = 0;
 
     for(uint32 TaskIndex = 0;
-        TaskIndex < ArrayCount(TranState->Tasks);
+        TaskIndex < TaskCount;
         ++TaskIndex)
     {
-        task_with_memory *Task = TranState->Tasks + TaskIndex;
+        task_with_memory *Task = Tasks + TaskIndex;
         if(!Task->BeingUsed)
         {
             FoundTask = Task;
             Task->BeingUsed = true;
-            Task->DependsOnEditorMode = DependsOnEditorMode;
             Task->MemoryFlush = BeginTemporaryMemory(&Task->Arena);
             break;
         }
@@ -103,7 +99,6 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-//#include "engine_game_simulate.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
 
@@ -185,39 +180,11 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             task_with_memory *Task = TranState->Tasks + TaskIndex;
             Task->BeingUsed = false;
         }
-
-        TranState->Assets = AllocateAssets(&TranState->TranArena, Megabytes(512), TranState,
-                                           &Memory->TextureOpQueue);
-
     }
 
-    {DEBUG_DATA_BLOCK("Memory");
-        memory_arena *ModeArena = &EditorState->ModeArena;
-        DEBUG_VALUE(ModeArena);
-        
-        memory_arena *AudioArena = &EditorState->AudioArena;
-        DEBUG_VALUE(AudioArena);
-        
-        memory_arena *TranArena = &TranState->TranArena;
-        DEBUG_VALUE(TranArena);
-    }
-#if 0
-    if(TranState->MainGenerationID)
-    {
-        EndGeneration(TranState->Assets, TranState->MainGenerationID);
-    }
-
-    TranState->MainGenerationID = BeginGeneration(TranState->Assets);
-#endif
     if(EditorState->EditorMode == EditorMode_None)
     {
         PlayTitleScreen(EditorState, TranState);
-    }
-
-    if(EditorState->SimulationQuit)
-    {
-        PlayTitleScreen(EditorState, TranState);
-        EditorState->SimulationQuit = false;
     }
     
     if(EditorState->EditorMode == EditorMode_TitleScreen)
@@ -232,21 +199,16 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     //
     // NOTE(casey): Render
     //
-    temporary_memory RenderMemory = BeginTemporaryMemory(&TranState->TranArena);
 
-    render_group RenderGroup_ = BeginRenderGroup(TranState->Assets, RenderCommands, TranState->MainGenerationID,
-                                                 false, RenderCommands->Width, RenderCommands->Height);
-    render_group *RenderGroup = &RenderGroup_;
-    u32 RenderWidth = RenderCommands->Width;
-    u32 RenderHeight = RenderCommands->Height;
-    
     if(WasPressed(Input->Controllers[0].RightShoulder))
     {
         EditorState->UIEnable = !EditorState->UIEnable;        
     }
 
-    BeginUI(&EditorState->UIState, RenderCommands, TranState->Assets, TranState->MainGenerationID,
-            RenderWidth, RenderHeight, nk, UIScale);
+    u32 RenderWidth = RenderCommands->Width;
+    u32 RenderHeight = RenderCommands->Height;
+    BeginUI(&EditorState->UIState, RenderCommands, 0, 0, RenderWidth, RenderHeight, nk, UIScale);
+
     if(nk_begin(nk, "UI Window", nk_rect(0, 0, (f32)1920, (f32)1080),
                 (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
@@ -276,24 +238,12 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 //                                                     Input, RenderWidth, RenderHeight);
                 } break;
 
-                case EditorMode_SimulateGame:
-                {
-                    EditorState->EditorMode = EditorMode_TitleScreen;
-                    // TODO(pvlso): make the game as a saparate .dll 
-//                    Rerun = GameUpdateAndRender(EditorState, TranState, Input, RenderCommands,
-//                                                &Memory->TextureOpQueue);
-                } break;
-
                 InvalidDefaultCase;
             }
         } while(Rerun);
     }
     nk_end(nk);
     EndUI(EditorState, &EditorState->UIState, Input);
-    
-    EndRenderGroup(RenderGroup);
-
-    EndTemporaryMemory(RenderMemory);
     
     CheckArena(&EditorState->ModeArena);
     CheckArena(&TranState->TranArena);
@@ -304,7 +254,7 @@ extern "C" ENGINE_GET_SOUND_SAMPLES(EngineGetSoundSamples)
     editor_state *EditorState = Memory->EditorState;
     transient_state *TranState = Memory->TransientState;
 
-    OutputPlayingSounds(&EditorState->AudioState, SoundBuffer, TranState->Assets, &TranState->TranArena);
+//    OutputPlayingSounds(&EditorState->AudioState, SoundBuffer, TranState->Assets, &TranState->TranArena);
 }
 
 #if EDITOR_INTERNAL

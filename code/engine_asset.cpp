@@ -478,7 +478,7 @@ LoadAsset(engine_assets *Assets, asset_header_type HType, u64 GUID, b32 Immediat
 
             if(!Immediate)
             {
-                Task = BeginTaskWithMemory(Assets->TranState, false);
+                Task = BeginTaskWithMemory(Assets->TaskCount, Assets->Tasks);
             }
 
             if(Immediate || Task)        
@@ -503,7 +503,7 @@ LoadAsset(engine_assets *Assets, asset_header_type HType, u64 GUID, b32 Immediat
                 {
                     load_asset_work *TaskWork = PushStruct(&Task->Arena, load_asset_work, NoClear());
                     *TaskWork = Work;
-                    Platform.AddEntry(Assets->TranState->LowPriorityQueue, LoadAssetWork, TaskWork);
+                    Platform.AddEntry(Assets->LowPriorityQueue, LoadAssetWork, TaskWork);
                 }
                 else
                 {
@@ -744,6 +744,17 @@ AllocateAssets(memory_arena *Arena, umm Size, transient_state *TranState,
 
     engine_assets *Assets = PushStruct(Arena, engine_assets);
     Assets->TextureOpQueue = TextureOpQueue;
+    Assets->LowPriorityQueue = TranState->LowPriorityQueue;
+
+    Assets->TaskCount = 4;
+    Assets->Tasks = PushArray(Arena, Assets->TaskCount, task_with_memory);
+    for(uint32 TaskIndex = 0;
+        TaskIndex < Assets->TaskCount;
+        ++TaskIndex)
+    {
+        task_with_memory *Task = Assets->Tasks + TaskIndex;
+        Task->BeingUsed = false;
+    }
 
     Assets->NextGenerationID = 0;
     Assets->InFlightGenerationCount = 0;    
@@ -754,8 +765,6 @@ AllocateAssets(memory_arena *Arena, umm Size, transient_state *TranState,
     Assets->MemorySentinel.Next = &Assets->MemorySentinel;
 
     InsertBlock(&Assets->MemorySentinel, Size, PushSize(Arena, Size, NoClear()));
-
-    Assets->TranState = TranState;
 
     Assets->LoadedAssetSentinel.Next = 
         Assets->LoadedAssetSentinel.Prev =

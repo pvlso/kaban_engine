@@ -10,6 +10,11 @@
 #include "engine_kea_builder_log.cpp"
 #include "engine_kea_builder_load.cpp"
 
+/*
+  TODO(pvlso):
+   - Logging
+*/
+
 internal kea_builder *
 InitKEABuilder(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 {
@@ -312,22 +317,11 @@ BuilderWriteKEA(kea_builder *Builder)
 {
     kesa_header *KESAHeader = Builder->KESAHeader;
 
-    u32 Length = 0;
-    char LogBuffer[512];
-    FILE *LogFile;
-    FormatString(ArrayCount(LogBuffer), LogBuffer, "ssa_writing_log_%d.txt", KESAHeader->Version);
-    fopen_s(&LogFile, LogBuffer, "wb");
-
     char KEAFileName[256];
     FormatString(ArrayCount(KEAFileName), KEAFileName, "game_data_%d.kea",
                  KESAHeader->Version);
-
-    Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "Writing to: %s\n", KEAFileName);
-    fwrite(LogBuffer, Length, 1, LogFile);
-
     FILE *Out;
     fopen_s(&Out, KEAFileName, "wb");
-
     if(Out)
     {
         kea_header Header = {};
@@ -356,10 +350,6 @@ BuilderWriteKEA(kea_builder *Builder)
         }
 
         Header.AssetsOffset = Header.AssetTypeTableOffset + AssetTypeArraySize + AssetTypeTableSize;
-
-//        BeginWritingLog(LogFile);
-//        WriteLogForHeader(LogFile, Header);
-//        EndWritingLog(LogFile);
         
         fwrite(&Header, sizeof(Header), 1, Out);
         fwrite(Builder->TagMaps, TagMapArraySize, 1, Out);
@@ -397,8 +387,6 @@ BuilderWriteKEA(kea_builder *Builder)
 
             if(Dest->Type == KEAType_Sound)
             {
-//                BeginWritingLog(LogFile, Source->Sound.Sound->SourceFileName);
-//                WriteLogForAsset(LogFile, Source);
                 loaded_sound WAV = LoadWAV(Source->SourceFileName,
                                            Source->Sound.FirstSampleIndex,
                                            0, 0, Builder->TempMem);
@@ -410,96 +398,52 @@ BuilderWriteKEA(kea_builder *Builder)
                 {
                     fwrite(WAV.Samples[ChannelIndex], Dest->Sound.SampleCount*sizeof(s16), 1, Out);
                 }
-
-//                EndWritingLog(LogFile, Source->Sound.Sound->SourceFileName);
             }
             else if(Dest->Type == KEAType_Tileset)
             {
-//                BeginWritingLog(LogFile, Tileset->StoredTileset->SourceFileName);
-//                WriteLogForAsset(LogFile, Source);
-
                 u32 TilesSize = Source->Tileset.TileCount*sizeof(u64);
                 fwrite(BuilderAsset->Data.Tileset.TileGUIDs, TilesSize, 1, Out);
                 
                 Dest->Tileset.TileCount = Source->Tileset.TileCount;
-
-//                EndWritingLog(LogFile, Tileset->StoredTileset->SourceFileName);
             }
             else if(Dest->Type == KEAType_SpriteSheet)
             {
-//                BeginWritingLog(LogFile, SpriteSheet->StoredSheet->SourceFileName);
-//                WriteLogForAsset(LogFile, Source);
-
                 u32 SpritesSize = Source->SpriteSheet.SpriteCount*sizeof(u64);
                 fwrite(BuilderAsset->Data.SpriteSheet.SpriteGUIDs, SpritesSize, 1, Out);
 
                 Dest->SpriteSheet.SpriteCount = Source->SpriteSheet.SpriteCount;
- 
-//                EndWritingLog(LogFile, SpriteSheet->StoredSheet->SourceFileName);
             }
             else if(Dest->Type == KEAType_TXT)
             {
-//                BeginWritingLog(LogFile, Source->Text.Text->SourceFileName);
                 loaded_text Text = LoadText(Source->SourceFileName, Builder->TempMem);
-//                WriteLogForAsset(LogFile, Source, Text.String);
 
                 Dest->Text.Length = StringLength(Text.String);
                 u32 TextSize = Dest->Text.Length;
                 fwrite(Text.String, TextSize, 1, Out);
-
-//                EndWritingLog(LogFile, Source->Text.Text->SourceFileName);
             }
             else if(Dest->Type == KEAType_BIN)
             {
-//                BeginWritingLog(LogFile, Source->File.File->SourceFileName);
-//                WriteLogForAsset(LogFile, Source);
                 read_file_result ReadResult =
                     Platform.ReadEntireFile(Source->SourceFileName, PlatformFileType_BIN, Builder->TempMem, true);    
 
                 Dest->BinaryFile.Size = ReadResult.Size;
                 fwrite(ReadResult.Contents, ReadResult.Size, 1, Out);
-
-//                EndWritingLog(LogFile, Source->File.File->SourceFileName);
             }
-#if 0
-            else if(Source->Type == BuilderAssetType_SSWM)
-            {
-                
-                BeginWritingLog(LogFile, Source->SSWM.File->SourceFileName);
-                WriteLogForAsset(LogFile, Source);
-                read_file_result ReadResult =
-                    Platform.ReadEntireFile(Source->SSWM.File->SourceFileName, PlatformFileType_SSWM, TempArena);    
-
-                Dest->SSWMFile.Size = ReadResult.Size;
-                fwrite(ReadResult.Contents, ReadResult.Size, 1, Out);
-
-                EndWritingLog(LogFile, Source->SSWM.File->SourceFileName);
-            }
-#endif
             else
             {
                 loaded_bitmap Bitmap = {};
                 if(Dest->Type == KEAType_Tile)
                 {
-//                    BeginWritingLog(LogFile, "tile");
-//                    WriteLogForAsset(LogFile, Source);
                     Bitmap = *BuilderAsset->Data.Tile.TileBitmap;
-//                    EndWritingLog(LogFile, "tile");
                 }
                 else if(Dest->Type == KEAType_Sprite)
                 {
-//                    BeginWritingLog(LogFile, "sprite");
-//                    WriteLogForAsset(LogFile, Source);
                     Bitmap = *BuilderAsset->Data.Sprite.SpriteBitmap;
-//                    EndWritingLog(LogFile, "sprite");
                 }
                 else
                 {
-//                    BeginWritingLog(LogFile, Source->Bitmap.Bitmap->FileName);
-//                    WriteLogForAsset(LogFile, Source);
                     Assert(Source->Type == AssetType_Bitmap);
                     Bitmap = LoadBMP(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
-//                    EndWritingLog(LogFile, Source->Bitmap.Bitmap->FileName);
                 }
 
                 Dest->Bitmap.Dim[0] = Bitmap.Width;
@@ -521,19 +465,12 @@ BuilderWriteKEA(kea_builder *Builder)
         }
         
         fwrite(KEAAssets, AssetArraySize, 1, Out);
-        
-        Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "Writing SSA comleted\n");
-        fwrite(LogBuffer, Length, 1, LogFile);
-
         fclose(Out);
     }
     else
     {
-//        Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "ERROR: Fail to open %s\n", SSAFileName);
-        fwrite(LogBuffer, Length, 1, LogFile);
+        // TODO(pvlso): Logging
     }
-
-    fclose(LogFile);
 }
 
 internal b32
@@ -543,7 +480,7 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 
     kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
 
-    // NOTE(pvlso): Create
+    // NOTE(pvlso): Create raw asset list
     kesa_header *StoredHeader = Builder->KESAHeader;
     for(u32 StoredAssetIndex = 1;
         StoredAssetIndex < StoredHeader->AssetCount;
@@ -553,49 +490,37 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
         switch(StoredAsset->Type)
         {
             case KESA_Bitmap:
-            {
                 AddBitmapAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_SpriteSheet:
-            {
                 AddSpriteSheetAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_Tileset:
-            {
                 AddTilesetAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_Sound:
-            {
                 AddSoundAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_Text:
-            {
                 AddTextAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_File:
-            {
                 AddFileAsset(Builder, StoredAsset);
-                AddStoredAssetTags(Builder, StoredAsset);
-            } break;
+                break;
 
             case KESA_SSWM:
-            {
                 Assert(!"Not implemented");
-            } break;
+                break;
 
-            InvalidDefaultCase;
+                InvalidDefaultCase;
         }
 
+        AddStoredAssetTags(Builder, StoredAsset);
         Builder->CurrentAsset = 0;
     }
 
