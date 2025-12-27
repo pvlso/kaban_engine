@@ -7,6 +7,18 @@
    $Notice: $
    ======================================================================== */
 
+struct builder_loaded_tiles
+{
+    u32 Count;
+    loaded_bitmap *TileBitmaps;
+};
+
+struct builder_loaded_sprites
+{
+    u32 Count;
+    loaded_bitmap *Sprites;
+};
+
 struct builder_added_spritesheet
 {
     u64 *SpriteGUIDs;
@@ -17,11 +29,22 @@ struct builder_added_tileset
     u64 *TileGUIDs;
 };
 
+struct builder_added_tile
+{
+    loaded_bitmap *TileBitmap;
+};
+
+struct builder_added_sprite
+{
+    loaded_bitmap *SpriteBitmap;
+};
+
 union added_asset_additional_data
 {
-    u64 PlaceHolder;
     builder_added_spritesheet SpriteSheet;
     builder_added_tileset Tileset;
+    builder_added_tile Tile; 
+    builder_added_sprite Sprite; 
 };
 
 struct kea_builder_added_asset_list
@@ -29,9 +52,9 @@ struct kea_builder_added_asset_list
     kea_asset KEAAsset;
     kesa_asset *StoredAsset;
 
-    kea_builder_added_asset_list *Next;    
-
     added_asset_additional_data Data;
+
+    kea_builder_added_asset_list *Next;    
 };
 
 struct kea_builder_tag_list
@@ -58,8 +81,12 @@ struct kea_builder
     kea_builder_tag_list *Tags;
     kea_builder_tag_list *CurrentTag;
 
+    kea_asset_type_table_entry *AssetTypeTable;
+    u32 **AssetTypeTableData;
+    
     u32 AssetCount;
     kea_builder_added_asset_list *BuilderAssets;
+    kea_builder_added_asset_list **SortedBuilderAssets;
     kea_builder_added_asset_list *CurrentAsset;
 };
 

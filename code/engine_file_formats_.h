@@ -157,17 +157,11 @@ enum kea_asset_type
     KEAType_Sprite,
     KEAType_Tileset,
     KEAType_Tile,
+    KEAType_TXT,
     KEAType_BIN,
     KEAType_SSWM,
 
     KEAType_Count,
-};
-
-struct kea_tag
-{
-    u32 TagIndex;
-    u32 TagValueIndex;
-    u64 BitSetOffset;
 };
 
 struct kea_tag_map
@@ -178,6 +172,13 @@ struct kea_tag_map
     u32 ValueCount;
     char Values[32][TAG_KEY_LENGTH];
     u64 ValueGUIDs[32]; // NOTE(pvlso): Made of TagMap->Key + TagMap->Values[I]
+};
+
+struct kea_tag
+{
+    u32 Index;
+    u32 ValueIndex;
+    u64 GUID;
 };
 
 struct kea_asset_type_table_entry
@@ -196,11 +197,11 @@ struct kea_header
     u64 TagMapsOffset; // NOTE(pvlso): Sorted array of kea_tag_map by GUID
 
     u32 UsedTagsCount;
-    u64 UsedTagsArrayOffset; // NOTE(pvlso): Sorted array of kea_tag by GUID
-
+    u64 UsedTagsArrayOffset; // NOTE(pvlso): array of kea_tag
+    
     u32 AssetTypeCount;
     u64 AssetTypeTableOffset; // NOTE(pvlso): Sorted array of kea_asset_type_table_entry by Type -> enum
-
+    
     u32 AssetCount;
     u64 AssetsOffset; // NOTE(pvlso): Sorted array of kea_asset by GUID
 };

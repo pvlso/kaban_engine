@@ -128,7 +128,7 @@ struct camera_transform
 
 struct render_group
 {
-    struct editor_assets *Assets; 
+    struct engine_assets *Assets; 
     real32 GlobalAlpha;
 
     rectangle2 ScreenArea;

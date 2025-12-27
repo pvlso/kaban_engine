@@ -9,9 +9,7 @@
 enum finalize_asset_operation
 {
     FinalizeAsset_None,
-    FinalizeAsset_Font,
     FinalizeAsset_Bitmap,
-    FinalizeAsset_SSWM,
 };
 
 struct load_asset_work
@@ -66,22 +64,6 @@ LoadAssetWorkDirectly(load_asset_work *Work)
                 // NOTE(casey): Nothing to do.
             } break;
 
-            case FinalizeAsset_Font:
-            {
-                loaded_font *Font = &Work->Asset->Header->Font;
-                ssa_font *SSA = &Work->Asset->SSA.Font;
-                for(u32 GlyphIndex = 1;
-                    GlyphIndex < SSA->GlyphCount;
-                    ++GlyphIndex)
-                {
-                    ssa_font_glyph *Glyph = Font->Glyphs + GlyphIndex;
-
-                    Assert(Glyph->UnicodeCodePoint < SSA->OnePastHighestCodePoint);
-                    Assert((u32)(u16)GlyphIndex == GlyphIndex);
-                    Font->UnicodeMap[Glyph->UnicodeCodePoint] = (u16)GlyphIndex;
-                }
-            } break;
-
             case FinalizeAsset_Bitmap:
             {
                 loaded_bitmap *Bitmap = &Work->Asset->Header->Bitmap;
@@ -94,13 +76,7 @@ LoadAssetWorkDirectly(load_asset_work *Work)
                 AddOp(Work->TextureOpQueue, &Op);
             } break;
 
-            case FinalizeAsset_SSWM:
-            {
-                loaded_world_map *SSWM = &Work->Asset->Header->SSWM;
-                sswm_header *Header = SSWM->Header;
-                SSWM->GroundTiles = (sswm_ground_tile *)((u8 *)SSWM->Header + SSWM->Header->Tiles);
-                SSWM->Entities = (sswm_entity *)((u8 *)SSWM->GroundTiles + SSWM->Header->Entities);
-            } break;
+            InvalidDefaultCase;
         }
     }
 
@@ -124,7 +100,7 @@ internal PLATFORM_WORK_QUEUE_CALLBACK(LoadAssetWork)
 }
 
 inline asset_file *
-GetFile(editor_assets *Assets, u32 FileIndex)
+GetFile(engine_assets *Assets, u32 FileIndex)
 {
     Assert(FileIndex < Assets->FileCount);
     asset_file *Result = Assets->Files + FileIndex;
@@ -133,7 +109,7 @@ GetFile(editor_assets *Assets, u32 FileIndex)
 }
 
 inline platform_file_handle *
-GetFileHandleFor(editor_assets *Assets, u32 FileIndex)
+GetFileHandleFor(engine_assets *Assets, u32 FileIndex)
 {
     platform_file_handle *Result = &GetFile(Assets, FileIndex)->Handle;
 
@@ -155,7 +131,7 @@ InsertBlock(asset_memory_block *Prev, u64 Size, void *Memory)
 }
 
 internal asset_memory_block *
-FindBlockForSize(editor_assets *Assets, umm Size)
+FindBlockForSize(engine_assets *Assets, umm Size)
 {
     asset_memory_block *Result = 0;
 
@@ -177,7 +153,7 @@ FindBlockForSize(editor_assets *Assets, umm Size)
 }
 
 internal b32
-MergeIfPossible(editor_assets *Assets, asset_memory_block *First, asset_memory_block *Second)
+MergeIfPossible(engine_assets *Assets, asset_memory_block *First, asset_memory_block *Second)
 {
     b32 Result = false;
 
@@ -204,7 +180,7 @@ MergeIfPossible(editor_assets *Assets, asset_memory_block *First, asset_memory_b
 }
 
 internal b32
-GenerationHasCompleted(editor_assets *Assets, u32 CheckID)
+GenerationHasCompleted(engine_assets *Assets, u32 CheckID)
 {
     b32 Result = true;
 
@@ -223,7 +199,7 @@ GenerationHasCompleted(editor_assets *Assets, u32 CheckID)
 }
 
 internal asset_memory_header *
-AcquireAssetMemory(editor_assets *Assets, u32 Size, u32 AssetIndex, asset_header_type AssetType)
+AcquireAssetMemory(engine_assets *Assets, u32 Size, u32 AssetIndex, asset_header_type AssetType)
 {
     asset_memory_header *Result = 0;
 
@@ -331,7 +307,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
 
         case AssetType_Bitmap:
         {
-            ssa_bitmap *Info = &Asset->SSA.Bitmap;
+            kea_bitmap *Info = &Asset->KEA.Bitmap;
             u32 Width = Info->Dim[0];
             u32 Height = Info->Dim[1];
             Size.Section = 4*Width;
@@ -341,33 +317,23 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
 
         case AssetType_Sound:
         {
-            ssa_sound *Info = &Asset->SSA.Sound;
+            kea_sound *Info = &Asset->KEA.Sound;
             Size.Section = Info->SampleCount*sizeof(int16);
             Size.Data = Info->ChannelCount*Size.Section;
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
-        case AssetType_Font:
-        {
-            ssa_font *Info = &Asset->SSA.Font;
-            u32 HorizontalAdvanceSize = sizeof(r32)*Info->GlyphCount*Info->GlyphCount;
-            u32 GlyphsSize = Info->GlyphCount*sizeof(ssa_font_glyph);
-            u32 UnicodeMapSize = sizeof(u16)*Info->OnePastHighestCodePoint;
-            Size.Data = GlyphsSize + HorizontalAdvanceSize;
-            Size.Total = Size.Data + sizeof(asset_memory_header) + UnicodeMapSize;
-        } break;
-
         case AssetType_Tileset:
         {
-            ssa_tileset *Info = &Asset->SSA.Tileset;
-            u32 TilesSize = sizeof(ssa_tile)*Info->TileCount;
+            kea_tileset *Info = &Asset->KEA.Tileset;
+            u32 TilesSize = sizeof(u64)*Info->TileCount;
             Size.Data = TilesSize;
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
         case AssetType_SpriteSheet:
         {
-            ssa_spritesheet *Info = &Asset->SSA.SpriteSheet;
+            kea_spritesheet *Info = &Asset->KEA.SpriteSheet;
             u32 TilesSize = sizeof(bitmap_id)*Info->SpriteCount;
             Size.Data = TilesSize;
             Size.Total = Size.Data + sizeof(asset_memory_header);
@@ -375,7 +341,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
 
         case AssetType_Text:
         {
-            ssa_text *Info = &Asset->SSA.Text;
+            kea_text *Info = &Asset->KEA.Text;
             u32 StringSize = Info->Length;
             Size.Data = StringSize;
             Size.Total = Size.Data + sizeof(asset_memory_header);
@@ -383,14 +349,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
 
         case AssetType_BinaryFile:
         {
-            ssa_binary_file *Info = &Asset->SSA.BinaryFile;
-            Size.Data = Info->Size;
-            Size.Total = Size.Data + sizeof(asset_memory_header);
-        } break;
-
-        case AssetType_SSWM:
-        {
-            ssa_sswm_file *Info = &Asset->SSA.SSWMFile;
+            kea_binary_file *Info = &Asset->KEA.BinaryFile;
             Size.Data = Info->Size;
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
@@ -402,12 +361,12 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
 }
 
 inline preloaded_asset
-PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
-                       asset_header_type HType, u32 ID)
+PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
+                       asset_header_type HType)
 {
     preloaded_asset Result = {};
     Result.Size = GetAssetMemorySize(Asset, HType);
-    Asset->Header = AcquireAssetMemory(Assets, Result.Size.Total, ID, HType);
+    Asset->Header = AcquireAssetMemory(Assets, Result.Size.Total, Asset->KEA.AssetIndex, HType);
 
     switch(HType)
     {
@@ -415,7 +374,7 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
 
         case AssetType_Bitmap:
         {
-            ssa_bitmap *Info = &Asset->SSA.Bitmap;
+            kea_bitmap *Info = &Asset->KEA.Bitmap;
 
             loaded_bitmap *Bitmap = &Asset->Header->Bitmap;            
             Bitmap->AlignPercentage = V2(Info->AlignPercentage[0], Info->AlignPercentage[1]);
@@ -434,7 +393,7 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
 
         case AssetType_Sound:
         {
-            ssa_sound *Info = &Asset->SSA.Sound;
+            kea_sound *Info = &Asset->KEA.Sound;
 
             loaded_sound *Sound = &Asset->Header->Sound;
             Sound->SampleCount = Info->SampleCount;
@@ -457,33 +416,12 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
             Result.FinalState = AssetState_Loaded;
         } break;
 
-        case AssetType_Font:
-        {
-            ssa_font *Info = &Asset->SSA.Font;
-            u32 HorizontalAdvanceSize = sizeof(r32)*Info->GlyphCount*Info->GlyphCount;
-            u32 GlyphsSize = Info->GlyphCount*sizeof(ssa_font_glyph);
-            u32 UnicodeMapSize = sizeof(u16)*Info->OnePastHighestCodePoint;
-
-            loaded_font *Font = &Asset->Header->Font;
-            Font->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_FontGlyph];
-            Font->Glyphs = (ssa_font_glyph *)(Asset->Header + 1);
-            Font->HorizontalAdvance = (r32 *)((u8 *)Font->Glyphs + GlyphsSize);
-            Font->UnicodeMap = (u16 *)((u8 *)Font->HorizontalAdvance + HorizontalAdvanceSize);
-
-            ZeroSize(UnicodeMapSize, Font->UnicodeMap);
-
-            Result.LoadDest = Font->Glyphs;
-            Result.FinalizeOp = FinalizeAsset_Font;
-            Result.FinalState = AssetState_Loaded;
-        } break;
-
         case AssetType_Tileset:
         {
             loaded_tileset *Tileset = &Asset->Header->Tileset;
-            Tileset->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Tile];
-            Tileset->Tiles = (ssa_tile *)(Asset->Header + 1);
+            Tileset->TileGUIDs = (bitmap_id *)(Asset->Header + 1);
                 
-            Result.LoadDest = Tileset->Tiles;
+            Result.LoadDest = Tileset->TileGUIDs;
             Result.FinalizeOp = FinalizeAsset_None;
             Result.FinalState = AssetState_Loaded;
         } break;
@@ -491,10 +429,9 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
         case AssetType_SpriteSheet:
         {
             loaded_spritesheet *SpriteSheet = &Asset->Header->SpriteSheet;
-            SpriteSheet->BitmapIDOffset = GetFile(Assets, Asset->FileIndex)->AssetTypeOffsets[Asset_Sprite];
-            SpriteSheet->SpriteIDs = (bitmap_id *)(Asset->Header + 1);
+            SpriteSheet->SpriteGUIDs = (bitmap_id *)(Asset->Header + 1);
                 
-            Result.LoadDest = SpriteSheet->SpriteIDs;
+            Result.LoadDest = SpriteSheet->SpriteGUIDs;
             Result.FinalizeOp = FinalizeAsset_None;
             Result.FinalState = AssetState_Loaded;
         } break;
@@ -511,23 +448,13 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
 
         case AssetType_BinaryFile:
         {
-            ssa_binary_file *Info = &Asset->SSA.BinaryFile;
+            kea_binary_file *Info = &Asset->KEA.BinaryFile;
             loaded_file *BinaryFile = &Asset->Header->BinaryFile;            
             BinaryFile->Size = Info->Size;
             BinaryFile->Data = (Asset->Header + 1);
 
             Result.LoadDest = BinaryFile->Data;
             Result.FinalizeOp = FinalizeAsset_None;
-            Result.FinalState = AssetState_Loaded;
-        } break;
-
-        case AssetType_SSWM:
-        {
-            loaded_world_map *SSWM = &Asset->Header->SSWM;            
-            SSWM->Header = (sswm_header *)(Asset->Header + 1);
-
-            Result.LoadDest = SSWM->Header;
-            Result.FinalizeOp = FinalizeAsset_SSWM;
             Result.FinalState = AssetState_Loaded;
         } break;
 
@@ -538,10 +465,11 @@ PrepareAssetForLoading(editor_assets *Assets, asset *Asset,
 }
 
 internal void
-LoadAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate)
+LoadAsset(engine_assets *Assets, asset_header_type HType, u64 GUID, b32 Immediate)
 {
-    asset *Asset = Assets->Assets + ID;        
-    if(ID)
+    
+    asset *Asset = GetAssetByGUID(Assets, GUID);        
+    if(GUID)
     {
         if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
            AssetState_Unloaded)
@@ -556,13 +484,13 @@ LoadAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate)
             if(Immediate || Task)        
             {
                 preloaded_asset PreAsset =
-                    PrepareAssetForLoading(Assets, Asset, HType, ID);
+                    PrepareAssetForLoading(Assets, Asset, HType);
 
                 load_asset_work Work;
                 Work.Task = Task;
-                Work.Asset = Assets->Assets + ID;
+                Work.Asset = Assets->Assets + Asset->KEA.AssetIndex;
                 Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
-                Work.Offset = Asset->SSA.DataOffset;
+                Work.Offset = Asset->KEA.DataOffset;
                 Work.Size = PreAsset.Size.Data;
 
                 Work.Destination = PreAsset.LoadDest;
@@ -595,8 +523,9 @@ LoadAsset(editor_assets *Assets, asset_header_type HType, u32 ID, b32 Immediate)
     }    
 }
 
+#if 0
 internal uint32
-GetBestMatchAssetFrom(editor_assets *Assets, asset_type_id TypeID,
+GetBestMatchAssetFrom(engine_assets *Assets, asset_type_id TypeID,
                       asset_vector *MatchVector, asset_vector *WeightVector)
 {
 //    TIMED_FUNCTION();
@@ -612,11 +541,11 @@ GetBestMatchAssetFrom(editor_assets *Assets, asset_type_id TypeID,
         asset *Asset = Assets->Assets + AssetIndex;
 
         real32 TotalWeightedDiff = 0.0f;
-        for(uint32 TagIndex = Asset->SSA.FirstTagIndex;
-            TagIndex < Asset->SSA.OnePastLastTagIndex;
+        for(uint32 TagIndex = Asset->KEA.FirstTagIndex;
+            TagIndex < Asset->KEA.OnePastLastTagIndex;
             ++TagIndex)
         {
-            ssa_tag *Tag = Assets->Tags + TagIndex;
+            kea_tag *Tag = Assets->Tags + TagIndex;
 
             s32 A = MatchVector->E[Tag->ID];
             real32 B = (r32)Tag->Value;
@@ -639,7 +568,7 @@ GetBestMatchAssetFrom(editor_assets *Assets, asset_type_id TypeID,
 }
 
 internal bitmap_id
-GetTileBitmapByChecksumTag(editor_assets *Assets, u32 Checksum)
+GetTileBitmapByChecksumTag(engine_assets *Assets, u32 Checksum)
 {
     bitmap_id Result = {};
 
@@ -650,11 +579,11 @@ GetTileBitmapByChecksumTag(editor_assets *Assets, u32 Checksum)
         ++AssetIndex)
     {
         asset *Asset = Assets->Assets + AssetIndex;
-        for(uint32 TagIndex = Asset->SSA.FirstTagIndex;
-            TagIndex < Asset->SSA.OnePastLastTagIndex;
+        for(uint32 TagIndex = Asset->KEA.FirstTagIndex;
+            TagIndex < Asset->KEA.OnePastLastTagIndex;
             ++TagIndex)
         {
-            ssa_tag *Tag = Assets->Tags + TagIndex;
+            kea_tag *Tag = Assets->Tags + TagIndex;
             if((Tag->ID == Tag_TileChecksum) && (Tag->Value == Checksum))
             {
                 Result = {AssetIndex};
@@ -668,7 +597,7 @@ GetTileBitmapByChecksumTag(editor_assets *Assets, u32 Checksum)
 }
 
 internal uint32
-GetRandomAssetFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomAssetFrom(engine_assets *Assets, asset_type_id TypeID, random_series *Series)
 {
 //    TIMED_FUNCTION();
 
@@ -686,7 +615,7 @@ GetRandomAssetFrom(editor_assets *Assets, asset_type_id TypeID, random_series *S
 }
 
 internal uint32
-GetFirstAssetFrom(editor_assets *Assets, asset_type_id TypeID)
+GetFirstAssetFrom(engine_assets *Assets, asset_type_id TypeID)
 {
 //    TIMED_FUNCTION();
 
@@ -702,7 +631,7 @@ GetFirstAssetFrom(editor_assets *Assets, asset_type_id TypeID)
 }
 
 inline sswm_id
-GetBestMatchSSWMFrom(editor_assets *Assets, asset_type_id TypeID,
+GetBestMatchSSWMFrom(engine_assets *Assets, asset_type_id TypeID,
                      asset_vector *MatchVector, asset_vector *WeightVector)
 {
     sswm_id Result = {GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector)};
@@ -710,7 +639,7 @@ GetBestMatchSSWMFrom(editor_assets *Assets, asset_type_id TypeID,
 }
 
 inline bitmap_id
-GetBestMatchBitmapFrom(editor_assets *Assets, asset_type_id TypeID,
+GetBestMatchBitmapFrom(engine_assets *Assets, asset_type_id TypeID,
                        asset_vector *MatchVector, asset_vector *WeightVector)
 {
     bitmap_id Result = {GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector)};
@@ -718,21 +647,21 @@ GetBestMatchBitmapFrom(editor_assets *Assets, asset_type_id TypeID,
 }
 
 inline bitmap_id
-GetFirstBitmapFrom(editor_assets *Assets, asset_type_id TypeID)
+GetFirstBitmapFrom(engine_assets *Assets, asset_type_id TypeID)
 {
     bitmap_id Result = {GetFirstAssetFrom(Assets, TypeID)};
     return(Result);
 }
 
 inline bitmap_id
-GetRandomBitmapFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomBitmapFrom(engine_assets *Assets, asset_type_id TypeID, random_series *Series)
 {
     bitmap_id Result = {GetRandomAssetFrom(Assets, TypeID, Series)};
     return(Result);
 }
 
 inline sound_id
-GetBestMatchSoundFrom(editor_assets *Assets, asset_type_id TypeID,
+GetBestMatchSoundFrom(engine_assets *Assets, asset_type_id TypeID,
                        asset_vector *MatchVector, asset_vector *WeightVector)
 {
     sound_id Result = {GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector)};
@@ -740,28 +669,28 @@ GetBestMatchSoundFrom(editor_assets *Assets, asset_type_id TypeID,
 }
 
 inline sound_id
-GetFirstSoundFrom(editor_assets *Assets, asset_type_id TypeID)
+GetFirstSoundFrom(engine_assets *Assets, asset_type_id TypeID)
 {
     sound_id Result = {GetFirstAssetFrom(Assets, TypeID)};
     return(Result);
 }
 
 inline sound_id
-GetRandomSoundFrom(editor_assets *Assets, asset_type_id TypeID, random_series *Series)
+GetRandomSoundFrom(engine_assets *Assets, asset_type_id TypeID, random_series *Series)
 {
     sound_id Result = {GetRandomAssetFrom(Assets, TypeID, Series)};
     return(Result);
 }
 
 inline font_id
-GetBestMatchFontFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
+GetBestMatchFontFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     font_id Result = {GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector)};
     return(Result);
 }
 
 inline tileset_id
-GetBestMatchTilesetFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
+GetBestMatchTilesetFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     tileset_id Result = {};
     Result.Value = GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector);
@@ -770,7 +699,7 @@ GetBestMatchTilesetFrom(editor_assets *Assets, asset_type_id TypeID, asset_vecto
 }
 
 inline spritesheet_id
-GetBestMatchSpriteSheetFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
+GetBestMatchSpriteSheetFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     spritesheet_id Result = {};
     Result.Value = GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector);
@@ -779,7 +708,7 @@ GetBestMatchSpriteSheetFrom(editor_assets *Assets, asset_type_id TypeID, asset_v
 }
 
 inline spritesheet_id
-GetFirstSpriteSheetFrom(editor_assets *Assets, asset_type_id TypeID)
+GetFirstSpriteSheetFrom(engine_assets *Assets, asset_type_id TypeID)
 {
     spritesheet_id Result = {};
     Result.Value = GetFirstAssetFrom(Assets, TypeID);
@@ -789,7 +718,7 @@ GetFirstSpriteSheetFrom(editor_assets *Assets, asset_type_id TypeID)
 
 
 inline text_id
-GetBestMatchTextFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
+GetBestMatchTextFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     text_id Result = {};
     Result.Value = GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector);
@@ -798,21 +727,22 @@ GetBestMatchTextFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *
 }
 
 inline file_id
-GetBestMatchFileFrom(editor_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
+GetBestMatchFileFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *MatchVector, asset_vector *WeightVector)
 {
     file_id Result = {};
     Result.Value = GetBestMatchAssetFrom(Assets, TypeID, MatchVector, WeightVector);
 
     return(Result);
 }
+#endif
 
-internal editor_assets *
-AllocateEditorAssets(memory_arena *Arena, umm Size, transient_state *TranState,
-                     platform_texture_op_queue *TextureOpQueue)
+internal engine_assets *
+AllocateAssets(memory_arena *Arena, umm Size, transient_state *TranState,
+               platform_texture_op_queue *TextureOpQueue)
 {
 //    TIMED_FUNCTION();
 
-    editor_assets *Assets = PushStruct(Arena, editor_assets);
+    engine_assets *Assets = PushStruct(Arena, engine_assets);
     Assets->TextureOpQueue = TextureOpQueue;
 
     Assets->NextGenerationID = 0;
@@ -831,56 +761,62 @@ AllocateEditorAssets(memory_arena *Arena, umm Size, transient_state *TranState,
         Assets->LoadedAssetSentinel.Prev =
         &Assets->LoadedAssetSentinel;
 
-    for(uint32 TagType = 0;
-        TagType < Tag_Count;
-        ++TagType)
-    {
-        Assets->TagRange[TagType] = 1000000.0f;
-    }
-    Assets->TagRange[Tag_FacingDirection] = Tau32;
-
     Assets->TagCount = 1;
     Assets->AssetCount = 1;
 
-    // NOTE(casey): This code was written using Snuffleupagus-Oriented Programming (SOP)
     {
         platform_file_group FileGroup = Platform.GetAllFilesOfTypeBegin(PlatformFileType_KEA);
         Assets->FileCount = FileGroup.FileCount;
         Assets->Files = PushArray(Arena, Assets->FileCount, asset_file);
         for(u32 FileIndex = 0;
-            FileIndex < Assets->FileCount;
+            FileIndex < 1; // TODO(pvlso): Merge multiple files
             ++FileIndex)
         {
             asset_file *File = Assets->Files + FileIndex;
 
-            ZeroArray(Asset_Count, File->AssetTypeOffsets);
-            File->TagBase = Assets->TagCount;
-
             ZeroStruct(File->Header);
             File->Handle = Platform.OpenNextFile(&FileGroup);
             Platform.ReadDataFromFile(&File->Handle, 0, sizeof(File->Header), &File->Header);
-
-            u32 AssetTypeArraySize = File->Header.AssetTypeCount*sizeof(ssa_asset_type);
-            File->AssetTypeArray = (ssa_asset_type *)PushSize(Arena, AssetTypeArraySize);
-            Platform.ReadDataFromFile(&File->Handle, File->Header.AssetTypes,
-                                      AssetTypeArraySize, File->AssetTypeArray);
-
-            if(File->Header.MagicValue != SSA_MAGIC_VALUE)
+            
+            if(File->Header.MagicValue != KEA_MAGIC_VALUE)
             {
-                Platform.FileError(&File->Handle, "SSA file has an invalid magic value.");
+                Platform.FileError(&File->Handle, "KEA file has an invalid magic value.");
             }
 
-            if(File->Header.Version > SSA_VERSION)
+            u32 TagMapsSize = File->Header.TagCount*sizeof(kea_tag_map);
+            Assets->TagMapCount = File->Header.TagCount;
+            Assets->TagMaps = (kea_tag_map *)PushSize(Arena, TagMapsSize);
+            Platform.ReadDataFromFile(&File->Handle, File->Header.TagMapsOffset,
+                                      TagMapsSize, Assets->TagMaps);
+
+            u32 TagsSize = File->Header.UsedTagsCount*sizeof(kea_tag);
+            Assets->Tags = (kea_tag *)PushSize(Arena, TagsSize);
+            Platform.ReadDataFromFile(&File->Handle, File->Header.UsedTagsArrayOffset,
+                                      TagsSize, Assets->Tags);
+
+            u32 AssetTypeTableSize = File->Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
+            Assets->TypeTable = (kea_asset_type_table_entry *)PushSize(Arena, AssetTypeTableSize);
+            Platform.ReadDataFromFile(&File->Handle, File->Header.AssetTypeTableOffset,
+                                      AssetTypeTableSize, Assets->TypeTable);
+
+            for(u32 Type = 0;
+                Type < KEAType_Count;
+                ++Type)
             {
-                Platform.FileError(&File->Handle, "SSA file is of a later version.");
+                kea_asset_type_table_entry *TypeEntry = Assets->TypeTable + Type;
+                u32 TypeDataSize = TypeEntry->TypeCount*sizeof(u32);
+
+                Assets->TypeTableData[Type] = (u32 *)PushSize(Arena, TypeDataSize);
+                Platform.ReadDataFromFile(&File->Handle, TypeEntry->AssetsIndeciesOffset,
+                                          TypeDataSize, Assets->TypeTableData[Type]);
             }
 
             if(PlatformNoFileErrors(&File->Handle))
             {
                 // NOTE(casey): The first asset and tag slot in every
-                // SSA is a null (reserved) so we don't count it as
+                // KEA is a null (reserved) so we don't count it as
                 // something we will need space for!
-                Assets->TagCount += (File->Header.TagCount - 1);
+                Assets->TagCount += (File->Header.UsedTagsCount - 1);
                 Assets->AssetCount += (File->Header.AssetCount - 1);
             }
             else
@@ -889,160 +825,44 @@ AllocateEditorAssets(memory_arena *Arena, umm Size, transient_state *TranState,
                 InvalidCodePath;
             }
         }
+
         Platform.GetAllFilesOfTypeEnd(&FileGroup);
     }
 
     // NOTE(casey): Allocate all metadata space
     Assets->Assets = PushArray(Arena, Assets->AssetCount, asset);
-    Assets->Tags = PushArray(Arena, Assets->TagCount, ssa_tag);
+    Assets->Tags = PushArray(Arena, Assets->TagCount, kea_tag);
 
     // NOTE(casey): Reserve one null tag at the beginning
     ZeroStruct(Assets->Tags[0]);
-
-    // NOTE(casey): Load tags
-    for(u32 FileIndex = 0;
-        FileIndex < Assets->FileCount;
-        ++FileIndex)
-    {
-        asset_file *File = Assets->Files + FileIndex;
-        if(PlatformNoFileErrors(&File->Handle))
-        {
-            // NOTE(casey): Skip the first tag, since it's null
-            u32 TagArraySize = sizeof(ssa_tag)*(File->Header.TagCount - 1);
-            Platform.ReadDataFromFile(&File->Handle, File->Header.Tags + sizeof(ssa_tag),
-                                      TagArraySize, Assets->Tags + File->TagBase);
-        }
-    }
 
     // NOTE(casey): Reserve one null asset at the beginning
     u32 AssetCount = 0;
     ZeroStruct(*(Assets->Assets + AssetCount));
     ++AssetCount;
 
-    for(u32 DestTypeID = 0;
-        DestTypeID < Asset_Count;
-        ++DestTypeID)
+    temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
+    kea_asset *KEAAssetArray = PushArray(&TranState->TranArena, Assets->AssetCount, kea_asset);
+
+    asset_file *File = Assets->Files + 0;
+    Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,
+                              Assets->AssetCount*sizeof(kea_asset),
+                              KEAAssetArray);
+    for(u32 AssetIndex = 0;
+        AssetIndex < Assets->AssetCount;
+        ++AssetIndex)
     {
-        asset_type *DestType = Assets->AssetTypes + DestTypeID;
-        DestType->FirstAssetIndex = AssetCount;
-
-        for(u32 FileIndex = 0;
-            FileIndex < Assets->FileCount;
-            ++FileIndex)
-        {
-            asset_file *File = Assets->Files + FileIndex;
-            if(PlatformNoFileErrors(&File->Handle))
-            {
-                for(u32 SourceIndex = 0;
-                    SourceIndex < File->Header.AssetTypeCount;
-                    ++SourceIndex)
-                {
-                    ssa_asset_type *SourceType = File->AssetTypeArray + SourceIndex;
-
-                    if(SourceType->TypeID == DestTypeID)
-                    {
-                        u32 AssetCountForType = (SourceType->OnePastLastAssetIndex -
-                                                 SourceType->FirstAssetIndex);
-
-                        File->AssetTypeOffsets[SourceType->TypeID] = AssetCount - SourceType->FirstAssetIndex;
-
-                        temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
-                        ssa_asset *SSAAssetArray = PushArray(&TranState->TranArena,
-                                                             AssetCountForType, ssa_asset);
-                        Platform.ReadDataFromFile(&File->Handle,
-                                                  File->Header.Assets +
-                                                  SourceType->FirstAssetIndex*sizeof(ssa_asset),
-                                                  AssetCountForType*sizeof(ssa_asset),
-                                                  SSAAssetArray);
-                        for(u32 AssetIndex = 0;
-                            AssetIndex < AssetCountForType;
-                            ++AssetIndex)
-                        {
-                            ssa_asset *SSAAsset = SSAAssetArray + AssetIndex;
-
-                            Assert(AssetCount < Assets->AssetCount);
-                            asset *Asset = Assets->Assets + AssetCount++;
-
-                            Asset->FileIndex = FileIndex;
-                            Asset->SSA = *SSAAsset;
-                            if(Asset->SSA.FirstTagIndex == 0)
-                            {
-                                Asset->SSA.FirstTagIndex = Asset->SSA.OnePastLastTagIndex = 0;
-                            }
-                            else
-                            {
-                                Asset->SSA.FirstTagIndex += (File->TagBase - 1);
-                                Asset->SSA.OnePastLastTagIndex += (File->TagBase - 1);
-                            }
-                        }
-
-                        EndTemporaryMemory(TempMem);
-                    }
-                }
-            }
-        }
-
-        DestType->OnePastLastAssetIndex = AssetCount;
+        asset *Asset = Assets->Assets + AssetIndex;
+        Asset->KEA = KEAAssetArray[AssetIndex];
     }
-
-    Assert(AssetCount == Assets->AssetCount);
+    EndTemporaryMemory(TempMem);
     
     return(Assets);
 }
 
-inline u32
-GetGlyphFromCodePoint(ssa_font *Info, loaded_font *Font, u32 CodePoint)
-{
-    u32 Result = 0;
-    if(CodePoint < Info->OnePastHighestCodePoint)
-    {
-        Result = Font->UnicodeMap[CodePoint];
-        Assert(Result < Info->GlyphCount);
-    }
-
-    return(Result);
-}
-
-internal r32
-GetHorizontalAdvanceForPair(ssa_font *Info, loaded_font *Font, u32 DesiredPrevCodePoint, u32 DesiredCodePoint)
-{
-    u32 PrevGlyph = GetGlyphFromCodePoint(Info, Font, DesiredPrevCodePoint);
-    u32 Glyph = GetGlyphFromCodePoint(Info, Font, DesiredCodePoint);
-
-    r32 Result = Font->HorizontalAdvance[PrevGlyph*Info->GlyphCount + Glyph];
-
-    return(Result);
-}
-
+#if 0
 internal bitmap_id
-GetBitmapForGlyph(editor_assets *Assets, ssa_font *Info, loaded_font *Font, u32 DesiredCodePoint)
-{
-    u32 Glyph = GetGlyphFromCodePoint(Info, Font, DesiredCodePoint);    
-    bitmap_id Result = Font->Glyphs[Glyph].BitmapID;
-    Result.Value += Font->BitmapIDOffset;
-
-    return(Result);
-}
-
-internal r32
-
-GetLineAdvanceFor(ssa_font *Info)
-{
-    r32 Result = Info->AscenderHeight + Info->DescenderHeight + Info->ExternalLeading;
-
-    return(Result);
-}
-
-internal r32
-GetStartingBaselineY(ssa_font *Info)
-{
-    r32 Result = Info->AscenderHeight;
-
-    return(Result);
-}
-
-internal bitmap_id
-GetBitmapForTile(editor_assets *Assets, ssa_tileset *Info, loaded_tileset *Tileset,
+GetBitmapForTile(engine_assets *Assets, kea_tileset *Info, loaded_tileset *Tileset,
                  u32 TileIndex)
 {
     Assert(TileIndex < Info->TileCount);
@@ -1053,7 +873,7 @@ GetBitmapForTile(editor_assets *Assets, ssa_tileset *Info, loaded_tileset *Tiles
 }
 
 inline sound_id
-GetSoundEffectForType(editor_assets *Assets, sound_effect_type Type, u32 Variety = 0)
+GetSoundEffectForType(engine_assets *Assets, sound_effect_type Type, u32 Variety = 0)
 {
     sound_id Result = {};
 
@@ -1069,3 +889,4 @@ GetSoundEffectForType(editor_assets *Assets, sound_effect_type Type, u32 Variety
     
     return(Result);
 }
+#endif

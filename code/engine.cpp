@@ -186,8 +186,8 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             Task->BeingUsed = false;
         }
 
-        TranState->Assets = AllocateEditorAssets(&TranState->TranArena, Megabytes(512), TranState,
-                                                 &Memory->TextureOpQueue);
+        TranState->Assets = AllocateAssets(&TranState->TranArena, Megabytes(512), TranState,
+                                           &Memory->TextureOpQueue);
 
     }
 

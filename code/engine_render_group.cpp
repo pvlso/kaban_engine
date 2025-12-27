@@ -152,24 +152,6 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     }
 }
 
-inline loaded_font *
-PushFont(render_group *Group, font_id ID)
-{
-    loaded_font *Font = GetFont(Group->Assets, ID, Group->GenerationID);    
-    if(Font)
-    {
-        // NOTE(casey): Nothing to do
-    }
-    else
-    {
-        Assert(!Group->RendersInBackground);
-        LoadAsset(Group->Assets, AssetType_Font, ID.Value, false);
-        ++Group->MissingResourceCount;
-    }
-
-    return(Font);
-}
-
 inline void
 PushLine(render_group *Group, object_transform *ObjectTransform, v3 Point0, v3 Point1, v4 Color = V4(1, 1, 1, 1))
 {
@@ -371,28 +353,6 @@ PushTileset(render_group *Group, tileset_id ID, b32 Immidiate = false)
     return(Tileset);
 }
 
-inline loaded_world_map *
-PushSSWM(editor_assets *Assets, u32 GenerationID, sswm_id ID, b32 Immidiate = false)
-{
-    loaded_world_map *SSWM = GetSSWM(Assets, ID, GenerationID);
-    if(Immidiate && !SSWM)
-    {
-        LoadSSWM(Assets, ID, true);
-        SSWM = GetSSWM(Assets, ID, GenerationID);
-    }
-    
-    if(SSWM)
-    {
-        // NOTE(casey): Nothing to do
-    }
-    else
-    {
-        LoadSSWM(Assets, ID, false);
-    }
-
-    return(SSWM);
-}
-
 inline loaded_file *
 PushFile(transient_state *TranState, file_id ID, b32 Immidiate = false)
 {
@@ -520,7 +480,7 @@ AllResourcesPresent(render_group *Group)
 }
 
 inline render_group
-BeginRenderGroup(editor_assets *Assets, editor_render_commands *Commands, u32 GenerationID, b32 RendersInBackground,
+BeginRenderGroup(engine_assets *Assets, editor_render_commands *Commands, u32 GenerationID, b32 RendersInBackground,
                  s32 PixelWidth, s32 PixelHeight)
 {
     render_group Result = {};

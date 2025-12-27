@@ -95,7 +95,7 @@ ChangePitch(audio_state *AudioState, playing_sound *Sound, real32 dSample)
 
 internal void
 OutputPlayingSounds(audio_state *AudioState,
-                    engine_sound_output_buffer *SoundBuffer, editor_assets *Assets,
+                    engine_sound_output_buffer *SoundBuffer, engine_assets *Assets,
                     memory_arena *TempArena)
 {    
     TIMED_FUNCTION();

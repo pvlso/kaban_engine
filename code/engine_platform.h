@@ -668,7 +668,7 @@ struct line
 };
 // ===========================================================================================================================================================
 
-#include "engine_file_formats.h"
+//#include "engine_file_formats.h"
 #include "engine_file_formats_.h"
 //#include "engine_asset_new.h"
 
@@ -1365,9 +1365,6 @@ struct debug_event
         v4 Value_v4;
         rectangle2 Value_rectangle2;
         rectangle3 Value_rectangle3;
-        bitmap_id Value_bitmap_id;
-        sound_id Value_sound_id;
-        font_id Value_font_id;
         memory_arena_p Value_memory_arena_p;
     };
 };
@@ -1488,9 +1485,6 @@ DEBUGValueSetEventData_(v3);
 DEBUGValueSetEventData_(v4);
 DEBUGValueSetEventData_(rectangle2);
 DEBUGValueSetEventData_(rectangle3);
-DEBUGValueSetEventData_(bitmap_id);
-DEBUGValueSetEventData_(sound_id);
-DEBUGValueSetEventData_(font_id);
 DEBUGValueSetEventData_(memory_arena_p);
 
 struct debug_data_block 

@@ -82,24 +82,6 @@
 #define UI_COLOR_RGBA1_E1E1E1FF V4(0.882352941176f, 0.882352941176f, 0.882352941176f, 1.0f)
 #define UI_COLOR_RGBA1_FFFFFFFF V4(1.0f,            1.0f,            1.0f           , 1.0f)
 
-global_variable u32 TagValueCounts[Tag_Count] =
-{
-    Value_Count,        Value_Count,         AnimationType_Count,
-    Asset_Count,        Value_Count,         FontType_Count,
-    Value_Count,        BiomeType_Count,     TileType_Count,
-    Height_Count,       CliffHillType_Count, TileSurface_Count,
-    TileSurface_Count,  TreeType_Count,      LightLevel_Count,
-    SizeLevel_Count,    Color_Count,         VarietyType_Count,
-    MagicElement_Count, Sex_Count,           Age_Count,
-    Color_Count,        Beard_Count,         Accessories_Count,
-    TopOutfit_Count,    Color_Count,         BottomOutfit_Count,
-    Color_Count,        NPCName_Count,       
-    QuestType_Count,
-    QuestName_Count,    Haircut_Count,       Spell_Count,
-    MagicEffect_Count,  ItemName_Count,      FileData_Count,
-    MusicType_Count,    SoundEffect_Count,   PropType_Count,
-};
-
 struct ui_state;
 
 struct array_cursor
@@ -137,8 +119,6 @@ struct ui_state
 
     u32 DefaultClipRect;
     render_group RenderGroup;
-    loaded_font *Font;
-    ssa_font *FontInfo;
 
     object_transform TextTransform;
     object_transform ShadowTransform;
@@ -152,7 +132,6 @@ struct ui_state
     r32 LeftEdge;
     r32 RightEdge;
     r32 FontScale;
-    font_id FontID;
     r32 GlobalWidth;
     r32 GlobalHeight;
 

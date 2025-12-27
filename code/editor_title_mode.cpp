@@ -20,7 +20,7 @@ PlayTitleScreen(editor_state *EditorState, transient_state *TranState)
 internal b32
 UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
-    editor_assets *Assets = TranState->Assets;
+    engine_assets *Assets = TranState->Assets;
     editor_mode_title_screen *TitleScreen = EditorState->TitleScreen;
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
 

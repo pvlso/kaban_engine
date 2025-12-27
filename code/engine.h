@@ -137,7 +137,7 @@ struct transient_state
 
     task_with_memory Tasks[4];
 
-    editor_assets *Assets;
+    engine_assets *Assets;
     u32 MainGenerationID;
 
     platform_work_queue *HighPriorityQueue;

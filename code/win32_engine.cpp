@@ -2360,7 +2360,7 @@ internal PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(Win32GetAllFilesOfTypeBegin)
     {
         case PlatformFileType_KEA:
         {
-            WildCard = L"*.ssa";
+            WildCard = L"*.kea";
         } break;
 
         InvalidDefaultCase;

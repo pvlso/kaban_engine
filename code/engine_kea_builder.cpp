@@ -7,6 +7,9 @@
    ======================================================================== */
 #include "engine_kea_builder.h"
 
+#include "engine_kea_builder_log.cpp"
+#include "engine_kea_builder_load.cpp"
+
 internal kea_builder *
 InitKEABuilder(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 {
@@ -49,125 +52,37 @@ GetTagMapByGUID(kea_tag_map *TagMaps, u32 Count, u64 GUID)
     return(ResultIndex);
 }
 
-struct bitset_index_offset_pair
+inline u64
+GetTagGUID(kea_builder *Builder, kea_tag Tag)
 {
-    u32 Index;
-    u32 Offset;
-};
-
-inline bitset_index_offset_pair
-GetBitsetPair(u32 BitIndex)
-{
-    bitset_index_offset_pair Result = {};
-    Result.Index = BitIndex >> 5; // NOTE(pvlso): equals to BitIndex / 32
-    Result.Offset = BitIndex & 31; // NOTE(pvlso): equals to BitIndex % 32
-
+    u64 Result = Builder->TagMaps[Tag.Index].ValueGUIDs[Tag.ValueIndex];
     return(Result);
 }
 
-inline void
-SetBitsetBit(u32 *Bitset, u32 BitIndex)
+inline kea_builder_added_asset_list *
+GetAssetByGUID(kea_builder *Builder, u64 GUID)
 {
-    bitset_index_offset_pair Pair = GetBitsetPair(BitIndex);
-    Bitset[Pair.Index] |= (1u << Pair.Offset);
-}
+    kea_builder_added_asset_list *Result = 0;
 
-inline b32
-TestBitsetBit(u32 *Bitset, u32 BitIndex)
-{
-    bitset_index_offset_pair Pair = GetBitsetPair(BitIndex);
-    
-    b32 Result = (Bitset[Pair.Index] >> Pair.Offset) & 1u;
-    return(Result);
-}
-
-internal kea_tag *
-GetUsedTags(kea_builder *KEABuilder, memory_arena *TempMem)
-{
-    kea_tag *Result = 0;
-
-    // NOTE(pvlso): Count how many unique tags are used
-    u32 *TagBitsetOffsets = PushArray(TempMem, KEABuilder->KETHeader->TagCount, u32);
-    u32 PossiableUniqueCount = 0;
-    for(u32 I = 0;
-        I < KEABuilder->KETHeader->TagCount;
-        ++I)
+    s32 Low = 0;
+    s32 High = Builder->AssetCount - 1;
+    while(Low <= High)
     {
-        kea_tag_map *Map = KEABuilder->TagMaps + I;
-        TagBitsetOffsets[I] = PossiableUniqueCount;
-        PossiableUniqueCount += Map->ValueCount;
-    }
-
-    u32 BitsetBlockCount = (PossiableUniqueCount + 31) / 32;
-    u32 UniqueCount = 0;
-    u32 *UniqueBitset = PushArray(TempMem, BitsetBlockCount, u32);
-    
-    for(u32 I = 0;
-        I < KEABuilder->KESAHeader->AssetCount;
-        ++I)
-    {
-        kesa_asset *KESAAsset = KEABuilder->KESAAssets + I;
-        for(u32 J = 0;
-            J < KESAAsset->TagCount;
-            ++J)
+        s32 Mid = Low + ((High - Low) >> 1);
+        kea_builder_added_asset_list *MidMap = Builder->SortedBuilderAssets[Mid];
+        if(MidMap->KEAAsset.GUID < GUID)
+            Low = Mid + 1;
+        else if(MidMap->KEAAsset.GUID > GUID)
+            High = Mid - 1;
+        else
         {
-            kesa_tag *Tag = KESAAsset->AssetTags + J;
-            s32 TagIndex = GetTagMapByGUID(KEABuilder->TagMaps,
-                                           KEABuilder->KETHeader->TagCount,
-                                           Tag->TagGUID);
-            
-            u32 BitIndex = TagBitsetOffsets[TagIndex] + Tag->TagValueIndex;
-            if(!TestBitsetBit(UniqueBitset, BitIndex))
-            {
-                SetBitsetBit(UniqueBitset, BitIndex);
-                ++UniqueCount;
-            }
+            Result = MidMap;
+            break;
         }
     }
 
-    u32 UsedTagsCount = 0;
-    kea_tag *UsedTags = PushArray(TempMem, UniqueCount, kea_tag);
-    for(u32 I = 0;
-        I < PossiableUniqueCount;
-        ++I)
-    {
-        if(TestBitsetBit(UniqueBitset, I))
-        {
-            s32 Low = 0;
-            s32 High = KEABuilder->KETHeader->TagCount;
-            s32 ResultIndex = -1;
-            while(Low <= High)
-            {
-                s32 Mid = Low + ((High - Low) >> 1);
-                if(TagBitsetOffsets[Mid] <= I)
-                {
-                    ResultIndex = Mid;
-                    Low = Mid + 1;
-                }
-                else
-                    High = Mid - 1;
-            }
-
-            UsedTags[UsedTagsCount].TagIndex = ResultIndex;
-            UsedTags[UsedTagsCount].TagValueIndex = I - TagBitsetOffsets[ResultIndex];
-        }
-    }
-    
     return(Result);
 }
-
-internal void
-PrepareKEABuilder(kea_builder *KEABuilder, memory_arena *TempMem)
-{
-    kea_tag *UsedTags = GetUsedTags(KEABuilder, TempMem);
-}
-
-struct builder_added_asset
-{
-    u32 ID;
-    ssa_asset *SSA;
-    builder_asset_source *Source;
-};
 
 internal kea_builder_added_asset_list *
 BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
@@ -187,7 +102,8 @@ BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
 }
 
 internal void
-AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_data *Data, u32 TileIndex)
+AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_data *Data, u32 TileIndex,
+             loaded_bitmap *TileBitmap)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Tileset);
 
@@ -211,7 +127,8 @@ AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_d
     KEAAsset->Bitmap.AlignPercentage[1] = 0.5f;
     
     Data->Tileset.TileGUIDs[TileIndex] = KEAAsset->GUID;
-
+    BuilderAsset->Data.Tile.TileBitmap = TileBitmap;
+    
     Builder->CurrentAsset = 0;
 }
 
@@ -229,19 +146,31 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
 
     BuilderAsset->Data.Tileset.TileGUIDs = PushArray(Builder->TempMem, KEAAsset->Tileset.TileCount, u64);
     
+
     Builder->CurrentAsset = 0;
+
+    loaded_bitmap TilesetBitmap = LoadBMP(KESAAsset->SourceFileName, PlatformFileType_TSBMP, Builder->TempMem);
+    loaded_bitmap MergeTileBitmap = {};
+    if(KESAAsset->Tileset.MergedTile)
+        MergeTileBitmap = LoadBMP(KESAAsset->Tileset.MergeTileFileName, PlatformFileType_STBMP, Builder->TempMem);
+        
+    builder_loaded_tiles TileBitmaps = {};
+    TileBitmaps.Count = KESAAsset->Tileset.TileCount;
+    TileBitmaps.TileBitmaps = PushArray(Builder->TempMem, KESAAsset->Tileset.TileCount, loaded_bitmap);
     for(u32 I = 0;
         I < KESAAsset->Tileset.TileCount;
         ++I)
     {
-        AddTileAsset(Builder, Asset, &BuilderAsset->Data, I);
+        TileBitmaps.TileBitmaps[I] = LoadTileBitmap(&KESAAsset->Tileset, &TilesetBitmap, &MergeTileBitmap, I, Builder->TempMem);
+        AddTileAsset(Builder, Asset, &BuilderAsset->Data, I, TileBitmaps.TileBitmaps + I);
     }
 
     Builder->CurrentAsset = BuilderAsset;
 }
 
 internal void
-AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data, u32 SpriteIndex)
+AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data,
+               u32 SpriteIndex, loaded_bitmap *Sprite)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, SpriteSheet);
 
@@ -257,7 +186,8 @@ AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additi
     KEAAsset->Bitmap.AlignPercentage[1] = KESAAsset->SpriteSheet.SpriteAlignPercentage.y;
     
     Data->SpriteSheet.SpriteGUIDs[SpriteIndex] = KEAAsset->GUID;
-
+    BuilderAsset->Data.Sprite.SpriteBitmap = Sprite;
+    
     Builder->CurrentAsset = 0;
 }
 
@@ -274,16 +204,55 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     KEAAsset->SpriteSheet.SpriteCount = KESAAsset->SpriteSheet.SpriteCount;
 
     BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, KEAAsset->SpriteSheet.SpriteCount, u64);
-    
+
     Builder->CurrentAsset = 0;
+
+    builder_loaded_sprites Sprites = LoadSprites(KESAAsset, Builder->TempMem);
     for(u32 I = 0;
         I < KESAAsset->SpriteSheet.SpriteCount;
         ++I)
     {
-        AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I);
+        AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
     }
 
     Builder->CurrentAsset = BuilderAsset;
+}
+
+internal void
+AddTextAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+    
+    KEAAsset->GUID = KESAAsset->GUID;
+    KEAAsset->Type = KEAType_TXT;
+}
+
+internal void
+AddFileAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+    
+    KEAAsset->GUID = KESAAsset->GUID;
+    KEAAsset->Type = KEAType_BIN;
+}
+
+internal void
+AddSoundAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
+    
+    KEAAsset->GUID = KESAAsset->GUID;
+    KEAAsset->Type = KEAType_Sound;
+    KEAAsset->Sound.Chain = KESAAsset->Sound.Chain;
 }
 
 internal void
@@ -301,7 +270,7 @@ AddBitmapAsset(kea_builder *Builder, kesa_asset *Asset)
 }
 
 internal void
-AddTag(kea_builder *Builder, u32 TagIndex, u32 TagValueIndex)
+AddTag(kea_builder *Builder, u32 TagIndex, u32 TagValueIndex, u64 TagGUID)
 {
     Assert(Builder->CurrentAsset);
 
@@ -309,8 +278,9 @@ AddTag(kea_builder *Builder, u32 TagIndex, u32 TagValueIndex)
     ++Asset->OnePastLastTagIndex;
     Builder->CurrentTag = PushStruct(Builder->TempMem, kea_builder_tag_list);
     Builder->CurrentTag->TagIndex = Builder->TagCount;
-    Builder->CurrentTag->Tag.TagIndex = TagIndex;
-    Builder->CurrentTag->Tag.TagValueIndex = TagValueIndex;
+    Builder->CurrentTag->Tag.Index = TagIndex;
+    Builder->CurrentTag->Tag.ValueIndex = TagValueIndex;
+    Builder->CurrentTag->Tag.GUID = TagGUID;
     ++Builder->TagCount;
 
     Builder->CurrentTag->Next = Builder->Tags->Next;
@@ -321,7 +291,7 @@ AddTag(kea_builder *Builder, u32 TagIndex, u32 TagValueIndex)
 inline void
 AddTag(kea_builder *Builder, kea_tag Tag)
 {
-    AddTag(Builder, Tag.TagIndex, Tag.TagValueIndex);
+    AddTag(Builder, Tag.Index, Tag.ValueIndex, Tag.GUID);
 }
 
 inline void
@@ -333,8 +303,237 @@ AddStoredAssetTags(kea_builder *Builder, kesa_asset *StoredAsset)
     {
         kesa_tag Tag = StoredAsset->AssetTags[I];
         u32 TagIndex = GetTagMapByGUID(Builder->TagMaps, Builder->KETHeader->TagCount, Tag.TagGUID);
-        AddTag(Builder, TagIndex, Tag.TagValueIndex);
+        AddTag(Builder, TagIndex, Tag.TagValueIndex, Tag.TagGUID);
     }    
+}
+
+internal void
+BuilderWriteKEA(kea_builder *Builder)
+{
+    kesa_header *KESAHeader = Builder->KESAHeader;
+
+    u32 Length = 0;
+    char LogBuffer[512];
+    FILE *LogFile;
+    FormatString(ArrayCount(LogBuffer), LogBuffer, "ssa_writing_log_%d.txt", KESAHeader->Version);
+    fopen_s(&LogFile, LogBuffer, "wb");
+
+    char KEAFileName[256];
+    FormatString(ArrayCount(KEAFileName), KEAFileName, "game_data_%d.kea",
+                 KESAHeader->Version);
+
+    Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "Writing to: %s\n", KEAFileName);
+    fwrite(LogBuffer, Length, 1, LogFile);
+
+    FILE *Out;
+    fopen_s(&Out, KEAFileName, "wb");
+
+    if(Out)
+    {
+        kea_header Header = {};
+        Header.MagicValue = KEA_MAGIC_VALUE;
+        Header.Version = KESAHeader->Version;
+        Header.TagCount = Builder->KETHeader->TagCount;
+        Header.UsedTagsCount = Builder->TagCount;
+        Header.AssetTypeCount = KEAType_Count;
+        Header.AssetCount = Builder->AssetCount;
+
+        u32 TagMapArraySize = Header.TagCount*sizeof(kea_tag_map);
+        u32 UsedTagsArraySize = Header.UsedTagsCount*sizeof(kea_tag);
+        u32 AssetTypeArraySize = Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
+        u32 AssetArraySize = Header.AssetCount*sizeof(kea_asset);
+        
+        Header.TagMapsOffset = sizeof(Header);
+        Header.UsedTagsArrayOffset = Header.TagMapsOffset + TagMapArraySize;
+        Header.AssetTypeTableOffset = Header.UsedTagsArrayOffset + UsedTagsArraySize;
+
+        u32 AssetTypeTableSize = 0;
+        for(u32 Type = 0;
+            Type < KEAType_Count;
+            ++Type)
+        {
+            AssetTypeTableSize += Builder->AssetTypeTable[Type].TypeCount*sizeof(u32);
+        }
+
+        Header.AssetsOffset = Header.AssetTypeTableOffset + AssetTypeArraySize + AssetTypeTableSize;
+
+//        BeginWritingLog(LogFile);
+//        WriteLogForHeader(LogFile, Header);
+//        EndWritingLog(LogFile);
+        
+        fwrite(&Header, sizeof(Header), 1, Out);
+        fwrite(Builder->TagMaps, TagMapArraySize, 1, Out);
+
+        kea_tag *UsedTags = PushArray(Builder->TempMem, Builder->TagCount, kea_tag);
+        kea_builder_tag_list *Itter = Builder->Tags->Next;
+        while(Itter)
+        {
+            UsedTags[Itter->TagIndex] = Itter->Tag;
+            Itter = Itter->Next;
+        }
+        fwrite(UsedTags, UsedTagsArraySize, 1, Out);
+
+        fseek(Out, AssetTypeArraySize, SEEK_CUR);
+        for(u32 Type = 0;
+            Type < KEAType_Count;
+            ++Type)
+        {
+            Builder->AssetTypeTable[Type].AssetsIndeciesOffset = ftell(Out);
+            fwrite(Builder->AssetTypeTableData[Type], sizeof(u32)*Builder->AssetTypeTable[Type].TypeCount, 1, Out);
+        }
+
+        fseek(Out, (u32)Header.AssetTypeTableOffset, SEEK_SET);
+        fwrite(Builder->AssetTypeTable, AssetTypeArraySize, 1, Out);
+        fseek(Out, AssetTypeArraySize + AssetTypeTableSize + AssetArraySize, SEEK_CUR);
+
+        for(u32 AssetIndex = 1;
+            AssetIndex < Header.AssetCount;
+            ++AssetIndex)
+        {
+            kea_builder_added_asset_list *BuilderAsset = Builder->SortedBuilderAssets[AssetIndex];
+            kea_asset *Dest = &BuilderAsset->KEAAsset;
+            kesa_asset *Source = BuilderAsset->StoredAsset;
+            Dest->DataOffset = ftell(Out);
+
+            if(Dest->Type == KEAType_Sound)
+            {
+//                BeginWritingLog(LogFile, Source->Sound.Sound->SourceFileName);
+//                WriteLogForAsset(LogFile, Source);
+                loaded_sound WAV = LoadWAV(Source->SourceFileName,
+                                           Source->Sound.FirstSampleIndex,
+                                           0, 0, Builder->TempMem);
+                Dest->Sound.SampleCount = WAV.SampleCount;
+                Dest->Sound.ChannelCount = WAV.ChannelCount;
+                for(u32 ChannelIndex = 0;
+                    ChannelIndex < WAV.ChannelCount;
+                    ++ChannelIndex)
+                {
+                    fwrite(WAV.Samples[ChannelIndex], Dest->Sound.SampleCount*sizeof(s16), 1, Out);
+                }
+
+//                EndWritingLog(LogFile, Source->Sound.Sound->SourceFileName);
+            }
+            else if(Dest->Type == KEAType_Tileset)
+            {
+//                BeginWritingLog(LogFile, Tileset->StoredTileset->SourceFileName);
+//                WriteLogForAsset(LogFile, Source);
+
+                u32 TilesSize = Source->Tileset.TileCount*sizeof(u64);
+                fwrite(BuilderAsset->Data.Tileset.TileGUIDs, TilesSize, 1, Out);
+                
+                Dest->Tileset.TileCount = Source->Tileset.TileCount;
+
+//                EndWritingLog(LogFile, Tileset->StoredTileset->SourceFileName);
+            }
+            else if(Dest->Type == KEAType_SpriteSheet)
+            {
+//                BeginWritingLog(LogFile, SpriteSheet->StoredSheet->SourceFileName);
+//                WriteLogForAsset(LogFile, Source);
+
+                u32 SpritesSize = Source->SpriteSheet.SpriteCount*sizeof(u64);
+                fwrite(BuilderAsset->Data.SpriteSheet.SpriteGUIDs, SpritesSize, 1, Out);
+
+                Dest->SpriteSheet.SpriteCount = Source->SpriteSheet.SpriteCount;
+ 
+//                EndWritingLog(LogFile, SpriteSheet->StoredSheet->SourceFileName);
+            }
+            else if(Dest->Type == KEAType_TXT)
+            {
+//                BeginWritingLog(LogFile, Source->Text.Text->SourceFileName);
+                loaded_text Text = LoadText(Source->SourceFileName, Builder->TempMem);
+//                WriteLogForAsset(LogFile, Source, Text.String);
+
+                Dest->Text.Length = StringLength(Text.String);
+                u32 TextSize = Dest->Text.Length;
+                fwrite(Text.String, TextSize, 1, Out);
+
+//                EndWritingLog(LogFile, Source->Text.Text->SourceFileName);
+            }
+            else if(Dest->Type == KEAType_BIN)
+            {
+//                BeginWritingLog(LogFile, Source->File.File->SourceFileName);
+//                WriteLogForAsset(LogFile, Source);
+                read_file_result ReadResult =
+                    Platform.ReadEntireFile(Source->SourceFileName, PlatformFileType_BIN, Builder->TempMem, true);    
+
+                Dest->BinaryFile.Size = ReadResult.Size;
+                fwrite(ReadResult.Contents, ReadResult.Size, 1, Out);
+
+//                EndWritingLog(LogFile, Source->File.File->SourceFileName);
+            }
+#if 0
+            else if(Source->Type == BuilderAssetType_SSWM)
+            {
+                
+                BeginWritingLog(LogFile, Source->SSWM.File->SourceFileName);
+                WriteLogForAsset(LogFile, Source);
+                read_file_result ReadResult =
+                    Platform.ReadEntireFile(Source->SSWM.File->SourceFileName, PlatformFileType_SSWM, TempArena);    
+
+                Dest->SSWMFile.Size = ReadResult.Size;
+                fwrite(ReadResult.Contents, ReadResult.Size, 1, Out);
+
+                EndWritingLog(LogFile, Source->SSWM.File->SourceFileName);
+            }
+#endif
+            else
+            {
+                loaded_bitmap Bitmap = {};
+                if(Dest->Type == KEAType_Tile)
+                {
+//                    BeginWritingLog(LogFile, "tile");
+//                    WriteLogForAsset(LogFile, Source);
+                    Bitmap = *BuilderAsset->Data.Tile.TileBitmap;
+//                    EndWritingLog(LogFile, "tile");
+                }
+                else if(Dest->Type == KEAType_Sprite)
+                {
+//                    BeginWritingLog(LogFile, "sprite");
+//                    WriteLogForAsset(LogFile, Source);
+                    Bitmap = *BuilderAsset->Data.Sprite.SpriteBitmap;
+//                    EndWritingLog(LogFile, "sprite");
+                }
+                else
+                {
+//                    BeginWritingLog(LogFile, Source->Bitmap.Bitmap->FileName);
+//                    WriteLogForAsset(LogFile, Source);
+                    Assert(Source->Type == AssetType_Bitmap);
+                    Bitmap = LoadBMP(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
+//                    EndWritingLog(LogFile, Source->Bitmap.Bitmap->FileName);
+                }
+
+                Dest->Bitmap.Dim[0] = Bitmap.Width;
+                Dest->Bitmap.Dim[1] = Bitmap.Height;
+
+                Assert((Bitmap.Width * BITMAP_BYTES_PER_PIXEL) == Bitmap.Pitch);
+                fwrite(Bitmap.Memory, Bitmap.Height*Bitmap.Pitch, 1, Out);
+            }
+        }
+
+        fseek(Out, (u32)Header.AssetsOffset, SEEK_SET);
+
+        kea_asset *KEAAssets = PushArray(Builder->TempMem, Builder->AssetCount, kea_asset);
+        for(u32 AssetIndex = 0;
+            AssetIndex < Builder->AssetCount;
+            ++AssetIndex)
+        {
+            KEAAssets[AssetIndex] = Builder->SortedBuilderAssets[AssetIndex]->KEAAsset;
+        }
+        
+        fwrite(KEAAssets, AssetArraySize, 1, Out);
+        
+        Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "Writing SSA comleted\n");
+        fwrite(LogBuffer, Length, 1, LogFile);
+
+        fclose(Out);
+    }
+    else
+    {
+//        Length = (u32)FormatString(ArrayCount(LogBuffer), LogBuffer, "ERROR: Fail to open %s\n", SSAFileName);
+        fwrite(LogBuffer, Length, 1, LogFile);
+    }
+
+    fclose(LogFile);
 }
 
 internal b32
@@ -342,57 +541,119 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 {
     b32 Result = true;
 
-    kea_builder *KEABuilder = InitKEABuilder(AssetsMode, TempMem);
+    kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
 
-    kesa_header *StoredHeader = KEABuilder->KESAHeader;
+    // NOTE(pvlso): Create
+    kesa_header *StoredHeader = Builder->KESAHeader;
     for(u32 StoredAssetIndex = 1;
         StoredAssetIndex < StoredHeader->AssetCount;
         ++StoredAssetIndex)
     {
-        kesa_asset *StoredAsset = KEABuilder->KESAAssets + StoredAssetIndex;
+        kesa_asset *StoredAsset = Builder->KESAAssets + StoredAssetIndex;
         switch(StoredAsset->Type)
         {
             case KESA_Bitmap:
             {
-                AddBitmapAsset(KEABuilder, StoredAsset);
-                AddStoredAssetTags(KEABuilder, StoredAsset);
+                AddBitmapAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_SpriteSheet:
             {
-                AddSpriteSheetAsset(KEABuilder, StoredAsset);
-                AddStoredAssetTags(KEABuilder, StoredAsset);
+                AddSpriteSheetAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_Tileset:
             {
-                AddTilesetAsset(KEABuilder, StoredAsset);
-                AddStoredAssetTags(KEABuilder, StoredAsset);
+                AddTilesetAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_Sound:
             {
+                AddSoundAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_Text:
             {
+                AddTextAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_File:
             {
+                AddFileAsset(Builder, StoredAsset);
+                AddStoredAssetTags(Builder, StoredAsset);
             } break;
 
             case KESA_SSWM:
             {
+                Assert(!"Not implemented");
             } break;
 
             InvalidDefaultCase;
         }
 
-        KEABuilder->CurrentAsset = 0;
+        Builder->CurrentAsset = 0;
     }
 
-//    PrepareKEABuilder(KEABuilder, TempMem);
+    kea_builder_added_asset_list *CurrentAsset = Builder->BuilderAssets;
+    u32 SortedCount = 0;
+    Builder->AssetCount += 1; // NOTE(pvlso): to acount for a null asset
+    Builder->SortedBuilderAssets = PushArray(Builder->TempMem, Builder->AssetCount, kea_builder_added_asset_list *);
+    while(CurrentAsset)
+    {
+        Builder->SortedBuilderAssets[SortedCount++] = CurrentAsset;
+        CurrentAsset = CurrentAsset->Next;
+    }
 
+    // NOTE(pvlso): Sort builder asset pointer array
+    for(u32 I = 1; I < Builder->AssetCount; ++I)
+    {
+        kea_builder_added_asset_list *Node = Builder->SortedBuilderAssets[I];
+        s32 J = I - 1;
+        while((J >= 0) && (Node->KEAAsset.GUID < Builder->SortedBuilderAssets[J]->KEAAsset.GUID))
+        {
+            Builder->SortedBuilderAssets[J + 1] = Builder->SortedBuilderAssets[J];
+            J = J - 1;
+        }
+
+        Builder->SortedBuilderAssets[J + 1] = Node;
+        Node->KEAAsset.AssetIndex = J;
+    }
+        
+    // NOTE(pvlso): asign an index and count asset types
+    Builder->AssetTypeTable = PushArray(Builder->TempMem, KEAType_Count, kea_asset_type_table_entry);
+    for(u32 I = 0; I < KEAType_Count; ++I)
+        Builder->AssetTypeTable[I].Type = I;    
+
+    for(u32 I = 0;
+        I < SortedCount;
+        ++I)
+    {
+        kea_builder_added_asset_list *Asset = Builder->SortedBuilderAssets[I];
+
+        Asset->KEAAsset.AssetIndex = I;
+        Builder->AssetTypeTable[Asset->KEAAsset.Type].TypeCount++; 
+    }
+
+    Builder->AssetTypeTableData = PushArray(Builder->TempMem, KEAType_Count, u32 *);
+    for(u32 I = 0; I < KEAType_Count; ++I)
+        Builder->AssetTypeTableData[I] = PushArray(Builder->TempMem, Builder->AssetTypeTable[I].TypeCount, u32);
+
+    u32 Itters[KEAType_Count] = {};
+    for(u32 I = 0;
+        I < SortedCount;
+        ++I)
+    {
+        kea_builder_added_asset_list *Asset = Builder->SortedBuilderAssets[I];
+        u32 Type = Asset->KEAAsset.Type;
+        Builder->AssetTypeTableData[Type][Itters[Type]++] = Asset->KEAAsset.AssetIndex; 
+    }
+
+    BuilderWriteKEA(Builder);
+    
     return(Result);
 }
