@@ -391,11 +391,9 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
             {
                 char *StoredType = JsonGetEnumString(UIState->JsonStringsHead, "StoredAssetType", StoredAsset->Type);
                 nk_layout_row_dynamic(Nk, 30, 1);
-                FormatString(ArrayCount(Text), Text, "  GUID: %d",
-                             StoredAsset->GUID);
                 struct nk_rect Rect = nk_widget_bounds(Nk);
                 nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
-                nk_label(Nk, Text, NK_TEXT_LEFT);
+                nk_labelf(Nk, NK_TEXT_LEFT, "  GUID: %llu", StoredAsset->GUID);
 
                 FormatString(ArrayCount(Text), Text, "  StoredType: %s",
                              StoredType ? StoredType : "-");

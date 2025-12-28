@@ -40,6 +40,7 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(nk_button_label(Nk, "Map Editor"))
             {
+                EditorState->EditorMode = EditorMode_MapEditor;
 //                PlayMapEditor(EditorState, TranState);
 //                Result = true;
                 return(Result);

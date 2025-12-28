@@ -885,11 +885,87 @@ Win32GetLastWriteTime(wchar_t *Filename)
     return(LastWriteTime);
 }
 
+inline FILETIME
+Win32GetLastWriteTime(char *Filename)
+{
+    FILETIME LastWriteTime = {};
+
+    WIN32_FILE_ATTRIBUTE_DATA Data;
+    if(GetFileAttributesExA(Filename, GetFileExInfoStandard, &Data))
+    {
+        LastWriteTime = Data.ftLastWriteTime;
+    }
+
+    return(LastWriteTime);
+}
+
 inline b32
 Win32TimeIsValid(FILETIME Time)
 {
     b32 Result = (Time.dwLowDateTime != 0) || (Time.dwHighDateTime != 0);
     return(Result);
+}
+
+internal
+PLATFORM_LOAD_CODE(Win32PlatformLoadCode)
+{
+    platform_loaded_code Result = {};
+
+    win32_loaded_code *LoadedCode = (win32_loaded_code *)Win32AllocateMemory(sizeof(win32_loaded_code));
+    WIN32_FILE_ATTRIBUTE_DATA Ignored;
+    if(!GetFileAttributesExA(LockFileName, GetFileExInfoStandard, &Ignored))
+    {
+        LoadedCode->DLLLastWriteTime = Win32GetLastWriteTime(SourceDLLName);
+
+        CopyFileA(SourceDLLName, TempDLLName, FALSE);
+        LoadedCode->DLL = LoadLibraryA(TempDLLName);
+
+        if(LoadedCode->DLL)
+            LoadedCode->IsValid = true;
+        else
+            Result.NoErrors = false;
+
+        Result.Platform = LoadedCode;
+    }
+
+    return(Result);
+}
+
+internal
+PLATFORM_UNLOAD_CODE(Win32PlatformUnloadCode)
+{
+    win32_loaded_code *LoadedCode = (win32_loaded_code *)Code->Platform;
+    if(LoadedCode->DLL)
+    {
+        FreeLibrary(LoadedCode->DLL);
+        LoadedCode->DLL = 0;
+    }
+
+    LoadedCode->IsValid = false;
+}
+
+internal
+PLATFORM_GET_PROC_ADDRESS(Win32PlatformGetProcAddress)
+{
+    void *Result = 0;
+
+    win32_loaded_code *LoadedCode = (win32_loaded_code *)Code->Platform;
+    if(LoadedCode->DLL)
+    {
+        Result = GetProcAddress(LoadedCode->DLL, FunctionName);
+    }
+    else
+    {
+        Code->NoErrors = false;
+    }
+
+    return(Result);
+}
+
+internal
+PLATFORM_SLEEP(Win32Sleep)
+{
+    Sleep(Time);
 }
 
 internal win32_engine_code
@@ -3090,10 +3166,10 @@ internal PLATFORM_LOAD_FONT_ASSET(Win32LoadFontAsset)
         HorizontalAdvance += sizeof(r32)*Font->MaxGlyphCount;
     }
 
-    Win32PlatformFreeFileMemory(Font->Glyphs);
-    Win32PlatformFreeFileMemory(Font->HorizontalAdvance);
-    Win32PlatformFreeFileMemory(Font->GlyphIndexFromCodePoint);
-    Win32PlatformFreeFileMemory(Font);
+    Win32DeallocateMemory(Font->Glyphs);
+    Win32DeallocateMemory(Font->HorizontalAdvance);
+    Win32DeallocateMemory(Font->GlyphIndexFromCodePoint);
+    Win32DeallocateMemory(Font);
 
     return(Result);
 }
@@ -3127,6 +3203,11 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
 
     Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
+
+    Memory->PlatformAPI.LoadCode = Win32PlatformLoadCode;
+    Memory->PlatformAPI.UnloadCode = Win32PlatformUnloadCode;
+    Memory->PlatformAPI.GetProcAddress = Win32PlatformGetProcAddress;
+    Memory->PlatformAPI.Sleep = Win32Sleep;
 
     Memory->PlatformAPI.LoadFontAsset = Win32LoadFontAsset;    
             

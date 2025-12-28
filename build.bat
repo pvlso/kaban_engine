@@ -23,13 +23,20 @@ if %BuildDebug% == true (
    )
 
    echo Building Nuklear Debug
-   cl %CommonCompilerFlagsD% -wd4116 ..\code\nuklear\nuklear_imp.c -Fmnuklear.map -c
-   lib /OUT:nuklear.lib nuklear_imp.obj
+   cl %CommonCompilerFlagsD% -wd4116 ..\code\nuklear\nuklear_imp.c -Fmnuklear.map -LD ^
+   -link -incremental:no -opt:ref -OUT:nuklear.dll -IMPLIB:nuklear.lib
    
    echo Building Engine Debug
    del *.pdb > NUL 2> NUL
    echo WAITING FOR PDB > lock.tmp
    cl %CommonCompilerFlagsD% ..\code\engine.cpp -Fmengine.map -LD nuklear.lib /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EngineUpdateAndRender -EXPORT:EngineGetSoundSamples -EXPORT:DEBUGEditorFrameEnd
+   del lock.tmp
+
+   echo Building Arkham Debug
+   del arkham.pdb > NUL 2> NUL
+   echo WAITING FOR PDB > lock.tmp
+   cl %CommonCompilerFlagsD% -wd4116 ..\code\arkham.cpp -Fmarkham.map -LD ^
+   -link -incremental:no -opt:ref -OUT:arkham.dll engine.lib nuklear.lib -EXPORT:ArkhamUpdateAndRender
    del lock.tmp
 
    cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map nuklear.lib /link %CommonLinkerFlags%

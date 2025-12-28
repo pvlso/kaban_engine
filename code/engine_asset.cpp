@@ -737,14 +737,14 @@ GetBestMatchFileFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *
 #endif
 
 internal engine_assets *
-AllocateAssets(memory_arena *Arena, umm Size, transient_state *TranState,
+AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQueue,
                platform_texture_op_queue *TextureOpQueue)
 {
 //    TIMED_FUNCTION();
 
     engine_assets *Assets = PushStruct(Arena, engine_assets);
     Assets->TextureOpQueue = TextureOpQueue;
-    Assets->LowPriorityQueue = TranState->LowPriorityQueue;
+    Assets->LowPriorityQueue = LowPriorityQueue;
 
     Assets->TaskCount = 4;
     Assets->Tasks = PushArray(Arena, Assets->TaskCount, task_with_memory);
@@ -850,8 +850,8 @@ AllocateAssets(memory_arena *Arena, umm Size, transient_state *TranState,
     ZeroStruct(*(Assets->Assets + AssetCount));
     ++AssetCount;
 
-    temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
-    kea_asset *KEAAssetArray = PushArray(&TranState->TranArena, Assets->AssetCount, kea_asset);
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    kea_asset *KEAAssetArray = PushArray(TempMem.Arena, Assets->AssetCount, kea_asset);
 
     asset_file *File = Assets->Files + 0;
     Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,

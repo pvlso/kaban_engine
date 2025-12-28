@@ -13,6 +13,13 @@ struct win32_window_dimension
     s32 Height;
 };
 
+struct win32_loaded_code
+{
+    HMODULE DLL;
+    FILETIME DLLLastWriteTime;
+    b32 IsValid;
+};
+
 struct win32_engine_code
 {
     HMODULE EditorCodeDLL;

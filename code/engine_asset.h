@@ -7,36 +7,6 @@
    $Notice: $
    ======================================================================== */
 
-struct bitmap_id
-{
-    u64 Value;
-};
-
-struct sound_id
-{
-    u64 Value;
-};
-
-struct tileset_id
-{
-    u64 Value;
-};
-
-struct spritesheet_id
-{
-    u64 Value;
-};
-
-struct text_id
-{
-    u64 Value;
-};
-
-struct file_id
-{
-    u64 Value;
-};
-
 struct loaded_sound
 {
     int16 *Samples[2];
@@ -231,7 +201,6 @@ GetAssetByGUID(engine_assets *Assets, u64 GUID)
 inline asset_memory_header *
 GetAsset(engine_assets *Assets, u64 ID, u32 GenerationID)
 {
-    Assert(ID <= Assets->AssetCount);
     asset *Asset = GetAssetByGUID(Assets, ID);
     
     asset_memory_header *Result = 0;

@@ -161,7 +161,21 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
         EngineLoadEditorMetadata(EditorState, "..\\editor_metadata.json");
+        EditorState->ArkhamCode = Platform.LoadCode("arkham.dll", "arkham_temp.dll", "lock.tmp");
+        EditorState->Arkham =
+            (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
+                                                                "ArkhamUpdateAndRender");
 
+        EditorState->EngineAPI.BeginRenderGroup = BeginRenderGroup;
+        EditorState->EngineAPI.EndRenderGroup = EndRenderGroup;
+        EditorState->EngineAPI.Perspective = Perspective;
+        EditorState->EngineAPI.Orthographic = Orthographic;
+        EditorState->EngineAPI.Clear = Clear;
+        EditorState->EngineAPI.PushBitmap = PushBitmap;
+
+        EditorState->EngineAPI.BeginGeneration = BeginGeneration;
+        EditorState->EngineAPI.EndGeneration = EndGeneration;
+        
         EditorState->UIEnable = true;
     }
 
@@ -180,8 +194,30 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             task_with_memory *Task = TranState->Tasks + TaskIndex;
             Task->BeingUsed = false;
         }
+
+        EditorState->EngineAPI.Assets = AllocateAssets(&TranState->TranArena, Megabytes(128),
+                                                       TranState->LowPriorityQueue, &Memory->TextureOpQueue);
     }
 
+    if(Memory->ExecutableReloaded)
+    {
+        Platform.UnloadCode(&EditorState->ArkhamCode);
+        for(u32 LoadTryIndex = 0;
+            LoadTryIndex < 100;
+            ++LoadTryIndex)
+        {
+            EditorState->ArkhamCode = Platform.LoadCode("arkham.dll", "arkham_temp.dll", "lock.tmp");
+
+            Platform.Sleep(100);
+
+            EditorState->Arkham =
+                (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
+                                                                    "ArkhamUpdateAndRender");
+            if(EditorState->Arkham)
+                break;
+        }
+    }
+    
     if(EditorState->EditorMode == EditorMode_None)
     {
         PlayTitleScreen(EditorState, TranState);
@@ -189,7 +225,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     
     if(EditorState->EditorMode == EditorMode_TitleScreen)
     {
-        nk->style.window.fixed_background.data.color.a = 255;
+        nk->style.window.fixed_background.data.color.a = 0;
     }
     else
     {
@@ -234,6 +270,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
+                    EditorState->Arkham(EditorState->EngineAPI, RenderCommands, nk, RenderWidth, RenderHeight);
 //                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
 //                                                     Input, RenderWidth, RenderHeight);
                 } break;

@@ -77,6 +77,8 @@ struct task_with_memory
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 
+#include "engine_api.h"
+
 //#include "engine_navigation_mesh.h"
 //#include "engine_map_editor_mode.h"
 
@@ -107,9 +109,13 @@ struct editor_state
     
     b32 UIEnable;
     ui_state UIState;
-    
+
     char window_title[64];
     editor_mode EditorMode;
+
+    engine_api EngineAPI;
+    platform_loaded_code ArkhamCode;
+    arkham_update_and_render *Arkham;
     union
     {
         editor_mode_title_screen *TitleScreen;
