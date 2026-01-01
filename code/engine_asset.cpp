@@ -778,7 +778,7 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
         Assets->FileCount = FileGroup.FileCount;
         Assets->Files = PushArray(Arena, Assets->FileCount, asset_file);
         for(u32 FileIndex = 0;
-            FileIndex < 1; // TODO(pvlso): Merge multiple files
+            FileIndex < Assets->FileCount; // TODO(pvlso): Merge multiple files
             ++FileIndex)
         {
             asset_file *File = Assets->Files + FileIndex;
@@ -838,33 +838,36 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
         Platform.GetAllFilesOfTypeEnd(&FileGroup);
     }
 
-    // NOTE(casey): Allocate all metadata space
-    Assets->Assets = PushArray(Arena, Assets->AssetCount, asset);
-    Assets->Tags = PushArray(Arena, Assets->TagCount, kea_tag);
-
-    // NOTE(casey): Reserve one null tag at the beginning
-    ZeroStruct(Assets->Tags[0]);
-
-    // NOTE(casey): Reserve one null asset at the beginning
-    u32 AssetCount = 0;
-    ZeroStruct(*(Assets->Assets + AssetCount));
-    ++AssetCount;
-
-    temporary_memory TempMem = BeginTemporaryMemory(Arena);
-    kea_asset *KEAAssetArray = PushArray(TempMem.Arena, Assets->AssetCount, kea_asset);
-
-    asset_file *File = Assets->Files + 0;
-    Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,
-                              Assets->AssetCount*sizeof(kea_asset),
-                              KEAAssetArray);
-    for(u32 AssetIndex = 0;
-        AssetIndex < Assets->AssetCount;
-        ++AssetIndex)
+    if(Assets->FileCount)
     {
-        asset *Asset = Assets->Assets + AssetIndex;
-        Asset->KEA = KEAAssetArray[AssetIndex];
+        asset_file *File = Assets->Files + 0;
+        // NOTE(casey): Allocate all metadata space
+        Assets->Assets = PushArray(Arena, Assets->AssetCount, asset);
+        Assets->Tags = PushArray(Arena, Assets->TagCount, kea_tag);
+
+        // NOTE(casey): Reserve one null tag at the beginning
+        ZeroStruct(Assets->Tags[0]);
+
+        // NOTE(casey): Reserve one null asset at the beginning
+        u32 AssetCount = 0;
+        ZeroStruct(*(Assets->Assets + AssetCount));
+        ++AssetCount;
+
+        temporary_memory TempMem = BeginTemporaryMemory(Arena);
+        kea_asset *KEAAssetArray = PushArray(TempMem.Arena, Assets->AssetCount, kea_asset);
+
+        Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,
+                                  Assets->AssetCount*sizeof(kea_asset),
+                                  KEAAssetArray);
+        for(u32 AssetIndex = 0;
+            AssetIndex < Assets->AssetCount;
+            ++AssetIndex)
+        {
+            asset *Asset = Assets->Assets + AssetIndex;
+            Asset->KEA = KEAAssetArray[AssetIndex];
+        }
+        EndTemporaryMemory(TempMem);
     }
-    EndTemporaryMemory(TempMem);
     
     return(Assets);
 }

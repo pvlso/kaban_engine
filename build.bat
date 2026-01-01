@@ -1,7 +1,7 @@
 @echo off
 
 set BuildDebug=true
-set BuildGLEW=false
+set BuildGLEW=true
 
 set CommonCompilerFlagsD= -DEDITOR_INTERNAL=1 -DEDITOR_SLOW=1 -DEDITOR_WIN32=1 -EHsc -Od -MTd -nologo -fp:fast -fp:except- -Gm- -GR- -EHa- -Zo -Oi -WX -W4 -FC -Z7 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4127 -wd4996
 set CommonCompilerFlagsO= -DEDITOR_INTERNAL=0 -DEDITOR_SLOW=0 -DEDITOR_WIN32=1 -EHsc -O2 -Oi -MT -nologo -fp:fast -fp:except- -Gm- -GR- -EHa- -WX -W4 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4127
@@ -23,20 +23,18 @@ if %BuildDebug% == true (
    )
 
    echo Building Nuklear Debug
-   cl %CommonCompilerFlagsD% -wd4116 ..\code\nuklear\nuklear_imp.c -Fmnuklear.map -LD ^
-   -link -incremental:no -opt:ref -OUT:nuklear.dll -IMPLIB:nuklear.lib
-   
+   cl %CommonCompilerFlagsD% -wd4116 -DNUKLEAR_DLL_BUILD ..\code\nuklear\nuklear_imp.c /link -incremental:no -opt:ref -PDB:nuklear.pdb /DLL /OUT:nuklear.dll /IMPLIB:nuklear.lib
+
    echo Building Engine Debug
-   del *.pdb > NUL 2> NUL
+   del engine_*.pdb > NUL 2> NUL
    echo WAITING FOR PDB > lock.tmp
    cl %CommonCompilerFlagsD% ..\code\engine.cpp -Fmengine.map -LD nuklear.lib /link -incremental:no -opt:ref -PDB:engine_%random%.pdb -EXPORT:EngineUpdateAndRender -EXPORT:EngineGetSoundSamples -EXPORT:DEBUGEditorFrameEnd
    del lock.tmp
 
    echo Building Arkham Debug
-   del arkham.pdb > NUL 2> NUL
+   del arkham_*.pdb > NUL 2> NUL
    echo WAITING FOR PDB > lock.tmp
-   cl %CommonCompilerFlagsD% -wd4116 ..\code\arkham.cpp -Fmarkham.map -LD ^
-   -link -incremental:no -opt:ref -OUT:arkham.dll engine.lib nuklear.lib -EXPORT:ArkhamUpdateAndRender
+   cl %CommonCompilerFlagsD% -wd4116 ..\code\arkham\arkham.cpp -Fmarkham.map -LD engine.lib nuklear.lib /link -incremental:no -opt:ref -PDB:arkham_%random%.pdb -EXPORT:ArkhamUpdateAndRender
    del lock.tmp
 
    cl %CommonCompilerFlagsD% ..\code\win32_engine.cpp -Fmwin32_engine.map nuklear.lib /link %CommonLinkerFlags%

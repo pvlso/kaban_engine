@@ -39,11 +39,13 @@ struct bitmap_header
     uint16 Reserved1;
     uint16 Reserved2;
     uint32 BitmapOffset;
+
     uint32 Size;
     int32 Width;
     int32 Height;
     uint16 Planes;
     uint16 BitsPerPixel;
+
     uint32 Compression;
     uint32 SizeOfBitmap;
     int32 HorzResolution;

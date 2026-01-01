@@ -6,6 +6,14 @@
    $Notice:  $
    ======================================================================== */
 
+#if defined(NUKLEAR_DLL_BUILD)
+#  define NK_API __declspec(dllexport)
+#elif defined(NUKLEAR_DLL_USE)
+#  define NK_API __declspec(dllimport)
+#else
+#  define NK_API
+#endif
+
 #define NK_IMPLEMENTATION
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO

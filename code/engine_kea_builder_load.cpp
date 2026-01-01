@@ -5,6 +5,73 @@
    $Creator: BabyKaban $
    $Notice:  $
    ======================================================================== */
+#if 0
+#define STBI_NO_STDIO
+#define STBI_ONLY_PNG
+#define STBI_ONLY_BMP
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+inline loaded_bitmap
+STBLoadImage(char *FileName, platform_file_type Type, memory_arena *Arena)
+{
+    loaded_bitmap Result = {};
+
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena, 0);    
+    if(ReadResult.Size != 0)
+    {
+        s32 Comp = 0;
+        stbi_set_flip_vertically_on_load(1);
+        u8 *Pixels = stbi_load_from_memory((u8 *)ReadResult.Contents, ReadResult.Size,
+                                           &Result.Width, &Result.Height,
+                                           &Comp, BITMAP_BYTES_PER_PIXEL);
+
+        Result.WidthOverHeight = (r32)Result.Width / (r32)Result.Height;
+        Result.AlignPercentage = V2(0.5f, 0.5f);
+
+//        Assert(Comp == BITMAP_BYTES_PER_PIXEL);
+        Result.Pitch = Result.Width*BITMAP_BYTES_PER_PIXEL;
+
+        u32 *Dest = 0;
+        if(Arena)
+            Dest = PushArray(Arena, Result.Width*Result.Height, u32);
+        else
+            Dest = (u32 *)Platform.AllocateMemory(Result.Width*Result.Height*sizeof(u32));
+        Result.Memory = Dest;
+
+        u32 PixelCount = Result.Width*Result.Height;
+        for(u32 I = 0;
+            I < PixelCount;
+            ++I)
+        {
+            u8 r8 = Pixels[4*I + 0];
+            u8 b8 = Pixels[4*I + 1];
+            u8 g8 = Pixels[4*I + 2];
+            u8 a8 = Pixels[4*I + 3];
+
+            v4 Texel = V4(r8, b8, g8, a8);
+
+            Texel = SRGB255ToLinear1(Texel);
+            Texel.rgb *= Texel.a;
+            Texel = Linear1ToSRGB255(Texel);
+
+            u32 A = (u32)(Texel.a + 0.5f);
+            u32 R = (u32)(Texel.r + 0.5f);
+            u32 G = (u32)(Texel.g + 0.5f);
+            u32 B = (u32)(Texel.b + 0.5f);
+
+            Dest[I] = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
+        }
+
+        if(!Arena)
+            Platform.FreeFileMemory(ReadResult.Contents);
+
+        stbi_image_free(Pixels);
+    }
+    
+    return(Result);
+}
+#endif
 
 internal loaded_bitmap
 LoadBMP(char *FileName, platform_file_type Type, memory_arena *Arena)
