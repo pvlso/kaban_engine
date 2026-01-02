@@ -631,16 +631,42 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         if(nk_button_label(Nk, "Add Tag"))
             AddAction(AssetsMode, AM_AddTag);
 
+        new_tag_map *NewTag = &AssetsMode->NewTag;
+        kea_tag_map *NewTagMap = &NewTag->Tag;
         if(nk_button_label(Nk, "Create New Tag"))
         {
-            ZeroStruct(AssetsMode->NewTag);
-            AssetsMode->NewTag.ValueCount = 1;
-            FormatString(ArrayCount(AssetsMode->NewTag.Key),
-                         AssetsMode->NewTag.Key,
+            for(u32 I = 0; I < NewTag->Tag.ValueCount; ++ I)
+            {
+                new_tag_map_value *Remove = NewTag->ValuesHead.Next;
+                NewTag->ValuesHead.Next = Remove->Next;
+
+                Remove->Next = NewTag->Free->Next;
+                NewTag->Free->Next = Remove;
+            }
+
+            ZeroStruct(AssetsMode->NewTag.Tag);
+            AssetsMode->NewTag.Tag.ValueCount = 1;
+            new_tag_map_value *NewValue = 0;
+            if(NewTag->Free)
+            {
+                NewValue = NewTag->Free;
+                NewTag->Free = NewValue->Next; 
+            }
+            else
+            {
+                NewValue = (new_tag_map_value *)Platform.AllocateMemory(sizeof(new_tag_map_value));
+            }
+
+            NewValue->Next = NewTag->ValuesHead.Next;
+            NewTag->ValuesHead.Next = NewValue;
+
+            FormatString(ArrayCount(NewTagMap->Key),
+                         NewTagMap->Key,
                          "Tag_None");
-            FormatString(ArrayCount(AssetsMode->NewTag.Values[0]),
-                         AssetsMode->NewTag.Values[0],
+            FormatString(ArrayCount(NewValue->Value),
+                         NewValue->Value,
                          "None");
+
             AssetsMode->CreatingNewTag = true;
         }
 
@@ -664,11 +690,11 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
 
                 struct nk_rect EditBounds = nk_widget_bounds(Nk);
                 nk_flags Active = nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD,
-                                                                 AssetsMode->NewTag.Key,
-                                                                 ArrayCount(AssetsMode->NewTag.Key),
+                                                                 NewTagMap->Key,
+                                                                 ArrayCount(NewTagMap->Key),
                                                                  nk_filter_ascii);
 
-                if((AssetsMode->NewTag.Key[0] == 0) && (Active & NK_EDIT_INACTIVE))
+                if((NewTagMap->Key[0] == 0) && (Active & NK_EDIT_INACTIVE))
                 {
                     nk_color placeholder = nk_rgba(150, 150, 150, 128);
                     nk_draw_text(nk_window_get_canvas(Nk),
@@ -682,30 +708,58 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                 nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                 if(nk_group_begin(Nk, "Tag Values", NK_WINDOW_TITLE))
                 {
+
+                    nk_layout_row_dynamic(Nk, 30, 2);
+                    if(nk_button_label(Nk, "Add"))
+                    {
+                        new_tag_map_value *NewValue = 0;
+                        if(NewTag->Free)
+                        {
+                            NewValue = NewTag->Free;
+                            NewTag->Free = NewTag->Free->Next; 
+                        }
+                        else
+                        {
+                            NewValue = (new_tag_map_value *)Platform.AllocateMemory(sizeof(new_tag_map_value));
+                        }
+
+                        NewValue->Next = NewTag->ValuesHead.Next;
+                        NewTag->ValuesHead.Next = NewValue;
+
+                        NewTagMap->ValueCount++;
+                    }
+
+                    if(nk_button_label(Nk, "Remove") && (NewTagMap->ValueCount > 1))
+                    {
+                        new_tag_map_value *Remove = NewTag->ValuesHead.Next;
+                        NewTag->ValuesHead.Next = Remove->Next;                        
+                        ZeroStruct(*Remove);
+
+                        Remove->Next = NewTag->Free;
+                        NewTag->Free = Remove;
+
+                        NewTagMap->ValueCount--;
+                    }
+
                     nk_layout_row_begin(Nk, NK_STATIC, 30, 2);
+                    new_tag_map_value *Value = NewTag->ValuesHead.Next;
                     for(u32 I = 0;
-                        I < AssetsMode->NewTag.ValueCount;
+                        I < NewTagMap->ValueCount;
                         ++I)
                     {
+
                         nk_layout_row_push(Nk, 20);
                         Rect = nk_widget_bounds(Nk);
                         nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[1]);
                         nk_labelf(Nk, NK_TEXT_CENTERED, "%d.", I);
                         nk_layout_row_push(Nk, 358);
                         nk_flags Active = nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD,
-                                                                         AssetsMode->NewTag.Values[I],
-                                                                         ArrayCount(AssetsMode->NewTag.Values[I]),
+                                                                         Value->Value,
+                                                                         ArrayCount(Value->Value),
                                                                          nk_filter_ascii);
+                        Value = Value->Next;
                     }
                     nk_layout_row_end(Nk);
-
-                    nk_layout_row_dynamic(Nk, 30, 2);
-                    if(nk_button_label(Nk, "Add") &&
-                       (AssetsMode->NewTag.ValueCount < ArrayCount(AssetsMode->NewTag.Values)))
-                        AssetsMode->NewTag.ValueCount++;
-
-                    if(nk_button_label(Nk, "Remove") && (AssetsMode->NewTag.ValueCount > 0))
-                        AssetsMode->NewTag.ValueCount--;
 
                     nk_group_end(Nk);
                 }

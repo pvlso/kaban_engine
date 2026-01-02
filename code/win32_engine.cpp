@@ -2627,6 +2627,45 @@ internal PLATFORM_WRITE_DATA_TO_FILE(Win32WriteDataToFile)
     }
 }
 
+internal PLATFORM_SEEK_FILE(Win32SeekFile)
+{
+    win32_platform_file_handle *Win32Handle = (win32_platform_file_handle *)Handle->Platform;
+
+    LARGE_INTEGER Pos;
+    Pos.QuadPart = Offset;
+    switch(Op)
+    {
+        case PlatformFileSeek_Set:
+            SetFilePointerEx(Win32Handle, Pos, 0, FILE_BEGIN);
+            break;
+
+        case PlatformFileSeek_Current:
+            SetFilePointerEx(Win32Handle, Pos, 0, FILE_CURRENT);
+            break;
+
+        case PlatformFileSeek_End:
+            Pos.QuadPart = -(s64)Offset;
+            SetFilePointerEx(Win32Handle, Pos, 0, FILE_END);
+            break;
+
+            InvalidDefaultCase;
+    }
+}
+
+internal PLATFORM_FILE_TELL(Win32FileTell)
+{
+    win32_platform_file_handle *Win32Handle = (win32_platform_file_handle *)Handle->Platform;
+
+    u64 Result = 0;
+
+    LARGE_INTEGER Zero = {};
+    LARGE_INTEGER Cur;
+    SetFilePointerEx(Win32Handle, Zero, &Cur, FILE_CURRENT);
+
+    Result = Cur.QuadPart;
+
+    return(Result);
+}
 
 internal PLATFORM_LIST_FILES_IN_DIRECTORY(Win32ListFilesInDirectory)
 {
@@ -3200,6 +3239,8 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
     Memory->PlatformAPI.ReadEntireFile = Win32PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = Win32PlatformWriteEntireFile;
     Memory->PlatformAPI.FreeFileMemory = Win32PlatformFreeFileMemory;
+    Memory->PlatformAPI.FileSeek = Win32SeekFile;
+    Memory->PlatformAPI.FileTell = Win32FileTell;
 
     Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;

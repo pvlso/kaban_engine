@@ -109,6 +109,22 @@ enum assets_mode_action
     AM_AddNewTag         = (1 << 9),
 };
 
+struct new_tag_map_value
+{
+    char Value[KET_TAG_KEY_LENGTH];
+    u64 GUID;
+    
+    new_tag_map_value *Next;
+};
+
+struct new_tag_map
+{
+    kea_tag_map Tag;
+
+    new_tag_map_value ValuesHead;    
+    new_tag_map_value *Free;
+};
+
 struct editor_mode_assets
 {
     b32 AssetsInitialized;
@@ -154,7 +170,7 @@ struct editor_mode_assets
     char **SolidTileFiles;
 
     b32 CreatingNewTag;
-    kea_tag_map NewTag;
+    new_tag_map NewTag;
     
     v2 PixelPosition;
     r32 Time;

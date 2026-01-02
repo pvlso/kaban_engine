@@ -30,8 +30,7 @@ extern "C" {
 #include "engine_types.h"
 #include "engine_defines.h"
     
-//#include "engine_file_formats.h"
-#include "engine_file_formats_.h"
+#include "engine_file_formats.h"
 //#include "engine_asset_new.h"
     
 
@@ -401,6 +400,14 @@ typedef enum platform_file_op
 
 } platform_file_op;
 
+typedef enum platform_file_seek_op
+{
+    PlatformFileSeek_Set,
+    PlatformFileSeek_Current,
+    PlatformFileSeek_End,
+
+} platform_file_seek_op;
+
 #define PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(name) platform_file_group name(platform_file_type Type)
 typedef PLATFORM_GET_ALL_FILE_OF_TYPE_BEGIN(platform_get_all_files_of_type_begin);
 
@@ -415,6 +422,12 @@ typedef PLATFORM_OPEN_FILE(platform_open_file);
 
 #define PLATFORM_CLOSE_FILE(name) void name(platform_file_handle *Handle)
 typedef PLATFORM_CLOSE_FILE(platform_close_file);
+
+#define PLATFORM_SEEK_FILE(name) void name(platform_file_handle *Handle, u64 Offset, platform_file_seek_op Op)
+typedef PLATFORM_SEEK_FILE(platform_seek_file);
+
+#define PLATFORM_FILE_TELL(name) u64 name(platform_file_handle *Handle)
+typedef PLATFORM_FILE_TELL(platform_file_tell);
 
 #define PLATFORM_READ_DATA_FROM_FILE(name) void name(platform_file_handle *Source, u64 Offset, u64 Size, void *Dest)
 typedef PLATFORM_READ_DATA_FROM_FILE(platform_read_data_from_file);
@@ -540,6 +553,9 @@ typedef struct platform_api
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;
+
+    platform_seek_file *FileSeek;
+    platform_file_tell *FileTell;
 
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
