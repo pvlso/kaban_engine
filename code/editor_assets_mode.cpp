@@ -9,20 +9,12 @@
 #include "engine_kea_builder.cpp"
 #include "engine_assets_mode_ui.cpp"
 
-internal b32
-ReadTags(editor_mode_assets *AssetsMode)
+inline void
+DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
 {
-    b32 Result = true;
-    Assert(AssetsMode->StoredHeader.MagicValue);
     ket_header *Header = &AssetsMode->TagHeader;
-
-    // NOTE(pvlso): Deallocate Assets Mode Tags
     if(AssetsMode->TagKeys)
     {
-        for(u32 I = 0; I < Header->TagCount; ++I)
-        {
-            Platform.DeallocateMemory(AssetsMode->TagKeys[I]);
-        }
         Platform.DeallocateMemory(AssetsMode->TagKeys);    
     }
 
@@ -41,6 +33,16 @@ ReadTags(editor_mode_assets *AssetsMode)
 
         Platform.DeallocateMemory(AssetsMode->Tags);
     }
+}
+
+internal b32
+ReadTags(editor_mode_assets *AssetsMode)
+{
+    b32 Result = true;
+    Assert(AssetsMode->StoredHeader.MagicValue);
+    ket_header *Header = &AssetsMode->TagHeader;
+
+    DeallocateAssetsModeTags(AssetsMode);
     
     u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
     u8 TagVersion[4] =
@@ -81,7 +83,7 @@ ReadTags(editor_mode_assets *AssetsMode)
             Map->ValueGUIDs = (u64 *)Platform.AllocateMemory(Tag->ValueCount*sizeof(u64));
             for(u32 J = 0; J < Tag->ValueCount; ++J)
             {
-                Map->Values[I] = (char *)Platform.AllocateMemory(KET_TAG_KEY_LENGTH);
+                Map->Values[J] = (char *)Platform.AllocateMemory(KET_TAG_KEY_LENGTH);
             }
 
             Map->GUID = Tag->GUID;
@@ -513,11 +515,11 @@ AddCurrentAsset(editor_mode_assets *AssetsMode)
 }
 
 inline void
-TagInsertionSort(u32 Count, kea_tag_map *Nodes)
+TagInsertionSort(u32 Count, ket_tag *Nodes)
 {
     for(u32 I = 1; I < Count; ++I)
     {
-        kea_tag_map Node = Nodes[I];
+        ket_tag Node = Nodes[I];
         s32 J = I - 1;
 
         while((J >= 0) && (Node.GUID < Nodes[J].GUID))
@@ -530,11 +532,16 @@ TagInsertionSort(u32 Count, kea_tag_map *Nodes)
     }
 }
 
-internal void
-AddNewTag(editor_mode_assets *AssetsMode)
+enum update_tags_op
 {
+    UpdateTagsOp_AddNew,
+    UpdateTagsOp_Edit,
+    UpdateTagsOp_Remove,
+};
 
-#if 0
+internal void
+UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
+{
     temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
     b32 Result = true;
     Assert(AssetsMode->StoredHeader.MagicValue);
@@ -558,35 +565,117 @@ AddNewTag(editor_mode_assets *AssetsMode)
         Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Write);
     if(PlatformNoFileErrors(&KETHandle))
     {
-        kea_tag_map *ExistingTags = PushArray(TempMem.Arena, Header->TagCount + 1, kea_tag_map);
-        Copy(sizeof(kea_tag_map)*Header->TagCount, AssetsMode->Tags, ExistingTags);
+        ket_tag *ExistingTags = 0;
+        new_tag_map *NewTag = &AssetsMode->NewTag;
 
-        AssetsMode->NewTag.GUID = GUIDFromString(AssetsMode->NewTag.Key);
-        char Buffer[TAG_KEY_LENGTH*2];
-        for(u32 I = 0;
-            I < AssetsMode->NewTag.ValueCount;
-            ++I)
+        char Buffer[KET_TAG_KEY_LENGTH*2];
+
+        Header->TagCount += (Op == UpdateTagsOp_AddNew) ? 1 : 0;
+
+        u32 AllocTagCount = (Op == UpdateTagsOp_Remove) ? (Header->TagCount - 1) : Header->TagCount;
+        ExistingTags = PushArray(TempMem.Arena, AllocTagCount, ket_tag);
+        u64 DataOffset = Header->TagArrayOffset + AllocTagCount*sizeof(ket_tag);
+
+        u32 *TagStringSizes = PushArray(TempMem.Arena, AllocTagCount, u32);
+        char **TagStrings = PushArray(TempMem.Arena, AllocTagCount, char *);
+        u32 IndexDecrement = 0;
+        for(u32 I = 0; I < Header->TagCount; ++I)
         {
-            FormatString(ArrayCount(Buffer), Buffer, "%s%s", AssetsMode->NewTag.Key, AssetsMode->NewTag.Values[I]);
-            AssetsMode->NewTag.ValueGUIDs[I] = GUIDFromString(Buffer);            
+            u32 Index = I - IndexDecrement;
+
+            kea_tag_map *TagMap = AssetsMode->Tags + I;
+            ket_tag *Tag = ExistingTags + Index;
+
+            if(StringsAreEqual(TagMap->Key, "Remove"))
+            {
+                IndexDecrement = 1;
+                continue;
+            }
+
+            Tag->DataOffset = DataOffset;
+            if(((Op == UpdateTagsOp_Edit) && (TagMap->GUID == NewTag->Tag.GUID)) ||
+               ((Op != UpdateTagsOp_Remove) && (I == (Header->TagCount - 1))))
+            {
+                Assert(I == Index);
+
+                NewTag->Tag.GUID = GUIDFromString(NewTag->Tag.Key);
+                TagStringSizes[Index] = NewTag->Tag.ValueCount*KET_TAG_KEY_LENGTH;
+                TagStrings[Index] = PushArray(TempMem.Arena, TagStringSizes[Index], char);
+                NewTag->Tag.ValueGUIDs = PushArray(TempMem.Arena, NewTag->Tag.ValueCount, u64);
+
+                char *TagStringAt = TagStrings[Index];
+                for(u32 ValueIndex = 0;
+                    ValueIndex < NewTag->Tag.ValueCount;
+                    ++ValueIndex)
+                {
+                    new_tag_map_value *Remove = NewTag->ValuesHead.Next;
+                    NewTag->ValuesHead.Next = Remove->Next;                        
+
+                    Remove->Next = NewTag->Free;
+                    NewTag->Free = Remove;
+
+                    Copy(KET_TAG_KEY_LENGTH, Remove->Value, TagStringAt);
+                    TagStringAt += KET_TAG_KEY_LENGTH;
+
+                    FormatString(ArrayCount(Buffer), Buffer, "%s%s", NewTag->Tag.Key, Remove->Value);
+                    NewTag->Tag.ValueGUIDs[ValueIndex] = GUIDFromString(Buffer);
+
+                    ZeroStruct(*Remove);
+                }
+
+                Tag->GUID = NewTag->Tag.GUID;
+                Copy(KET_TAG_KEY_LENGTH, NewTag->Tag.Key, Tag->Key);
+                Tag->ValueCount = NewTag->Tag.ValueCount;
+
+                u32 GUIDsSize = Tag->ValueCount*sizeof(u64);
+                Platform.WriteDataToFile(&KETHandle, Tag->DataOffset, GUIDsSize, NewTag->Tag.ValueGUIDs);
+                DataOffset += GUIDsSize;
+
+                ZeroStruct(NewTag->Tag);
+            }
+            else
+            {
+                TagStringSizes[Index] = TagMap->ValueCount*KET_TAG_KEY_LENGTH;
+                TagStrings[Index] = PushArray(TempMem.Arena, TagStringSizes[Index], char);
+
+                char *TagStringAt = TagStrings[Index];
+                for(u32 ValueIndex = 0;
+                    ValueIndex < TagMap->ValueCount;
+                    ++ValueIndex)
+                {
+                    Copy(KET_TAG_KEY_LENGTH, TagMap->Values[ValueIndex], TagStringAt);
+                    TagStringAt += KET_TAG_KEY_LENGTH;
+                }
+
+                Tag->GUID = TagMap->GUID;
+                Copy(KET_TAG_KEY_LENGTH, TagMap->Key, Tag->Key);
+                Tag->ValueCount = TagMap->ValueCount;
+
+                u32 GUIDsSize = Tag->ValueCount*sizeof(u64);
+                Platform.WriteDataToFile(&KETHandle, Tag->DataOffset, GUIDsSize, TagMap->ValueGUIDs);
+                DataOffset += GUIDsSize;
+            }
+
+            Platform.WriteDataToFile(&KETHandle, DataOffset, TagStringSizes[Index], TagStrings[Index]);
+            DataOffset += TagStringSizes[Index];
         }
 
-        ExistingTags[Header->TagCount] = AssetsMode->NewTag;
-        ++Header->TagCount;
-
+        Header->TagCount -= IndexDecrement;
+        
         TagInsertionSort(Header->TagCount, ExistingTags);
             
         Header->Version = TagFullVersion;
-
         Platform.WriteDataToFile(&KETHandle, 0, sizeof(ket_header), Header);
-        Platform.WriteDataToFile(&KETHandle, Header->TagArrayOffset,
-                                 sizeof(kea_tag_map)*Header->TagCount, ExistingTags);
+        Platform.WriteDataToFile(&KETHandle, sizeof(ket_header), sizeof(ket_tag)*Header->TagCount, ExistingTags);
+
         Platform.CloseFile(&KETHandle);
     }
     else
     {
         // TODO(pvlso): Logging
     }
+    
+    EndTemporaryMemory(TempMem);
 
     u8 StoredVersion[4] =
         {
@@ -609,12 +698,10 @@ AddNewTag(editor_mode_assets *AssetsMode)
         Platform.CloseFile(&KESAHandle);
     }
 
+    AssetsMode->CurrentTagIndex = 0;
+    
     //NOTE(pvlso): Update tags
     ReadTags(AssetsMode);
-    
-    EndTemporaryMemory(TempMem);
-#endif
-    
 }
 
 internal void
@@ -836,8 +923,8 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode,
 
     AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount] = {};
     RemoveAction(AssetsMode, AM_AddAsset); 
-    RemoveAction(AssetsMode, AM_RemoveTag); 
-    RemoveAction(AssetsMode, AM_AddTag); 
+    RemoveAction(AssetsMode, AM_RemoveAssetTag); 
+    RemoveAction(AssetsMode, AM_AddAssetTag); 
 
     AssetsMode->LastTagIndex = 0;
     AssetsMode->CurrentTagIndex = 0;
@@ -1454,14 +1541,18 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 AssetsMode->LastEditMode = AssetsMode->EditMode;            
             }
 
-            if(CheckRemoveAction(AssetsMode, AM_RemoveTag))
+            if(CheckRemoveAction(AssetsMode, AM_RemoveAssetTag))
                 RemoveCurrentAssetTag(AssetsMode, AssetsMode->CurrentAsset);
         
-            if(CheckRemoveAction(AssetsMode, AM_AddTag))
+            if(CheckRemoveAction(AssetsMode, AM_AddAssetTag))
                 AddTagToCurrentAsset(AssetsMode, AssetsMode->CurrentAsset);
 
             if(CheckRemoveAction(AssetsMode, AM_AddNewTag))
-                AddNewTag(AssetsMode);
+                UpdateEditorTags(AssetsMode, UpdateTagsOp_AddNew);
+            else if(CheckRemoveAction(AssetsMode, AM_AddEditedTag))
+                UpdateEditorTags(AssetsMode, UpdateTagsOp_Edit);
+            else if(CheckRemoveAction(AssetsMode, AM_RemoveEditedTag))
+                UpdateEditorTags(AssetsMode, UpdateTagsOp_Remove);
 
             if(IsAction(AssetsMode, AM_AddAsset) &&
                !IsAction(AssetsMode, AM_EditStoredAsset))
@@ -1581,6 +1672,8 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
                                  &EditorState->AudioState);
             Platform.DeallocateMemory(AssetsMode->StoredAssets);
+            DeallocateAssetsModeTags(AssetsMode);
+            
             PlayTitleScreen(EditorState, TranState);
         }
     }

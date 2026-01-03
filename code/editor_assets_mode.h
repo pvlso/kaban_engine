@@ -104,9 +104,12 @@ enum assets_mode_action
     AM_WriteAssets       = (1 << 5),
     
     AM_AddAsset          = (1 << 6),
-    AM_RemoveTag         = (1 << 7),
-    AM_AddTag            = (1 << 8),
+    AM_RemoveAssetTag    = (1 << 7),
+    AM_AddAssetTag       = (1 << 8),
+
     AM_AddNewTag         = (1 << 9),
+    AM_AddEditedTag      = (1 << 10),
+    AM_RemoveEditedTag   = (1 << 11),
 };
 
 struct new_tag_map_value
@@ -170,6 +173,7 @@ struct editor_mode_assets
     char **SolidTileFiles;
 
     b32 CreatingNewTag;
+    b32 EditingTag;
     new_tag_map NewTag;
     
     v2 PixelPosition;

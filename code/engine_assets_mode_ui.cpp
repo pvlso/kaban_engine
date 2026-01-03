@@ -519,7 +519,37 @@ ExtractTagValues(kea_tag_map *Tag, memory_arena *TempArena)
 
     return(Result);
 }
-    
+
+inline new_tag_map_value *
+ClearNewTag(editor_mode_assets *AssetsMode, new_tag_map *NewTag)
+{
+    new_tag_map_value *NewValue = 0;
+
+    for(u32 I = 0; I < NewTag->Tag.ValueCount; ++ I)
+    {
+        new_tag_map_value *Remove = NewTag->ValuesHead.Next;
+        NewTag->ValuesHead.Next = Remove->Next;
+
+        Remove->Next = NewTag->Free->Next;
+        NewTag->Free->Next = Remove;
+    }
+
+    ZeroStruct(AssetsMode->NewTag.Tag);
+    AssetsMode->NewTag.Tag.ValueCount = 1;
+    if(NewTag->Free)
+    {
+        NewValue = NewTag->Free;
+        NewTag->Free = NewValue->Next; 
+    }
+    else
+        NewValue = PushStruct(&AssetsMode->UtilityArena, new_tag_map_value);
+
+    NewValue->Next = NewTag->ValuesHead.Next;
+    NewTag->ValuesHead.Next = NewValue;
+
+    return(NewValue);
+}
+
 inline void
 DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                        kesa_asset *CurrentAsset)
@@ -566,7 +596,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
 
     f32 UIOffsetY = (AssetsMode->EditMode == EditMode_Tileset) ? 70.0f : 0.0f;
     
-    nk_layout_row_static(Nk, 310.0f + UIOffsetY, 450, 1);
+    nk_layout_row_static(Nk, 380.0f + UIOffsetY, 450, 1);
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
@@ -629,48 +659,57 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                              CurrentTag->ValueCount, 30, {460, 460});
 
         if(nk_button_label(Nk, "Add Tag"))
-            AddAction(AssetsMode, AM_AddTag);
+            AddAction(AssetsMode, AM_AddAssetTag);
 
         new_tag_map *NewTag = &AssetsMode->NewTag;
         kea_tag_map *NewTagMap = &NewTag->Tag;
         if(nk_button_label(Nk, "Create New Tag"))
         {
-            for(u32 I = 0; I < NewTag->Tag.ValueCount; ++ I)
-            {
-                new_tag_map_value *Remove = NewTag->ValuesHead.Next;
-                NewTag->ValuesHead.Next = Remove->Next;
-
-                Remove->Next = NewTag->Free->Next;
-                NewTag->Free->Next = Remove;
-            }
-
-            ZeroStruct(AssetsMode->NewTag.Tag);
-            AssetsMode->NewTag.Tag.ValueCount = 1;
-            new_tag_map_value *NewValue = 0;
-            if(NewTag->Free)
-            {
-                NewValue = NewTag->Free;
-                NewTag->Free = NewValue->Next; 
-            }
-            else
-            {
-                NewValue = (new_tag_map_value *)Platform.AllocateMemory(sizeof(new_tag_map_value));
-            }
-
-            NewValue->Next = NewTag->ValuesHead.Next;
-            NewTag->ValuesHead.Next = NewValue;
-
-            FormatString(ArrayCount(NewTagMap->Key),
-                         NewTagMap->Key,
-                         "Tag_None");
-            FormatString(ArrayCount(NewValue->Value),
-                         NewValue->Value,
-                         "None");
+            new_tag_map_value *NewValue = ClearNewTag(AssetsMode, NewTag);
+            FormatString(ArrayCount(NewTagMap->Key), NewTagMap->Key, "Tag_None");
+            FormatString(ArrayCount(NewValue->Value), NewValue->Value, "None");
 
             AssetsMode->CreatingNewTag = true;
         }
 
-        if(AssetsMode->CreatingNewTag)
+        if(nk_button_label(Nk, "Edit Choosen Tag") && (AssetsMode->CurrentTagIndex > 0))
+        {
+            new_tag_map_value *First = ClearNewTag(AssetsMode, NewTag);
+
+            // NOTE(pvlso): Saving GUID here to know what tag to look for when updating the file
+            NewTag->Tag.GUID = CurrentTag->GUID;
+            FormatString(ArrayCount(NewTagMap->Key), NewTagMap->Key, CurrentTag->Key);
+            FormatString(ArrayCount(First->Value), First->Value, CurrentTag->Values[0]);
+
+            for(u32 I = 1; I < CurrentTag->ValueCount; ++I)
+            {
+                new_tag_map_value *NewValue = 0;
+                if(NewTag->Free)
+                {
+                    NewValue = NewTag->Free;
+                    NewTag->Free = NewTag->Free->Next; 
+                }
+                else
+                    NewValue = PushStruct(&AssetsMode->UtilityArena, new_tag_map_value);
+
+                NewValue->Next = NewTag->ValuesHead.Next;
+                NewTag->ValuesHead.Next = NewValue;
+
+                FormatString(ArrayCount(NewValue->Value), NewValue->Value, CurrentTag->Values[I]);
+
+                NewTagMap->ValueCount++;
+            }
+            
+            AssetsMode->EditingTag = true;
+        }
+
+        if(nk_button_label(Nk, "Remove Choosen Tag") && (AssetsMode->CurrentTagIndex > 0))
+        {
+            FormatString(ArrayCount(CurrentTag->Key), CurrentTag->Key, "Remove");
+            AddAction(AssetsMode, AM_RemoveEditedTag);
+        }
+
+        if(AssetsMode->CreatingNewTag || AssetsMode->EditingTag)
         {
             struct nk_rect PopupBounds;
             nk_window *Win = nk_window_find(Nk, "UI Window");
@@ -719,9 +758,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                             NewTag->Free = NewTag->Free->Next; 
                         }
                         else
-                        {
-                            NewValue = (new_tag_map_value *)Platform.AllocateMemory(sizeof(new_tag_map_value));
-                        }
+                            NewValue = PushStruct(&AssetsMode->UtilityArena, new_tag_map_value);
 
                         NewValue->Next = NewTag->ValuesHead.Next;
                         NewTag->ValuesHead.Next = NewValue;
@@ -767,12 +804,20 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
                 nk_layout_row_dynamic(Nk, 30, 2);
                 if(nk_button_label(Nk, "Save"))
                 {
+                    if(AssetsMode->EditingTag)
+                        AddAction(AssetsMode, AM_AddEditedTag);
+                    else
+                        AddAction(AssetsMode, AM_AddNewTag);
+                        
                     AssetsMode->CreatingNewTag = false;
-                    AddAction(AssetsMode, AM_AddNewTag);
+                    AssetsMode->EditingTag = false;
                 }
 
                 if(nk_button_label(Nk, "Close"))
+                {
                     AssetsMode->CreatingNewTag = false;
+                    AssetsMode->EditingTag = false;
+                }
 
                 Nk->style.window.fixed_background.data.color.a = 0;
                 nk_popup_end(Nk);
@@ -783,7 +828,7 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -314 - UIOffsetY, 450, 275});
+    nk_layout_space_push(Nk, {1460, -384 - UIOffsetY, 450, 275});
     Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
     if(nk_group_begin(Nk, "Stored Asset Attributes", NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
@@ -841,14 +886,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_labelf(Nk, NK_TEXT_CENTERED, "Value: %s", CurrentTag->Values[StoredTag.TagValueIndex]);
 
         if(nk_button_label(Nk, "Remove Current Tag"))
-            AddAction(AssetsMode, AM_RemoveTag);
+            AddAction(AssetsMode, AM_RemoveAssetTag);
         
         nk_group_end(Nk);
     }
     nk_layout_space_end(Nk);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {-5, 690 - UIOffsetY, 450, 50});
+    nk_layout_space_push(Nk, {-5, 620 - UIOffsetY, 450, 50});
     if(nk_group_begin(Nk, "Actions", NK_WINDOW_NO_SCROLLBAR))
     {        
         nk_layout_row_dynamic(Nk, 40, 2);
