@@ -76,7 +76,7 @@ struct kea_builder
 
     ket_header *KETHeader;
     kea_tag_map *TagMaps;
-
+    
     u32 TagCount;
     kea_builder_tag_list *Tags;
     kea_builder_tag_list *CurrentTag;

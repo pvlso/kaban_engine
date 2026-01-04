@@ -332,13 +332,36 @@ BuilderWriteKEA(kea_builder *Builder)
         Header.AssetTypeCount = KEAType_Count;
         Header.AssetCount = Builder->AssetCount;
 
-        u32 TagMapArraySize = Header.TagCount*sizeof(kea_tag_map);
+        u32 TagMapArraySize = Header.TagCount*sizeof(ket_tag);
         u32 UsedTagsArraySize = Header.UsedTagsCount*sizeof(kea_tag);
         u32 AssetTypeArraySize = Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
         u32 AssetArraySize = Header.AssetCount*sizeof(kea_asset);
         
         Header.TagMapsOffset = sizeof(Header);
-        Header.UsedTagsArrayOffset = Header.TagMapsOffset + TagMapArraySize;
+
+        ket_tag *KETTags = (ket_tag *)PushSize(Builder->TempMem, TagMapArraySize);
+        fseek(Out, (u32)(Header.TagMapsOffset + TagMapArraySize), SEEK_SET);
+        for(u32 TagMapIndex = 0;
+            TagMapIndex < Header.TagCount;
+            ++TagMapIndex)
+        {
+            kea_tag_map *TagMap = Builder->TagMaps + TagMapIndex;
+            ket_tag *Tag = KETTags + TagMapIndex;
+            Tag->GUID = TagMap->GUID;
+            Copy(KET_TAG_KEY_LENGTH, TagMap->Key, Tag->Key);
+            Tag->ValueCount = TagMap->ValueCount;
+            Tag->DataOffset = ftell(Out);
+
+            fwrite(TagMap->ValueGUIDs, Tag->ValueCount*sizeof(u64), 1, Out);
+            for(u32 StringIndex = 0;
+                StringIndex < Tag->ValueCount;
+                ++StringIndex)
+            {
+                fwrite(TagMap->Values[StringIndex], KET_TAG_KEY_LENGTH, 1, Out);
+            }
+        }
+
+        Header.UsedTagsArrayOffset = ftell(Out);
         Header.AssetTypeTableOffset = Header.UsedTagsArrayOffset + UsedTagsArraySize;
 
         u32 AssetTypeTableSize = 0;
@@ -351,8 +374,10 @@ BuilderWriteKEA(kea_builder *Builder)
 
         Header.AssetsOffset = Header.AssetTypeTableOffset + AssetTypeArraySize + AssetTypeTableSize;
         
-        fwrite(&Header, sizeof(Header), 1, Out);
-        fwrite(Builder->TagMaps, TagMapArraySize, 1, Out);
+        fseek(Out, 0, SEEK_SET);
+        fwrite(&Header, sizeof(kea_header), 1, Out);
+        fwrite(KETTags, TagMapArraySize, 1, Out);
+        fseek(Out, (u32)Header.UsedTagsArrayOffset, SEEK_SET);
 
         kea_tag *UsedTags = PushArray(Builder->TempMem, Builder->TagCount, kea_tag);
         kea_builder_tag_list *Itter = Builder->Tags->Next;
@@ -374,7 +399,7 @@ BuilderWriteKEA(kea_builder *Builder)
 
         fseek(Out, (u32)Header.AssetTypeTableOffset, SEEK_SET);
         fwrite(Builder->AssetTypeTable, AssetTypeArraySize, 1, Out);
-        fseek(Out, AssetTypeArraySize + AssetTypeTableSize + AssetArraySize, SEEK_CUR);
+        fseek(Out, (u32)Header.AssetsOffset + AssetArraySize, SEEK_SET);
 
         for(u32 AssetIndex = 1;
             AssetIndex < Header.AssetCount;

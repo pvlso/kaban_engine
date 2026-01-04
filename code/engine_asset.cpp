@@ -772,7 +772,7 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
 
     Assets->TagCount = 1;
     Assets->AssetCount = 1;
-
+#if 0
     {
         platform_file_group FileGroup = Platform.GetAllFilesOfTypeBegin(PlatformFileType_KEA);
         Assets->FileCount = FileGroup.FileCount;
@@ -834,7 +834,6 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
                 InvalidCodePath;
             }
         }
-
         Platform.GetAllFilesOfTypeEnd(&FileGroup);
     }
 
@@ -868,6 +867,7 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
         }
         EndTemporaryMemory(TempMem);
     }
+#endif
     
     return(Assets);
 }

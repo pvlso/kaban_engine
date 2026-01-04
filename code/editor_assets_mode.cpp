@@ -1521,7 +1521,8 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         {
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
-                ClearEditModeData(EditorState, AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
+                if(AssetsMode->CurrentAsset)
+                    ClearEditModeData(EditorState, AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 RemoveAction(AssetsMode, AM_EditStoredAsset);
 
                 if(AssetsMode->LastEditMode == EditMode_None)
