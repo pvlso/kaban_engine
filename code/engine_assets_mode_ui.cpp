@@ -530,8 +530,10 @@ ClearNewTag(editor_mode_assets *AssetsMode, new_tag_map *NewTag)
         new_tag_map_value *Remove = NewTag->ValuesHead.Next;
         NewTag->ValuesHead.Next = Remove->Next;
 
-        Remove->Next = NewTag->Free->Next;
-        NewTag->Free->Next = Remove;
+        ZeroStruct(*Remove);
+        
+        Remove->Next = NewTag->Free;
+        NewTag->Free = Remove;
     }
 
     ZeroStruct(AssetsMode->NewTag.Tag);

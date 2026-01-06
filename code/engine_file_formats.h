@@ -168,8 +168,6 @@ enum kea_asset_type
 
 struct kea_tag
 {
-    u32 Index;
-    u32 ValueIndex;
     u64 GUID;
 };
 
@@ -178,6 +176,23 @@ struct kea_asset_type_table_entry
     u32 Type;
     u32 TypeCount;
     u64 AssetsIndeciesOffset;
+};
+
+struct kea_tag_lookup_entry
+{
+    u64 GUID;
+
+    u32 TagIndex;
+    u32 TagValueIndex;
+
+    u32 AssetsFirstIndex;
+    u32 Count;
+};
+
+struct kea_tag_hash_table
+{
+    u32 Capacity;
+    u64 TableOffset;
 };
 
 struct kea_header
@@ -190,6 +205,10 @@ struct kea_header
 
     u32 UsedTagsCount;
     u64 UsedTagsArrayOffset; // NOTE(pvlso): array of kea_tag
+
+    kea_tag_hash_table HashTable;
+    u32 TagedAssetsIndeciesCount;
+    u64 TagedAssetsIndeciesOffset; // NOTE(pvlso): array of asset indecies for kea_tag_lookup
     
     u32 AssetTypeCount;
     u64 AssetTypeTableOffset; // NOTE(pvlso): Sorted array of kea_asset_type_table_entry by Type -> enum

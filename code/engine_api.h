@@ -32,11 +32,9 @@ struct engine_api
 
     u32 (*BeginGeneration)(engine_assets *Assets);
     void (*EndGeneration)(engine_assets *Assets, u32 GenerationID);
-
-    engine_assets *Assets;
 };
 
-#define ARKHAM_UPDATE_AND_RENDER(name) void name(engine_api EngineAPI, editor_render_commands *Commands, \
+#define ARKHAM_UPDATE_AND_RENDER(name) void name(engine_api EngineAPI, engine_assets *Assets, editor_render_commands *Commands, \
                                                  nk_context *Nk, u32 RenderWidth, u32 RenderHeight)
 typedef ARKHAM_UPDATE_AND_RENDER(arkham_update_and_render);
 

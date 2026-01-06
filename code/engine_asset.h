@@ -101,6 +101,15 @@ struct asset_memory_block
     umm Size;
 };
 
+struct assets_tag_table
+{
+    u32 TagedAssetsIndeciesCount;
+    u32 *TagedAssetsIndecies;
+
+    u32 Capacity;
+    kea_tag_lookup_entry *Entries;
+};
+
 struct engine_assets
 {
     platform_texture_op_queue *TextureOpQueue;
@@ -113,8 +122,7 @@ struct engine_assets
     asset_memory_block MemorySentinel;
     asset_memory_header LoadedAssetSentinel;
 
-    u32 FileCount;
-    asset_file *Files;
+    asset_file File;
 
     u32 TagMapCount;
     kea_tag_map *TagMaps;
@@ -124,6 +132,8 @@ struct engine_assets
 
     kea_asset_type_table_entry *TypeTable;
     u32 *TypeTableData[KEAType_Count];
+
+    assets_tag_table TagTable;
     
     u32 AssetCount;
     asset *Assets;

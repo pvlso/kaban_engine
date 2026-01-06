@@ -65,6 +65,13 @@ struct kea_builder_tag_list
     kea_builder_tag_list *Next;
 };
 
+struct kea_builder_tag_lookup_entry_list
+{
+    kea_tag_lookup_entry Entry;
+    u32 IndexOffset;
+    kea_builder_tag_lookup_entry_list *Next;
+};
+
 struct kea_builder
 {
     memory_arena *TempMem;
@@ -80,9 +87,18 @@ struct kea_builder
     u32 TagCount;
     kea_builder_tag_list *Tags;
     kea_builder_tag_list *CurrentTag;
+    kea_tag *UsedTags;
 
     kea_asset_type_table_entry *AssetTypeTable;
     u32 **AssetTypeTableData;
+
+    u32 EntryCount;
+    kea_builder_tag_lookup_entry_list TagTable;    
+    kea_tag_hash_table TagHashTable;
+    kea_tag_lookup_entry *TableData;
+
+    u32 TagAssetsIndeciesCount;
+    u32 *TagAssetsIndecies;
     
     u32 AssetCount;
     kea_builder_added_asset_list *BuilderAssets;

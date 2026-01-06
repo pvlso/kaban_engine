@@ -99,23 +99,6 @@ internal PLATFORM_WORK_QUEUE_CALLBACK(LoadAssetWork)
     EndTaskWithMemory(Work->Task);
 }
 
-inline asset_file *
-GetFile(engine_assets *Assets, u32 FileIndex)
-{
-    Assert(FileIndex < Assets->FileCount);
-    asset_file *Result = Assets->Files + FileIndex;
-
-    return(Result);
-}
-
-inline platform_file_handle *
-GetFileHandleFor(engine_assets *Assets, u32 FileIndex)
-{
-    platform_file_handle *Result = &GetFile(Assets, FileIndex)->Handle;
-
-    return(Result);
-}
-
 internal asset_memory_block *
 InsertBlock(asset_memory_block *Prev, u64 Size, void *Memory)
 {
@@ -489,7 +472,7 @@ LoadAsset(engine_assets *Assets, asset_header_type HType, u64 GUID, b32 Immediat
                 load_asset_work Work;
                 Work.Task = Task;
                 Work.Asset = Assets->Assets + Asset->KEA.AssetIndex;
-                Work.Handle = GetFileHandleFor(Assets, Asset->FileIndex);
+                Work.Handle = &Assets->File.Handle;
                 Work.Offset = Asset->KEA.DataOffset;
                 Work.Size = PreAsset.Size.Data;
 
@@ -737,7 +720,7 @@ GetBestMatchFileFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *
 #endif
 
 internal engine_assets *
-AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQueue,
+AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena, umm Size, platform_work_queue *LowPriorityQueue,
                platform_texture_op_queue *TextureOpQueue)
 {
 //    TIMED_FUNCTION();
@@ -772,102 +755,127 @@ AllocateAssets(memory_arena *Arena, umm Size, platform_work_queue *LowPriorityQu
 
     Assets->TagCount = 1;
     Assets->AssetCount = 1;
-#if 0
-    {
-        platform_file_group FileGroup = Platform.GetAllFilesOfTypeBegin(PlatformFileType_KEA);
-        Assets->FileCount = FileGroup.FileCount;
-        Assets->Files = PushArray(Arena, Assets->FileCount, asset_file);
-        for(u32 FileIndex = 0;
-            FileIndex < Assets->FileCount; // TODO(pvlso): Merge multiple files
-            ++FileIndex)
-        {
-            asset_file *File = Assets->Files + FileIndex;
 
-            ZeroStruct(File->Header);
-            File->Handle = Platform.OpenNextFile(&FileGroup);
-            Platform.ReadDataFromFile(&File->Handle, 0, sizeof(File->Header), &File->Header);
+    Assets->File.Handle = Platform.OpenFile(AssetFileName, PlatformFileType_KEA, PlatformFileOp_Read);
+
+    asset_file *File = &Assets->File;
+    ZeroStruct(File->Header);
+    Platform.ReadDataFromFile(&File->Handle, 0, sizeof(File->Header), &File->Header);
             
-            if(File->Header.MagicValue != KEA_MAGIC_VALUE)
-            {
-                Platform.FileError(&File->Handle, "KEA file has an invalid magic value.");
-            }
-
-            u32 TagMapsSize = File->Header.TagCount*sizeof(kea_tag_map);
-            Assets->TagMapCount = File->Header.TagCount;
-            Assets->TagMaps = (kea_tag_map *)PushSize(Arena, TagMapsSize);
-            Platform.ReadDataFromFile(&File->Handle, File->Header.TagMapsOffset,
-                                      TagMapsSize, Assets->TagMaps);
-
-            u32 TagsSize = File->Header.UsedTagsCount*sizeof(kea_tag);
-            Assets->Tags = (kea_tag *)PushSize(Arena, TagsSize);
-            Platform.ReadDataFromFile(&File->Handle, File->Header.UsedTagsArrayOffset,
-                                      TagsSize, Assets->Tags);
-
-            u32 AssetTypeTableSize = File->Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
-            Assets->TypeTable = (kea_asset_type_table_entry *)PushSize(Arena, AssetTypeTableSize);
-            Platform.ReadDataFromFile(&File->Handle, File->Header.AssetTypeTableOffset,
-                                      AssetTypeTableSize, Assets->TypeTable);
-
-            for(u32 Type = 0;
-                Type < KEAType_Count;
-                ++Type)
-            {
-                kea_asset_type_table_entry *TypeEntry = Assets->TypeTable + Type;
-                u32 TypeDataSize = TypeEntry->TypeCount*sizeof(u32);
-
-                Assets->TypeTableData[Type] = (u32 *)PushSize(Arena, TypeDataSize);
-                Platform.ReadDataFromFile(&File->Handle, TypeEntry->AssetsIndeciesOffset,
-                                          TypeDataSize, Assets->TypeTableData[Type]);
-            }
-
-            if(PlatformNoFileErrors(&File->Handle))
-            {
-                // NOTE(casey): The first asset and tag slot in every
-                // KEA is a null (reserved) so we don't count it as
-                // something we will need space for!
-                Assets->TagCount += (File->Header.UsedTagsCount - 1);
-                Assets->AssetCount += (File->Header.AssetCount - 1);
-            }
-            else
-            {
-                // TODO(casey): Eventually, have some way of notifying users of bogus files?
-                InvalidCodePath;
-            }
-        }
-        Platform.GetAllFilesOfTypeEnd(&FileGroup);
-    }
-
-    if(Assets->FileCount)
+    if(PlatformNoFileErrors(&File->Handle))
     {
-        asset_file *File = Assets->Files + 0;
-        // NOTE(casey): Allocate all metadata space
-        Assets->Assets = PushArray(Arena, Assets->AssetCount, asset);
-        Assets->Tags = PushArray(Arena, Assets->TagCount, kea_tag);
-
-        // NOTE(casey): Reserve one null tag at the beginning
-        ZeroStruct(Assets->Tags[0]);
-
-        // NOTE(casey): Reserve one null asset at the beginning
-        u32 AssetCount = 0;
-        ZeroStruct(*(Assets->Assets + AssetCount));
-        ++AssetCount;
-
-        temporary_memory TempMem = BeginTemporaryMemory(Arena);
-        kea_asset *KEAAssetArray = PushArray(TempMem.Arena, Assets->AssetCount, kea_asset);
-
-        Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,
-                                  Assets->AssetCount*sizeof(kea_asset),
-                                  KEAAssetArray);
-        for(u32 AssetIndex = 0;
-            AssetIndex < Assets->AssetCount;
-            ++AssetIndex)
+        if(File->Header.MagicValue != KEA_MAGIC_VALUE)
         {
-            asset *Asset = Assets->Assets + AssetIndex;
-            Asset->KEA = KEAAssetArray[AssetIndex];
+            Platform.FileError(&File->Handle, "KEA file has an invalid magic value.");
         }
-        EndTemporaryMemory(TempMem);
+
+        Assets->TagMapCount = File->Header.TagCount;
+        Assets->TagMaps = PushArray(Arena, Assets->TagMapCount, kea_tag_map);
+
+        u32 RawTagsSize = File->Header.TagCount*sizeof(ket_tag);
+        ket_tag *RawTags = PushArray(TempArena, Assets->TagMapCount, ket_tag);
+        Platform.ReadDataFromFile(&File->Handle, File->Header.TagMapsOffset,
+                                  RawTagsSize, RawTags);
+        for(u32 TagIndex = 0;
+            TagIndex < Assets->TagMapCount;
+            ++TagIndex)
+        {
+            ket_tag *RawTag = RawTags + TagIndex;
+            kea_tag_map *Map = Assets->TagMaps + TagIndex;
+
+            Map->GUID = RawTag->GUID;
+            Copy(KET_TAG_KEY_LENGTH, RawTag->Key, Map->Key);
+            Map->ValueCount = RawTag->ValueCount;
+
+            Map->Values = PushArray(Arena, Map->ValueCount, char *);
+            Map->ValueGUIDs = PushArray(Arena, Map->ValueCount, u64);
+        
+            u32 ValueGUIDsSize = Map->ValueCount*sizeof(u64);
+            Platform.ReadDataFromFile(&File->Handle, RawTag->DataOffset, ValueGUIDsSize, Map->ValueGUIDs);
+
+            u64 TagValuesOffset = RawTag->DataOffset + ValueGUIDsSize;
+            u32 StringSize = KET_TAG_KEY_LENGTH*Map->ValueCount;
+            char *TagsString = PushArray(TempArena, StringSize, char);
+            Platform.ReadDataFromFile(&File->Handle, TagValuesOffset, StringSize, TagsString);
+
+            char *StringAt = TagsString;
+            for(u32 StringIndex = 0;
+                StringIndex < Map->ValueCount;
+                ++StringIndex)
+            {
+                Map->Values[StringIndex] = PushArray(Arena, KET_TAG_KEY_LENGTH, char);
+                Copy(KET_TAG_KEY_LENGTH, StringAt, Map->Values[StringIndex]);
+                StringAt += KET_TAG_KEY_LENGTH;
+            }
+        }
+
+        Assets->TagTable.TagedAssetsIndeciesCount = File->Header.TagedAssetsIndeciesCount;
+        Assets->TagTable.Capacity = File->Header.HashTable.Capacity;
+
+        u32 TagTableEntriesSize = Assets->TagTable.Capacity*sizeof(kea_tag_lookup_entry);
+        Assets->TagTable.Entries = (kea_tag_lookup_entry *)PushSize(Arena, TagTableEntriesSize);
+        Platform.ReadDataFromFile(&File->Handle, File->Header.HashTable.TableOffset,
+                                  TagTableEntriesSize, Assets->TagTable.Entries);
+    
+        u32 TagedAssetsIndeciesSize = Assets->TagTable.TagedAssetsIndeciesCount*sizeof(u32);
+        Assets->TagTable.TagedAssetsIndecies = (u32 *)PushSize(Arena, TagedAssetsIndeciesSize);
+        Platform.ReadDataFromFile(&File->Handle, File->Header.TagedAssetsIndeciesOffset,
+                                  TagedAssetsIndeciesSize, Assets->TagTable.TagedAssetsIndecies);
+
+        u32 AssetTypeTableSize = File->Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
+        Assets->TypeTable = (kea_asset_type_table_entry *)PushSize(Arena, AssetTypeTableSize);
+        Platform.ReadDataFromFile(&File->Handle, File->Header.AssetTypeTableOffset,
+                                  AssetTypeTableSize, Assets->TypeTable);
+
+        for(u32 Type = 0;
+            Type < KEAType_Count;
+            ++Type)
+        {
+            kea_asset_type_table_entry *TypeEntry = Assets->TypeTable + Type;
+            u32 TypeDataSize = TypeEntry->TypeCount*sizeof(u32);
+
+            Assets->TypeTableData[Type] = (u32 *)PushSize(Arena, TypeDataSize);
+            Platform.ReadDataFromFile(&File->Handle, TypeEntry->AssetsIndeciesOffset,
+                                      TypeDataSize, Assets->TypeTableData[Type]);
+        }
+
+        if(PlatformNoFileErrors(&File->Handle))
+        {
+            Assets->TagCount = File->Header.UsedTagsCount;
+            Assets->AssetCount = File->Header.AssetCount;
+
+            // NOTE(casey): Allocate all metadata space
+            Assets->Assets = PushArray(Arena, Assets->AssetCount, asset);
+            Assets->Tags = PushArray(Arena, Assets->TagCount, kea_tag);
+
+            u32 UsedTagsSize = File->Header.UsedTagsCount*sizeof(kea_tag);
+            Assets->Tags = (kea_tag *)PushSize(Arena, UsedTagsSize);
+            Platform.ReadDataFromFile(&File->Handle, File->Header.UsedTagsArrayOffset,
+                                      UsedTagsSize, Assets->Tags);
+
+            kea_asset *KEAAssetArray = PushArray(TempArena, Assets->AssetCount, kea_asset);
+
+            Platform.ReadDataFromFile(&File->Handle, File->Header.AssetsOffset,
+                                      Assets->AssetCount*sizeof(kea_asset),
+                                      KEAAssetArray);
+            for(u32 AssetIndex = 0;
+                AssetIndex < Assets->AssetCount;
+                ++AssetIndex)
+            {
+                asset *Asset = Assets->Assets + AssetIndex;
+                Asset->KEA = KEAAssetArray[AssetIndex];
+            }
+        }
+        else
+        {
+            // TODO(casey): Eventually, have some way of notifying users of bogus files?
+            InvalidCodePath;
+        }
     }
-#endif
+    else
+    {
+        // TODO(pvlso): Popup faild to open an asset file with message
+    }
     
     return(Assets);
 }

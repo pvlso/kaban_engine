@@ -209,5 +209,36 @@ GUIDFromString(char *s)
     return(Result); 
 }
 
+inline u64
+HashU64(u64 x)
+{
+    x ^= x >> 30;
+    x *= 0xbf58476d1ce4e5b9ULL;
+    x ^= x >> 27;
+    x *= 0x94d049bb133111ebULL;
+    x ^= x >> 31;
+
+    return(x);
+}
+
+inline u32
+NextPow2(u32 X)
+{
+    u32 Result = 1;
+    if(X > 1)
+    {
+        X -= 1;
+        X |= X >> 1;
+        X |= X >> 2;
+        X |= X >> 4;
+        X |= X >> 8;
+        X |= X >> 16;
+
+        Result = X + 1;
+    }
+
+    return(Result);
+}
+
 #define ENGINE_SHARED_H
 #endif

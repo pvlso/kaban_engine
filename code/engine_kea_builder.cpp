@@ -27,6 +27,7 @@ InitKEABuilder(editor_mode_assets *AssetsMode, memory_arena *TempMem)
     KEABuilder->TagMaps = AssetsMode->Tags;
 
     KEABuilder->Tags = PushStruct(TempMem, kea_builder_tag_list);
+    KEABuilder->TagCount = 1;
     KEABuilder->BuilderAssets = PushStruct(TempMem, kea_builder_added_asset_list);
 
     return(KEABuilder);
@@ -55,13 +56,6 @@ GetTagMapByGUID(kea_tag_map *TagMaps, u32 Count, u64 GUID)
     }
 
     return(ResultIndex);
-}
-
-inline u64
-GetTagGUID(kea_builder *Builder, kea_tag Tag)
-{
-    u64 Result = Builder->TagMaps[Tag.Index].ValueGUIDs[Tag.ValueIndex];
-    return(Result);
 }
 
 inline kea_builder_added_asset_list *
@@ -283,20 +277,40 @@ AddTag(kea_builder *Builder, u32 TagIndex, u32 TagValueIndex, u64 TagGUID)
     ++Asset->OnePastLastTagIndex;
     Builder->CurrentTag = PushStruct(Builder->TempMem, kea_builder_tag_list);
     Builder->CurrentTag->TagIndex = Builder->TagCount;
-    Builder->CurrentTag->Tag.Index = TagIndex;
-    Builder->CurrentTag->Tag.ValueIndex = TagValueIndex;
     Builder->CurrentTag->Tag.GUID = TagGUID;
     ++Builder->TagCount;
 
+    kea_builder_tag_lookup_entry_list *Search = Builder->TagTable.Next;    
+    b32 Found = false;
+    while(Search)
+    {
+        if(Search->Entry.GUID == TagGUID)
+        {
+            Search->Entry.Count += 1;
+            Found = true;
+            break;
+        }
+
+        Search = Search->Next;
+    }
+
+    if(!Found)
+    {
+        kea_builder_tag_lookup_entry_list *TagEntry = PushStruct(Builder->TempMem, kea_builder_tag_lookup_entry_list);    
+        TagEntry->Entry.GUID = TagGUID;
+        TagEntry->Entry.TagIndex = TagIndex;
+        TagEntry->Entry.TagValueIndex = TagValueIndex;
+        TagEntry->Entry.Count = 1;
+
+        TagEntry->Next = Builder->TagTable.Next;
+        Builder->TagTable.Next = TagEntry;    
+
+        ++Builder->EntryCount;
+    }
+    
     Builder->CurrentTag->Next = Builder->Tags->Next;
     Builder->Tags->Next = Builder->CurrentTag;
     Builder->CurrentTag = 0;
-}
-
-inline void
-AddTag(kea_builder *Builder, kea_tag Tag)
-{
-    AddTag(Builder, Tag.Index, Tag.ValueIndex, Tag.GUID);
 }
 
 inline void
@@ -308,7 +322,7 @@ AddStoredAssetTags(kea_builder *Builder, kesa_asset *StoredAsset)
     {
         kesa_tag Tag = StoredAsset->AssetTags[I];
         u32 TagIndex = GetTagMapByGUID(Builder->TagMaps, Builder->KETHeader->TagCount, Tag.TagGUID);
-        AddTag(Builder, TagIndex, Tag.TagValueIndex, Tag.TagGUID);
+        AddTag(Builder, TagIndex, Tag.TagValueIndex, Builder->TagMaps[TagIndex].ValueGUIDs[Tag.TagValueIndex]);
     }    
 }
 
@@ -318,7 +332,7 @@ BuilderWriteKEA(kea_builder *Builder)
     kesa_header *KESAHeader = Builder->KESAHeader;
 
     char KEAFileName[256];
-    FormatString(ArrayCount(KEAFileName), KEAFileName, "game_data_%d.kea",
+    FormatString(ArrayCount(KEAFileName), KEAFileName, "../data/keas/game_data_%d.kea",
                  KESAHeader->Version);
     FILE *Out;
     fopen_s(&Out, KEAFileName, "wb");
@@ -329,11 +343,15 @@ BuilderWriteKEA(kea_builder *Builder)
         Header.Version = KESAHeader->Version;
         Header.TagCount = Builder->KETHeader->TagCount;
         Header.UsedTagsCount = Builder->TagCount;
+        Header.HashTable = Builder->TagHashTable;
+        Header.TagedAssetsIndeciesCount = Builder->TagAssetsIndeciesCount;
         Header.AssetTypeCount = KEAType_Count;
         Header.AssetCount = Builder->AssetCount;
 
         u32 TagMapArraySize = Header.TagCount*sizeof(ket_tag);
         u32 UsedTagsArraySize = Header.UsedTagsCount*sizeof(kea_tag);
+        u32 TagHashTableDataSize = Header.HashTable.Capacity*sizeof(kea_tag_lookup_entry);
+        u32 TagAssetsIndeciesSize = Header.TagedAssetsIndeciesCount*sizeof(u32);
         u32 AssetTypeArraySize = Header.AssetTypeCount*sizeof(kea_asset_type_table_entry);
         u32 AssetArraySize = Header.AssetCount*sizeof(kea_asset);
         
@@ -362,7 +380,9 @@ BuilderWriteKEA(kea_builder *Builder)
         }
 
         Header.UsedTagsArrayOffset = ftell(Out);
-        Header.AssetTypeTableOffset = Header.UsedTagsArrayOffset + UsedTagsArraySize;
+        Header.HashTable.TableOffset = Header.UsedTagsArrayOffset + UsedTagsArraySize;
+        Header.TagedAssetsIndeciesOffset = Header.HashTable.TableOffset + TagHashTableDataSize;
+        Header.AssetTypeTableOffset = Header.TagedAssetsIndeciesOffset + TagAssetsIndeciesSize;
 
         u32 AssetTypeTableSize = 0;
         for(u32 Type = 0;
@@ -378,15 +398,9 @@ BuilderWriteKEA(kea_builder *Builder)
         fwrite(&Header, sizeof(kea_header), 1, Out);
         fwrite(KETTags, TagMapArraySize, 1, Out);
         fseek(Out, (u32)Header.UsedTagsArrayOffset, SEEK_SET);
-
-        kea_tag *UsedTags = PushArray(Builder->TempMem, Builder->TagCount, kea_tag);
-        kea_builder_tag_list *Itter = Builder->Tags->Next;
-        while(Itter)
-        {
-            UsedTags[Itter->TagIndex] = Itter->Tag;
-            Itter = Itter->Next;
-        }
-        fwrite(UsedTags, UsedTagsArraySize, 1, Out);
+        fwrite(Builder->UsedTags, UsedTagsArraySize, 1, Out);
+        fwrite(Builder->TableData, TagHashTableDataSize, 1, Out);
+        fwrite(Builder->TagAssetsIndecies, TagAssetsIndeciesSize, 1, Out);
 
         fseek(Out, AssetTypeArraySize, SEEK_CUR);
         for(u32 Type = 0;
@@ -498,6 +512,25 @@ BuilderWriteKEA(kea_builder *Builder)
     }
 }
 
+internal inline void
+TagTableInsert(kea_tag_lookup_entry *Table, u32 Capacity, kea_tag_lookup_entry Entry)
+{
+    u32 Mask = Capacity - 1;
+    u32 Index = (u32)HashU64(Entry.GUID) & Mask;
+    for(;;)
+    {
+        kea_tag_lookup_entry *Insert = Table + Index;
+        if(Insert->GUID == 0)
+        {
+            Copy(sizeof(kea_tag_lookup_entry), &Entry, Insert);
+            break;
+        }
+
+        Assert(Insert->GUID != Entry.GUID);
+        Index = (Index + 1) & Mask;
+    }
+}
+
 internal b32
 BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 {
@@ -603,6 +636,68 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
         Builder->AssetTypeTableData[Type][Itters[Type]++] = Asset->KEAAsset.AssetIndex; 
     }
 
+    Builder->UsedTags = PushArray(Builder->TempMem, Builder->TagCount, kea_tag);
+    kea_builder_tag_list *Itter = Builder->Tags->Next;
+    while(Itter)
+    {
+        Builder->UsedTags[Itter->TagIndex] = Itter->Tag;
+        Itter = Itter->Next;
+    }
+
+    // NOTE(pvlso): count how many asset indecies we need
+    u32 IndeciesArrayCount = 0;
+    kea_builder_tag_lookup_entry_list *Search = Builder->TagTable.Next;    
+    while(Search)
+    {
+        Search->Entry.AssetsFirstIndex = IndeciesArrayCount;
+        IndeciesArrayCount += Search->Entry.Count;
+        Search = Search->Next;
+    }
+
+    // NOTE(pvlso): Fill the index array
+    Builder->TagAssetsIndeciesCount = IndeciesArrayCount;
+    Builder->TagAssetsIndecies = PushArray(Builder->TempMem, Builder->TagAssetsIndeciesCount, u32);
+    u32 FirstIndex = 0;
+    for(u32 I = 0;
+        I < SortedCount;
+        ++I)
+    {
+        kea_builder_added_asset_list *Asset = Builder->SortedBuilderAssets[I];
+        kea_asset *KEA = &Asset->KEAAsset;
+        for(u32 TagIndex = KEA->FirstTagIndex;
+            TagIndex < KEA->OnePastLastTagIndex;
+            ++TagIndex)
+        {
+            u64 TagGUID = Builder->UsedTags[TagIndex].GUID;
+            kea_builder_tag_lookup_entry_list *Search = Builder->TagTable.Next;    
+            while(Search)
+            {
+                if(Search->Entry.GUID == TagGUID)
+                {
+                    Assert(Search->IndexOffset < Search->Entry.Count);
+
+                    Builder->TagAssetsIndecies[Search->Entry.AssetsFirstIndex + Search->IndexOffset] = KEA->AssetIndex;
+                    Search->IndexOffset += 1;
+                    break;
+                }
+
+                Search = Search->Next;
+            }
+        }
+    }
+
+    // NOTE(pvlso): Build tag hash table
+    u32 HashTableCapacity = NextPow2(CeilReal32ToInt32((f32)Builder->EntryCount / 0.7f));
+    Builder->TagHashTable.Capacity = HashTableCapacity;
+    Builder->TableData = PushArray(Builder->TempMem, HashTableCapacity, kea_tag_lookup_entry);
+
+    Search = Builder->TagTable.Next;    
+    while(Search)
+    {
+        TagTableInsert(Builder->TableData, HashTableCapacity, Search->Entry);
+        Search = Search->Next;
+    }
+    
     BuilderWriteKEA(Builder);
     
     return(Result);

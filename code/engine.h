@@ -95,6 +95,14 @@ struct editor_meta
     u8 KESAVersion[4];
 };
 
+struct engine_module
+{
+    u32 ModuleID;
+    char DLLName[128];
+    char TempDLLName[128];
+    char KEAFileName[128];
+};
+
 struct editor_state
 {
     memory_arena TotalArena;
@@ -113,6 +121,8 @@ struct editor_state
     char window_title[64];
     editor_mode EditorMode;
 
+    engine_module ArkhamModule;
+
     engine_api EngineAPI;
     platform_loaded_code ArkhamCode;
     arkham_update_and_render *Arkham;
@@ -129,6 +139,8 @@ struct transient_state
 {
     memory_arena TranArena;    
 
+    engine_assets *ArkhamAssets;
+    
     task_with_memory Tasks[4];
 
     platform_work_queue *HighPriorityQueue;

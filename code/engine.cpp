@@ -117,6 +117,21 @@ EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
             EditorState->EditorMeta.KESAVersion[I] =
                 (u8)KEASVersion->Array.Items[I]->Int;
         }
+
+        json_value *EngineModules = JsonLookupObjectElement(Metadata, "modules");
+        if(EngineModules)
+        {
+            Assert(EngineModules->Type == JsonValue_Object);
+            json_value *ArkhamModule = JsonLookupObjectElement(&EngineModules->Object, "arkham");
+
+            json_value *DLLName = JsonLookupObjectElement(&ArkhamModule->Object, "dll_name");
+            json_value *TempDLLName = JsonLookupObjectElement(&ArkhamModule->Object, "temp_dll_name");
+            json_value *KEAFileName = JsonLookupObjectElement(&ArkhamModule->Object, "asset_file");
+
+            Copy(StringLength(DLLName->String), DLLName->String, EditorState->ArkhamModule.DLLName);
+            Copy(StringLength(TempDLLName->String), TempDLLName->String, EditorState->ArkhamModule.TempDLLName);
+            Copy(StringLength(KEAFileName->String), KEAFileName->String, EditorState->ArkhamModule.KEAFileName);
+        }
     }
     else
     {
@@ -161,6 +176,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
         EngineLoadEditorMetadata(EditorState, "..\\editor_metadata.json");
+
         EditorState->ArkhamCode = Platform.LoadCode("arkham.dll", "arkham_temp.dll", "lock.tmp");
         EditorState->Arkham =
             (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
@@ -195,8 +211,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             Task->BeingUsed = false;
         }
 
-        EditorState->EngineAPI.Assets = AllocateAssets(&TranState->TranArena, Megabytes(128),
-                                                       TranState->LowPriorityQueue, &Memory->TextureOpQueue);
+        if(EditorState->Arkham)
+        {
+            temporary_memory TempMem = BeginTemporaryMemory(&EditorState->ModeArena);
+            TranState->ArkhamAssets = AllocateAssets(EditorState->ArkhamModule.KEAFileName, &TranState->TranArena,
+                                                     TempMem.Arena, Megabytes(128),
+                                                     TranState->LowPriorityQueue, &Memory->TextureOpQueue);
+            EndTemporaryMemory(TempMem);
+        }
     }
 
     if(Memory->ExecutableReloaded)
@@ -270,7 +292,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
-                    EditorState->Arkham(EditorState->EngineAPI, RenderCommands, nk, RenderWidth, RenderHeight);
+                    EditorState->Arkham(EditorState->EngineAPI, TranState->ArkhamAssets, RenderCommands, nk, RenderWidth, RenderHeight);
 //                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
 //                                                     Input, RenderWidth, RenderHeight);
                 } break;
