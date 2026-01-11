@@ -78,7 +78,6 @@ struct task_with_memory
 #include "editor_assets_mode.h"
 
 #include "engine_api.h"
-
 //#include "engine_navigation_mesh.h"
 //#include "engine_map_editor_mode.h"
 
@@ -107,6 +106,7 @@ struct editor_state
 {
     memory_arena TotalArena;
     memory_arena ModeArena;
+
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
     audio_state AudioState;
 
@@ -139,6 +139,7 @@ struct transient_state
 {
     memory_arena TranArena;    
 
+    memory_arena AssetsArena;
     engine_assets *ArkhamAssets;
     
     task_with_memory Tasks[4];

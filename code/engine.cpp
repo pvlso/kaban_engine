@@ -191,6 +191,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
         EditorState->EngineAPI.BeginGeneration = BeginGeneration;
         EditorState->EngineAPI.EndGeneration = EndGeneration;
+        EditorState->EngineAPI.GetBestMatchAssets = GetBestMatchAssets;
         
         EditorState->UIEnable = true;
     }
@@ -211,16 +212,17 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             Task->BeingUsed = false;
         }
 
+        SubArena(&TranState->AssetsArena, &TranState->TranArena, Megabytes(128), NoClear());
+
         if(EditorState->Arkham)
         {
-            temporary_memory TempMem = BeginTemporaryMemory(&EditorState->ModeArena);
-            TranState->ArkhamAssets = AllocateAssets(EditorState->ArkhamModule.KEAFileName, &TranState->TranArena,
-                                                     TempMem.Arena, Megabytes(128),
-                                                     TranState->LowPriorityQueue, &Memory->TextureOpQueue);
+            temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
+            TranState->ArkhamAssets = AllocateAssets("game_data_54.kea", &TranState->AssetsArena,
+                                                     TempMem.Arena, TranState->LowPriorityQueue, &Memory->TextureOpQueue);
             EndTemporaryMemory(TempMem);
         }
     }
-
+    
     if(Memory->ExecutableReloaded)
     {
         Platform.UnloadCode(&EditorState->ArkhamCode);
@@ -232,11 +234,13 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
             Platform.Sleep(100);
 
-            EditorState->Arkham =
-                (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
-                                                                    "ArkhamUpdateAndRender");
-            if(EditorState->Arkham)
+            if(EditorState->ArkhamCode.Platform)
+            {
+                EditorState->Arkham =
+                    (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
+                                                                        "ArkhamUpdateAndRender");
                 break;
+            }
         }
     }
     
@@ -292,9 +296,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
-                    EditorState->Arkham(EditorState->EngineAPI, TranState->ArkhamAssets, RenderCommands, nk, RenderWidth, RenderHeight);
-//                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, RenderGroup,
-//                                                     Input, RenderWidth, RenderHeight);
+                    b32 Exit = EditorState->Arkham(EditorState->EngineAPI, TranState->ArkhamAssets,
+                                                   RenderCommands, nk, RenderWidth, RenderHeight);
+                    if(Exit)
+                        PlayTitleScreen(EditorState, TranState);
                 } break;
 
                 InvalidDefaultCase;

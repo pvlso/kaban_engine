@@ -594,7 +594,7 @@ UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
 
             Tag->DataOffset = DataOffset;
             if(((Op == UpdateTagsOp_Edit) && (TagMap->GUID == NewTag->Tag.GUID)) ||
-               ((Op != UpdateTagsOp_Remove) && (I == (Header->TagCount - 1))))
+               ((Op == UpdateTagsOp_AddNew) && (I == (Header->TagCount - 1))))
             {
                 Assert(I == Index);
 
@@ -1560,8 +1560,10 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             {
                 AddCurrentAsset(AssetsMode);
                 AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
+                AssetsMode->CurrentAsset->Type = KESAFromEditMode(AssetsMode->EditMode);
+
                 RemoveAction(AssetsMode, AM_AddAsset);
-                WriteStoredAssets(EditorState, AssetsMode);
+//                WriteStoredAssets(EditorState, AssetsMode);
             }
         
             r32 TileDim = 32.0f;
@@ -1587,8 +1589,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->StoredAssetChanged = true;
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
-                    else if((AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex) ||
-                            IsAction(AssetsMode, AM_RemoveStoredAsset))
+                    else if(AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex)
                     {
                         kesa_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
@@ -1608,7 +1609,13 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
 
                     if(CheckRemoveAction(AssetsMode, AM_RemoveStoredAsset))
                     {
+                        ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
+                                             &EditorState->AudioState);
                         RemoveStoredAsset(AssetsMode);
+
+                        AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
+                        LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
+
                         AssetsMode->StoredAssetChanged = true;
                     }
 
@@ -1664,7 +1671,6 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             }
 
             DrawAssetsModeUI(AssetsMode, UIState);
-
 
             AssetsMode->Time += Input->dtForFrame;
         }

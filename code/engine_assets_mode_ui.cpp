@@ -103,7 +103,7 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
     if(nk_group_begin(Nk, "Stored Assets View", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
     {
         nk_layout_row_static(Nk, 110, 440, 1);
-        for(u32 AssetIndex = 0;
+        for(u32 AssetIndex = 1;
             AssetIndex < AssetsMode->StoredHeader.AssetCount;
             ++AssetIndex)
         {
@@ -148,7 +148,7 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
         nk_layout_row_dynamic(Nk, 40, 1);
         nk_property_int(Nk, "Stored Asset: ", 0,
                         (int *)&AssetsMode->ShowStoredAssetIndex,
-                        AssetsMode->StoredHeader.AssetCount, 1, 0.1f);
+                        AssetsMode->StoredHeader.AssetCount - 1, 1, 0.1f);
 
         nk_layout_row_static(Nk, 770, 1280, 1);
         if(nk_group_begin(Nk, "Asset Specific View", NK_WINDOW_NO_SCROLLBAR))
@@ -552,6 +552,75 @@ ClearNewTag(editor_mode_assets *AssetsMode, new_tag_map *NewTag)
     return(NewValue);
 }
 
+static int
+ContainsCaseInsensitiveASCII(const char *haystack, const char *needle)
+{
+    if (!needle || !needle[0]) return 1; // empty search matches everything
+
+    for (const char *h0 = haystack; *h0; ++h0)
+    {
+        const char *h = h0;
+        const char *n = needle;
+
+        while (*h && *n)
+        {
+            unsigned char ch = (unsigned char)*h;
+            unsigned char cn = (unsigned char)*n;
+
+            if (ch >= 'A' && ch <= 'Z') ch = (unsigned char)(ch - 'A' + 'a');
+            if (cn >= 'A' && cn <= 'Z') cn = (unsigned char)(cn - 'A' + 'a');
+
+            if (ch != cn) break;
+
+            ++h;
+            ++n;
+        }
+
+        if (!*n) return 1; // matched all of needle
+    }
+
+    return 0;
+}
+
+inline void
+SearchBox(editor_mode_assets *AssetsMode, nk_context *Nk, char **Strings, u32 StringCount,
+          u32 *ResultIndex)
+{
+    const char *preview = (StringCount > 0) ? Strings[*ResultIndex] : "<none>";
+    // Use nk_combo_begin_label to build a custom popup
+    if(nk_combo_begin_label(Nk, preview, nk_vec2(nk_widget_width(Nk), 240)))
+    {
+        // Search field
+        nk_layout_row_dynamic(Nk, 30, 1);
+        nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD, AssetsMode->Search, 127, nk_filter_default);
+
+        // Filtered list
+        nk_layout_row_dynamic(Nk, 20, 1);
+        int shown = 0;
+        for (u32 i = 0; i < StringCount; ++i)
+        {
+            if (ContainsCaseInsensitiveASCII(Strings[i], AssetsMode->Search))
+            {
+                // selectable row
+                nk_bool Selected = (i == *ResultIndex);
+                if (nk_selectable_label(Nk, Strings[i], NK_TEXT_LEFT, &Selected))
+                {
+                    *ResultIndex = i;
+                    nk_combo_close(Nk); // close after choosing
+                }
+                shown++;
+            }
+        }
+
+        if (shown == 0)
+        {
+            nk_label(Nk, "No matches", NK_TEXT_LEFT);
+        }
+
+        nk_combo_end(Nk);
+    }
+}
+
 inline void
 DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                        kesa_asset *CurrentAsset)
@@ -601,29 +670,25 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     nk_layout_row_static(Nk, 380.0f + UIOffsetY, 450, 1);
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+
     if(nk_group_begin(Nk, "File Picker", NK_WINDOW_NO_SCROLLBAR))
     {        
-        char *Strings = AssambleStrings(TempMem.Arena, FileStrings, &FileCount);
-
         nk_layout_row_static(Nk, 30, 440, 1);
         struct nk_rect Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_label(Nk, Text, NK_TEXT_CENTERED);
-        nk_combobox_string(Nk, Strings, (int *)&AssetsMode->FileIndex,
-                             FileCount, 30, {460, 460});
+
+        SearchBox(AssetsMode, Nk, FileStrings, FileCount, &AssetsMode->FileIndex);
 
         if(AssetsMode->EditMode == EditMode_Tileset)
         {
-            char *Strings = AssambleStrings(TempMem.Arena,
-                                            AssetsMode->SolidTileFiles,
-                                            &AssetsMode->SolidTileFileCount);
-
             nk_layout_row_static(Nk, 30, 440, 1);
             struct nk_rect Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_label(Nk, "Choose Merge Tile", NK_TEXT_CENTERED);
-            nk_combobox_string(Nk, Strings, (int *)&AssetsMode->SubFileIndex,
-                                 AssetsMode->SolidTileFileCount, 30, {460, 460});
+
+            SearchBox(AssetsMode, Nk, AssetsMode->SolidTileFiles, AssetsMode->SolidTileFileCount,
+                      &AssetsMode->SubFileIndex);
         }
 
         nk_layout_row_static(Nk, 30, 440, 1);
@@ -631,9 +696,8 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_label(Nk, "Choose Tag To Add \\|/", NK_TEXT_CENTERED);
 
-        u32 Count = AssetsMode->TagHeader.TagCount;
-        char *TagStrings = AssambleStrings(TempMem.Arena, AssetsMode->TagKeys, &Count, false);
-        nk_combobox_string(Nk, TagStrings, (int *)&AssetsMode->CurrentTagIndex, Count, 30, {460, 460});
+        SearchBox(AssetsMode, Nk, AssetsMode->TagKeys,
+                  AssetsMode->TagHeader.TagCount, &AssetsMode->CurrentTagIndex);
 
         kea_tag_map *CurrentTag = AssetsMode->Tags + AssetsMode->CurrentTagIndex;
         
@@ -647,18 +711,14 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_label(Nk, "Choose Tag Value", NK_TEXT_CENTERED);
-        char *TagValues = AssambleStrings(TempMem.Arena,
-                                          ExtractTagValues(CurrentTag, TempMem.Arena),
-                                          &CurrentTag->ValueCount);
 
         Rect = nk_widget_bounds(Nk);
         nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
         nk_labelf(Nk, NK_TEXT_LEFT, "  Current Value: %s|%d",
                      CurrentTag->Values[AssetsMode->CurrentTagValue], AssetsMode->CurrentTagValue);
 
-        nk_combobox_string(Nk, TagValues,
-                             (int *)&AssetsMode->CurrentTagValue,
-                             CurrentTag->ValueCount, 30, {460, 460});
+        SearchBox(AssetsMode, Nk, CurrentTag->Values,
+                  CurrentTag->ValueCount, &AssetsMode->CurrentTagValue);
 
         if(nk_button_label(Nk, "Add Tag"))
             AddAction(AssetsMode, AM_AddAssetTag);
@@ -1222,6 +1282,7 @@ DrawAssetsSoundEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_co
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
             nk_labelf(Nk, NK_TEXT_CENTERED, "Current Chain: %s", ChainString);
 
+            // TODO(pvlso): remove this and replace with selectable lables
             u32 Count = KEASoundChain_Count;
             char *TagValues = AssambleStrings(TempMem.Arena,
                                               SoundChainStringArray,

@@ -115,6 +115,8 @@ struct engine_assets
     platform_texture_op_queue *TextureOpQueue;
 
     u32 TaskCount;
+
+    memory_arena UtilArena;
     task_with_memory *Tasks;
     platform_work_queue *LowPriorityQueue;
 
@@ -209,10 +211,8 @@ GetAssetByGUID(engine_assets *Assets, u64 GUID)
 }
 
 inline asset_memory_header *
-GetAsset(engine_assets *Assets, u64 ID, u32 GenerationID)
+GetAssetInternal(engine_assets *Assets, asset *Asset, u32 GenerationID)
 {
-    asset *Asset = GetAssetByGUID(Assets, ID);
-    
     asset_memory_header *Result = 0;
 
     BeginAssetLock(Assets);
@@ -232,6 +232,31 @@ GetAsset(engine_assets *Assets, u64 ID, u32 GenerationID)
     }
 
     EndAssetLock(Assets);
+    
+    return(Result);
+}
+
+inline asset_memory_header *
+GetAsset(engine_assets *Assets, u64 ID, u32 GenerationID)
+{
+    asset *Asset = 0;
+    if(ID < Assets->AssetCount)
+        Asset = Assets->Assets + ID;
+    else
+        Asset = GetAssetByGUID(Assets, ID);
+
+    asset_memory_header *Result = GetAssetInternal(Assets, Asset, GenerationID);
+    
+    return(Result);
+}
+
+inline asset_memory_header *
+GetAsset(engine_assets *Assets, u32 ID, u32 GenerationID)
+{
+    Assert(ID < Assets->AssetCount);
+
+    asset *Asset = Assets->Assets + ID;
+    asset_memory_header *Result = GetAssetInternal(Assets, Asset, GenerationID);
     
     return(Result);
 }

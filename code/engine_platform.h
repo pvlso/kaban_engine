@@ -489,6 +489,9 @@ typedef PLATFORM_ALLOCATE_MEMORY(platform_allocate_memory);
 
 #define PLATFORM_DEALLOCATE_MEMORY(name) void name(void *Memory)
 typedef PLATFORM_DEALLOCATE_MEMORY(platform_deallocate_memory);
+
+#define PLATFORM_REALLOCATE_MEMORY(name) void *name(void *Source, u32 InitSize, u32 Size)
+typedef PLATFORM_REALLOCATE_MEMORY(platform_reallocate_memory);
     
 typedef void platform_add_entry(platform_work_queue *Queue, platform_work_queue_callback *Callback, void *Data);
 typedef void platform_complete_all_work(platform_work_queue *Queue);
@@ -559,7 +562,8 @@ typedef struct platform_api
 
     platform_allocate_memory *AllocateMemory;
     platform_deallocate_memory *DeallocateMemory;
-
+    platform_reallocate_memory *ReallocateMemory;
+    
     platform_load_code *LoadCode;
     platform_unload_code *UnloadCode;
     platform_get_proc_address *GetProcAddress;

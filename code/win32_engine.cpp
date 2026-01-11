@@ -89,6 +89,23 @@ PLATFORM_DEALLOCATE_MEMORY(Win32DeallocateMemory)
         VirtualFree(Memory, 0, MEM_RELEASE);
     }
 }
+
+PLATFORM_REALLOCATE_MEMORY(Win32ReallocateMemory)
+{
+    void *Result = VirtualAlloc(0, Size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+
+    if(Source)
+    {
+        if(InitSize > Size)
+            Copy(Size, Source, Result);
+        else
+            Copy(InitSize, Source, Result);
+
+        Win32DeallocateMemory(Source);
+    }
+    
+    return(Result);
+}
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3244,6 +3261,7 @@ Win32InitPlatformAPI(engine_memory *Memory, platform_work_queue *HighPQ,
 
     Memory->PlatformAPI.AllocateMemory = Win32AllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = Win32DeallocateMemory;
+    Memory->PlatformAPI.ReallocateMemory = Win32ReallocateMemory;
 
     Memory->PlatformAPI.LoadCode = Win32PlatformLoadCode;
     Memory->PlatformAPI.UnloadCode = Win32PlatformUnloadCode;

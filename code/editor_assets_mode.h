@@ -167,6 +167,9 @@ struct editor_mode_assets
     u32 SubFileIndex;
     u32 LastSubFileIndex;
 
+    s32 SearchLen;
+    char Search[128];
+    
     u32 SourceFileCounts[KESA_Count];
     char **SourceFiles[KESA_Count];
     u32 SolidTileFileCount;

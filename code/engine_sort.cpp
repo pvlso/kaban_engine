@@ -7,6 +7,24 @@
    ======================================================================== */
 
 inline void
+InsertionSort(u32 Count, u32 *Nodes)
+{
+    for(u32 I = 1; I < Count; ++I)
+    {
+        u32 Node = Nodes[I];
+        s32 J = I - 1;
+
+        while((J >= 0) && (Node < Nodes[J]))
+        {
+            Nodes[J + 1] = Nodes[J];
+            J = J - 1;
+        }
+
+        Nodes[J + 1] = Node;
+    }
+}
+
+inline void
 InsertionSort(u32 Count, u64 *Nodes)
 {
     for(u32 I = 1; I < Count; ++I)

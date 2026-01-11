@@ -451,7 +451,12 @@ internal void
 LoadAsset(engine_assets *Assets, asset_header_type HType, u64 GUID, b32 Immediate)
 {
     
-    asset *Asset = GetAssetByGUID(Assets, GUID);        
+    asset *Asset = 0;        
+    if(GUID < Assets->AssetCount)
+        Asset = Assets->Assets + GUID;
+    else
+        Asset = GetAssetByGUID(Assets, GUID);
+
     if(GUID)
     {
         if(AtomicCompareExchangeUInt32((uint32 *)&Asset->State, AssetState_Queued, AssetState_Unloaded) ==
@@ -720,7 +725,7 @@ GetBestMatchFileFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *
 #endif
 
 internal engine_assets *
-AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena, umm Size, platform_work_queue *LowPriorityQueue,
+AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena, platform_work_queue *LowPriorityQueue,
                platform_texture_op_queue *TextureOpQueue)
 {
 //    TIMED_FUNCTION();
@@ -747,6 +752,7 @@ AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena
     Assets->MemorySentinel.Prev = &Assets->MemorySentinel;
     Assets->MemorySentinel.Next = &Assets->MemorySentinel;
 
+    umm Size = GetArenaSizeRemaining(Arena);
     InsertBlock(&Assets->MemorySentinel, Size, PushSize(Arena, Size, NoClear()));
 
     Assets->LoadedAssetSentinel.Next = 
@@ -878,6 +884,123 @@ AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena
     }
     
     return(Assets);
+}
+
+inline kea_tag_lookup_entry *
+TagTableGet(assets_tag_table *Table, u64 TagGUID)
+{
+    kea_tag_lookup_entry *Result = 0;
+
+    u32 Mask = Table->Capacity - 1;
+    u32 Index = (u32)HashU64(TagGUID) & Mask;
+
+    for(;;)
+    {
+        kea_tag_lookup_entry *Entry = Table->Entries + Index;
+        if(Entry->GUID == 0)
+            break;
+        else if(Entry->GUID == TagGUID)
+        {
+            Result = Entry;
+            break;
+        }
+
+        Index = (Index + 1) & Mask;
+    }
+
+    return(Result);
+}
+
+inline u32
+KeepMostFrequent(u32 *Array, u32 Count)
+{
+    u32 Result = 0;
+    if(Count > 0)
+    {
+        u32 MaxCount = 0;
+        u32 TempCount = 1;
+
+        for(u32 I = 1; I <= Count; ++I)
+        {
+            if((I < Count) && (Array[I] == Array[I - 1]))
+                ++TempCount;
+            else
+            {
+                if(TempCount > MaxCount)
+                    MaxCount = TempCount;
+                TempCount = 1;
+            }
+        }
+
+        TempCount = 1;
+        for(u32 I = 1; I <= Count; ++I)
+        {
+            if((I < Count) && (Array[I] == Array[I - 1]))
+                ++TempCount;
+            else
+            {
+                if(TempCount == MaxCount)
+                    Array[Result++] = Array[I - 1];
+                TempCount = 1;
+            }
+        }
+    }
+
+    return(Result);
+}
+
+inline asset_best_match_result
+GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector)
+{
+    asset_best_match_result Result = {};
+
+    u64 *GUIDs = PushArray(&Assets->UtilArena, Vector->PairCount, u64);
+    char Buffer[128];
+    for(u32 I = 0; I < Vector->PairCount; ++I)
+    {
+        asset_tag_pair *Pair = Vector->Pairs + I;
+        FormatString(ArrayCount(Buffer), Buffer, "%s%s", Pair->Key, Pair->Value);
+        GUIDs[I] = GUIDFromString(Buffer);
+    }
+
+    kea_tag_lookup_entry *Entry = TagTableGet(&Assets->TagTable, GUIDs[0]);
+    u32 IndeciesSize = 0;
+    if(Entry)
+    {
+        IndeciesSize = sizeof(u32)*Entry->Count;
+        Result.AssetCount = Entry->Count;
+        Result.Indecies = (u32 *)Platform.ReallocateMemory(0, 0, IndeciesSize);
+        Copy(IndeciesSize, Assets->TagTable.TagedAssetsIndecies + Entry->AssetsFirstIndex, Result.Indecies);
+    }
+
+    for(u32 I = 1; I < Vector->PairCount; ++I)
+    {
+        kea_tag_lookup_entry *Entry = TagTableGet(&Assets->TagTable, GUIDs[I]);
+        if(Entry)
+        {
+            u32 EntryIndeciesSize = Entry->Count*sizeof(u32);
+            u32 NewIndeciesSize = IndeciesSize + EntryIndeciesSize;
+            Result.Indecies = (u32 *)Platform.ReallocateMemory(Result.Indecies, IndeciesSize, NewIndeciesSize);
+
+            Copy(EntryIndeciesSize, Assets->TagTable.TagedAssetsIndecies + Entry->AssetsFirstIndex, (u8 *)Result.Indecies + IndeciesSize);
+            IndeciesSize = NewIndeciesSize;
+            Result.AssetCount += Entry->Count;
+        }
+    }
+
+    InsertionSort(Result.AssetCount, Result.Indecies);
+
+    Result.AssetCount = KeepMostFrequent(Result.Indecies, Result.AssetCount);
+    if(Result.AssetCount > 1)
+        Result.Indecies = (u32 *)Platform.ReallocateMemory(Result.Indecies, IndeciesSize, Result.AssetCount*sizeof(u32));
+    else
+    {
+        u32 Index = Result.Indecies[0];
+        Platform.DeallocateMemory(Result.Indecies);
+        Result.Index = Index;
+    }
+
+    return(Result);
 }
 
 #if 0

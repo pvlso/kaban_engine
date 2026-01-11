@@ -38,11 +38,8 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
                 return(Result);
             }
 
-            if(nk_button_label(Nk, "Map Editor"))
+            if(nk_button_label(Nk, "Play Game"))
             {
-                EditorState->EditorMode = EditorMode_MapEditor;
-//                PlayMapEditor(EditorState, TranState);
-//                Result = true;
                 return(Result);
             }
 
