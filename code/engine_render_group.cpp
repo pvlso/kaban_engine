@@ -110,7 +110,8 @@ StoreColor(object_transform *Transform, v4 Source)
 
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
-           loaded_bitmap *Bitmap, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f)
+           loaded_bitmap *Bitmap, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1),
+           f32 CAlign = 1.0f, f32 Angle = 0.0f)
 {
     used_bitmap_dim Dim = GetBitmapDim(Group, ObjectTransform, Bitmap, Height, Offset, CAlign);
     if(Dim.Basis.Valid)
@@ -124,13 +125,16 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
             Entry->P = Dim.Basis.P;
             Entry->Color = Color;
             Entry->Size = Size;
+
+            Entry->RotateAngle = Angle;
         }
     }
 }
 
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
-    bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f)
+           bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f,
+           f32 Angle = 0.0f)
 {
     
     loaded_bitmap *Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
@@ -142,7 +146,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     
     if(Bitmap)
     {
-        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign);
+        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign, Angle);
     }
     else
     {
@@ -208,13 +212,30 @@ PushRect(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 D
     if(Basis.Valid)
     {
         v2 ScaledDim = Basis.Scale*Dim;
-        rectangle2 ScreenArea = RectMinDim(Basis.P, ScaledDim);
         render_entry_rectangle *Rect = PushRenderElement(Group, render_entry_rectangle, Basis.SortKey);
         if(Rect)
         {
             Rect->P = Basis.P;
             Rect->Color = Color;
             Rect->Dim = ScaledDim;
+        }
+    }
+}
+
+inline void
+PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius, s32 Segments, v4 Color = V4(1, 1, 1, 1))
+{
+    entity_basis_p_result Basis = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, Center);
+    if(Basis.Valid)
+    {
+        f32 ScaledRadius = Basis.Scale*Radius;
+        render_entry_circle_outline *Circle = PushRenderElement(Group, render_entry_circle_outline, Basis.SortKey);
+        if(Circle)
+        {
+            Circle->Center = Basis.P;
+            Circle->Color = Color;
+            Circle->Radius = ScaledRadius;
+            Circle->Segments = Segments;
         }
     }
 }

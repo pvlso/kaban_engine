@@ -99,6 +99,7 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
+#include "arkham/arkham.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
 
@@ -116,21 +117,6 @@ EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
         {
             EditorState->EditorMeta.KESAVersion[I] =
                 (u8)KEASVersion->Array.Items[I]->Int;
-        }
-
-        json_value *EngineModules = JsonLookupObjectElement(Metadata, "modules");
-        if(EngineModules)
-        {
-            Assert(EngineModules->Type == JsonValue_Object);
-            json_value *ArkhamModule = JsonLookupObjectElement(&EngineModules->Object, "arkham");
-
-            json_value *DLLName = JsonLookupObjectElement(&ArkhamModule->Object, "dll_name");
-            json_value *TempDLLName = JsonLookupObjectElement(&ArkhamModule->Object, "temp_dll_name");
-            json_value *KEAFileName = JsonLookupObjectElement(&ArkhamModule->Object, "asset_file");
-
-            Copy(StringLength(DLLName->String), DLLName->String, EditorState->ArkhamModule.DLLName);
-            Copy(StringLength(TempDLLName->String), TempDLLName->String, EditorState->ArkhamModule.TempDLLName);
-            Copy(StringLength(KEAFileName->String), KEAFileName->String, EditorState->ArkhamModule.KEAFileName);
         }
     }
     else
@@ -176,22 +162,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
         EngineLoadEditorMetadata(EditorState, "..\\editor_metadata.json");
-
-        EditorState->ArkhamCode = Platform.LoadCode("arkham.dll", "arkham_temp.dll", "lock.tmp");
-        EditorState->Arkham =
-            (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
-                                                                "ArkhamUpdateAndRender");
-
-        EditorState->EngineAPI.BeginRenderGroup = BeginRenderGroup;
-        EditorState->EngineAPI.EndRenderGroup = EndRenderGroup;
-        EditorState->EngineAPI.Perspective = Perspective;
-        EditorState->EngineAPI.Orthographic = Orthographic;
-        EditorState->EngineAPI.Clear = Clear;
-        EditorState->EngineAPI.PushBitmap = PushBitmap;
-
-        EditorState->EngineAPI.BeginGeneration = BeginGeneration;
-        EditorState->EngineAPI.EndGeneration = EndGeneration;
-        EditorState->EngineAPI.GetBestMatchAssets = GetBestMatchAssets;
         
         EditorState->UIEnable = true;
     }
@@ -204,43 +174,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             
         TranState->HighPriorityQueue = Memory->HighPriorityQueue;
         TranState->LowPriorityQueue = Memory->LowPriorityQueue;
+        TranState->TextureOpQueue = &Memory->TextureOpQueue;
+
         for(uint32 TaskIndex = 0;
             TaskIndex < ArrayCount(TranState->Tasks);
             ++TaskIndex)
         {
             task_with_memory *Task = TranState->Tasks + TaskIndex;
             Task->BeingUsed = false;
-        }
-
-        SubArena(&TranState->AssetsArena, &TranState->TranArena, Megabytes(128), NoClear());
-
-        if(EditorState->Arkham)
-        {
-            temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
-            TranState->ArkhamAssets = AllocateAssets("game_data_54.kea", &TranState->AssetsArena,
-                                                     TempMem.Arena, TranState->LowPriorityQueue, &Memory->TextureOpQueue);
-            EndTemporaryMemory(TempMem);
-        }
-    }
-    
-    if(Memory->ExecutableReloaded)
-    {
-        Platform.UnloadCode(&EditorState->ArkhamCode);
-        for(u32 LoadTryIndex = 0;
-            LoadTryIndex < 100;
-            ++LoadTryIndex)
-        {
-            EditorState->ArkhamCode = Platform.LoadCode("arkham.dll", "arkham_temp.dll", "lock.tmp");
-
-            Platform.Sleep(100);
-
-            if(EditorState->ArkhamCode.Platform)
-            {
-                EditorState->Arkham =
-                    (arkham_update_and_render *)Platform.GetProcAddress(&EditorState->ArkhamCode,
-                                                                        "ArkhamUpdateAndRender");
-                break;
-            }
         }
     }
     
@@ -296,8 +237,12 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
-                    b32 Exit = EditorState->Arkham(EditorState->EngineAPI, TranState->ArkhamAssets,
-                                                   RenderCommands, nk, RenderWidth, RenderHeight);
+                } break;
+
+                case EditorMode_Arkham:
+                {
+                    b32 Exit = ArkhamUpdateAndRender(EditorState->ArkhamGameState, nk, RenderCommands,
+                                                     RenderWidth, RenderHeight);
                     if(Exit)
                         PlayTitleScreen(EditorState, TranState);
                 } break;

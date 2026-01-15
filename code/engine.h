@@ -76,8 +76,9 @@ struct task_with_memory
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
+#include "arkham/arkham.h"
 
-#include "engine_api.h"
+//#include "engine_api.h"
 //#include "engine_navigation_mesh.h"
 //#include "engine_map_editor_mode.h"
 
@@ -87,6 +88,7 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_MapEditor,
+    EditorMode_Arkham,
 };
 
 struct editor_meta
@@ -94,14 +96,7 @@ struct editor_meta
     u8 KESAVersion[4];
 };
 
-struct engine_module
-{
-    u32 ModuleID;
-    char DLLName[128];
-    char TempDLLName[128];
-    char KEAFileName[128];
-};
-
+struct game_state;
 struct editor_state
 {
     memory_arena TotalArena;
@@ -109,6 +104,8 @@ struct editor_state
 
     memory_arena AudioArena; // TODO(casey): Move this into the audio system proper!
     audio_state AudioState;
+
+    pcg32_random_t Rng;
 
     b32 Play;
     playing_sound *Sound;
@@ -121,15 +118,14 @@ struct editor_state
     char window_title[64];
     editor_mode EditorMode;
 
-    engine_module ArkhamModule;
-
-    engine_api EngineAPI;
-    platform_loaded_code ArkhamCode;
-    arkham_update_and_render *Arkham;
+//    engine_api EngineAPI;
+//    platform_loaded_code ArkhamCode;
+//    arkham_update_and_render *Arkham;
     union
     {
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
+        game_state *ArkhamGameState;
 //        engine_map_editor *MapEditor;
 //        editor_game_simulate_mode *SimulateGame;
     };
@@ -146,6 +142,8 @@ struct transient_state
 
     platform_work_queue *HighPriorityQueue;
     platform_work_queue *LowPriorityQueue;
+
+    platform_texture_op_queue *TextureOpQueue;
 };
 
 internal task_with_memory *BeginTaskWithMemory(u32 TaskCount, task_with_memory *Tasks);

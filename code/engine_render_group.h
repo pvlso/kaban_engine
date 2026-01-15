@@ -50,6 +50,7 @@ enum render_group_entry_type
     RenderGroupEntryType_render_entry_line,
     RenderGroupEntryType_render_entry_triangle,
     RenderGroupEntryType_render_entry_blend_render_target,
+    RenderGroupEntryType_render_entry_circle_outline,
 };
 
 struct render_group_entry_header // TODO(casey): Don't store type here, store in sort index?
@@ -72,6 +73,8 @@ struct render_entry_bitmap
     v4 Color;
     v2 P;
     v2 Size;
+
+    f32 RotateAngle;
 };
 
 struct render_entry_rectangle
@@ -94,6 +97,14 @@ struct render_entry_triangle
     v2 A;
     v2 B;
     v2 C;
+};
+
+struct render_entry_circle_outline
+{
+    v4 Color;
+    v2 Center;
+    f32 Radius;
+    s32 Segments;
 };
 
 struct render_entry_blend_render_target

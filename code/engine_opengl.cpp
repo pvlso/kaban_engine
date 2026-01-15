@@ -261,6 +261,46 @@ OpenGLLineVertices(v2 MinP, v2 MaxP)
     glVertex2f(MinP.x, MinP.y);
 }
 
+inline void
+OpenGLQuad(v2 P0, v2 P1, v2 P2, v2 P3,
+           v4 Color, v2 MinUV = V2(0,0), v2 MaxUV = V2(1,1))
+{
+    glBegin(GL_TRIANGLES);
+    glColor4f(Color.r, Color.g, Color.b, Color.a);
+
+    // Lower triangle: P0, P1, P2
+    glTexCoord2f(MinUV.x, MinUV.y); glVertex2f(P0.x, P0.y);
+    glTexCoord2f(MaxUV.x, MinUV.y); glVertex2f(P1.x, P1.y);
+    glTexCoord2f(MaxUV.x, MaxUV.y); glVertex2f(P2.x, P2.y);
+
+    // Upper triangle: P0, P2, P3
+    glTexCoord2f(MinUV.x, MinUV.y); glVertex2f(P0.x, P0.y);
+    glTexCoord2f(MaxUV.x, MaxUV.y); glVertex2f(P2.x, P2.y);
+    glTexCoord2f(MinUV.x, MaxUV.y); glVertex2f(P3.x, P3.y);
+
+    glEnd();
+}
+
+inline void
+OpenGLCircleOutline(v2 Center, f32 Radius, int Segments, v4 Color)
+{
+    glBegin(GL_LINE_LOOP);
+    glColor4f(Color.r, Color.g, Color.b, Color.a);
+
+    for(int i = 0;
+        i < Segments;
+        ++i)
+    {
+        f32 a = (2.0f*Pi32)*((f32)i / (f32)Segments);
+        f32 x = Center.x + Radius*Cos(a);
+        f32 y = Center.y + Radius*Sin(a);
+
+        glVertex2f(x, y);
+    }
+
+    glEnd();
+}
+
 internal void
 OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
                      u32 WindowWidth, u32 WindowHeight)
@@ -375,20 +415,30 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                     
                     if(Entry->Bitmap->Width && Entry->Bitmap->Height)
                     {
-                        v2 XAxis = {1, 0};
-                        v2 YAxis = {0, 1};
-                        v2 MinP = Entry->P;
-                        v2 MaxP = MinP + Entry->Size.x*XAxis + Entry->Size.y*YAxis;
+                        r32 c = cosf(Entry->RotateAngle);
+                        r32 s = sinf(Entry->RotateAngle);
+
+                        v2 XAxis = { c, s };
+                        v2 YAxis = { -s, c };
+
+                        v2 X = 0.5f*Entry->Size.x*XAxis;
+                        v2 Y = 0.5f*Entry->Size.y*YAxis;
+                        v2 C = Entry->P + 0.5f*Entry->Size;
+
+                        v2 P0 = C - X - Y;
+                        v2 P1 = C + X - Y;
+                        v2 P2 = C + X + Y;
+                        v2 P3 = C - X + Y;
 
                         glBindTexture(GL_TEXTURE_2D, (GLuint)U32FromPointer(Entry->Bitmap->TextureHandle));
 
-                        r32 OneTexelU = 0.5f / (r32)Entry->Bitmap->Width;
-                        r32 OneTexelV = 0.5f / (r32)Entry->Bitmap->Height;
+                        r32 OneTexelU = 1.0f / (r32)Entry->Bitmap->Width;
+                        r32 OneTexelV = 1.0f / (r32)Entry->Bitmap->Height;
 
                         v2 MinUV = V2(OneTexelU, OneTexelV);
                         v2 MaxUV = V2(1.0f - OneTexelU, 1.0f - OneTexelV);
 
-                        OpenGLRectangle(Entry->P, MaxP, Entry->Color);
+                        OpenGLQuad(P0, P1, P2, P3, Entry->Color, MinUV, MaxUV);                        
                     }
                 } break;
 
@@ -414,6 +464,14 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                     render_entry_triangle *Entry = (render_entry_triangle *)Data;
                     glDisable(GL_TEXTURE_2D);
                     OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
+                    glEnable(GL_TEXTURE_2D);
+                } break;
+
+                case RenderGroupEntryType_render_entry_circle_outline:
+                {
+                    render_entry_circle_outline *Entry = (render_entry_circle_outline *)Data;
+                    glDisable(GL_TEXTURE_2D);
+                    OpenGLCircleOutline(Entry->Center, Entry->Radius, Entry->Segments, SRGB1ToLinear1(Entry->Color));
                     glEnable(GL_TEXTURE_2D);
                 } break;
 

@@ -9,6 +9,14 @@
 #include <stdarg.h>
 
 inline b32
+IsDigit(char C)
+{
+    b32 Result = ((C >= '0') && (C <= '9'));
+
+    return(Result);
+}
+
+inline b32
 IsEndOfLine(char C)
 {
     b32 Result = ((C == '\n') ||

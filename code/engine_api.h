@@ -21,43 +21,6 @@ struct game_state;
 #include "engine_intrinsics.h"
 #include "engine_math.h"
 
-struct asset_tag_pair
-{
-    char *Key;
-    char *Value;
-};
-
-struct asset_tag_vector
-{
-    u32 PairCount;
-    asset_tag_pair Pairs[24];
-};
-
-struct asset_best_match_result
-{
-    u32 AssetCount;
-
-    union
-    {
-        u32 Index;
-        u32 *Indecies;
-    };
-};
-
-inline void
-TagVectorAdd(asset_tag_vector *Vector, char *Key, char *Value)
-{
-    asset_tag_pair *Pair = Vector->Pairs + Vector->PairCount++; 
-    Pair->Key = Key;
-    Pair->Value = Value;
-}
-
-inline void
-ClearTagVector(asset_tag_vector *Vector)
-{
-    Vector->PairCount = 0;
-}
-
 struct engine_api
 {
     render_group (*BeginRenderGroup)(engine_assets *Assets, editor_render_commands *Commands, u32 GenerationID, b32 RendersInBackground,

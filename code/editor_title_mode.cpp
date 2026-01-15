@@ -40,6 +40,7 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
 
             if(nk_button_label(Nk, "Play Game"))
             {
+                PlayArkham(EditorState, TranState);
                 return(Result);
             }
 

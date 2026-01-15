@@ -726,7 +726,7 @@ GetBestMatchFileFrom(engine_assets *Assets, asset_type_id TypeID, asset_vector *
 
 internal engine_assets *
 AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena, platform_work_queue *LowPriorityQueue,
-               platform_texture_op_queue *TextureOpQueue)
+               platform_texture_op_queue *TextureOpQueue, umm SizeMax = 0)
 {
 //    TIMED_FUNCTION();
 
@@ -752,7 +752,7 @@ AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena
     Assets->MemorySentinel.Prev = &Assets->MemorySentinel;
     Assets->MemorySentinel.Next = &Assets->MemorySentinel;
 
-    umm Size = GetArenaSizeRemaining(Arena);
+    umm Size = SizeMax ? SizeMax : GetArenaSizeRemaining(Arena);
     InsertBlock(&Assets->MemorySentinel, Size, PushSize(Arena, Size, NoClear()));
 
     Assets->LoadedAssetSentinel.Next = 

@@ -14,13 +14,6 @@ JsonAddToken(json_parser *Parser, json_token_type Type, char *Value)
     ++Parser->TokenCount;    
 }
 
-inline b32
-IsDigit(char C)
-{
-    b32 Result = ((C >= '0') && (C <= '9'));
-    return(Result);
-}
-
 internal void
 JsonTokenize(json_parser *Parser, char *Json)
 {
