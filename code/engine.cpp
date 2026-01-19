@@ -242,7 +242,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                 case EditorMode_Arkham:
                 {
                     b32 Exit = ArkhamUpdateAndRender(EditorState->ArkhamGameState, nk, RenderCommands,
-                                                     RenderWidth, RenderHeight);
+                                                     RenderWidth, RenderHeight, Input);
                     if(Exit)
                         PlayTitleScreen(EditorState, TranState);
                 } break;
