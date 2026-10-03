@@ -183,7 +183,7 @@ Win32GetTime(void)
 }
 
 inline void
-Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
+Win32GetCursorPos(win32_window *Window, double* xpos, double* ypos)
 {
     /*
        NOTE(pvlso): The implementation of this function is based on
@@ -199,7 +199,7 @@ Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
 
     if (GetCursorPos(&pos))
     {
-        ScreenToClient(State->WindowHandle, &pos);
+        ScreenToClient(Window->Handle, &pos);
 
         if (xpos)
             *xpos = pos.x;
@@ -209,7 +209,7 @@ Win32GetCursorPos(win32_state *State, double* xpos, double* ypos)
 }
 
 internal void
-Win32SetClipboardString(win32_state *State, const char* string)
+Win32SetClipboardString(win32_window *Window, const char* string)
 {
     /*
        NOTE(pvlso): The implementation of this function is based on
@@ -244,7 +244,7 @@ Win32SetClipboardString(win32_state *State, const char* string)
 
     // NOTE: Retry clipboard opening a few times as some other application may have it
     //       open and also the Windows Clipboard History reads it after each update
-    while (!OpenClipboard(State->WindowHandle))
+    while (!OpenClipboard(Window->Handle))
     {
         Sleep(1);
         tries++;
@@ -347,7 +347,7 @@ Win32ClipboardGetString(win32_state *State)
 }
 
 inline s32
-Win32GetKey(win32_state *State, s32 key)
+Win32GetKey(win32_window *Window, s32 key)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -360,12 +360,12 @@ Win32GetKey(win32_state *State, s32 key)
         return WIN32_RELEASE;
     }
 
-    s32 Result = (s32)State->keys[key];
+    s32 Result = (s32)Window->keys[key];
     return(Result);
 }
 
 inline void
-Win32SetCursorPos(win32_state *State, double xpos, double ypos)
+Win32SetCursorPos(win32_window *Window, double xpos, double ypos)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -383,15 +383,15 @@ Win32SetCursorPos(win32_state *State, double xpos, double ypos)
     POINT pos = { (int) xpos, (int) ypos };
 
     // Store the new position so it can be recognized later
-    State->lastCursorPosX = pos.x;
-    State->lastCursorPosY = pos.y;
+    Window->lastCursorPosX = pos.x;
+    Window->lastCursorPosY = pos.y;
 
-    ClientToScreen(State->WindowHandle, &pos);
+    ClientToScreen(Window->Handle, &pos);
     SetCursorPos(pos.x, pos.y);
 }
 
 inline s32
-Win32GetMouseButton(win32_state *State, int button)
+Win32GetMouseButton(win32_window *Window, int button)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -404,7 +404,7 @@ Win32GetMouseButton(win32_state *State, int button)
         return WIN32_RELEASE;
     }
 
-    s32 Result = (s32)State->MouseButtons[button];
+    s32 Result = (s32)Window->MouseButtons[button];
     return(Result);
 }
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -423,7 +423,7 @@ Win32NkScrollCallback(nk_win32 *NkWin32, double xoff, double yoff)
 }
 
 internal inline void
-Win32NkMouseButtonCallback(nk_win32 *NkWin32, win32_state *State, int button, int action)
+Win32NkMouseButtonCallback(win32_window *Window, int button, int action)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -435,20 +435,20 @@ Win32NkMouseButtonCallback(nk_win32 *NkWin32, win32_state *State, int button, in
     if(button != WIN32_MOUSE_BUTTON_LEFT)
         return;
 
-    Win32GetCursorPos(State, &x, &y);
+    Win32GetCursorPos(Window, &x, &y);
     if(action == WIN32_PRESS)
     {
-        double dt = Win32GetTime() - NkWin32->last_button_click;
+        double dt = Win32GetTime() - Window->Nk.last_button_click;
         if((dt > NK_WIN32_DOUBLE_CLICK_LO) && (dt < NK_WIN32_DOUBLE_CLICK_HI))
         {
-            NkWin32->is_double_click_down = nk_true;
-            NkWin32->double_click_pos = nk_vec2((float)x, (float)y);
+            Window->Nk.is_double_click_down = nk_true;
+            Window->Nk.double_click_pos = nk_vec2((float)x, (float)y);
         }
 
-        NkWin32->last_button_click = Win32GetTime();
+        Window->Nk.last_button_click = Win32GetTime();
     }
     else
-        NkWin32->is_double_click_down = nk_false;
+        Window->Nk.is_double_click_down = nk_false;
 }
 
 internal inline void
@@ -538,7 +538,7 @@ Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
       repo
     */
 
-    win32_state *State = (win32_state *)usr.ptr;
+    win32_window *Window = (win32_window *)usr.ptr;
 
     char *str = 0;
     (void)usr;
@@ -547,12 +547,12 @@ Win32NkClipboardCopy(nk_handle usr, const char *text, int len)
     if (!str) return;
     Copy(len, (void *)text, (void *)str);
     str[len] = '\0';
-    Win32SetClipboardString(State, str);
+    Win32SetClipboardString(Window, str);
     Win32DeallocateMemory(str);
 }
 
 internal struct nk_context*
-Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
+Win32InitNkContext(win32_window *Window)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -560,19 +560,19 @@ Win32InitNkContext(win32_state *State, nk_win32 *NkWin32)
       repo
     */
 
-    nk_init_default(&NkWin32->ctx, 0);
+    nk_init_default(&Window->Nk.ctx, 0);
 
-    NkWin32->ctx.clip.userdata.ptr = (void *)State;
-    NkWin32->ctx.clip.copy = Win32NkClipboardCopy;
-    NkWin32->ctx.clip.paste = Win32NkClipboardPaste;
-    nk_buffer_init_default(&NkWin32->ogl.cmds);
+    Window->Nk.ctx.clip.userdata.ptr = (void *)Window;
+    Window->Nk.ctx.clip.copy = Win32NkClipboardCopy;
+    Window->Nk.ctx.clip.paste = Win32NkClipboardPaste;
+    nk_buffer_init_default(&Window->Nk.ogl.cmds);
 
-    NkWin32->is_double_click_down = nk_false;
-    NkWin32->double_click_pos = nk_vec2(0, 0);
+    Window->Nk.is_double_click_down = nk_false;
+    Window->Nk.double_click_pos = nk_vec2(0, 0);
 
-    NkWin32->delta_time_seconds_last = Win32GetTime();
+    Window->Nk.delta_time_seconds_last = Win32GetTime();
 
-    return &NkWin32->ctx;
+    return &Window->Nk.ctx;
 }
 
 internal void
@@ -607,7 +607,7 @@ Win32NkFontStashEnd(nk_win32 *NkWin32)
 }
 
 internal void
-Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 WindowHeight,
+Win32NkUpdateInputs(win32_state *State, win32_window *Window, u32 WindowWidth, u32 WindowHeight,
                     rectangle2i DrawRegion, f32 dt)
 {
     /*
@@ -616,6 +616,8 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
       repo
     */
 
+    nk_win32 *NkWin32 = &Window->Nk;
+    
     int i;
     double x, y;
     struct nk_context *ctx = &NkWin32->ctx;
@@ -646,15 +648,15 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
     if (k_state[NK_KEY_SCROLL_UP] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_UP, k_state[NK_KEY_SCROLL_UP]);
     if (k_state[NK_KEY_SCROLL_DOWN] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_DOWN, k_state[NK_KEY_SCROLL_DOWN]);
 
-    nk_input_key(ctx, NK_KEY_TEXT_START, Win32GetKey(State, WIN32_KEY_HOME) == WIN32_PRESS);
-    nk_input_key(ctx, NK_KEY_TEXT_END, Win32GetKey(State, WIN32_KEY_END) == WIN32_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_START, Win32GetKey(State, WIN32_KEY_HOME) == WIN32_PRESS);
-    nk_input_key(ctx, NK_KEY_SCROLL_END, Win32GetKey(State, WIN32_KEY_END) == WIN32_PRESS);
-    nk_input_key(ctx, NK_KEY_SHIFT, Win32GetKey(State, WIN32_KEY_LEFT_SHIFT) == WIN32_PRESS||
-                 Win32GetKey(State, WIN32_KEY_RIGHT_SHIFT) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_START, Win32GetKey(Window, WIN32_KEY_HOME) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_TEXT_END, Win32GetKey(Window, WIN32_KEY_END) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_START, Win32GetKey(Window, WIN32_KEY_HOME) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SCROLL_END, Win32GetKey(Window, WIN32_KEY_END) == WIN32_PRESS);
+    nk_input_key(ctx, NK_KEY_SHIFT, Win32GetKey(Window, WIN32_KEY_LEFT_SHIFT) == WIN32_PRESS||
+                 Win32GetKey(Window, WIN32_KEY_RIGHT_SHIFT) == WIN32_PRESS);
 
-    if (Win32GetKey(State, WIN32_KEY_LEFT_CONTROL) == WIN32_PRESS ||
-        Win32GetKey(State, WIN32_KEY_RIGHT_CONTROL) == WIN32_PRESS) {
+    if (Win32GetKey(Window, WIN32_KEY_LEFT_CONTROL) == WIN32_PRESS ||
+        Win32GetKey(Window, WIN32_KEY_RIGHT_CONTROL) == WIN32_PRESS) {
         /* Note these are physical keys and won't respect any layouts/key mapping */
         if (k_state[NK_KEY_COPY] >= 0) nk_input_key(ctx, NK_KEY_COPY, k_state[NK_KEY_COPY]);
         if (k_state[NK_KEY_PASTE] >= 0) nk_input_key(ctx, NK_KEY_PASTE, k_state[NK_KEY_PASTE]);
@@ -674,7 +676,7 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
         nk_input_key(ctx, NK_KEY_CUT, 0);
     }
 
-    Win32GetCursorPos(State, &x, &y);
+    Win32GetCursorPos(Window, &x, &y);
 
     r32 MouseU = Clamp01MapToRange((r32)DrawRegion.Min.x, (f32)x, (r32)DrawRegion.Max.x);
     r32 MouseV = Clamp01MapToRange((r32)DrawRegion.Min.y, (f32)y, (r32)DrawRegion.Max.y);
@@ -684,14 +686,14 @@ Win32NkUpdateInputs(win32_state *State, nk_win32 *NkWin32, u32 WindowWidth, u32 
 
     nk_input_motion(ctx, (int)x, (int)y);
     if (ctx->input.mouse.grabbed) {
-        Win32SetCursorPos(State, (double)ctx->input.mouse.prev.x, (double)ctx->input.mouse.prev.y);
+        Win32SetCursorPos(Window, (double)ctx->input.mouse.prev.x, (double)ctx->input.mouse.prev.y);
         ctx->input.mouse.pos.x = ctx->input.mouse.prev.x;
         ctx->input.mouse.pos.y = ctx->input.mouse.prev.y;
     }
 
-    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_LEFT) == WIN32_PRESS);
-    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_MIDDLE) == WIN32_PRESS);
-    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, Win32GetMouseButton(State, WIN32_MOUSE_BUTTON_RIGHT) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, Win32GetMouseButton(Window, WIN32_MOUSE_BUTTON_LEFT) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, Win32GetMouseButton(Window, WIN32_MOUSE_BUTTON_MIDDLE) == WIN32_PRESS);
+    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, Win32GetMouseButton(Window, WIN32_MOUSE_BUTTON_RIGHT) == WIN32_PRESS);
     nk_input_button(ctx, NK_BUTTON_DOUBLE, (int)NkWin32->double_click_pos.x, (int)NkWin32->double_click_pos.y, NkWin32->is_double_click_down);
     nk_input_scroll(ctx, NkWin32->scroll);
     nk_input_end(&NkWin32->ctx);
@@ -721,10 +723,11 @@ Win32NkShutdown(nk_win32 *NkWin32)
 }
 
 inline nk_context *
-Win32SetupNkContext(win32_state *State, nk_win32 *NkWin32, s32 Width, s32 Height)
+Win32SetupNkContext(win32_window *Window, s32 Width, s32 Height)
 {
+    nk_win32 *NkWin32 = &Window->Nk;
     struct nk_context *Result = 0;
-    Result = Win32InitNkContext(State, NkWin32);
+    Result = Win32InitNkContext(Window);
     {
         struct nk_font_atlas *atlas;
         Win32NkFontStashBegin(NkWin32, &atlas);
@@ -1290,8 +1293,11 @@ DEBUG_PLATFORM_GET_PROCESS_STATE(DEBUGGetProcessState)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): OPENGL INIT
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-internal void
-Win32SetPixelFormat(HDC WindowDC)
+#if EDITOR_INTERNAL
+internal void Win32SetPixelFormat(HDC WindowDC, HDC DebugWindowDC)
+#else
+internal void Win32SetPixelFormat(HDC WindowDC)
+#endif
 {
     int SuggestedPixelFormatIndex = 0;
     GLuint ExtendedPick = 0;
@@ -1335,6 +1341,10 @@ Win32SetPixelFormat(HDC WindowDC)
     DescribePixelFormat(WindowDC, SuggestedPixelFormatIndex,
                         sizeof(SuggestedPixelFormat), &SuggestedPixelFormat);
     SetPixelFormat(WindowDC, SuggestedPixelFormatIndex, &SuggestedPixelFormat);
+#if EDITOR_INTERNAL
+    if(DebugWindowDC)
+        SetPixelFormat(DebugWindowDC, SuggestedPixelFormatIndex, &SuggestedPixelFormat);
+#endif
 }
 
 internal void
@@ -1363,7 +1373,11 @@ Win32LoadWGLExtensions(void)
             0);
 
         HDC WindowDC = GetDC(Window);
+#if EDITOR_INTERNAL
+        Win32SetPixelFormat(WindowDC, 0);
+#else
         Win32SetPixelFormat(WindowDC);
+#endif
         HGLRC OpenGLRC = wglCreateContext(WindowDC);
         if(wglMakeCurrent(WindowDC, OpenGLRC))        
         {
@@ -1383,12 +1397,19 @@ Win32LoadWGLExtensions(void)
     }
 }
 
-internal HGLRC
-Win32InitOpenGL(HDC WindowDC)
+#if EDITOR_INTERNAL
+internal HGLRC Win32InitOpenGL(HDC WindowDC, HDC DebugWindowDC)
+#else
+internal HGLRC Win32InitOpenGL(HDC WindowDC)
+#endif
 {
     Win32LoadWGLExtensions();
     
+#if EDITOR_INTERNAL
+    Win32SetPixelFormat(WindowDC, DebugWindowDC);
+#else
     Win32SetPixelFormat(WindowDC);
+#endif
 
     b32 ModernContext = true;
     HGLRC OpenGLRC = 0;
@@ -1799,7 +1820,7 @@ Win32ProcessKeyboardMessage(engine_button_state *NewState, bool32 IsDown)
 // Notifies shared code of a scroll event
 //
 internal inline void
-Win32InputScroll(win32_state *State, double xoffset, double yoffset)
+Win32InputScroll(win32_window *Window, double xoffset, double yoffset)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -1811,10 +1832,7 @@ Win32InputScroll(win32_state *State, double xoffset, double yoffset)
     Assert(yoffset > -FLT_MAX);
     Assert(yoffset < FLT_MAX);
 
-    Win32NkScrollCallback(&State->NkMain, xoffset, yoffset);
-#if EDITOR_INTERNAL
-    Win32NkScrollCallback(&State->NkDebug, xoffset, yoffset);
-#endif
+    Win32NkScrollCallback(&Window->Nk, xoffset, yoffset);
 }
 
 // Notifies shared code of a Unicode codepoint input event
@@ -1822,7 +1840,7 @@ Win32InputScroll(win32_state *State, double xoffset, double yoffset)
 //
 
 internal inline void
-Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
+Win32InputChar(win32_state *State, win32_window *Window, uint32_t codepoint, int mods, b32 plain)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -1839,18 +1857,13 @@ Win32InputChar(win32_state *State, uint32_t codepoint, int mods, b32 plain)
         mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
     if (plain)
-    {
-        Win32NkCharCallback(&State->NkMain, codepoint);
-#if EDITOR_INTERNAL
-        Win32NkCharCallback(&State->NkDebug, codepoint);
-#endif
-    }
+        Win32NkCharCallback(&Window->Nk, codepoint);
 }
 
 // Notifies shared code of a physical key event
 //
 internal inline void
-Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
+Win32InputKey(win32_state *State, win32_window *Window, int key, int scancode, int action, int mods)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -1866,13 +1879,13 @@ Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
     {
         b32 repeated = WIN32_FALSE;
 
-        if (action == WIN32_RELEASE && State->keys[key] == WIN32_RELEASE)
+        if (action == WIN32_RELEASE && Window->keys[key] == WIN32_RELEASE)
             return;
 
-        if (action == WIN32_PRESS && State->keys[key] == WIN32_PRESS)
+        if (action == WIN32_PRESS && Window->keys[key] == WIN32_PRESS)
             repeated = WIN32_TRUE;
 
-        State->keys[key] = (char) action;
+        Window->keys[key] = (char) action;
 
         if (repeated)
             action = WIN32_REPEAT;
@@ -1881,17 +1894,13 @@ Win32InputKey(win32_state *State, int key, int scancode, int action, int mods)
     if (!State->lockKeyMods)
         mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
-    Win32NkKeyCallback(&State->NkMain, key, scancode, action, mods);
-
-#if EDITOR_INTERNAL
-    Win32NkKeyCallback(&State->NkDebug, key, scancode, action, mods);
-#endif
+    Win32NkKeyCallback(&Window->Nk, key, scancode, action, mods);
 }
 
 // Notifies shared code of a mouse button click event
 //
 internal inline void
-Win32InputMouseClick(win32_state *State, int button, int action, int mods)
+Win32InputMouseClick(win32_state *State, win32_window *Window, int button, int action, int mods)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -1909,12 +1918,9 @@ Win32InputMouseClick(win32_state *State, int button, int action, int mods)
     if (!State->lockKeyMods)
         mods &= ~(WIN32_MOD_CAPS_LOCK | WIN32_MOD_NUM_LOCK);
 
-    State->MouseButtons[button] = (char) action;
+    Window->MouseButtons[button] = (char) action;
 
-    Win32NkMouseButtonCallback(&State->NkMain, State, button, action);
-#if EDITOR_INTERNAL
-    Win32NkMouseButtonCallback(&State->NkDebug, State, button, action);
-#endif
+    Win32NkMouseButtonCallback(Window, button, action);
 }
 
 internal void
@@ -1924,10 +1930,16 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
     for(;;)
     {
         BOOL GotMessage = FALSE;
-        
+        win32_window *Window = 0;
         {
             TIMED_BLOCK("PeekMessage");
             GotMessage = PeekMessage(&Message, 0, 0, 0, PM_REMOVE);
+            if(State->MainWindow.Handle == Message.hwnd)
+                Window = &State->MainWindow;
+#if EDITOR_INTERNAL
+            else if(State->DebugWindow.Handle == Message.hwnd)
+                Window = &State->DebugWindow;
+#endif
         }
         
         if(!GotMessage)
@@ -1945,30 +1957,30 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
             case WM_MOUSEWHEEL:
             {
                 *MouseRotated = (s16)(Message.wParam >> 16);
-                Win32InputScroll(State, 0.0, (SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA);
+                Win32InputScroll(Window, 0.0, (SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA);
             } break;
 
             case WM_MOUSEHWHEEL:
             {
                 // This message is only sent on Windows Vista and later
                 // NOTE: The X-axis is inverted for consistency with macOS and X11
-                Win32InputScroll(State, -((SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA), 0.0);
+                Win32InputScroll(Window, -((SHORT) HIWORD(Message.wParam) / (double) WHEEL_DELTA), 0.0);
             } break;
 
             case WM_CHAR:
             case WM_SYSCHAR:
             {
                 if (Message.wParam >= 0xd800 && Message.wParam <= 0xdbff)
-                    State->highSurrogate = (WCHAR) Message.wParam;
+                    Window->highSurrogate = (WCHAR) Message.wParam;
                 else
                 {
                     uint32_t codepoint = 0;
 
                     if (Message.wParam >= 0xdc00 && Message.wParam <= 0xdfff)
                     {
-                        if (State->highSurrogate)
+                        if (Window->highSurrogate)
                         {
-                            codepoint += (State->highSurrogate - 0xd800) << 10;
+                            codepoint += (Window->highSurrogate - 0xd800) << 10;
                             codepoint += (WCHAR) Message.wParam - 0xdc00;
                             codepoint += 0x10000;
                         }
@@ -1976,8 +1988,8 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     else
                         codepoint = (WCHAR) Message.wParam;
 
-                    State->highSurrogate = 0;
-                    Win32InputChar(State, codepoint, Win32GetKeyMods(), Message.message != WM_SYSCHAR);
+                    Window->highSurrogate = 0;
+                    Win32InputChar(State, Window, codepoint, Win32GetKeyMods(), Message.message != WM_SYSCHAR);
                 }
 
             } break;
@@ -2015,18 +2027,18 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
 
                 for (i = 0;  i <= WIN32_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->MouseButtons[i] == WIN32_PRESS)
+                    if (Window->MouseButtons[i] == WIN32_PRESS)
                         break;
                 }
 
                 if (i > WIN32_MOUSE_BUTTON_LAST)
-                    SetCapture(State->WindowHandle);
+                    SetCapture(Window->Handle);
 
-                Win32InputMouseClick(State, button, action, Win32GetKeyMods());
+                Win32InputMouseClick(State, Window, button, action, Win32GetKeyMods());
 
                 for (i = 0;  i <= WIN32_MOUSE_BUTTON_LAST;  i++)
                 {
-                    if (State->MouseButtons[i] == WIN32_PRESS)
+                    if (Window->MouseButtons[i] == WIN32_PRESS)
                         break;
                 }
 
@@ -2115,17 +2127,17 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     // HACK: Release both Shift keys on Shift up event, as when both
                     //       are pressed the first release does not emit any event
                     // NOTE: The other half of this is in _glfwPollEventsWin32
-                    Win32InputKey(State, WIN32_KEY_LEFT_SHIFT, scancode, action, mods);
-                    Win32InputKey(State, WIN32_KEY_RIGHT_SHIFT, scancode, action, mods);
+                    Win32InputKey(State, Window, WIN32_KEY_LEFT_SHIFT, scancode, action, mods);
+                    Win32InputKey(State, Window, WIN32_KEY_RIGHT_SHIFT, scancode, action, mods);
                 }
                 else if (Message.wParam == VK_SNAPSHOT)
                 {
                     // HACK: Key down is not reported for the Print Screen key
-                    Win32InputKey(State, key, scancode, WIN32_PRESS, mods);
-                    Win32InputKey(State, key, scancode, WIN32_RELEASE, mods);
+                    Win32InputKey(State, Window, key, scancode, WIN32_PRESS, mods);
+                    Win32InputKey(State, Window, key, scancode, WIN32_RELEASE, mods);
                 }
                 else
-                    Win32InputKey(State, key, scancode, action, mods);
+                    Win32InputKey(State, Window, key, scancode, action, mods);
 
 #if 1
                 uint32 VKCode = (uint32)Message.wParam;
@@ -3349,20 +3361,38 @@ WinMain(HINSTANCE Instance,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
-                0,
-                0,
-                Instance,
-                0);
+                0, 0, Instance, 0);
+#if EDITOR_INTERNAL
+        HWND DebugWindow =
+            CreateWindowExA(
+                0, // WS_EX_TOPMOST|WS_EX_LAYERED,
+                WindowClass.lpszClassName,
+                "Debug",
+                WS_OVERLAPPEDWINDOW,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                960, 540,
+                0, 0, Instance, 0);
+#endif
         if(Window)
         {
-            Win32State.WindowHandle = Window;
+            Win32State.MainWindow.Handle = Window;
+#if EDITOR_INTERNAL
+            Win32State.DebugWindow.Handle = DebugWindow;
+            SetWindowPos(DebugWindow, HWND_TOP, 200, 200, 960, 540, SWP_SHOWWINDOW);
+#endif
             ToggleFullscreen(Window);
 
             // NOTE(pvlso): Init OpenGLRC
-            HDC OpenGLDC = GetDC(Window);
             HGLRC OpenGLRC = 0;
+#if EDITOR_INTERNAL
+            HDC OpenGLDC = GetDC(Window);
+            HDC DebugOpenGLDC = GetDC(DebugWindow);
+            OpenGLRC = Win32InitOpenGL(OpenGLDC, DebugOpenGLDC);
+#else
+            HDC OpenGLDC = GetDC(Window);
             OpenGLRC = Win32InitOpenGL(OpenGLDC);
-
+#endif
             // NOTE(pvlso): Init multithreading queues
             win32_thread_startup HighPriStartups[3] = {};
             platform_work_queue HighPriorityQueue = {};
@@ -3446,10 +3476,10 @@ WinMain(HINSTANCE Instance,
 
             memory_arena FrameTempArena = {};
 
-            nk_context *nk = Win32SetupNkContext(&Win32State, &Win32State.NkMain,
+            nk_context *nk = Win32SetupNkContext(&Win32State.MainWindow,
                                                  UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
 #if EDITOR_INTERNAL
-            nk_context *debug_nk = Win32SetupNkContext(&Win32State, &Win32State.NkDebug,
+            nk_context *debug_nk = Win32SetupNkContext(&Win32State.DebugWindow,
                                                        UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y);
 #endif
             nk_colorf bg = {};
@@ -3466,6 +3496,10 @@ WinMain(HINSTANCE Instance,
                 win32_window_dimension Dimension = Win32GetWindowDimension(Window);
                 rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                         Dimension.Width, Dimension.Height);
+
+                win32_window_dimension DebugDimension = Win32GetWindowDimension(DebugWindow);
+                rectangle2i DebugDrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
+                                                             DebugDimension.Width, DebugDimension.Height);
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): Input Processing
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3552,14 +3586,14 @@ WinMain(HINSTANCE Instance,
 // NOTE(pvlso): Engine Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-                Win32NkUpdateInputs(&Win32State, &Win32State.NkMain,
+                Win32NkUpdateInputs(&Win32State, &Win32State.MainWindow,
                                     UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                                     DrawRegion,
                                     TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
-                Win32NkUpdateInputs(&Win32State, &Win32State.NkDebug,
+                Win32NkUpdateInputs(&Win32State, &Win32State.DebugWindow,
                                     UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
-                                    DrawRegion,
+                                    DebugDrawRegion,
                                     TargetSecondsPerFrame);
 #endif
                 BEGIN_BLOCK("Engine Update");
@@ -3567,7 +3601,7 @@ WinMain(HINSTANCE Instance,
                 {
                     if(Engine.UpdateAndRender)
                     {
-                        v2 UIScale = V2(Win32State.NkMain.fb_scale.x, Win32State.NkMain.fb_scale.y);
+                        v2 UIScale = V2(Win32State.MainWindow.Nk.fb_scale.x, Win32State.MainWindow.Nk.fb_scale.y);
                         Engine.UpdateAndRender(nk, UIScale, &EditorMemory, NewInput, &RenderCommands);
                         if(NewInput->QuitRequested)
                         {
@@ -3766,17 +3800,32 @@ WinMain(HINSTANCE Instance,
                     TextureOpQueue->FirstFree = FirstTextureOp;
                     EndTicketMutex(&TextureOpQueue->Mutex);
                 }
-
                 HDC DeviceContext = GetDC(Window);
                 Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DeviceContext,
                                            DrawRegion, Dimension.Width, Dimension.Height, &FrameTempArena);
-                NKOpenGLRenderCommands(&Win32State.NkMain, DrawRegion, NK_ANTI_ALIASING_ON);
+
+
+                NKOpenGLRenderCommands(&Win32State.MainWindow.Nk, DrawRegion, NK_ANTI_ALIASING_ON);
+
 #if EDITOR_INTERNAL
-                NKOpenGLRenderCommands(&Win32State.NkDebug, DrawRegion, NK_ANTI_ALIASING_ON);
+                HDC DebugDeviceContext = GetDC(DebugWindow);
+                wglMakeCurrent(DebugDeviceContext, OpenGLRC);
+
+                glClearColor(1, 1, 1, 1);
+                glClear(GL_COLOR_BUFFER_BIT);
+//                Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DebugDeviceContext,
+//                                           DebugDrawRegion, DebugDimension.Width, DebugDimension.Height, &FrameTempArena);
 #endif
+                NKOpenGLRenderCommands(&Win32State.DebugWindow.Nk, DebugDrawRegion, NK_ANTI_ALIASING_ON);
+                wglMakeCurrent(DeviceContext, OpenGLRC);
+
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);
+#if EDITOR_INTERNAL
 
+                SwapBuffers(DebugDeviceContext);
+                ReleaseDC(DebugWindow, DebugDeviceContext);
+#endif
 
                 END_BLOCK();
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

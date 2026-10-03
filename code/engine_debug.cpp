@@ -1612,23 +1612,10 @@ DEBUGEnd(debug_state *DebugState, engine_input *Input)
 
     nk_context *nk = DebugState->nk;
 
-    if(WasPressed(Input->Controllers[0].ShowProfiler))
+    if (nk_begin(nk, "Profiler", nk_rect(0, 0, (f32)1920, (f32)1080),
+                   NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
-        if(nk_window_is_hidden(nk, "Profiler"))
-            DebugState->ShowProfiler = true;
-        else
-            DebugState->ShowProfiler = false;
-    }
-    if (nk_begin(nk, "Profiler", nk_rect(0, 0, 200, 70),
-                   NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|
-                   NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE|NK_WINDOW_CLOSABLE))
-    {
-        if(DebugState->ShowProfiler)
-            nk_window_show(nk, "Profiler", NK_SHOWN);
-        else
-            nk_window_show(nk, "Profiler", NK_HIDDEN);
-
-
+        nk_window_show(nk, "Profiler", NK_SHOWN);
         DrawTrees(DebugState);
     }
     nk_end(nk);

@@ -86,30 +86,38 @@ struct nk_win32
     float delta_time_seconds_last;
 };
 
+struct win32_window
+{
+    HWND Handle;
+    nk_win32 Nk;
+
+    WCHAR highSurrogate;
+    
+    char MouseButtons[WIN32_MOUSE_BUTTON_LAST + 1];
+    char keys[WIN32_KEY_LAST + 1];
+
+    s32 cursorMode;
+    s32 lastCursorPosX, lastCursorPosY;
+};
+
 #define WIN32_STATE_FILE_NAME_COUNT MAX_PATH
 struct win32_state
 {
     wchar_t EXEFileName[WIN32_STATE_FILE_NAME_COUNT];
     wchar_t *OnePastLastEXEFileNameSlash;
 
-    HWND WindowHandle;
+    win32_window *CurrentWindow;
 
-    WCHAR highSurrogate;
     b32 lockKeyMods;
 
     s16 Keycodes[512];
     s16 Scancodes[WIN32_KEY_LAST + 1];
 
-    char MouseButtons[WIN32_MOUSE_BUTTON_LAST + 1];
-    char keys[WIN32_KEY_LAST + 1];
-
-    s32 cursorMode;
-    s32 lastCursorPosX, lastCursorPosY;
+    win32_window MainWindow;
     char *clipboardString;
 
-    nk_win32 NkMain;
 #if EDITOR_INTERNAL
-    nk_win32 NkDebug;
+    win32_window DebugWindow;
 #endif
 };
 
