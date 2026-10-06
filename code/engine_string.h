@@ -8,6 +8,17 @@
    ======================================================================== */
 #include <stdarg.h>
 
+inline u32
+StringLength(char *String)
+{
+    u32 Count = 0;
+    while(*String++)
+    {
+        ++Count;
+    }
+    return(Count);
+}
+
 inline b32
 IsDigit(char C)
 {
@@ -198,7 +209,8 @@ ReadVarArgFloat(u32 Length, va_list *ArgList)
     {
         case 4:
         {
-            Result = va_arg(*ArgList, f32);
+            // NOTE(pvlso): floats are promoted to double when passed through varargs
+            Result = (f32)va_arg(*ArgList, f64);
         } break;
 
         case 8:
@@ -269,8 +281,13 @@ F64ToASCII(format_dest *Dest, f64 Value, u32 Precision)
 }
 
 internal umm
-FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgList)
+FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgListInit)
 {
+    // NOTE(pvlso): On x64 SysV va_list is an array type, so taking the address of a
+    // va_list parameter gives the wrong type. Work on a local copy instead.
+    va_list ArgList;
+    va_copy(ArgList, ArgListInit);
+
     format_dest Dest = {DestSize, DestInit};
 
     if(Dest.Size)
@@ -624,6 +641,8 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgList)
             Dest.At[-1] = 0;
         }
     }
+
+    va_end(ArgList);
 
     umm Result = Dest.At - DestInit;
     return(Result);

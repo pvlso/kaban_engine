@@ -37,7 +37,7 @@ ZeroSize(umm Size, void *Ptr)
 
         for(umm I = 0; I < AVXSize; ++I)
         {
-            _mm256_store_si256((__m256i *)Byte, Zero_32x);
+            _mm256_storeu_si256((__m256i *)Byte, Zero_32x);
             Byte += 32;
         }
     }
@@ -49,7 +49,7 @@ ZeroSize(umm Size, void *Ptr)
 
         for(umm I = 0; I < SSESize; ++I)
         {
-            _mm_store_si128((__m128i *)Byte, Zero_16x);
+            _mm_storeu_si128((__m128i *)Byte, Zero_16x);
             Byte += 16;
         }
     }

@@ -19,147 +19,13 @@
     1 - Slow code welcome.
 */
 
+#include "engine_types.h"
+#include "engine_defines.h"
+#include "engine_intrinsics.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-//
-// NOTE(casey): Compilers
-//
-
-#include "engine_types.h"
-#include "engine_defines.h"
-    
-#include "engine_file_formats.h"
-//#include "engine_asset_new.h"
-    
-
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(pvlso): MULTITHREADING
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-inline uint32
-SafeTruncateUInt64(uint64 Value)
-{
-    Assert(Value <= U32Maximum);
-    uint32 Result = (uint32)Value;
-    return(Result);
-}
-
-inline u16
-SafeTruncateToU16(uint32 Value)
-{
-    Assert(Value <= U16Maximum);
-    u16 Result = (u16)Value;
-    return(Result);
-}
-
-#if COMPILER_MSVC
-#define CompletePreviousReadsBeforeFutureReads _ReadBarrier()
-#define CompletePreviousWritesBeforeFutureWrites _WriteBarrier()
-inline uint32
-AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
-{
-    uint32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
-
-    return(Result);
-}
-
-inline u64
-AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
-
-    return(Result);
-}
-
-inline u64
-AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
-
-    return(Result);
-}    
-
-inline u32
-GetThreadID(void)
-{
-    u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
-    u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
-
-    return(ThreadID);
-}
-
-#elif COMPILER_LLVM
-#define CompletePreviousReadsBeforeFutureReads asm volatile("" ::: "memory")
-#define CompletePreviousWritesBeforeFutureWrites asm volatile("" ::: "memory")
-
-inline uint32
-AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
-{
-    uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
-
-    return(Result);
-}
-
-inline u64
-AtomicExchangeU64(u64 volatile *Value, u64 New)
-{
-    u64 Result = __sync_lock_test_and_set(Value, New);
-
-    return(Result);
-}
-
-inline u64
-AtomicAddU64(u64 volatile *Value, u64 Addend)
-{
-    // NOTE(casey): Returns the original value _prior_ to adding
-    u64 Result = __sync_fetch_and_add(Value, Addend);
-
-    return(Result);
-}    
-
-inline u32
-GetThreadID(void)
-{
-    u32 ThreadID;
-#if defined(__APPLE__) && defined(__x86_64__)
-    asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
-#elif defined(__i386__)
-    asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
-#elif defined(__x86_64__)
-    asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
-#else
-#error Unsupported architecture
-#endif
-
-    return(ThreadID);
-}
-#else
-// TODO(casey): Other compilers/platforms??
-#endif
-
-struct ticket_mutex
-{
-    u64 volatile Ticket;
-    u64 volatile Serving;
-};
-
-inline void
-BeginTicketMutex(ticket_mutex *Mutex)
-{
-    u64 Ticket = AtomicAddU64(&Mutex->Ticket, 1);
-    while(Ticket != Mutex->Serving) {_mm_pause();};
-}
-
-inline void
-EndTicketMutex(ticket_mutex *Mutex)
-{
-    AtomicAddU64(&Mutex->Serving, 1);
-}
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// ...........................................................................................................................................................
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 /*
   NOTE(casey): Services that the editor provides to the platform layer.
@@ -367,7 +233,8 @@ typedef struct platform_file_group
 } platform_file_group;
 
 // NOTE(pvlso): File type classification used by the platform layer.
-// - None: use the filename exactly as provided (no prefix/pattern).
+// - None: use the filename exactly as provided (no prefix/pattern), relative to the
+//   executable directory. Always use '/' as the separator, the platform converts it.
 // - Other types: map to a directory or wildcard used during file lookup.
 // - TXT/JSON: treated as text files; loader appends a null terminator.
 typedef enum platform_file_type
@@ -468,7 +335,9 @@ typedef struct platform_loaded_code
     void *Platform;
 } platform_loaded_code;
 
-#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *SourceDLLName, char *TempDLLName, char *LockFileName)
+// NOTE(pvlso): ModuleName is the bare name of the library ("arkham"), the platform layer
+// adds the OS specific prefix/extension and looks for it next to the executable.
+#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *ModuleName)
 typedef PLATFORM_LOAD_CODE(platform_load_code);
 
 #define PLATFORM_UNLOAD_CODE(name) void name(platform_loaded_code *Code)
@@ -509,28 +378,10 @@ struct platform_texture_op_queue
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(pvlso): NUKLEAR API
+// NOTE(pvlso): UI
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-//#include "engine_platform_nuklear.h"
 #define UI_BASE_RESOLUTION_X 1920
 #define UI_BASE_RESOLUTION_Y 1080
-
-typedef struct builder_loaded_font
-{
-    u32 OnePastHighestCodePoint;
-    u32 GlyphCount;
-    r32 AscenderHeight;
-    r32 DescenderHeight;
-    r32 ExternalLeading;
-
-    u32 *UnicodeCodePoints;
-    struct loaded_bitmap *Glyphs;
-    r32 *HorizontalAdvance;
-    u16 *UnicodeMap;
-} builder_loaded_font;
-
-#define PLATFORM_LOAD_FONT_ASSET(name) builder_loaded_font name(char *FileName, u32 FontSize, memory_arena *Arena)
-typedef PLATFORM_LOAD_FONT_ASSET(platform_load_font_asset);
 
 #define PLATFORM_SLEEP(name) void name(s32 Time)
 typedef PLATFORM_SLEEP(platform_sleep);
@@ -569,8 +420,6 @@ typedef struct platform_api
     platform_get_proc_address *GetProcAddress;
     platform_sleep *Sleep;
 
-    platform_load_font_asset *LoadFontAsset;    
-    
 #if EDITOR_INTERNAL
     debug_platform_execute_system_command *DEBUGExecuteSystemCommand;
     debug_platform_get_process_state *DEBUGGetProcessState;
@@ -644,271 +493,15 @@ struct debug_table;
 #define DEBUG_EDITOR_FRAME_END(name) void name(struct nk_context *nk, engine_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands)
 typedef DEBUG_EDITOR_FRAME_END(debug_editor_frame_end);
 
-struct debug_id
-{
-    void *Value[2];
-};
-
-#if EDITOR_INTERNAL
-enum debug_type
-{
-    DebugType_Unknown,
-
-    DebugType_FrameMarker,
-    DebugType_BeginBlock,
-    DebugType_EndBlock,
-
-    DebugType_OpenDataBlock,
-    DebugType_CloseDataBlock,
-
-//    DebugType_MarkDebugValue,
-
-    DebugType_b32,
-    DebugType_r32,
-    DebugType_u32,
-    DebugType_s32,
-    DebugType_v2,
-    DebugType_v3,
-    DebugType_v4,
-    DebugType_rectangle2,
-    DebugType_rectangle3,
-    DebugType_bitmap_id,    
-    DebugType_sound_id,    
-    DebugType_font_id,    
-    DebugType_memory_arena_p,
-
-    DebugType_ThreadIntervalGraph,
-    DebugType_FrameBarGraph,
-    DebugType_LastFrameInfo,
-    DebugType_DebugMemoryInfo,
-    DebugType_FrameSlider,
-    DebugType_TopClocksList,
-    
-    DebugType_ArenaOccupancy,
-};
-typedef struct memory_arena *memory_arena_p;
-struct debug_event
-{
-    u64 Clock;
-    char *GUID;
-    u16 ThreadID;
-    u16 CoreIndex;
-    u8 Type;
-    union
-    {
-        debug_id DebugID;
-        debug_event *Value_debug_event;
-
-        b32 Value_b32;
-        s32 Value_s32;
-        u32 Value_u32;
-        r32 Value_r32;
-        v2 Value_v2;
-        v3 Value_v3;
-        v4 Value_v4;
-        rectangle2 Value_rectangle2;
-        rectangle3 Value_rectangle3;
-        memory_arena_p Value_memory_arena_p;
-    };
-};
-
-struct debug_table
-{
-    debug_event EditEvent;
-    u32 RecordIncrement;
-    
-    // TODO(casey): No attempt is currently made to ensure that the final
-    // debug records being written to the event array actually complete
-    // their output prior to the swap of the event array index.    
-    u32 CurrentEventArrayIndex;
-    // TODO(casey): This could actually be a u32 atomic now, since we
-    // only need 1 bit to store which array we're using...
-    u64 volatile EventArrayIndex_EventIndex;
-    debug_event Events[2][16*65536];
-};
-
-extern debug_table *GlobalDebugTable;
-
-#define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
-#define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)
-#define DEBUG_NAME(Name) UniqueFileCounterString_(__FILE__, __LINE__, __COUNTER__, Name)
-
-#define DEBUGSetEventRecording(Enabled) (GlobalDebugTable->RecordIncrement = (Enabled) ? 1 : 0)
-
-#define RecordDebugEvent(EventType, GUIDInit)                           \
-    u64 ArrayIndex_EventIndex = AtomicAddU64(&GlobalDebugTable->EventArrayIndex_EventIndex, GlobalDebugTable->RecordIncrement); \
-    u32 EventIndex = ArrayIndex_EventIndex & 0xFFFFFFFF;                \
-    Assert(EventIndex < ArrayCount(GlobalDebugTable->Events[0]));       \
-    debug_event *Event = GlobalDebugTable->Events[ArrayIndex_EventIndex >> 32] + EventIndex; \
-    Event->Clock = __rdtsc();                                           \
-    Event->Type = (u8)EventType;                                        \
-    Event->CoreIndex = 0;                                               \
-    Event->ThreadID = (u16)GetThreadID();                               \
-    Event->GUID = GUIDInit;
-
-#define FRAME_MARKER(SecondsElapsedInit)                                \
-    {RecordDebugEvent(DebugType_FrameMarker, DEBUG_NAME("Frame Marker")); \
-        Event->Value_r32 = SecondsElapsedInit;}  
-
-#define TIMED_BLOCK__(GUID, Number, ...) timed_block TimedBlock_##Number(GUID, ## __VA_ARGS__)
-#define TIMED_BLOCK_(GUID, Number, ...) TIMED_BLOCK__(GUID, Number, ## __VA_ARGS__)
-#define TIMED_BLOCK(Name, ...) TIMED_BLOCK_(DEBUG_NAME(Name), __COUNTER__, ## __VA_ARGS__)
-#define TIMED_FUNCTION(...) TIMED_BLOCK_(DEBUG_NAME(__FUNCTION__), ## __VA_ARGS__)
-
-#define BEGIN_BLOCK_(GUID) {RecordDebugEvent(DebugType_BeginBlock, GUID);}
-#define END_BLOCK_(GUID) {RecordDebugEvent(DebugType_EndBlock, GUID);}
-
-#define BEGIN_BLOCK(Name) BEGIN_BLOCK_(DEBUG_NAME(Name))
-#define END_BLOCK() END_BLOCK_(DEBUG_NAME("END_BLOCK_"))
-
-struct timed_block
-{
-    timed_block(char *GUID, u32 HitCountInit = 1)
-    {
-        BEGIN_BLOCK_(GUID);
-    }
-    
-    ~timed_block()
-    {
-        END_BLOCK();
-    }
-};
-
-#else
-
-#define TIMED_BLOCK(...) 
-#define TIMED_FUNCTION(...) 
-#define BEGIN_BLOCK(...)
-#define END_BLOCK(...)
-#define FRAME_MARKER(...)
-
-#endif
-
-//
-// NOTE(casey): Shared utils
-//
-inline u32
-StringLength(char *String)
-{
-    u32 Count = 0;
-    while(*String++)
-    {
-        ++Count;
-    }
-    return(Count);
-}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #ifdef __cplusplus
 }
 #endif
 
-
-#if defined(__cplusplus) && EDITOR_INTERNAL
-
-extern debug_event *DEBUGGlobalEditEvent;
-
-#define DEBUGValueSetEventData_(type)                                   \
-    inline void                                                         \
-    DEBUGValueSetEventData(debug_event *Event, type Ignored, void *Value) \
-    {                                                                   \
-        Event->Type = DebugType_##type;                                 \
-        if(GlobalDebugTable->EditEvent.GUID == Event->GUID)             \
-        {                                                               \
-            *(type *)Value = GlobalDebugTable->EditEvent.Value_##type;  \
-        }                                                               \
-                                                                        \
-        Event->Value_##type = *(type *)Value;                           \
-    }
-
-DEBUGValueSetEventData_(r32);
-DEBUGValueSetEventData_(u32);
-DEBUGValueSetEventData_(s32);
-DEBUGValueSetEventData_(v2);
-DEBUGValueSetEventData_(v3);
-DEBUGValueSetEventData_(v4);
-DEBUGValueSetEventData_(rectangle2);
-DEBUGValueSetEventData_(rectangle3);
-DEBUGValueSetEventData_(memory_arena_p);
-
-struct debug_data_block 
-{
-    debug_data_block(char *Name)
-    {
-        RecordDebugEvent(DebugType_OpenDataBlock, Name);
-        //Event->DebugID = ID;                                      
-    }
-    
-    ~debug_data_block(void)
-    {
-        RecordDebugEvent(DebugType_CloseDataBlock, DEBUG_NAME("End Data Block"));
-    }
-};
-
-#define DEBUG_DATA_BLOCK(Name) debug_data_block DataBlock__(DEBUG_NAME(Name))
-#define DEBUG_BEGIN_DATA_BLOCK(Name) RecordDebugEvent(DebugType_OpenDataBlock, DEBUG_NAME(Name))
-#define DEBUG_END_DATA_BLOCK(Name) RecordDebugEvent(DebugType_CloseDataBlock, DEBUG_NAME("End Data Block"))
-
-internal void DEBUGEditEventData(char *GUID, debug_event *Event);
-
-#define DEBUG_VALUE(Value)                                          \
-    {                                                               \
-        RecordDebugEvent(DebugType_Unknown, DEBUG_NAME(#Value));    \
-        DEBUGValueSetEventData(Event, Value, (void *)&(Value));     \
-    } 
-#define DEBUG_NAMED_VALUE(Value)                                    \
-    {                                                               \
-        RecordDebugEvent(DebugType_Unknown, __FUNCTION__ #Value);   \
-        DEBUGValueSetEventData(Event, Value, (void *)&(Value));     \
-    } 
-
-#define DEBUG_B32(Value)                                            \
-    {                                                               \
-        RecordDebugEvent(DebugType_Unknown, DEBUG_NAME(#Value));    \
-        DEBUGValueSetEventData(Event, (s32)0, (void *)&Value);      \
-        Event->Type = DebugType_b32;                                \
-    } 
-
-#define DEBUG_UI_ELEMENT(Type, Name)            \
-    {                                           \
-        RecordDebugEvent(Type, #Name);          \
-    } 
-
-#define DEBUG_BEGIN_ARRAY(...)
-#define DEBUG_END_ARRAY(...)
-
-inline debug_id DEBUG_POINTER_ID(void *Pointer)
-{
-    debug_id ID = {Pointer};
-
-    return(ID);
-}
-
-#define DEBUG_UI_ENABLED 1
-
-internal void DEBUG_HIT(debug_id ID, r32 ZValue);
-internal b32 DEBUG_HIGHLIGHTED(debug_id ID, v4 *Color);
-internal b32 DEBUG_REQUESTED(debug_id ID);
-
-#else
-
-#define DEBUGSetEventRecording(Enabled)
-
-inline debug_id DEBUG_POINTER_ID(void *Pointer) {debug_id NullID = {}; return(NullID);}
-
-#define DEBUG_DATA_BLOCK(...)
-#define DEBUG_VALUE(...)
-#define DEBUG_BEGIN_ARRAY(...)
-#define DEBUG_END_ARRAY(...)
-#define DEBUG_UI_ENABLED 0
-#define DEBUG_HIT(...)
-#define DEBUG_HIGHLIGHTED(...) 0
-#define DEBUG_REQUESTED(...) 0
-#define DEBUG_B32(Value)
-#endif
-
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// ...........................................................................................................................................................
-// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+#include "engine_debug_interface.h"
 
 #define EDITOR_PLATFORM_H
 #endif

@@ -332,12 +332,14 @@ BuilderWriteKEA(kea_builder *Builder)
     kesa_header *KESAHeader = Builder->KESAHeader;
 
     char KEAFileName[256];
-    FormatString(ArrayCount(KEAFileName), KEAFileName, "../data/keas/game_data_%d.kea",
+    FormatString(ArrayCount(KEAFileName), KEAFileName, "game_data_%d.kea",
                  KESAHeader->Version);
-    FILE *Out;
-    fopen_s(&Out, KEAFileName, "wb");
-    if(Out)
+    platform_file_handle Out = Platform.OpenFile(KEAFileName, PlatformFileType_KEA, PlatformFileOp_Write);
+    if(PlatformNoFileErrors(&Out))
     {
+        // NOTE(pvlso): Every write goes to an explicit offset, At tracks where the next one lands
+        u64 At = 0;
+
         kea_header Header = {};
         Header.MagicValue = KEA_MAGIC_VALUE;
         Header.Version = KESAHeader->Version;
@@ -358,7 +360,7 @@ BuilderWriteKEA(kea_builder *Builder)
         Header.TagMapsOffset = sizeof(Header);
 
         ket_tag *KETTags = (ket_tag *)PushSize(Builder->TempMem, TagMapArraySize);
-        fseek(Out, (u32)(Header.TagMapsOffset + TagMapArraySize), SEEK_SET);
+        At = Header.TagMapsOffset + TagMapArraySize;
         for(u32 TagMapIndex = 0;
             TagMapIndex < Header.TagCount;
             ++TagMapIndex)
@@ -368,18 +370,20 @@ BuilderWriteKEA(kea_builder *Builder)
             Tag->GUID = TagMap->GUID;
             Copy(KET_TAG_KEY_LENGTH, TagMap->Key, Tag->Key);
             Tag->ValueCount = TagMap->ValueCount;
-            Tag->DataOffset = ftell(Out);
+            Tag->DataOffset = At;
 
-            fwrite(TagMap->ValueGUIDs, Tag->ValueCount*sizeof(u64), 1, Out);
+            Platform.WriteDataToFile(&Out, At, Tag->ValueCount*sizeof(u64), TagMap->ValueGUIDs);
+            At += Tag->ValueCount*sizeof(u64);
             for(u32 StringIndex = 0;
                 StringIndex < Tag->ValueCount;
                 ++StringIndex)
             {
-                fwrite(TagMap->Values[StringIndex], KET_TAG_KEY_LENGTH, 1, Out);
+                Platform.WriteDataToFile(&Out, At, KET_TAG_KEY_LENGTH, TagMap->Values[StringIndex]);
+                At += KET_TAG_KEY_LENGTH;
             }
         }
 
-        Header.UsedTagsArrayOffset = ftell(Out);
+        Header.UsedTagsArrayOffset = At;
         Header.HashTable.TableOffset = Header.UsedTagsArrayOffset + UsedTagsArraySize;
         Header.TagedAssetsIndeciesOffset = Header.HashTable.TableOffset + TagHashTableDataSize;
         Header.AssetTypeTableOffset = Header.TagedAssetsIndeciesOffset + TagAssetsIndeciesSize;
@@ -394,26 +398,29 @@ BuilderWriteKEA(kea_builder *Builder)
 
         Header.AssetsOffset = Header.AssetTypeTableOffset + AssetTypeArraySize + AssetTypeTableSize;
         
-        fseek(Out, 0, SEEK_SET);
-        fwrite(&Header, sizeof(kea_header), 1, Out);
-        fwrite(KETTags, TagMapArraySize, 1, Out);
-        fseek(Out, (u32)Header.UsedTagsArrayOffset, SEEK_SET);
-        fwrite(Builder->UsedTags, UsedTagsArraySize, 1, Out);
-        fwrite(Builder->TableData, TagHashTableDataSize, 1, Out);
-        fwrite(Builder->TagAssetsIndecies, TagAssetsIndeciesSize, 1, Out);
+        // NOTE(pvlso): The header is written last, once every offset in it is known
+        Platform.WriteDataToFile(&Out, Header.TagMapsOffset, TagMapArraySize, KETTags);
+        At = Header.UsedTagsArrayOffset;
+        Platform.WriteDataToFile(&Out, At, UsedTagsArraySize, Builder->UsedTags);
+        At += UsedTagsArraySize;
+        Platform.WriteDataToFile(&Out, At, TagHashTableDataSize, Builder->TableData);
+        At += TagHashTableDataSize;
+        Platform.WriteDataToFile(&Out, At, TagAssetsIndeciesSize, Builder->TagAssetsIndecies);
+        At += TagAssetsIndeciesSize;
 
-        fseek(Out, AssetTypeArraySize, SEEK_CUR);
+        At += AssetTypeArraySize;
         for(u32 Type = 0;
             Type < KEAType_Count;
             ++Type)
         {
-            Builder->AssetTypeTable[Type].AssetsIndeciesOffset = ftell(Out);
-            fwrite(Builder->AssetTypeTableData[Type], sizeof(u32)*Builder->AssetTypeTable[Type].TypeCount, 1, Out);
+            u32 TypeTableSize = sizeof(u32)*Builder->AssetTypeTable[Type].TypeCount;
+            Builder->AssetTypeTable[Type].AssetsIndeciesOffset = At;
+            Platform.WriteDataToFile(&Out, At, TypeTableSize, Builder->AssetTypeTableData[Type]);
+            At += TypeTableSize;
         }
 
-        fseek(Out, (u32)Header.AssetTypeTableOffset, SEEK_SET);
-        fwrite(Builder->AssetTypeTable, AssetTypeArraySize, 1, Out);
-        fseek(Out, (u32)Header.AssetsOffset + AssetArraySize, SEEK_SET);
+        Platform.WriteDataToFile(&Out, Header.AssetTypeTableOffset, AssetTypeArraySize, Builder->AssetTypeTable);
+        At = Header.AssetsOffset + AssetArraySize;
 
         for(u32 AssetIndex = 1;
             AssetIndex < Header.AssetCount;
@@ -422,7 +429,7 @@ BuilderWriteKEA(kea_builder *Builder)
             kea_builder_added_asset_list *BuilderAsset = Builder->SortedBuilderAssets[AssetIndex];
             kea_asset *Dest = &BuilderAsset->KEAAsset;
             kesa_asset *Source = BuilderAsset->StoredAsset;
-            Dest->DataOffset = ftell(Out);
+            Dest->DataOffset = At;
 
             if(Dest->Type == KEAType_Sound)
             {
@@ -435,20 +442,24 @@ BuilderWriteKEA(kea_builder *Builder)
                     ChannelIndex < WAV.ChannelCount;
                     ++ChannelIndex)
                 {
-                    fwrite(WAV.Samples[ChannelIndex], Dest->Sound.SampleCount*sizeof(s16), 1, Out);
+                    u32 ChannelSize = Dest->Sound.SampleCount*sizeof(s16);
+                    Platform.WriteDataToFile(&Out, At, ChannelSize, WAV.Samples[ChannelIndex]);
+                    At += ChannelSize;
                 }
             }
             else if(Dest->Type == KEAType_Tileset)
             {
                 u32 TilesSize = Source->Tileset.TileCount*sizeof(u64);
-                fwrite(BuilderAsset->Data.Tileset.TileGUIDs, TilesSize, 1, Out);
+                Platform.WriteDataToFile(&Out, At, TilesSize, BuilderAsset->Data.Tileset.TileGUIDs);
+                At += TilesSize;
                 
                 Dest->Tileset.TileCount = Source->Tileset.TileCount;
             }
             else if(Dest->Type == KEAType_SpriteSheet)
             {
                 u32 SpritesSize = Source->SpriteSheet.SpriteCount*sizeof(u64);
-                fwrite(BuilderAsset->Data.SpriteSheet.SpriteGUIDs, SpritesSize, 1, Out);
+                Platform.WriteDataToFile(&Out, At, SpritesSize, BuilderAsset->Data.SpriteSheet.SpriteGUIDs);
+                At += SpritesSize;
 
                 Dest->SpriteSheet.SpriteCount = Source->SpriteSheet.SpriteCount;
             }
@@ -458,7 +469,8 @@ BuilderWriteKEA(kea_builder *Builder)
 
                 Dest->Text.Length = StringLength(Text.String);
                 u32 TextSize = Dest->Text.Length;
-                fwrite(Text.String, TextSize, 1, Out);
+                Platform.WriteDataToFile(&Out, At, TextSize, Text.String);
+                At += TextSize;
             }
             else if(Dest->Type == KEAType_BIN)
             {
@@ -466,7 +478,8 @@ BuilderWriteKEA(kea_builder *Builder)
                     Platform.ReadEntireFile(Source->SourceFileName, PlatformFileType_BIN, Builder->TempMem, true);    
 
                 Dest->BinaryFile.Size = ReadResult.Size;
-                fwrite(ReadResult.Contents, ReadResult.Size, 1, Out);
+                Platform.WriteDataToFile(&Out, At, ReadResult.Size, ReadResult.Contents);
+                At += ReadResult.Size;
             }
             else
             {
@@ -489,11 +502,11 @@ BuilderWriteKEA(kea_builder *Builder)
                 Dest->Bitmap.Dim[1] = Bitmap.Height;
 
                 Assert((Bitmap.Width * BITMAP_BYTES_PER_PIXEL) == Bitmap.Pitch);
-                fwrite(Bitmap.Memory, Bitmap.Height*Bitmap.Pitch, 1, Out);
+                u32 BitmapSize = Bitmap.Height*Bitmap.Pitch;
+                Platform.WriteDataToFile(&Out, At, BitmapSize, Bitmap.Memory);
+                At += BitmapSize;
             }
         }
-
-        fseek(Out, (u32)Header.AssetsOffset, SEEK_SET);
 
         kea_asset *KEAAssets = PushArray(Builder->TempMem, Builder->AssetCount, kea_asset);
         for(u32 AssetIndex = 0;
@@ -503,13 +516,15 @@ BuilderWriteKEA(kea_builder *Builder)
             KEAAssets[AssetIndex] = Builder->SortedBuilderAssets[AssetIndex]->KEAAsset;
         }
         
-        fwrite(KEAAssets, AssetArraySize, 1, Out);
-        fclose(Out);
+        Platform.WriteDataToFile(&Out, Header.AssetsOffset, AssetArraySize, KEAAssets);
+        Platform.WriteDataToFile(&Out, 0, sizeof(kea_header), &Header);
     }
     else
     {
         // TODO(pvlso): Logging
     }
+
+    Platform.CloseFile(&Out);
 }
 
 internal inline void

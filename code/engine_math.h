@@ -2156,7 +2156,7 @@ InvertedInfinityRectangle3(void)
 
     Result.Min.x = Result.Min.y = Real32Maximum;
     Result.Max.x = Result.Max.y = -Real32Maximum;
-    Result.Max.z = Result.Max.z = 0;
+    Result.Min.z = Result.Max.z = 0;
 
     return(Result);
 }

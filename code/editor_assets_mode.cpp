@@ -1429,11 +1429,13 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
 
     if(TextMode->EditTextFile && AssetsMode->SourceFileCounts[KESA_Text])
     {
+#if EDITOR_INTERNAL
         char *FileName = AssetsMode->SourceFiles[KESA_Text][AssetsMode->FileIndex];
         char CommandLine[512];
         FormatString(ArrayCount(CommandLine), CommandLine,
                      "openwithnotepad.bat txts/%s", FileName);
         Platform.DEBUGExecuteSystemCommand(0, 0, CommandLine);
+#endif
 
         TextMode->EditTextFile = false;
     }

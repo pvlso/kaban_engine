@@ -8,6 +8,7 @@
    ======================================================================== */
 
 #include "engine_platform.h"
+#include "engine_file_formats.h"
 #include "engine_config.h"
 #include "engine_shared.h"
 

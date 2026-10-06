@@ -3,3 +3,5 @@ build
 data
 arkham.cpp
 arkham.h
+# Local dev log
+DEVLOG.md

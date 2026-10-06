@@ -58,33 +58,8 @@ struct win32_debug_time_marker
     DWORD FlipWriteCursor;
 };
 
-struct nk_opengl
-{
-    struct nk_buffer cmds;
-    struct nk_draw_null_texture tex_null;
-    GLuint font_tex;
-};
-
-struct nk_win32
-{
-    int width, height;
-    int display_width, display_height;
-
-    struct nk_opengl ogl;
-    struct nk_context ctx;
-    struct nk_font_atlas atlas;
-    struct nk_vec2 fb_scale;
-
-    unsigned int text[NK_WIN32_TEXT_MAX];
-    nk_char key_events[NK_KEY_MAX];
-
-    int text_len;
-    struct nk_vec2 scroll;
-    double last_button_click;
-    int is_double_click_down;
-    struct nk_vec2 double_click_pos;
-    float delta_time_seconds_last;
-};
+// NOTE(pvlso): The nuklear backend state is shared with the renderer and the GLFW layer
+typedef nk_platform nk_win32;
 
 struct win32_window
 {
@@ -153,40 +128,6 @@ struct win32_platform_file_group
 {
     HANDLE FindHandle;
     WIN32_FIND_DATAW FindData;
-};
-
-inline u16
-ReadU16(u8 *Data, u32 Offset)
-{
-    u16 Result = (Data[Offset] << 8) | (Data[Offset + 1]);
-    return(Result);
-}
-
-inline u32
-ReadU32(u8 *Data, u32 Offset)
-{
-    u32 Result = ((Data[Offset] << 24) | (Data[Offset + 1] << 16) |
-                  (Data[Offset + 2] << 8) | (Data[Offset + 3]));
-    return(Result);
-}
-
-struct win32_loaded_font
-{
-    HFONT Win32Handle;
-    TEXTMETRIC TextMetric;
-    r32 LineAdvance;
-
-    u32 *Glyphs;
-    r32 *HorizontalAdvance;
-
-    u32 MinCodePoint;
-    u32 MaxCodePoint;
-
-    u32 MaxGlyphCount;
-    u32 GlyphCount;
-
-    u32 *GlyphIndexFromCodePoint;
-    u32 OnePastHighestCodePoint;
 };
 
 #define WIN32_EDITOR_H

@@ -6,10 +6,12 @@
    $Notice:  $
    ======================================================================== */
 
-#if defined(NUKLEAR_DLL_BUILD)
+#if defined(_WIN32) && defined(NUKLEAR_DLL_BUILD)
 #  define NK_API __declspec(dllexport)
-#elif defined(NUKLEAR_DLL_USE)
+#elif defined(_WIN32) && defined(NUKLEAR_DLL_USE)
 #  define NK_API __declspec(dllimport)
+#elif defined(NUKLEAR_DLL_BUILD)
+#  define NK_API __attribute__((visibility("default")))
 #else
 #  define NK_API
 #endif

@@ -206,5 +206,150 @@ FindLeastSignificantSetBit(uint32 Value)
     return(Result);
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): MULTITHREADING
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+inline uint32
+SafeTruncateUInt64(uint64 Value)
+{
+    Assert(Value <= U32Maximum);
+    uint32 Result = (uint32)Value;
+    return(Result);
+}
+
+inline u16
+SafeTruncateToU16(uint32 Value)
+{
+    Assert(Value <= U16Maximum);
+    u16 Result = (u16)Value;
+    return(Result);
+}
+
+#if COMPILER_MSVC
+#define CompletePreviousReadsBeforeFutureReads _ReadBarrier()
+#define CompletePreviousWritesBeforeFutureWrites _WriteBarrier()
+inline uint32
+AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+{
+    uint32 Result = _InterlockedCompareExchange((long volatile *)Value, New, Expected);
+
+    return(Result);
+}
+
+inline u64
+AtomicExchangeU64(u64 volatile *Value, u64 New)
+{
+    u64 Result = _InterlockedExchange64((__int64 volatile *)Value, New);
+
+    return(Result);
+}
+
+inline u64
+AtomicAddU64(u64 volatile *Value, u64 Addend)
+{
+    // NOTE(casey): Returns the original value _prior_ to adding
+    u64 Result = _InterlockedExchangeAdd64((__int64 volatile *)Value, Addend);
+
+    return(Result);
+}    
+
+inline u32
+AtomicIncrementU32(u32 volatile *Value)
+{
+    // NOTE(pvlso): Returns the value _after_ the increment
+    u32 Result = _InterlockedIncrement((long volatile *)Value);
+
+    return(Result);
+}
+
+inline u32
+GetThreadID(void)
+{
+    u8 *ThreadLocalStorage = (u8 *)__readgsqword(0x30);
+    u32 ThreadID = *(u32 *)(ThreadLocalStorage + 0x48);
+
+    return(ThreadID);
+}
+
+#elif COMPILER_LLVM
+#define CompletePreviousReadsBeforeFutureReads asm volatile("" ::: "memory")
+#define CompletePreviousWritesBeforeFutureWrites asm volatile("" ::: "memory")
+
+inline uint32
+AtomicCompareExchangeUInt32(uint32 volatile *Value, uint32 New, uint32 Expected)
+{
+    uint32 Result = __sync_val_compare_and_swap(Value, Expected, New);
+
+    return(Result);
+}
+
+inline u64
+AtomicExchangeU64(u64 volatile *Value, u64 New)
+{
+    u64 Result = __sync_lock_test_and_set(Value, New);
+
+    return(Result);
+}
+
+inline u64
+AtomicAddU64(u64 volatile *Value, u64 Addend)
+{
+    // NOTE(casey): Returns the original value _prior_ to adding
+    u64 Result = __sync_fetch_and_add(Value, Addend);
+
+    return(Result);
+}    
+
+inline u32
+AtomicIncrementU32(u32 volatile *Value)
+{
+    // NOTE(pvlso): Returns the value _after_ the increment
+    u32 Result = __sync_add_and_fetch(Value, 1);
+
+    return(Result);
+}
+
+inline u32
+GetThreadID(void)
+{
+    u32 ThreadID;
+#if defined(__APPLE__) && defined(__x86_64__)
+    asm("mov %%gs:0x00,%0" : "=r"(ThreadID));
+#elif defined(__i386__)
+    asm("mov %%gs:0x08,%0" : "=r"(ThreadID));
+#elif defined(__x86_64__)
+    asm("mov %%fs:0x10,%0" : "=r"(ThreadID));
+#else
+#error Unsupported architecture
+#endif
+
+    return(ThreadID);
+}
+#else
+// TODO(casey): Other compilers/platforms??
+#endif
+
+struct ticket_mutex
+{
+    u64 volatile Ticket;
+    u64 volatile Serving;
+};
+
+inline void
+BeginTicketMutex(ticket_mutex *Mutex)
+{
+    u64 Ticket = AtomicAddU64(&Mutex->Ticket, 1);
+    while(Ticket != Mutex->Serving) {_mm_pause();};
+}
+
+inline void
+EndTicketMutex(ticket_mutex *Mutex)
+{
+    AtomicAddU64(&Mutex->Serving, 1);
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
 #define EDITOR_INTRINSICS_H
 #endif

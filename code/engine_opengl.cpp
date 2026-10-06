@@ -546,7 +546,7 @@ struct nk_gl_vertex
 };
 
 internal void
-NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_aliasing AA)
+NKOpenGLRenderCommands(nk_platform *NkPlatform, rectangle2i DrawRegion, enum nk_anti_aliasing AA)
 {
     TIMED_FUNCTION();
     /*
@@ -556,7 +556,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
     */
 
     /* setup global state */
-    struct nk_opengl *dev = &NkWin32->ogl;
+    struct nk_opengl *dev = &NkPlatform->ogl;
     glPushAttrib(GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_TRANSFORM_BIT);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
@@ -566,13 +566,13 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* setup viewport/project */
-//    glViewport(0,0,(GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
-    glViewport(DrawRegion.Min.x, DrawRegion.Min.y, (GLsizei)NkWin32->display_width,(GLsizei)NkWin32->display_height);
+//    glViewport(0,0,(GLsizei)NkPlatform->display_width,(GLsizei)NkPlatform->display_height);
+    glViewport(DrawRegion.Min.x, DrawRegion.Min.y, (GLsizei)NkPlatform->display_width,(GLsizei)NkPlatform->display_height);
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0.0f, NkWin32->width, NkWin32->height, 0.0f, -1.0f, 1.0f);
+    glOrtho(0.0f, NkPlatform->width, NkPlatform->height, 0.0f, -1.0f, 1.0f);
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
@@ -615,7 +615,7 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
         /* convert shapes into vertexes */
         nk_buffer_init_default(&vbuf);
         nk_buffer_init_default(&ebuf);
-        nk_convert(&NkWin32->ctx, &dev->cmds, &vbuf, &ebuf, &config);
+        nk_convert(&NkPlatform->ctx, &dev->cmds, &vbuf, &ebuf, &config);
 
         /* setup vertex buffer pointer */
         {const void *vertices = nk_buffer_memory_const(&vbuf);
@@ -625,15 +625,15 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
 
         /* iterate over and execute each draw command */
         offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);
-        nk_draw_foreach(cmd, &NkWin32->ctx, &dev->cmds)
+        nk_draw_foreach(cmd, &NkPlatform->ctx, &dev->cmds)
         {
             if (!cmd->elem_count) continue;
             glBindTexture(GL_TEXTURE_2D, (GLuint)cmd->texture.id);
 
-            float sx = cmd->clip_rect.x * NkWin32->fb_scale.x;
-            float sy = (NkWin32->height - (cmd->clip_rect.y + cmd->clip_rect.h)) * NkWin32->fb_scale.y;
-            float sw = cmd->clip_rect.w * NkWin32->fb_scale.x;
-            float sh = cmd->clip_rect.h * NkWin32->fb_scale.y;
+            float sx = cmd->clip_rect.x * NkPlatform->fb_scale.x;
+            float sy = (NkPlatform->height - (cmd->clip_rect.y + cmd->clip_rect.h)) * NkPlatform->fb_scale.y;
+            float sw = cmd->clip_rect.w * NkPlatform->fb_scale.x;
+            float sh = cmd->clip_rect.h * NkPlatform->fb_scale.y;
 
             GLint x = (GLint)FloorReal32ToInt32(sx);
             GLint y = (GLint)FloorReal32ToInt32(sy);
@@ -642,21 +642,21 @@ NKOpenGLRenderCommands(nk_win32 *NkWin32, rectangle2i DrawRegion, enum nk_anti_a
 
             w += 1;
             h += 1;
-            x += (GLint)CeilReal32ToInt32(DrawRegion.Min.x * NkWin32->fb_scale.x);
-            y += (GLint)CeilReal32ToInt32(DrawRegion.Min.y * NkWin32->fb_scale.y);
+            x += (GLint)CeilReal32ToInt32(DrawRegion.Min.x * NkPlatform->fb_scale.x);
+            y += (GLint)CeilReal32ToInt32(DrawRegion.Min.y * NkPlatform->fb_scale.y);
 
 #if 0
-            GLint x = (GLint)CeilReal32ToInt32(cmd->clip_rect.x * NkWin32->fb_scale.x);
-            GLint y = (GLint)CeilReal32ToInt32(((f32)NkWin32->height - (cmd->clip_rect.y + cmd->clip_rect.h)) * NkWin32->fb_scale.y);
-            GLint w = (GLint)CeilReal32ToInt32(cmd->clip_rect.w * NkWin32->fb_scale.x);
-            GLint h = (GLint)CeilReal32ToInt32(cmd->clip_rect.h * NkWin32->fb_scale.y);
+            GLint x = (GLint)CeilReal32ToInt32(cmd->clip_rect.x * NkPlatform->fb_scale.x);
+            GLint y = (GLint)CeilReal32ToInt32(((f32)NkPlatform->height - (cmd->clip_rect.y + cmd->clip_rect.h)) * NkPlatform->fb_scale.y);
+            GLint w = (GLint)CeilReal32ToInt32(cmd->clip_rect.w * NkPlatform->fb_scale.x);
+            GLint h = (GLint)CeilReal32ToInt32(cmd->clip_rect.h * NkPlatform->fb_scale.y);
 #endif
 
             glScissor(x, y, w, h);
             glDrawElements(GL_TRIANGLES, (GLsizei)cmd->elem_count, GL_UNSIGNED_SHORT, offset);
             offset += cmd->elem_count;
         }
-        nk_clear(&NkWin32->ctx);
+        nk_clear(&NkPlatform->ctx);
         nk_buffer_clear(&dev->cmds);
         nk_buffer_free(&vbuf);
         nk_buffer_free(&ebuf);

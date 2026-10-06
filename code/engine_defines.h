@@ -36,7 +36,7 @@
     
 #if EDITOR_SLOW
 // TODO(casey): Complete assertion macro - don't worry everyone!
-#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#define Assert(Expression) if(!(Expression)) {*(volatile int *)0 = 0;}
 #else
 #define Assert(Expression)
 #endif

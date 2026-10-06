@@ -78,7 +78,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
     EditorMeta->KESAVersion[3] = (Result)       & 0xff;
 
     platform_file_handle EditorMetaHandle =
-        Platform.OpenFile("..\\editor_metadata.json", PlatformFileType_None, PlatformFileOp_Write);
+        Platform.OpenFile("../editor_metadata.json", PlatformFileType_None, PlatformFileOp_Write);
 
     char Data[256];
     FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [%d, %d, %d, %d]\n}",
@@ -121,12 +121,9 @@ EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
     }
     else
     {
-        FILE *MetaFile;
-        fopen_s(&MetaFile, MetadataSource, "wb");
         char Data[256];
         FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
-        fwrite(Data, StringLength(Data), 1, MetaFile);
-        fclose(MetaFile);
+        Platform.WriteEntireFile(MetadataSource, PlatformFileType_None, (u8 *)Data, StringLength(Data));
     }
     
     EndTemporaryMemory(TempMem);
@@ -161,7 +158,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
-        EngineLoadEditorMetadata(EditorState, "..\\editor_metadata.json");
+        EngineLoadEditorMetadata(EditorState, "../editor_metadata.json");
         
         EditorState->UIEnable = true;
     }

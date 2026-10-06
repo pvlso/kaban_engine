@@ -421,17 +421,18 @@ internal void
 PrintTokens(json_parser *Parser)
 {
     char Buffer[1024];
-    FILE *File;
-    fopen_s(&File, "json_parsed_tokens.txt", "wb");
+    platform_file_handle File = Platform.OpenFile("json_parsed_tokens.txt", PlatformFileType_None, PlatformFileOp_Write);
+    u64 At = 0;
     for(u32 TokenIndex = 0;
-        TokenIndex < Parser->TokenCount;
+        PlatformNoFileErrors(&File) && (TokenIndex < Parser->TokenCount);
         ++TokenIndex)
     {
         json_token *Token = Parser->Tokens + TokenIndex;
         u32 Length = (u32)FormatString(ArrayCount(Buffer), Buffer, "Type: %d, Value: %s\n", Token->Type, Token->Value);
-        fwrite(Buffer, Length, 1, File);
+        Platform.WriteDataToFile(&File, At, Length, Buffer);
+        At += Length;
     }
-    fclose(File);
+    Platform.CloseFile(&File);
 }
 
 internal json_object *
