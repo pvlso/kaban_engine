@@ -2171,10 +2171,6 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->MoveRight, IsDown);
                     }
-                    else if(VKCode == 'Q')
-                    {
-                        Win32ProcessKeyboardMessage(&KeyboardController->LeftShoulder, IsDown);
-                    }
                     else if(VKCode == 'E')
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->RightShoulder, IsDown);
@@ -2203,21 +2199,13 @@ Win32ProcessPendingMessages(win32_state *State, engine_controller_input *Keyboar
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->ForthMode, IsDown);
                     }
-                    else if(VKCode == '5')
-                    {
-                        Win32ProcessKeyboardMessage(&KeyboardController->PlayMusic, IsDown);
-                    }
-                    else if(VKCode == '6')
-                    {
-                        Win32ProcessKeyboardMessage(&KeyboardController->TerminateSound, IsDown);
-                    }
-                    else if(VKCode == 'H')
-                    {
-                        Win32ProcessKeyboardMessage(&KeyboardController->ShowProfiler, IsDown);
-                    }
                     else if(VKCode == 'P')
                     {
                         Win32ProcessKeyboardMessage(&KeyboardController->ShowUI, IsDown);
+                    }
+                    else if(VKCode == 'M')
+                    {
+                        Win32ProcessKeyboardMessage(&KeyboardController->ToggleMute, IsDown);
                     }
                     else if(VKCode == VK_UP)
                     {

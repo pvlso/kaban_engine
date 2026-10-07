@@ -426,9 +426,6 @@ CheckForInput(engine_map_editor *MapEditor, nk_context *Nk, engine_input *Input)
 
                     case MapEditorMode_Terrain:
                     {
-                        if(WasPressed(Controller->LeftShoulder))
-                            ToggleMEFlag(MapEditor, MEFlag_ShowCurrentLayer);
-
                         if(WasPressed(Controller->Fill))
                             MapEditor->FillActive = !MapEditor->FillActive;
 

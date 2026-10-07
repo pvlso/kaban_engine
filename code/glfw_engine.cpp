@@ -625,7 +625,6 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_A:      GLFWProcessKeyboardMessage(&KeyboardController->MoveLeft, IsDown); break;
             case GLFW_KEY_S:      GLFWProcessKeyboardMessage(&KeyboardController->MoveDown, IsDown); break;
             case GLFW_KEY_D:      GLFWProcessKeyboardMessage(&KeyboardController->MoveRight, IsDown); break;
-            case GLFW_KEY_Q:      GLFWProcessKeyboardMessage(&KeyboardController->LeftShoulder, IsDown); break;
             case GLFW_KEY_E:      GLFWProcessKeyboardMessage(&KeyboardController->RightShoulder, IsDown); break;
             case GLFW_KEY_F:      GLFWProcessKeyboardMessage(&KeyboardController->Fill, IsDown); break;
             case GLFW_KEY_U:      GLFWProcessKeyboardMessage(&KeyboardController->Undo, IsDown); break;
@@ -633,10 +632,8 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_2:      GLFWProcessKeyboardMessage(&KeyboardController->SecondMode, IsDown); break;
             case GLFW_KEY_3:      GLFWProcessKeyboardMessage(&KeyboardController->ThirdMode, IsDown); break;
             case GLFW_KEY_4:      GLFWProcessKeyboardMessage(&KeyboardController->ForthMode, IsDown); break;
-            case GLFW_KEY_5:      GLFWProcessKeyboardMessage(&KeyboardController->PlayMusic, IsDown); break;
-            case GLFW_KEY_6:      GLFWProcessKeyboardMessage(&KeyboardController->TerminateSound, IsDown); break;
-            case GLFW_KEY_H:      GLFWProcessKeyboardMessage(&KeyboardController->ShowProfiler, IsDown); break;
             case GLFW_KEY_P:      GLFWProcessKeyboardMessage(&KeyboardController->ShowUI, IsDown); break;
+            case GLFW_KEY_M:      GLFWProcessKeyboardMessage(&KeyboardController->ToggleMute, IsDown); break;
             case GLFW_KEY_UP:     GLFWProcessKeyboardMessage(&KeyboardController->ActionUp, IsDown); break;
             case GLFW_KEY_LEFT:   GLFWProcessKeyboardMessage(&KeyboardController->ActionLeft, IsDown); break;
             case GLFW_KEY_DOWN:   GLFWProcessKeyboardMessage(&KeyboardController->ActionDown, IsDown); break;

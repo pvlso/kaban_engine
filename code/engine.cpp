@@ -200,9 +200,15 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     // NOTE(casey): Render
     //
 
-    if(WasPressed(Input->Controllers[0].RightShoulder))
+    // NOTE(pvlso): Alt + E toggles the UI, Alt + M mutes / unmutes the audio
+    if(Input->AltDown && WasPressed(Input->Controllers[0].RightShoulder))
     {
         EditorState->UIEnable = !EditorState->UIEnable;        
+    }
+
+    if(Input->AltDown && WasPressed(Input->Controllers[0].ToggleMute))
+    {
+        EditorState->AudioState.Muted = !EditorState->AudioState.Muted;
     }
 
     u32 RenderWidth = RenderCommands->Width;

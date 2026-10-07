@@ -34,6 +34,7 @@ struct audio_state
     playing_sound *FirstFreePlayingSound;
 
     v2 MasterVolume;
+    b32 Muted;
 };
 
 #define EDITOR_AUDIO_H

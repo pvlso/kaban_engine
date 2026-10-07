@@ -160,7 +160,8 @@ OutputPlayingSounds(audio_state *AudioState,
                 real32 dSampleChunk = 4.0f*dSample;
 
                 // NOTE(casey): Channel 0
-                __m128 MasterVolume0 = _mm_set1_ps(AudioState->MasterVolume.E[0]);
+                v2 MasterVolume = AudioState->Muted ? V2(0.0f, 0.0f) : AudioState->MasterVolume;
+                __m128 MasterVolume0 = _mm_set1_ps(MasterVolume.E[0]);
                 __m128 Volume0 = _mm_setr_ps(Volume.E[0] + 0.0f*dVolume.E[0],
                                              Volume.E[0] + 1.0f*dVolume.E[0],
                                              Volume.E[0] + 2.0f*dVolume.E[0],
@@ -169,7 +170,7 @@ OutputPlayingSounds(audio_state *AudioState,
                 __m128 dVolumeChunk0 = _mm_set1_ps(dVolumeChunk.E[0]);
 
                 // NOTE(casey): Channel 1
-                __m128 MasterVolume1 = _mm_set1_ps(AudioState->MasterVolume.E[1]);
+                __m128 MasterVolume1 = _mm_set1_ps(MasterVolume.E[1]);
                 __m128 Volume1 = _mm_setr_ps(Volume.E[1] + 0.0f*dVolume.E[1],
                                              Volume.E[1] + 1.0f*dVolume.E[1],
                                              Volume.E[1] + 2.0f*dVolume.E[1],
