@@ -99,7 +99,7 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-#include "arkham/arkham.cpp"
+//#include "arkham/arkham.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
 
@@ -238,8 +238,9 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_Arkham:
                 {
-                    b32 Exit = ArkhamUpdateAndRender(EditorState->ArkhamGameState, nk, RenderCommands,
-                                                     RenderWidth, RenderHeight, Input);
+//                    b32 Exit = ArkhamUpdateAndRender(EditorState->ArkhamGameState, nk, RenderCommands,
+//                                                     RenderWidth, RenderHeight, Input);
+                    b32 Exit = true;
                     if(Exit)
                         PlayTitleScreen(EditorState, TranState);
                 } break;
