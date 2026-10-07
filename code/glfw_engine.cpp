@@ -125,14 +125,14 @@ GLFWGetTime(void)
 // NOTE(pvlso): GLFW reports the cursor in screen coordinates, which may differ from
 // framebuffer pixels on HiDPI displays. Everything else here works in pixels.
 internal void
-GLFWGetCursorPosInPixels(glfw_state *State, r64 *X, r64 *Y)
+GLFWGetCursorPosInPixels(glfw_window *Window, r64 *X, r64 *Y)
 {
     r64 CursorX, CursorY;
-    glfwGetCursorPos(State->Window, &CursorX, &CursorY);
+    glfwGetCursorPos(Window->Handle, &CursorX, &CursorY);
 
     s32 WindowWidth, WindowHeight, FramebufferWidth, FramebufferHeight;
-    glfwGetWindowSize(State->Window, &WindowWidth, &WindowHeight);
-    glfwGetFramebufferSize(State->Window, &FramebufferWidth, &FramebufferHeight);
+    glfwGetWindowSize(Window->Handle, &WindowWidth, &WindowHeight);
+    glfwGetFramebufferSize(Window->Handle, &FramebufferWidth, &FramebufferHeight);
 
     *X = CursorX;
     *Y = CursorY;
@@ -144,11 +144,11 @@ GLFWGetCursorPosInPixels(glfw_state *State, r64 *X, r64 *Y)
 }
 
 internal void
-GLFWSetCursorPosInPixels(glfw_state *State, r64 X, r64 Y)
+GLFWSetCursorPosInPixels(glfw_window *Window, r64 X, r64 Y)
 {
     s32 WindowWidth, WindowHeight, FramebufferWidth, FramebufferHeight;
-    glfwGetWindowSize(State->Window, &WindowWidth, &WindowHeight);
-    glfwGetFramebufferSize(State->Window, &FramebufferWidth, &FramebufferHeight);
+    glfwGetWindowSize(Window->Handle, &WindowWidth, &WindowHeight);
+    glfwGetFramebufferSize(Window->Handle, &FramebufferWidth, &FramebufferHeight);
 
     if((FramebufferWidth > 0) && (FramebufferHeight > 0))
     {
@@ -156,7 +156,7 @@ GLFWSetCursorPosInPixels(glfw_state *State, r64 X, r64 Y)
         Y = Y*(r64)WindowHeight/(r64)FramebufferHeight;
     }
 
-    glfwSetCursorPos(State->Window, X, Y);
+    glfwSetCursorPos(Window->Handle, X, Y);
 }
 
 internal inline void
@@ -167,7 +167,7 @@ GLFWNkScrollCallback(nk_platform *NkGLFW, double xoff, double yoff)
 }
 
 internal inline void
-GLFWNkMouseButtonCallback(nk_platform *NkGLFW, glfw_state *State, int button, int action)
+GLFWNkMouseButtonCallback(glfw_window *Window, int button, int action)
 {
     /*
       NOTE(pvlso): The implementation of this function is based on
@@ -175,11 +175,13 @@ GLFWNkMouseButtonCallback(nk_platform *NkGLFW, glfw_state *State, int button, in
       repo
     */
 
+    nk_platform *NkGLFW = &Window->Nk;
+
     double x, y;
     if(button != GLFW_MOUSE_BUTTON_LEFT)
         return;
 
-    GLFWGetCursorPosInPixels(State, &x, &y);
+    GLFWGetCursorPosInPixels(Window, &x, &y);
     if(action == GLFW_PRESS)
     {
         double dt = GLFWGetTime() - NkGLFW->last_button_click;
@@ -257,8 +259,8 @@ GLFWNkKeyCallback(nk_platform *NkGLFW, int key, int action)
 internal void
 GLFWNkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 {
-    glfw_state *State = (glfw_state *)usr.ptr;
-    const char *text = glfwGetClipboardString(State->Window);
+    glfw_window *Window = (glfw_window *)usr.ptr;
+    const char *text = glfwGetClipboardString(Window->Handle);
     if (text)
         nk_textedit_paste(edit, text, nk_strlen(text));
 }
@@ -266,23 +268,24 @@ GLFWNkClipboardPaste(nk_handle usr, struct nk_text_edit *edit)
 internal void
 GLFWNkClipboardCopy(nk_handle usr, const char *text, int len)
 {
-    glfw_state *State = (glfw_state *)usr.ptr;
+    glfw_window *Window = (glfw_window *)usr.ptr;
 
     if (!len) return;
     char *str = (char*)OSAllocateMemory((size_t)len+1);
     if (!str) return;
     Copy(len, (void *)text, (void *)str);
     str[len] = '\0';
-    glfwSetClipboardString(State->Window, str);
+    glfwSetClipboardString(Window->Handle, str);
     OSDeallocateMemory(str);
 }
 
 internal struct nk_context*
-GLFWInitNkContext(glfw_state *State, nk_platform *NkGLFW)
+GLFWInitNkContext(glfw_window *Window)
 {
+    nk_platform *NkGLFW = &Window->Nk;
     nk_init_default(&NkGLFW->ctx, 0);
 
-    NkGLFW->ctx.clip.userdata.ptr = (void *)State;
+    NkGLFW->ctx.clip.userdata.ptr = (void *)Window;
     NkGLFW->ctx.clip.copy = GLFWNkClipboardCopy;
     NkGLFW->ctx.clip.paste = GLFWNkClipboardPaste;
     nk_buffer_init_default(&NkGLFW->ogl.cmds);
@@ -317,14 +320,14 @@ GLFWNkFontStashEnd(nk_platform *NkGLFW)
 }
 
 inline b32
-GLFWKeyIsDown(glfw_state *State, s32 Key)
+GLFWKeyIsDown(glfw_window *Window, s32 Key)
 {
-    b32 Result = (glfwGetKey(State->Window, Key) == GLFW_PRESS);
+    b32 Result = (glfwGetKey(Window->Handle, Key) == GLFW_PRESS);
     return(Result);
 }
 
 internal void
-GLFWNkUpdateInputs(glfw_state *State, nk_platform *NkGLFW, u32 WindowWidth, u32 WindowHeight,
+GLFWNkUpdateInputs(glfw_window *Window, u32 WindowWidth, u32 WindowHeight,
                    rectangle2i DrawRegion, f32 dt)
 {
     /*
@@ -332,6 +335,8 @@ GLFWNkUpdateInputs(glfw_state *State, nk_platform *NkGLFW, u32 WindowWidth, u32 
       nuklear implementation for GLFW library provided with nuklear
       repo
     */
+
+    nk_platform *NkGLFW = &Window->Nk;
 
     int i;
     double x, y;
@@ -361,15 +366,15 @@ GLFWNkUpdateInputs(glfw_state *State, nk_platform *NkGLFW, u32 WindowWidth, u32 
     if (k_state[NK_KEY_SCROLL_UP] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_UP, k_state[NK_KEY_SCROLL_UP]);
     if (k_state[NK_KEY_SCROLL_DOWN] >= 0) nk_input_key(ctx, NK_KEY_SCROLL_DOWN, k_state[NK_KEY_SCROLL_DOWN]);
 
-    nk_input_key(ctx, NK_KEY_TEXT_START, GLFWKeyIsDown(State, GLFW_KEY_HOME));
-    nk_input_key(ctx, NK_KEY_TEXT_END, GLFWKeyIsDown(State, GLFW_KEY_END));
-    nk_input_key(ctx, NK_KEY_SCROLL_START, GLFWKeyIsDown(State, GLFW_KEY_HOME));
-    nk_input_key(ctx, NK_KEY_SCROLL_END, GLFWKeyIsDown(State, GLFW_KEY_END));
-    nk_input_key(ctx, NK_KEY_SHIFT, GLFWKeyIsDown(State, GLFW_KEY_LEFT_SHIFT) ||
-                 GLFWKeyIsDown(State, GLFW_KEY_RIGHT_SHIFT));
+    nk_input_key(ctx, NK_KEY_TEXT_START, GLFWKeyIsDown(Window, GLFW_KEY_HOME));
+    nk_input_key(ctx, NK_KEY_TEXT_END, GLFWKeyIsDown(Window, GLFW_KEY_END));
+    nk_input_key(ctx, NK_KEY_SCROLL_START, GLFWKeyIsDown(Window, GLFW_KEY_HOME));
+    nk_input_key(ctx, NK_KEY_SCROLL_END, GLFWKeyIsDown(Window, GLFW_KEY_END));
+    nk_input_key(ctx, NK_KEY_SHIFT, GLFWKeyIsDown(Window, GLFW_KEY_LEFT_SHIFT) ||
+                 GLFWKeyIsDown(Window, GLFW_KEY_RIGHT_SHIFT));
 
-    if (GLFWKeyIsDown(State, GLFW_KEY_LEFT_CONTROL) ||
-        GLFWKeyIsDown(State, GLFW_KEY_RIGHT_CONTROL)) {
+    if (GLFWKeyIsDown(Window, GLFW_KEY_LEFT_CONTROL) ||
+        GLFWKeyIsDown(Window, GLFW_KEY_RIGHT_CONTROL)) {
         /* Note these are physical keys and won't respect any layouts/key mapping */
         if (k_state[NK_KEY_COPY] >= 0) nk_input_key(ctx, NK_KEY_COPY, k_state[NK_KEY_COPY]);
         if (k_state[NK_KEY_PASTE] >= 0) nk_input_key(ctx, NK_KEY_PASTE, k_state[NK_KEY_PASTE]);
@@ -389,7 +394,7 @@ GLFWNkUpdateInputs(glfw_state *State, nk_platform *NkGLFW, u32 WindowWidth, u32 
         nk_input_key(ctx, NK_KEY_CUT, 0);
     }
 
-    GLFWGetCursorPosInPixels(State, &x, &y);
+    GLFWGetCursorPosInPixels(Window, &x, &y);
 
     r32 MouseU = Clamp01MapToRange((r32)DrawRegion.Min.x, (f32)x, (r32)DrawRegion.Max.x);
     r32 MouseV = Clamp01MapToRange((r32)DrawRegion.Min.y, (f32)y, (r32)DrawRegion.Max.y);
@@ -402,14 +407,14 @@ GLFWNkUpdateInputs(glfw_state *State, nk_platform *NkGLFW, u32 WindowWidth, u32 
         // NOTE(pvlso): prev is in UI coordinates, map it back into the draw region
         r64 GrabX = DrawRegion.Min.x + ((r64)ctx->input.mouse.prev.x/(r64)NkGLFW->width)*GetWidth(DrawRegion);
         r64 GrabY = DrawRegion.Min.y + ((r64)ctx->input.mouse.prev.y/(r64)NkGLFW->height)*GetHeight(DrawRegion);
-        GLFWSetCursorPosInPixels(State, GrabX, GrabY);
+        GLFWSetCursorPosInPixels(Window, GrabX, GrabY);
         ctx->input.mouse.pos.x = ctx->input.mouse.prev.x;
         ctx->input.mouse.pos.y = ctx->input.mouse.prev.y;
     }
 
-    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, glfwGetMouseButton(State->Window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, glfwGetMouseButton(State->Window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
-    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, glfwGetMouseButton(State->Window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_LEFT, (int)x, (int)y, glfwGetMouseButton(Window->Handle, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_MIDDLE, (int)x, (int)y, glfwGetMouseButton(Window->Handle, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS);
+    nk_input_button(ctx, NK_BUTTON_RIGHT, (int)x, (int)y, glfwGetMouseButton(Window->Handle, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
     nk_input_button(ctx, NK_BUTTON_DOUBLE, (int)NkGLFW->double_click_pos.x, (int)NkGLFW->double_click_pos.y, NkGLFW->is_double_click_down);
     nk_input_scroll(ctx, NkGLFW->scroll);
     nk_input_end(&NkGLFW->ctx);
@@ -433,9 +438,10 @@ GLFWNkShutdown(nk_platform *NkGLFW)
 }
 
 inline nk_context *
-GLFWSetupNkContext(glfw_state *State, nk_platform *NkGLFW)
+GLFWSetupNkContext(glfw_window *Window)
 {
-    struct nk_context *Result = GLFWInitNkContext(State, NkGLFW);
+    nk_platform *NkGLFW = &Window->Nk;
+    struct nk_context *Result = GLFWInitNkContext(Window);
     {
         struct nk_font_atlas *atlas;
         GLFWNkFontStashBegin(NkGLFW, &atlas);
@@ -486,19 +492,19 @@ GLFWDisplayBufferInWindow(editor_render_commands *Commands, rectangle2i DrawRegi
 internal void
 GLFWToggleFullscreen(glfw_state *State)
 {
-    if(glfwGetWindowMonitor(State->Window))
+    if(glfwGetWindowMonitor(State->MainWindow.Handle))
     {
-        glfwSetWindowMonitor(State->Window, 0,
+        glfwSetWindowMonitor(State->MainWindow.Handle, 0,
                              State->WindowedX, State->WindowedY,
                              State->WindowedWidth, State->WindowedHeight, 0);
     }
     else
     {
-        glfwGetWindowPos(State->Window, &State->WindowedX, &State->WindowedY);
-        glfwGetWindowSize(State->Window, &State->WindowedWidth, &State->WindowedHeight);
+        glfwGetWindowPos(State->MainWindow.Handle, &State->WindowedX, &State->WindowedY);
+        glfwGetWindowSize(State->MainWindow.Handle, &State->WindowedWidth, &State->WindowedHeight);
 
         const GLFWvidmode *Mode = glfwGetVideoMode(State->Monitor);
-        glfwSetWindowMonitor(State->Window, State->Monitor, 0, 0,
+        glfwSetWindowMonitor(State->MainWindow.Handle, State->Monitor, 0, 0,
                              Mode->width, Mode->height, Mode->refreshRate);
     }
 
@@ -534,23 +540,50 @@ GLFWWindowCloseCallback(GLFWwindow *Window)
     GlobalRunning = false;
 }
 
+// NOTE(pvlso): Maps a GLFW window back to ours, both windows point at the same glfw_state
+internal glfw_window *
+GLFWGetWindow(glfw_state *State, GLFWwindow *Handle)
+{
+    glfw_window *Result = &State->MainWindow;
+#if EDITOR_INTERNAL
+    if(Handle == State->DebugWindow.Handle)
+    {
+        Result = &State->DebugWindow;
+    }
+#endif
+
+    return(Result);
+}
+
+// NOTE(pvlso): The app is active while any of its windows has focus. When focus moves
+// between our windows the lost event comes first, so the other window isn't focused yet.
 internal void
 GLFWWindowFocusCallback(GLFWwindow *Window, int Focused)
 {
-    GlobalAppIsActive = (Focused == GLFW_TRUE);
+    glfw_state *State = (glfw_state *)glfwGetWindowUserPointer(Window);
+
+    b32 AnyFocused = (Focused == GLFW_TRUE);
+    AnyFocused = AnyFocused || glfwGetWindowAttrib(State->MainWindow.Handle, GLFW_FOCUSED);
+#if EDITOR_INTERNAL
+    AnyFocused = AnyFocused || glfwGetWindowAttrib(State->DebugWindow.Handle, GLFW_FOCUSED);
+#endif
+
+    GlobalAppIsActive = AnyFocused;
 }
 
 internal void
 GLFWScrollCallback(GLFWwindow *Window, double XOffset, double YOffset)
 {
     glfw_state *State = (glfw_state *)glfwGetWindowUserPointer(Window);
+    glfw_window *EventWindow = GLFWGetWindow(State, Window);
 
-    State->ScrollY += YOffset;
+    // NOTE(pvlso): Only the main window drives the engine
+    if(EventWindow == &State->MainWindow)
+    {
+        State->ScrollY += YOffset;
+    }
 
-    GLFWNkScrollCallback(&State->NkMain, XOffset, YOffset);
-#if EDITOR_INTERNAL
-    GLFWNkScrollCallback(&State->NkDebug, XOffset, YOffset);
-#endif
+    GLFWNkScrollCallback(&EventWindow->Nk, XOffset, YOffset);
 }
 
 internal void
@@ -561,10 +594,7 @@ GLFWCharCallback(GLFWwindow *Window, unsigned int CodePoint)
     if((CodePoint < 32) || ((CodePoint > 126) && (CodePoint < 160)))
         return;
 
-    GLFWNkCharCallback(&State->NkMain, CodePoint);
-#if EDITOR_INTERNAL
-    GLFWNkCharCallback(&State->NkDebug, CodePoint);
-#endif
+    GLFWNkCharCallback(&GLFWGetWindow(State, Window)->Nk, CodePoint);
 }
 
 internal void
@@ -572,24 +602,21 @@ GLFWMouseButtonCallback(GLFWwindow *Window, int Button, int Action, int Mods)
 {
     glfw_state *State = (glfw_state *)glfwGetWindowUserPointer(Window);
 
-    GLFWNkMouseButtonCallback(&State->NkMain, State, Button, Action);
-#if EDITOR_INTERNAL
-    GLFWNkMouseButtonCallback(&State->NkDebug, State, Button, Action);
-#endif
+    GLFWNkMouseButtonCallback(GLFWGetWindow(State, Window), Button, Action);
 }
 
 internal void
 GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
 {
     glfw_state *State = (glfw_state *)glfwGetWindowUserPointer(Window);
+    glfw_window *EventWindow = GLFWGetWindow(State, Window);
 
-    GLFWNkKeyCallback(&State->NkMain, Key, Action);
-#if EDITOR_INTERNAL
-    GLFWNkKeyCallback(&State->NkDebug, Key, Action);
-#endif
+    GLFWNkKeyCallback(&EventWindow->Nk, Key, Action);
 
+    // NOTE(pvlso): Only the main window drives the engine, typing into the debug window
+    // shouldn't move things around in the editor
     engine_controller_input *KeyboardController = State->KeyboardController;
-    if((Action != GLFW_REPEAT) && KeyboardController)
+    if((Action != GLFW_REPEAT) && KeyboardController && (EventWindow == &State->MainWindow))
     {
         b32 IsDown = (Action == GLFW_PRESS);
         switch(Key)
@@ -656,6 +683,17 @@ global_variable debug_table GlobalDebugTable_;
 debug_table *GlobalDebugTable = &GlobalDebugTable_;
 #endif
 
+internal void
+GLFWSetCallbacks(GLFWwindow *Window)
+{
+    glfwSetWindowCloseCallback(Window, GLFWWindowCloseCallback);
+    glfwSetWindowFocusCallback(Window, GLFWWindowFocusCallback);
+    glfwSetKeyCallback(Window, GLFWKeyCallback);
+    glfwSetCharCallback(Window, GLFWCharCallback);
+    glfwSetMouseButtonCallback(Window, GLFWMouseButtonCallback);
+    glfwSetScrollCallback(Window, GLFWScrollCallback);
+}
+
 internal b32
 GLFWInitOpenGL(void)
 {
@@ -709,6 +747,26 @@ main(int ArgCount, char **Args)
     GlobalFramebufferWidth = Mode->width;
     GlobalFramebufferHeight = Mode->height;
 
+#if EDITOR_INTERNAL
+    s32 MonitorCount = 0;
+    GLFWmonitor **Monitors = glfwGetMonitors(&MonitorCount);
+    for(s32 MonitorIndex = 0; MonitorIndex < MonitorCount; ++MonitorIndex)
+    {
+        if(Monitors[MonitorIndex] != State->Monitor)
+        {
+            State->DebugMonitor = Monitors[MonitorIndex];
+            break;
+        }
+    }
+
+    if(State->DebugMonitor)
+    {
+        // NOTE(pvlso): GLFW minimizes fullscreen windows when they lose focus, with both windows
+        // fullscreen clicking one would minimize the other
+        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
+    }
+#endif
+
     // NOTE(pvlso): The renderer and nuklear backend use fixed function GL, so ask for
     // a 3.0 context without a profile, which gives a compatibility context.
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -719,6 +777,10 @@ main(int ArgCount, char **Args)
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GLFW_TRUE);
 #endif
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    // NOTE(pvlso): Lets X11 window managers match our windows (e.g. i3 for_window rules),
+    // ignored on other platforms
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "kaban");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "editor");
 
     State->WindowedWidth = (2*Mode->width)/3;
     State->WindowedHeight = (2*Mode->height)/3;
@@ -733,17 +795,12 @@ main(int ArgCount, char **Args)
         return(1);
     }
 
-    State->Window = Window;
+    State->MainWindow.Handle = Window;
     glfwSetWindowUserPointer(Window, State);
     glfwSetWindowPos(Window, State->WindowedX, State->WindowedY);
     glfwSetWindowAspectRatio(Window, GlobalFramebufferWidth, GlobalFramebufferHeight);
 
-    glfwSetWindowCloseCallback(Window, GLFWWindowCloseCallback);
-    glfwSetWindowFocusCallback(Window, GLFWWindowFocusCallback);
-    glfwSetKeyCallback(Window, GLFWKeyCallback);
-    glfwSetCharCallback(Window, GLFWCharCallback);
-    glfwSetMouseButtonCallback(Window, GLFWMouseButtonCallback);
-    glfwSetScrollCallback(Window, GLFWScrollCallback);
+    GLFWSetCallbacks(Window);
 
     if(!DEBUGGlobalShowCursor)
     {
@@ -757,6 +814,29 @@ main(int ArgCount, char **Args)
         glfwTerminate();
         return(1);
     }
+
+#if EDITOR_INTERNAL
+    // NOTE(pvlso): The debug window gets its own context (GLFW has one per window) that shares
+    // textures with the main one, so the nuklear font atlas works in both.
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "debug");
+    GLFWwindow *DebugWindow = glfwCreateWindow(GLFW_DEBUG_WINDOW_WIDTH, GLFW_DEBUG_WINDOW_HEIGHT, "Debug", 0, Window);
+    if(DebugWindow)
+    {
+        State->DebugWindow.Handle = DebugWindow;
+        glfwSetWindowUserPointer(DebugWindow, State);
+        GLFWSetCallbacks(DebugWindow);
+
+        glfwMakeContextCurrent(DebugWindow);
+        OpenGLInit(true, OpenGLSupportsSRGBFramebuffer);
+        // NOTE(pvlso): Only the main window waits for vsync, otherwise every frame waits twice
+        glfwSwapInterval(0);
+        glfwMakeContextCurrent(Window);
+    }
+    else
+    {
+        fprintf(stderr, "GLFW PLATFORM: Could not create the debug window.\n");
+    }
+#endif
 
     // NOTE(pvlso): Init multithreading queues
     platform_work_queue HighPriorityQueue = {};
@@ -816,13 +896,30 @@ main(int ArgCount, char **Args)
 
     glfwShowWindow(Window);
     GLFWToggleFullscreen(State);
+#if EDITOR_INTERNAL
+    if(State->DebugWindow.Handle)
+    {
+        // NOTE(pvlso): Positioned after showing, X11 window managers ignore it on unmapped windows
+        glfwShowWindow(State->DebugWindow.Handle);
+        if(State->DebugMonitor)
+        {
+            const GLFWvidmode *DebugMode = glfwGetVideoMode(State->DebugMonitor);
+            glfwSetWindowMonitor(State->DebugWindow.Handle, State->DebugMonitor, 0, 0,
+                                 DebugMode->width, DebugMode->height, DebugMode->refreshRate);
+        }
+        else
+        {
+            glfwSetWindowPos(State->DebugWindow.Handle, GLFW_DEBUG_WINDOW_X, GLFW_DEBUG_WINDOW_Y);
+        }
+    }
+#endif
     GlobalAppIsActive = true;
 
     memory_arena FrameTempArena = {};
 
-    nk_context *nk = GLFWSetupNkContext(State, &State->NkMain);
+    nk_context *nk = GLFWSetupNkContext(&State->MainWindow);
 #if EDITOR_INTERNAL
-    nk_context *debug_nk = GLFWSetupNkContext(State, &State->NkDebug);
+    nk_context *debug_nk = GLFWSetupNkContext(&State->DebugWindow);
 #endif
 
     GlobalRunning = true;
@@ -837,6 +934,16 @@ main(int ArgCount, char **Args)
         glfwGetFramebufferSize(Window, &DimensionWidth, &DimensionHeight);
         rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                 DimensionWidth, DimensionHeight);
+
+#if EDITOR_INTERNAL
+        s32 DebugDimensionWidth = 0, DebugDimensionHeight = 0;
+        if(State->DebugWindow.Handle)
+        {
+            glfwGetFramebufferSize(State->DebugWindow.Handle, &DebugDimensionWidth, &DebugDimensionHeight);
+        }
+        rectangle2i DebugDrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
+                                                     DebugDimensionWidth, DebugDimensionHeight);
+#endif
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): Input Processing
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -871,7 +978,7 @@ main(int ArgCount, char **Args)
             TIMED_BLOCK("Mouse Position");
 
             r64 CursorX, CursorY;
-            GLFWGetCursorPosInPixels(State, &CursorX, &CursorY);
+            GLFWGetCursorPosInPixels(&State->MainWindow, &CursorX, &CursorY);
             r32 MouseX = (r32)CursorX;
             r32 MouseY = (r32)((DimensionHeight - 1) - CursorY);
             NewInput->MouseZ = MouseZ;
@@ -882,9 +989,9 @@ main(int ArgCount, char **Args)
             NewInput->MouseX = (r32)RenderCommands.Width*MouseU;
             NewInput->MouseY = (r32)RenderCommands.Height*MouseV;
 
-            NewInput->ShiftDown = (GLFWKeyIsDown(State, GLFW_KEY_LEFT_SHIFT) || GLFWKeyIsDown(State, GLFW_KEY_RIGHT_SHIFT));
-            NewInput->AltDown = (GLFWKeyIsDown(State, GLFW_KEY_LEFT_ALT) || GLFWKeyIsDown(State, GLFW_KEY_RIGHT_ALT));
-            NewInput->ControlDown = (GLFWKeyIsDown(State, GLFW_KEY_LEFT_CONTROL) || GLFWKeyIsDown(State, GLFW_KEY_RIGHT_CONTROL));
+            NewInput->ShiftDown = (GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_LEFT_SHIFT) || GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_RIGHT_SHIFT));
+            NewInput->AltDown = (GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_LEFT_ALT) || GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_RIGHT_ALT));
+            NewInput->ControlDown = (GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_LEFT_CONTROL) || GLFWKeyIsDown(&State->MainWindow, GLFW_KEY_RIGHT_CONTROL));
         }
 
         {
@@ -918,20 +1025,23 @@ main(int ArgCount, char **Args)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): Engine Update
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-        GLFWNkUpdateInputs(State, &State->NkMain,
+        GLFWNkUpdateInputs(&State->MainWindow,
                            UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
                            DrawRegion, TargetSecondsPerFrame);
 #if EDITOR_INTERNAL
-        GLFWNkUpdateInputs(State, &State->NkDebug,
-                           UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
-                           DrawRegion, TargetSecondsPerFrame);
+        if(State->DebugWindow.Handle)
+        {
+            GLFWNkUpdateInputs(&State->DebugWindow,
+                               UI_BASE_RESOLUTION_X, UI_BASE_RESOLUTION_Y,
+                               DebugDrawRegion, TargetSecondsPerFrame);
+        }
 #endif
         BEGIN_BLOCK("Engine Update");
         if(!GlobalPause)
         {
             if(Engine.UpdateAndRender)
             {
-                v2 UIScale = V2(State->NkMain.fb_scale.x, State->NkMain.fb_scale.y);
+                v2 UIScale = V2(State->MainWindow.Nk.fb_scale.x, State->MainWindow.Nk.fb_scale.y);
                 Engine.UpdateAndRender(nk, UIScale, &EngineMemory, NewInput, &RenderCommands);
                 if(NewInput->QuitRequested)
                 {
@@ -1023,9 +1133,21 @@ main(int ArgCount, char **Args)
         }
 
         GLFWDisplayBufferInWindow(&RenderCommands, DrawRegion, DimensionWidth, DimensionHeight, &FrameTempArena);
-        NKOpenGLRenderCommands(&State->NkMain, DrawRegion, NK_ANTI_ALIASING_ON);
+        NKOpenGLRenderCommands(&State->MainWindow.Nk, DrawRegion, NK_ANTI_ALIASING_ON);
+
 #if EDITOR_INTERNAL
-        NKOpenGLRenderCommands(&State->NkDebug, DrawRegion, NK_ANTI_ALIASING_ON);
+        if(State->DebugWindow.Handle)
+        {
+            glfwMakeContextCurrent(State->DebugWindow.Handle);
+
+            glViewport(0, 0, DebugDimensionWidth, DebugDimensionHeight);
+            glClearColor(1, 1, 1, 1);
+            glClear(GL_COLOR_BUFFER_BIT);
+            NKOpenGLRenderCommands(&State->DebugWindow.Nk, DebugDrawRegion, NK_ANTI_ALIASING_ON);
+
+            glfwSwapBuffers(State->DebugWindow.Handle);
+            glfwMakeContextCurrent(Window);
+        }
 #endif
 
         BEGIN_BLOCK("SwapBuffers");
@@ -1076,13 +1198,19 @@ main(int ArgCount, char **Args)
     PlatformCompleteAllWork(&HighPriorityQueue);
     PlatformCompleteAllWork(&LowPriorityQueue);
 
-    GLFWNkShutdown(&State->NkMain);
+    GLFWNkShutdown(&State->MainWindow.Nk);
 #if EDITOR_INTERNAL
-    GLFWNkShutdown(&State->NkDebug);
+    GLFWNkShutdown(&State->DebugWindow.Nk);
 #endif
 
     PlatformUnloadEngineCode(&Engine);
 
+#if EDITOR_INTERNAL
+    if(State->DebugWindow.Handle)
+    {
+        glfwDestroyWindow(State->DebugWindow.Handle);
+    }
+#endif
     glfwDestroyWindow(Window);
     glfwTerminate();
 
