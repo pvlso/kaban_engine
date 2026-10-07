@@ -5,3 +5,6 @@ arkham.cpp
 arkham.h
 # Local dev log
 DEVLOG.md
+
+# Game projects, each one can be its own repo
+projects/

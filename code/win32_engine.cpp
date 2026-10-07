@@ -40,14 +40,14 @@ global_variable wchar_t *GlobalDataDirs[PlatformFileType_Count] =
 {
     L"",             L"keas",         L"kesas",      L"kewms",      L"kets",
     L"bmps",         L"spritesheets", L"tilesets",   L"solidtiles", L"wavs",
-    L"txts",         L"jsons",        L"ttfs",       L"bins"
+    L"txts",         L"jsons",        L"ttfs",       L"bins",       L""
 };
 
 global_variable wchar_t *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     L".*",    L".kea",  L".kesa", L".kewm", L".ket",
     L".bmp",  L".bmp",  L".bmp",  L".bmp",  L".wav",
-    L".txt",  L".json", L".ttf",  L".bin"
+    L".txt",  L".json", L".ttf",  L".bin",  L".*"
 };
 
 global_variable win32_window_dimension GlobalFramebufferDim;

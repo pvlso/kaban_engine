@@ -212,6 +212,26 @@ OSNextFileInDirectory(os_directory *Directory)
     return(Result);
 }
 
+internal char *
+OSNextDirectoryInDirectory(os_directory *Directory)
+{
+    char *Result = 0;
+
+    while(!Result && Directory->HasPendingEntry)
+    {
+        if((Directory->FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+           (Directory->FindData.cFileName[0] != L'.'))
+        {
+            Win32WideToUTF8(Directory->FindData.cFileName, Directory->FileName, sizeof(Directory->FileName));
+            Result = Directory->FileName;
+        }
+
+        Directory->HasPendingEntry = (FindNextFileW(Directory->FindHandle, &Directory->FindData) != 0);
+    }
+
+    return(Result);
+}
+
 internal void
 OSCloseDirectory(os_directory *Directory)
 {

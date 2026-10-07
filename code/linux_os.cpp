@@ -228,6 +228,34 @@ OSNextFileInDirectory(os_directory *Directory)
     return(Result);
 }
 
+internal char *
+OSNextDirectoryInDirectory(os_directory *Directory)
+{
+    char *Result = 0;
+
+    if(Directory->Handle)
+    {
+        while(struct dirent *Entry = readdir(Directory->Handle))
+        {
+            if(Entry->d_name[0] == '.')
+            {
+                continue;
+            }
+
+            char FilePath[4096];
+            snprintf(FilePath, sizeof(FilePath), "%s/%s", Directory->Path, Entry->d_name);
+            struct stat Stat;
+            if((stat(FilePath, &Stat) == 0) && S_ISDIR(Stat.st_mode))
+            {
+                Result = Entry->d_name;
+                break;
+            }
+        }
+    }
+
+    return(Result);
+}
+
 internal void
 OSCloseDirectory(os_directory *Directory)
 {

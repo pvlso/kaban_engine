@@ -14,7 +14,8 @@ struct platform_paths
     char EXEFileName[PLATFORM_PATH_COUNT];
     char *OnePastLastEXEFileNameSlash;
 
-    // NOTE(pvlso): Ends with a separator
+    // NOTE(pvlso): All end with a separator. Root is the directory that holds build/, data/ and projects/
+    char ROOTPath[PLATFORM_PATH_COUNT];
     char DATAPath[PLATFORM_PATH_COUNT];
 };
 

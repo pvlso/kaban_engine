@@ -18,14 +18,14 @@ global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
     "",             "keas",         "kesas",      "kewms",      "kets",
     "bmps",         "spritesheets", "tilesets",   "solidtiles", "wavs",
-    "txts",         "jsons",        "ttfs",       "bins"
+    "txts",         "jsons",        "ttfs",       "bins",       ""
 };
 
 global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
     ".bmp",  ".bmp",  ".bmp",  ".bmp",  ".wav",
-    ".txt",  ".json", ".ttf",  ".bin"
+    ".txt",  ".json", ".ttf",  ".bin",  ".*"
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -71,13 +71,29 @@ PlatformBuildEXEPathFileName(char *FileName, char *Dest, umm DestCount)
     snprintf(Dest, DestCount, "%.*s%s", DirLength, GlobalPaths.EXEFileName, FileName);
 }
 
+// NOTE(pvlso): The directory files of a type live in, without a trailing separator
+internal void
+PlatformBuildTypeDirectory(platform_file_type Type, char *Dest, umm DestCount)
+{
+    if(Type == PlatformFileType_Project)
+    {
+        snprintf(Dest, DestCount, "%sprojects", GlobalPaths.ROOTPath);
+    }
+    else
+    {
+        snprintf(Dest, DestCount, "%s%s", GlobalPaths.DATAPath, GlobalDataDirs[Type]);
+    }
+}
+
 // NOTE(pvlso): PlatformFileType_None means the name is relative to the exe directory
 internal void
 PlatformBuildDataPath(char *FileName, platform_file_type Type, char *Dest, umm DestCount)
 {
     if(Type != PlatformFileType_None)
     {
-        snprintf(Dest, DestCount, "%s%s/%s", GlobalPaths.DATAPath, GlobalDataDirs[Type], FileName);
+        char Directory[PLATFORM_PATH_COUNT];
+        PlatformBuildTypeDirectory(Type, Directory, sizeof(Directory));
+        snprintf(Dest, DestCount, "%s/%s", Directory, FileName);
     }
     else
     {
@@ -123,16 +139,18 @@ PlatformInitPaths(void)
     }
 
     int RootLength = (int)(SlashBeforeBuild - GlobalPaths.EXEFileName);
-    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%.*sdata/",
+    snprintf(GlobalPaths.ROOTPath, sizeof(GlobalPaths.ROOTPath), "%.*s",
              RootLength, GlobalPaths.EXEFileName);
+    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%sdata/", GlobalPaths.ROOTPath);
     OSCreateDirectory(GlobalPaths.DATAPath);
 
+    // NOTE(pvlso): Creates data/<type dir> for every type and projects/
     char DirPath[PLATFORM_PATH_COUNT];
     for(u32 Type = 1;
         Type < PlatformFileType_Count;
         ++Type)
     {
-        snprintf(DirPath, sizeof(DirPath), "%s%s", GlobalPaths.DATAPath, GlobalDataDirs[Type]);
+        PlatformBuildTypeDirectory((platform_file_type)Type, DirPath, sizeof(DirPath));
         OSCreateDirectory(DirPath);
     }
 
@@ -160,7 +178,7 @@ PlatformCollectFilesOfType(platform_file_type Type, char **Dest, memory_arena *A
     u32 FileCount = 0;
 
     char Path[PLATFORM_PATH_COUNT];
-    snprintf(Path, sizeof(Path), "%s%s", GlobalPaths.DATAPath, GlobalDataDirs[Type]);
+    PlatformBuildTypeDirectory(Type, Path, sizeof(Path));
 
     os_directory Directory;
     if(OSOpenDirectory(&Directory, Path))
@@ -339,6 +357,56 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(PlatformListFilesInDirectory)
 {
     u32 FileCount = PlatformCollectFilesOfType(Type, Dest, Arena, U32Maximum);
     return(FileCount);
+}
+
+internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
+{
+    u32 ProjectCount = 0;
+
+    char ProjectsPath[PLATFORM_PATH_COUNT];
+    PlatformBuildTypeDirectory(PlatformFileType_Project, ProjectsPath, sizeof(ProjectsPath));
+
+    os_directory Directory;
+    if(OSOpenDirectory(&Directory, ProjectsPath))
+    {
+        while(char *Name = OSNextDirectoryInDirectory(&Directory))
+        {
+            char MainFile[PLATFORM_PATH_COUNT];
+            snprintf(MainFile, sizeof(MainFile), "%s/%s/%s.cpp", ProjectsPath, Name, Name);
+            if(OSFileExists(MainFile))
+            {
+                if(Dest && Arena)
+                {
+                    if(ProjectCount >= DestCount)
+                    {
+                        break;
+                    }
+
+                    Dest[ProjectCount] = PushString(Arena, Name);
+                }
+
+                ++ProjectCount;
+            }
+        }
+    }
+    OSCloseDirectory(&Directory);
+
+    return(ProjectCount);
+}
+
+internal PLATFORM_MAKE_DIRECTORY(PlatformMakeDirectory)
+{
+    b32 Result = false;
+
+    char FullPath[PLATFORM_PATH_COUNT];
+    PlatformBuildDataPath(Path, Type, FullPath, sizeof(FullPath));
+    if(!OSFileExists(FullPath))
+    {
+        OSCreateDirectory(FullPath);
+        Result = OSFileExists(FullPath);
+    }
+
+    return(Result);
 }
 
 internal PLATFORM_FREE_FILE_MEMORY(PlatformFreeFileMemory)
@@ -696,6 +764,8 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.WriteDataToFile = PlatformWriteDataToFile;
     Memory->PlatformAPI.FileError = PlatformFileError;
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
+    Memory->PlatformAPI.ListProjects = PlatformListProjects;
+    Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;
 
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;

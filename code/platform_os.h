@@ -58,6 +58,8 @@ internal u64 OSGetLastWriteTime(char *Path);
 // NOTE(pvlso): Lists regular files only. The returned name lives until the next call.
 internal b32 OSOpenDirectory(os_directory *Directory, char *Path);
 internal char *OSNextFileInDirectory(os_directory *Directory);
+// NOTE(pvlso): Lists subdirectories only, skips hidden ones ('.' prefix). Same lifetime as above.
+internal char *OSNextDirectoryInDirectory(os_directory *Directory);
 internal void OSCloseDirectory(os_directory *Directory);
 
 //

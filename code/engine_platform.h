@@ -255,6 +255,9 @@ typedef enum platform_file_type
     PlatformFileType_JSON,
     PlatformFileType_TTF,
     PlatformFileType_BIN,
+
+    // NOTE(pvlso): Relative to the projects directory (next to data/), e.g. "game_name/game_name.cpp"
+    PlatformFileType_Project,
     
     PlatformFileType_Count,
 } platform_file_type;
@@ -308,6 +311,15 @@ typedef PLATFORM_FILE_ERROR(platform_file_error);
 // NOTE(pvlso): Dest and Arena can be specified to 0 if you want to know only count
 #define PLATFORM_LIST_FILES_IN_DIRECTORY(name) u32 name(platform_file_type Type, char **Dest, memory_arena *Arena)
 typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
+
+// NOTE(pvlso): Names of the directories in projects/ that hold a project, which is
+// game_name/game_name.cpp. Dest and Arena can be 0 to only count, otherwise at most DestCount are stored.
+#define PLATFORM_LIST_PROJECTS(name) u32 name(char **Dest, u32 DestCount, memory_arena *Arena)
+typedef PLATFORM_LIST_PROJECTS(platform_list_projects);
+
+// NOTE(pvlso): Path is relative to the Type's directory. False if it already exists or can't be created.
+#define PLATFORM_MAKE_DIRECTORY(name) b32 name(char *Path, platform_file_type Type)
+typedef PLATFORM_MAKE_DIRECTORY(platform_make_directory);
 
 typedef struct read_file_result
 {
@@ -404,6 +416,8 @@ typedef struct platform_api
     platform_file_error *FileError;
 
     platform_list_files_in_directory *ListFilesInDirectory;
+    platform_list_projects *ListProjects;
+    platform_make_directory *MakeDirectory;
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;
