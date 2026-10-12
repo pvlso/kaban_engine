@@ -82,7 +82,6 @@ struct task_with_memory
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 #include "editor_game_mode.h"
-//#include "arkham/arkham.h"
 
 //#include "engine_navigation_mesh.h"
 //#include "engine_map_editor_mode.h"
@@ -93,7 +92,6 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_MapEditor,
-    EditorMode_Arkham,
     EditorMode_Game,
 };
 
@@ -129,7 +127,6 @@ struct editor_state
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
         editor_mode_game *Game;
-        game_state *ArkhamGameState;
 //        engine_map_editor *MapEditor;
 //        editor_game_simulate_mode *SimulateGame;
     };
@@ -140,8 +137,7 @@ struct transient_state
     memory_arena TranArena;    
 
     memory_arena AssetsArena;
-    engine_assets *ArkhamAssets;
-    
+
     task_with_memory Tasks[4];
 
     platform_work_queue *HighPriorityQueue;

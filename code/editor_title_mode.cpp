@@ -240,19 +240,13 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     if(!Result)
     {
         char Buffer[256];
-        nk_layout_row_begin(Nk, NK_STATIC, 40, 8);
+        nk_layout_row_begin(Nk, NK_STATIC, 40, 7);
         {
             nk_layout_row_push(Nk, 130);
             if(nk_button_label(Nk, "Assets Mode"))
             {
                 PlayAssetsMode(EditorState, TranState);
                 Result = true;
-                return(Result);
-            }
-
-            if(nk_button_label(Nk, "Play Game"))
-            {
-//                PlayArkham(EditorState, TranState);
                 return(Result);
             }
 
