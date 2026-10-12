@@ -489,26 +489,41 @@ GLFWDisplayBufferInWindow(editor_render_commands *Commands, rectangle2i DrawRegi
     EndTemporaryMemory(TempMem);
 }
 
+// NOTE(pvlso): Borderless fullscreen. Exclusive fullscreen (glfwSetWindowMonitor with a monitor)
+// makes Windows flash black whenever focus moves between two fullscreen windows.
 internal void
-GLFWToggleFullscreen(glfw_state *State)
+GLFWToggleFullscreen(glfw_window *Window)
 {
-    if(glfwGetWindowMonitor(State->MainWindow.Handle))
+    if(Window->Fullscreen)
     {
-        glfwSetWindowMonitor(State->MainWindow.Handle, 0,
-                             State->WindowedX, State->WindowedY,
-                             State->WindowedWidth, State->WindowedHeight, 0);
+        glfwSetWindowAttrib(Window->Handle, GLFW_DECORATED, GLFW_TRUE);
+        glfwSetWindowMonitor(Window->Handle, 0,
+                             Window->WindowedX, Window->WindowedY,
+                             Window->WindowedWidth, Window->WindowedHeight, GLFW_DONT_CARE);
     }
     else
     {
-        glfwGetWindowPos(State->MainWindow.Handle, &State->WindowedX, &State->WindowedY);
-        glfwGetWindowSize(State->MainWindow.Handle, &State->WindowedWidth, &State->WindowedHeight);
+        glfwGetWindowPos(Window->Handle, &Window->WindowedX, &Window->WindowedY);
+        glfwGetWindowSize(Window->Handle, &Window->WindowedWidth, &Window->WindowedHeight);
 
-        const GLFWvidmode *Mode = glfwGetVideoMode(State->Monitor);
-        glfwSetWindowMonitor(State->MainWindow.Handle, State->Monitor, 0, 0,
-                             Mode->width, Mode->height, Mode->refreshRate);
+        s32 MonitorX, MonitorY;
+        glfwGetMonitorPos(Window->Monitor, &MonitorX, &MonitorY);
+        const GLFWvidmode *Mode = glfwGetVideoMode(Window->Monitor);
+
+        s32 Height = Mode->height;
+#if defined(_WIN32)
+        // NOTE(pvlso): The driver (seen on NVIDIA) still switches a window that exactly covers
+        // the monitor to direct flip, which flashes black on every focus change. One pixel
+        // taller keeps it composited. Spills onto a monitor below, if there is one.
+        Height += 1;
+#endif
+
+        glfwSetWindowAttrib(Window->Handle, GLFW_DECORATED, GLFW_FALSE);
+        glfwSetWindowMonitor(Window->Handle, 0, MonitorX, MonitorY,
+                             Mode->width, Height, GLFW_DONT_CARE);
     }
 
-    glfwSwapInterval(1);
+    Window->Fullscreen = !Window->Fullscreen;
 }
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -641,18 +656,18 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_ESCAPE: GLFWProcessKeyboardMessage(&KeyboardController->Back, IsDown); break;
             case GLFW_KEY_SPACE:  GLFWProcessKeyboardMessage(&KeyboardController->Start, IsDown); break;
         }
+    }
 
-        if(IsDown)
+    // NOTE(pvlso): Window shortcuts work in every window, Alt+Enter toggles the one that got the key
+    if((Action == GLFW_PRESS) && (Mods & GLFW_MOD_ALT))
+    {
+        if(Key == GLFW_KEY_F4)
         {
-            b32 AltKeyWasDown = (Mods & GLFW_MOD_ALT);
-            if((Key == GLFW_KEY_F4) && AltKeyWasDown)
-            {
-                GlobalRunning = false;
-            }
-            else if((Key == GLFW_KEY_ENTER) && AltKeyWasDown)
-            {
-                GLFWToggleFullscreen(State);
-            }
+            GlobalRunning = false;
+        }
+        else if(Key == GLFW_KEY_ENTER)
+        {
+            GLFWToggleFullscreen(EventWindow);
         }
     }
 }
@@ -755,13 +770,6 @@ main(int ArgCount, char **Args)
             break;
         }
     }
-
-    if(State->DebugMonitor)
-    {
-        // NOTE(pvlso): GLFW minimizes fullscreen windows when they lose focus, with both windows
-        // fullscreen clicking one would minimize the other
-        glfwWindowHint(GLFW_AUTO_ICONIFY, GLFW_FALSE);
-    }
 #endif
 
     // NOTE(pvlso): The renderer and nuklear backend use fixed function GL, so ask for
@@ -779,12 +787,14 @@ main(int ArgCount, char **Args)
     glfwWindowHintString(GLFW_X11_CLASS_NAME, "kaban");
     glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "editor");
 
-    State->WindowedWidth = (2*Mode->width)/3;
-    State->WindowedHeight = (2*Mode->height)/3;
-    State->WindowedX = (Mode->width - State->WindowedWidth)/2;
-    State->WindowedY = (Mode->height - State->WindowedHeight)/2;
+    glfw_window *MainWindow = &State->MainWindow;
+    MainWindow->Monitor = State->Monitor;
+    MainWindow->WindowedWidth = (2*Mode->width)/3;
+    MainWindow->WindowedHeight = (2*Mode->height)/3;
+    MainWindow->WindowedX = (Mode->width - MainWindow->WindowedWidth)/2;
+    MainWindow->WindowedY = (Mode->height - MainWindow->WindowedHeight)/2;
 
-    GLFWwindow *Window = glfwCreateWindow(State->WindowedWidth, State->WindowedHeight, "Editor", 0, 0);
+    GLFWwindow *Window = glfwCreateWindow(MainWindow->WindowedWidth, MainWindow->WindowedHeight, "Editor", 0, 0);
     if(!Window)
     {
         fprintf(stderr, "GLFW PLATFORM: Could not create the window / OpenGL context.\n");
@@ -792,9 +802,9 @@ main(int ArgCount, char **Args)
         return(1);
     }
 
-    State->MainWindow.Handle = Window;
+    MainWindow->Handle = Window;
     glfwSetWindowUserPointer(Window, State);
-    glfwSetWindowPos(Window, State->WindowedX, State->WindowedY);
+    glfwSetWindowPos(Window, MainWindow->WindowedX, MainWindow->WindowedY);
     glfwSetWindowAspectRatio(Window, GlobalFramebufferWidth, GlobalFramebufferHeight);
 
     GLFWSetCallbacks(Window);
@@ -820,6 +830,8 @@ main(int ArgCount, char **Args)
     if(DebugWindow)
     {
         State->DebugWindow.Handle = DebugWindow;
+        // NOTE(pvlso): Alt+Enter with one monitor makes it fullscreen over the editor
+        State->DebugWindow.Monitor = State->DebugMonitor ? State->DebugMonitor : State->Monitor;
         glfwSetWindowUserPointer(DebugWindow, State);
         GLFWSetCallbacks(DebugWindow);
 
@@ -892,21 +904,16 @@ main(int ArgCount, char **Args)
     DEBUGSetEventRecording(Engine.IsValid);
 
     glfwShowWindow(Window);
-    GLFWToggleFullscreen(State);
+    GLFWToggleFullscreen(MainWindow);
 #if EDITOR_INTERNAL
     if(State->DebugWindow.Handle)
     {
         // NOTE(pvlso): Positioned after showing, X11 window managers ignore it on unmapped windows
         glfwShowWindow(State->DebugWindow.Handle);
+        glfwSetWindowPos(State->DebugWindow.Handle, GLFW_DEBUG_WINDOW_X, GLFW_DEBUG_WINDOW_Y);
         if(State->DebugMonitor)
         {
-            const GLFWvidmode *DebugMode = glfwGetVideoMode(State->DebugMonitor);
-            glfwSetWindowMonitor(State->DebugWindow.Handle, State->DebugMonitor, 0, 0,
-                                 DebugMode->width, DebugMode->height, DebugMode->refreshRate);
-        }
-        else
-        {
-            glfwSetWindowPos(State->DebugWindow.Handle, GLFW_DEBUG_WINDOW_X, GLFW_DEBUG_WINDOW_Y);
+            GLFWToggleFullscreen(&State->DebugWindow);
         }
     }
 #endif

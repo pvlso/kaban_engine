@@ -21,15 +21,20 @@ struct glfw_window
 {
     GLFWwindow *Handle;
     nk_platform Nk;
+
+    // NOTE(pvlso): Fullscreen is borderless (an undecorated window covering Monitor), not
+    // exclusive, so switching focus between our windows doesn't flash black on Windows.
+    GLFWmonitor *Monitor;
+    b32 Fullscreen;
+
+    // NOTE(pvlso): Windowed position and size, restored when leaving fullscreen
+    s32 WindowedX, WindowedY;
+    s32 WindowedWidth, WindowedHeight;
 };
 
 struct glfw_state
 {
     GLFWmonitor *Monitor;
-
-    // NOTE(pvlso): Windowed position and size of the main window, restored when leaving fullscreen
-    s32 WindowedX, WindowedY;
-    s32 WindowedWidth, WindowedHeight;
 
     // NOTE(pvlso): Set for the duration of glfwPollEvents so the key callback
     // can update the keyboard controller
@@ -40,7 +45,7 @@ struct glfw_state
 #if EDITOR_INTERNAL
     // NOTE(pvlso): Separate OS window for the profiler, shares the main window's GL objects
     glfw_window DebugWindow;
-    // NOTE(pvlso): First non primary monitor, the debug window goes fullscreen there. 0 with one monitor.
+    // NOTE(pvlso): First non primary monitor, the debug window starts fullscreen there. 0 with one monitor.
     GLFWmonitor *DebugMonitor;
 #endif
 };
