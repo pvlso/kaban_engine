@@ -38,6 +38,9 @@ struct editor_mode_game
     // NOTE(pvlso): Set by the controls (DrawGameControls), handled at the start of the next update
     b32 StopRequested;
     b32 RestartRequested;
+
+    // NOTE(pvlso): Stop takes two frames, see StopGame
+    b32 Stopping;
 };
 
 internal void PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName);

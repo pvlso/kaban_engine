@@ -289,6 +289,34 @@ ClearGameMemory(editor_mode_game *Game)
     Game->Memory.GameState = 0;
 }
 
+// NOTE(pvlso): Queues a delete for the texture of every loaded bitmap and closes the KEA. The
+// asset memory itself is in the mode arena, which the next mode frees.
+internal void
+FreeGameAssets(engine_assets *Assets)
+{
+    if(Assets->Assets)
+    {
+        for(u32 AssetIndex = 0; AssetIndex < Assets->AssetCount; ++AssetIndex)
+        {
+            asset *Asset = Assets->Assets + AssetIndex;
+            if((Asset->State == AssetState_Loaded) && Asset->Header &&
+               (Asset->Header->AssetType == AssetType_Bitmap) && Asset->Header->Bitmap.TextureHandle)
+            {
+                texture_op Op = {};
+                Op.IsAllocate = false;
+                Op.Deallocate.Handle = Asset->Header->Bitmap.TextureHandle;
+                AddOp(Assets->TextureOpQueue, &Op);
+            }
+        }
+    }
+
+    Platform.CloseFile(&Assets->File.Handle);
+}
+
+// NOTE(pvlso): Stop takes two frames. The first one lets the in-flight asset loads finish
+// and doesn't run the game. Their texture uploads are queued, and the platform runs that
+// queue at the end of the frame, writing the handles into the asset memory. The second
+// frame (FinishStopGame) can then delete every texture and free the mode arena.
 internal void
 StopGame(editor_state *EditorState, transient_state *TranState)
 {
@@ -308,6 +336,20 @@ StopGame(editor_state *EditorState, transient_state *TranState)
     if(Game->UpdateAndRender)
     {
         Platform.UnloadCode(&Game->Code);
+        Game->UpdateAndRender = 0;
+    }
+
+    Game->Stopping = true;
+    FormatString(sizeof(Game->Status), Game->Status, "Stopping %s...", Game->ProjectName);
+}
+
+internal void
+FinishStopGame(editor_state *EditorState, transient_state *TranState)
+{
+    editor_mode_game *Game = EditorState->Game;
+    if(Game->Assets)
+    {
+        FreeGameAssets(Game->Assets);
     }
 
     PlayTitleScreen(EditorState, TranState);
@@ -398,19 +440,23 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     editor_mode_game *Game = EditorState->Game;
     nk_context *Nk = EditorState->UIState.Nk;
 
-    UpdateGameBuild(Game, TranState, Input->dtForFrame);
-
-#if !EDITOR_INTERNAL
-    DrawGameControls(Game, Nk, 400.0f);
-#endif
-
-    if(Game->StopRequested)
+    if(Game->Stopping)
+    {
+        FinishStopGame(EditorState, TranState);
+        Result = true;
+    }
+    else if(Game->StopRequested)
     {
         StopGame(EditorState, TranState);
-        Result = true;
     }
     else
     {
+        UpdateGameBuild(Game, TranState, Input->dtForFrame);
+
+#if !EDITOR_INTERNAL
+        DrawGameControls(Game, Nk, 400.0f);
+#endif
+
         // NOTE(pvlso): The game starts over with empty memory, the code stays
         if(Game->RestartRequested)
         {
