@@ -27,11 +27,12 @@ Kaban Engine builds and runs on **Windows and Linux (X11)**. The platform layer 
 * Prototype navigation mesh generation & agent movement
 * Internal tools for game data management
 * Hot reloading of the engine code
+* Projects: games live in `projects/`, the editor compiles them, runs them and hot reloads them on save
 * Separate debug/profiler window (on a second monitor when one is available)
 
 **Not yet ready / incomplete:**
 
-* Projects system: games will live in `projects/` and be compiled and hot reloaded by the editor (only the project list exists so far)
+* Games only run inside the editor, there is no standalone export yet
 * Entity system (very early)
 * Animation system (mostly conceptual)
 * Several editor tools depend on unfinished systems
@@ -82,9 +83,23 @@ Requires clang (or gcc) and the X11 development headers (X11, Xrandr, Xinerama, 
 
 Run `build/kaban`.
 
+**Projects**
+
+A game is a folder `projects/<name>/` with `<name>.cpp` in it. The game includes only `code/engine_api.h` and exports `GameUpdateAndRender`. The title screen lists the projects, and **New Project** writes a small template to start from.
+
+**Run** builds the selected project, loads it, and rebuilds and hot reloads it whenever one of its source files changes. Build errors and the build log show up in the debug window's Project panel, along with Stop and Restart. A project can also be built by hand:
+
+```
+build.bat project <name> [debug|release] [clang|msvc]
+./build.sh project <name> [debug|release]
+```
+
+The output goes to `projects/<name>/build/`.
+
 **Notes**
 
-* The engine looks for `data/` and `projects/` next to the `build/` directory and creates them if they're missing. Game assets are not part of the repository.
+* The engine looks for `data/` and `projects/` next to the `build/` directory and creates them if they're missing.
+* Every project has its own assets in `projects/<name>/data/` and its own `editor_metadata.json`. The Assets Mode and a running game use the selected project's data. The engine's own `data/` is for the editor only. Game assets are not part of the repository.
 * Rebuilding while the editor is running hot reloads the engine code.
 * Editor keys: `Alt+E` toggles the UI, `Alt+M` mutes audio, `Alt+Enter` toggles fullscreen, `Alt+F4` quits.
 * Expect missing features, breakage, or incomplete subsystems.
