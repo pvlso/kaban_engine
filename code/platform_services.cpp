@@ -394,6 +394,103 @@ internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
     return(ProjectCount);
 }
 
+internal PLATFORM_BUILD_PROJECT(PlatformBuildProject)
+{
+    char BuildDirectory[PLATFORM_PATH_COUNT];
+    snprintf(BuildDirectory, sizeof(BuildDirectory), "%sprojects/%s/build", GlobalPaths.ROOTPath, ProjectName);
+    OSCreateDirectory(BuildDirectory);
+
+    char LogPath[PLATFORM_PATH_COUNT];
+    snprintf(LogPath, sizeof(LogPath), "%s/build.log", BuildDirectory);
+
+#if EDITOR_INTERNAL
+    char *Mode = "debug";
+#else
+    char *Mode = "release";
+#endif
+    char CommandLine[PLATFORM_PATH_COUNT];
+    snprintf(CommandLine, sizeof(CommandLine), OS_BUILD_PROJECT_COMMAND, ProjectName, Mode);
+
+    // NOTE(pvlso): The build scripts live in the root directory
+    platform_process Result = OSExecuteCommand(GlobalPaths.ROOTPath, CommandLine, LogPath);
+    return(Result);
+}
+
+internal PLATFORM_GET_PROCESS_STATE(PlatformGetProcessState)
+{
+    platform_process_state Result = OSGetProcessState(Process);
+    return(Result);
+}
+
+internal b32
+IsSourceFileName(char *FileName)
+{
+    b32 Result = (StringEndsWithNoCase(FileName, ".cpp") ||
+                  StringEndsWithNoCase(FileName, ".c") ||
+                  StringEndsWithNoCase(FileName, ".h") ||
+                  StringEndsWithNoCase(FileName, ".hpp") ||
+                  StringEndsWithNoCase(FileName, ".inl"));
+    return(Result);
+}
+
+internal u64
+PlatformNewestSourceWriteTime(char *Path, u32 Depth)
+{
+    u64 Result = 0;
+
+    os_directory Directory;
+    if(OSOpenDirectory(&Directory, Path))
+    {
+        while(char *Name = OSNextFileInDirectory(&Directory))
+        {
+            if(IsSourceFileName(Name))
+            {
+                char FilePath[PLATFORM_PATH_COUNT];
+                snprintf(FilePath, sizeof(FilePath), "%s/%s", Path, Name);
+                u64 WriteTime = OSGetLastWriteTime(FilePath);
+                if(WriteTime > Result)
+                {
+                    Result = WriteTime;
+                }
+            }
+        }
+    }
+    OSCloseDirectory(&Directory);
+
+    // NOTE(pvlso): build/ only holds what the build writes. The depth limit is there for links that loop.
+    if(Depth < 8)
+    {
+        if(OSOpenDirectory(&Directory, Path))
+        {
+            while(char *Name = OSNextDirectoryInDirectory(&Directory))
+            {
+                if(!((Depth == 0) && StringsAreEqual(Name, "build")))
+                {
+                    char SubPath[PLATFORM_PATH_COUNT];
+                    snprintf(SubPath, sizeof(SubPath), "%s/%s", Path, Name);
+                    u64 WriteTime = PlatformNewestSourceWriteTime(SubPath, Depth + 1);
+                    if(WriteTime > Result)
+                    {
+                        Result = WriteTime;
+                    }
+                }
+            }
+        }
+        OSCloseDirectory(&Directory);
+    }
+
+    return(Result);
+}
+
+internal PLATFORM_GET_PROJECT_WRITE_TIME(PlatformGetProjectWriteTime)
+{
+    char ProjectPath[PLATFORM_PATH_COUNT];
+    snprintf(ProjectPath, sizeof(ProjectPath), "%sprojects/%s", GlobalPaths.ROOTPath, ProjectName);
+
+    u64 Result = PlatformNewestSourceWriteTime(ProjectPath, 0);
+    return(Result);
+}
+
 internal PLATFORM_MAKE_DIRECTORY(PlatformMakeDirectory)
 {
     b32 Result = false;
@@ -634,15 +731,22 @@ PlatformLoadCodeFile(platform_code *Code, char *ModuleName, platform_file_type T
     if(!OSFileExists(Code->LockFileName))
     {
         Code->LibraryLastWriteTime = OSGetLastWriteTime(Code->SourceLibraryName);
-#if EDITOR_INTERNAL
-        if(OSCopyFile(Code->SourceLibraryName, Code->TempLibraryName))
+
+        // NOTE(pvlso): Loading a copy keeps the library free for the next build. Projects
+        // always rebuild while they run, the engine only does in internal builds.
+        b32 LoadCopy = (EDITOR_INTERNAL || (Type == PlatformFileType_Project));
+        if(LoadCopy)
         {
-            Code->Library = OSLoadLibrary(Code->TempLibraryName);
+            if(OSCopyFile(Code->SourceLibraryName, Code->TempLibraryName))
+            {
+                Code->Library = OSLoadLibrary(Code->TempLibraryName);
+            }
         }
-#else
-        Code->TempLibraryName[0] = 0;
-        Code->Library = OSLoadLibrary(Code->SourceLibraryName);
-#endif
+        else
+        {
+            Code->TempLibraryName[0] = 0;
+            Code->Library = OSLoadLibrary(Code->SourceLibraryName);
+        }
         Code->IsValid = (Code->Library != 0);
     }
 
@@ -789,6 +893,9 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
     Memory->PlatformAPI.ListProjects = PlatformListProjects;
     Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;
+    Memory->PlatformAPI.BuildProject = PlatformBuildProject;
+    Memory->PlatformAPI.GetProcessState = PlatformGetProcessState;
+    Memory->PlatformAPI.GetProjectWriteTime = PlatformGetProjectWriteTime;
 
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;

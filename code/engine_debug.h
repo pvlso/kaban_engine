@@ -227,6 +227,11 @@ struct debug_state
 
     debug_element *RootProfileElement;
 
+    // NOTE(pvlso): The profiler graph in the debug window: Threads / Frames / Clocks, and the
+    // id of its view (which element it zoomed into)
+    debug_type ProfileGraphType;
+    debug_id ProfileGraphID;
+
     u32 FrameBarLaneCount;
     debug_thread *FirstThread;
     debug_thread *FirstFreeThread;

@@ -449,12 +449,10 @@ DrawProfileBarsnk(debug_state *DebugState, debug_id GraphID, struct nk_rect Prof
 }
 
 internal void
-DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
+DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElement, r32 Height)
 {
     nk_context *nk = DebugState->nk;
-    nk_layout_row_dynamic(nk, 5, 1);
-    nk_spacer(nk);
-    nk_layout_row_dynamic(nk, 310, 1);
+    nk_layout_row_dynamic(nk, Height, 1);
 
     struct nk_rect Rect = {};
     nk_widget(&Rect, nk);
@@ -491,12 +489,10 @@ DrawProfileIn(debug_state *DebugState, debug_id GraphID, debug_element *RootElem
 }
 
 internal void
-DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElement)
+DrawFrameBars(debug_state *DebugState, debug_id GraphID, debug_element *RootElement, r32 Height)
 {
     nk_context *nk = DebugState->nk;
-    nk_layout_row_dynamic(nk, 5, 1);
-    nk_spacer(nk);
-    nk_layout_row_dynamic(nk, 310, 1);
+    nk_layout_row_dynamic(nk, Height, 1);
 
     struct nk_rect Rect = {};
     nk_widget(&Rect, nk);
@@ -767,257 +763,158 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
     }
 }
 
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): DEBUG WINDOW LAYOUT
+//
+//   frame rate (top left)
+//   +- Profile ------------------------------+ +- Project ------------------+
+//   | Pause Oldest Most Recent | Root Threads | | Stop Restart                |
+//   | Frames Clocks                           | | status, builds / reloads    |
+//   | frame slider                            | | build log of a failed build |
+//   | viewing frame info                      | |                             |
+//   | graph (fills the rest)                  | |                             |
+//   | debug memory                            | |                             |
+//   +-----------------------------------------+ +-----------------------------+
+//
+// Everything is in UI units, the window is UI_BASE_RESOLUTION_X x UI_BASE_RESOLUTION_Y.
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+#define DEBUG_WINDOW_ROW_HEIGHT 30.0f
+#define DEBUG_PROFILE_WIDTH 1140.0f
+#define DEBUG_PROJECT_WIDTH 730.0f
+
 internal void
-DEBUGDrawElement(debug_state *DebugState, debug_tree *Tree, debug_element *Element, debug_id DebugID,
-                 u32 FrameOrdinal)
+DrawFrameRate(debug_state *DebugState)
 {
     nk_context *nk = DebugState->nk;
-    debug_stored_event *OldestStoredEvent = 
-        Element->Frames[DebugState->ViewingFrameOrdinal].OldestEvent;
 
-    debug_view *View = GetOrCreateDebugViewFor(DebugState, DebugID);
-    switch(Element->Type)
+    // NOTE(pvlso): Always the newest frame, the profiler can be looking at an older one
+    debug_frame *Frame = DebugState->Frames + DebugState->MostRecentFrameOrdinal;
+    r32 Seconds = Frame->WallSecondsElapsed;
+
+    char Text[64];
+    FormatString(sizeof(Text), Text, "%.02fms  %.0f fps", 1000.0f*Seconds, (Seconds > 0.0f) ? (1.0f / Seconds) : 0.0f);
+    nk_layout_row_static(nk, 24, 300, 1);
+    nk_label(nk, Text, NK_TEXT_LEFT);
+}
+
+internal void
+DrawProfiler(debug_state *DebugState, r32 Height)
+{
+    nk_context *nk = DebugState->nk;
+    if(nk_group_begin(nk, "Profile", NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
     {
-        case DebugType_bitmap_id:
+        nk_layout_row_begin(nk, NK_STATIC, DEBUG_WINDOW_ROW_HEIGHT, 8);
         {
-#if 0
-            debug_event *Event = OldestStoredEvent ? &OldestStoredEvent->Event : 0;
-            loaded_bitmap *Bitmap = 0;
-            r32 BitmapScale = View->InlineBlock.Dim.y;
-            if(Event)
+            nk_layout_row_push(nk, 110);
+            if(nk_button_label(nk, DebugState->Paused ? "Resume" : "Pause"))
             {
-                Bitmap = GetBitmap(RenderGroup->Assets, Event->Value_bitmap_id, RenderGroup->GenerationID);
-                if(Bitmap)
+                DebugState->Paused = !DebugState->Paused;
+            }
+            if(nk_button_label(nk, "Oldest"))
+            {
+                DebugState->ViewingFrameOrdinal = DebugState->OldestFrameOrdinal;
+            }
+            if(nk_button_label(nk, "Most Recent"))
+            {
+                DebugState->ViewingFrameOrdinal = DebugState->MostRecentFrameOrdinal;
+            }
+
+            nk_layout_row_push(nk, 60);
+            nk_spacer(nk);
+
+            nk_layout_row_push(nk, 110);
+            debug_view *View = GetOrCreateDebugViewFor(DebugState, DebugState->ProfileGraphID);
+            if(nk_button_label(nk, "Root"))
+            {
+                View->ProfileGraph.GUID = 0;
+            }
+
+            debug_type GraphTypes[] = {DebugType_ThreadIntervalGraph, DebugType_FrameBarGraph, DebugType_TopClocksList};
+            char *GraphNames[] = {"Threads", "Frames", "Clocks"};
+            for(u32 GraphIndex = 0; GraphIndex < ArrayCount(GraphTypes); ++GraphIndex)
+            {
+                nk_bool Selected = (DebugState->ProfileGraphType == GraphTypes[GraphIndex]);
+                if(nk_selectable_label(nk, GraphNames[GraphIndex], NK_TEXT_CENTERED, &Selected))
                 {
-                    used_bitmap_dim Dim = GetBitmapDim(RenderGroup, &NoTransform, Bitmap, BitmapScale, V3(0.0f, 0.0f, 0.0f), 1.0f);
-                    View->InlineBlock.Dim.x = Dim.Size.x;
+                    DebugState->ProfileGraphType = GraphTypes[GraphIndex];
                 }
             }
+        }
+        nk_layout_row_end(nk);
 
-            layout_element LayEl = BeginElementRectangle(Layout, &View->InlineBlock.Dim);
-            MakeElementSizable(&LayEl);
-            DefaultInteraction(&LayEl, ItemInteraction);
-            EndElement(&LayEl);
-            PushRect(&DebugState->RenderGroup, &DebugState->BackingTransform, LayEl.Bounds, 0.0f, V4(0, 0, 0, 1.0f));
+        DrawFrameSlider(DebugState, DebugState->ProfileGraphID, DebugState->RootProfileElement);
 
-            if(Bitmap)
-            {
-                PushBitmap(&DebugState->RenderGroup, &DebugState->BackingTransform, Event->Value_bitmap_id, BitmapScale,
-                    V3(GetMinCorner(LayEl.Bounds), 1.0f), V4(1, 1, 1, 1), 0.0f);
-            }
-#endif
-        } break;
+        char Text[256];
+        debug_frame *ViewingFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
+        FormatString(sizeof(Text), Text, "Viewing frame: %.02fms, %d events, %d profile blocks, %d data blocks",
+                     ViewingFrame->WallSecondsElapsed * 1000.0f, ViewingFrame->StoredEventCount,
+                     ViewingFrame->ProfileBlockCount, ViewingFrame->DataBlockCount);
+        nk_layout_row_dynamic(nk, DEBUG_WINDOW_ROW_HEIGHT, 1);
+        nk_label(nk, Text, NK_TEXT_LEFT);
 
-        case DebugType_memory_arena_p:
-        case DebugType_ArenaOccupancy:
+        debug_view *View = GetOrCreateDebugViewFor(DebugState, DebugState->ProfileGraphID);
+        debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
+        if(!ViewingElement)
         {
-            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
-            {
-                nk_layout_row_push(nk, 80);
-                nk_label(nk, GetName(Element), NK_TEXT_LEFT);
+            ViewingElement = DebugState->RootProfileElement;
+        }
 
-                nk_layout_row_push(nk, 200);
-                debug_element_frame *RootFrame = Element->Frames + DebugState->ViewingFrameOrdinal;
-                debug_stored_event *Event = RootFrame->OldestEvent;
-                if(Event)
-                {
-                    memory_arena *Arena = Event->Event.Value_memory_arena_p;
-                    if(Arena->Base)
-                    {
-                        nk_prog(nk, Arena->Used, Arena->Size, nk_false);
-                    }
-                }
-            }
-            nk_layout_row_end(nk);
-
-        } break;
-
-        case DebugType_ThreadIntervalGraph:
-        case DebugType_FrameBarGraph:
-        case DebugType_TopClocksList:
+        // NOTE(pvlso): What's left after the title, the rows above and the memory line below
+        r32 GraphHeight = Height - 6.0f*DEBUG_WINDOW_ROW_HEIGHT - 90.0f;
+        switch(DebugState->ProfileGraphType)
         {
-            debug_view_profile_graph *Graph = &View->ProfileGraph;
-
-            nk_layout_row_begin(nk, NK_STATIC, 30, 4);
+            case DebugType_ThreadIntervalGraph:
             {
-                nk_layout_row_push(nk, 80);
-                if(nk_button_label(nk, "Root"))
-                {
-                    Graph->GUID = 0;
-                }
+                DrawProfileIn(DebugState, DebugState->ProfileGraphID, ViewingElement, GraphHeight);
+            } break;
 
-                if(nk_button_label(nk, "Threads"))
-                {
-                    Element->Type = DebugType_ThreadIntervalGraph;
-                }
-
-                if(nk_button_label(nk, "Frames"))
-                {
-                    Element->Type = DebugType_FrameBarGraph;
-                }
-
-                if(nk_button_label(nk, "Clocks"))
-                {
-                    Element->Type = DebugType_TopClocksList;
-                }
-            }
-            nk_layout_row_end(nk);
-            
-            u32 ViewingFrameOrdinal = DebugState->ViewingFrameOrdinal;
-            debug_element *ViewingElement = GetElementFromGUID(DebugState, View->ProfileGraph.GUID);
-            if(!ViewingElement)
+            case DebugType_FrameBarGraph:
             {
-                ViewingElement = DebugState->RootProfileElement;
-            }
+                DrawFrameBars(DebugState, DebugState->ProfileGraphID, ViewingElement, GraphHeight);
+            } break;
 
-            switch(Element->Type)
+            default:
             {
-                case DebugType_ThreadIntervalGraph:
+                nk_layout_row_dynamic(nk, GraphHeight, 1);
+                if(nk_group_begin(nk, "Clocks", NK_WINDOW_BORDER))
                 {
-                    DrawProfileIn(DebugState, DebugID, ViewingElement);
-                } break;
-
-                case DebugType_FrameBarGraph:
-                {
-                    DrawFrameBars(DebugState, DebugID, ViewingElement);
-                } break;
-                
-                case DebugType_TopClocksList:
-                {
-                    DrawTopClocksList(DebugState, DebugID, ViewingElement);
-                } break;
-            }
-        } break;
-
-        case DebugType_FrameSlider:
-        {
-            nk_layout_row_begin(nk, NK_STATIC, 30, 3);
-            {
-                    nk_layout_row_push(nk, 108);
-                if(nk_button_label(nk, "Pause"))
-                {
-                    DebugState->Paused = !DebugState->Paused;
+                    DrawTopClocksList(DebugState, DebugState->ProfileGraphID, ViewingElement);
+                    nk_group_end(nk);
                 }
+            } break;
+        }
 
-                if(nk_button_label(nk, "Oldest"))
-                {
-                    DebugState->ViewingFrameOrdinal = DebugState->OldestFrameOrdinal;
-                }
+        FormatString(sizeof(Text), Text, "Debug per-frame arena space remaining: %ukb",
+                     (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
+        nk_layout_row_dynamic(nk, DEBUG_WINDOW_ROW_HEIGHT, 1);
+        nk_label(nk, Text, NK_TEXT_LEFT);
 
-                if(nk_button_label(nk, "Most Recent"))
-                {
-                    DebugState->ViewingFrameOrdinal = DebugState->MostRecentFrameOrdinal;
-                }
-            }
-            nk_layout_row_end(nk);
-
-            DrawFrameSlider(DebugState, DebugID, Element);
-        } break;
-
-        case DebugType_LastFrameInfo:
-        {
-            char Text[256];
-            
-            debug_frame *MostRecentFrame = DebugState->Frames + DebugState->ViewingFrameOrdinal;
-            FormatString(sizeof(Text), Text, "Viewing frame time: %.02fms %de %dp %dd",
-                         MostRecentFrame->WallSecondsElapsed * 1000.0f, MostRecentFrame->StoredEventCount,
-                         MostRecentFrame->ProfileBlockCount, MostRecentFrame->DataBlockCount);
-
-            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
-            {
-                nk_layout_row_push(nk, 400);
-                nk_label(nk, Text, NK_TEXT_LEFT);
-            }
-            nk_layout_row_end(nk);
-        } break;
-
-        case DebugType_DebugMemoryInfo:
-        {
-            char Text[256];
-            FormatString(sizeof(Text), Text, "Per-frame arena space remaining: %ukb",
-                         (u32)(GetArenaSizeRemaining(&DebugState->PerFrameArena, AlignNoClear(1)) / 1024));
-            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
-            {
-                nk_layout_row_push(nk, 400);
-                nk_label(nk, Text, NK_TEXT_LEFT);
-            }
-            nk_layout_row_end(nk);
-        } break;
-
-        default:
-        {
-            debug_event NullEvent = {};
-            NullEvent.GUID = Element->GUID;
-            NullEvent.Type = (u8)Element->Type;
-
-            debug_event *Event = OldestStoredEvent ? &OldestStoredEvent->Event : &NullEvent;
-            char Text[256];
-            DEBUGEventToText(Text, Text + sizeof(Text), Element, Event,
-                DEBUGVarToText_AddName|
-                    DEBUGVarToText_AddValue|
-                    DEBUGVarToText_NullTerminator|
-                    DEBUGVarToText_Colon|
-                    DEBUGVarToText_PrettyBools);
-
-            nk_layout_row_begin(nk, NK_STATIC, 30, 1);
-            {
-                nk_layout_row_push(nk, 400);
-                nk_label(nk, Text, NK_TEXT_LEFT);
-            }
-            nk_layout_row_end(nk);
-        } break;
+        nk_group_end(nk);
     }
 }
 
 internal void
-DrawTreeLink(debug_state *DebugState, debug_tree *Tree, debug_variable_link *Link)
+DrawProjectPanel(editor_state *EditorState, nk_context *nk, r32 Height)
 {
-    u32 FrameOrdinal = DebugState->ViewingFrameOrdinal;
-    
-    if(HasChildren(Link))
+    if(nk_group_begin(nk, "Project", NK_WINDOW_BORDER|NK_WINDOW_TITLE|NK_WINDOW_NO_SCROLLBAR))
     {
-        debug_id ID = DebugIDFromLink(Tree, Link);
-
-        char *Text = Link->Name;
-        int id = *(int *)ID.Value[1];
-        if(nk_tree_push_id(DebugState->nk, NK_TREE_NODE, Text, NK_MINIMIZED, id))
+        if(EditorState && (EditorState->EditorMode == EditorMode_Game))
         {
-            for(debug_variable_link *SubLink = Link->FirstChild;
-                SubLink != GetSentinel(Link);
-                SubLink = SubLink->Next)
-            {
-                DrawTreeLink(DebugState, Tree, SubLink);
-            }
-
-            nk_tree_pop(DebugState->nk);
+            // NOTE(pvlso): The log gets what's left under the title, the buttons, status and counts
+            DrawGameControls(EditorState->Game, nk, Height - 3.0f*DEBUG_WINDOW_ROW_HEIGHT - 80.0f);
         }
-    }
-    else
-    {
-        debug_id DebugID = DebugIDFromLink(Tree, Link);
-        DEBUGDrawElement(DebugState, Tree, Link->Element, DebugID, FrameOrdinal);
-    }
-}
-
-internal void
-DrawTrees(debug_state *DebugState)
-{
-    u32 FrameOrdinal = DebugState->ViewingFrameOrdinal;
-
-    for(debug_tree *Tree = DebugState->TreeSentinel.Next;
-        Tree != &DebugState->TreeSentinel;
-        Tree = Tree->Next)
-    {
-        debug_variable_link *Group = Tree->Group;
-        if(Group)
+        else
         {
-            DrawTreeLink(DebugState, Tree, Group);
+            nk_layout_row_dynamic(nk, DEBUG_WINDOW_ROW_HEIGHT, 1);
+            nk_label(nk, "No project running, start one with Run on the title screen", NK_TEXT_LEFT);
         }
+
+        nk_group_end(nk);
     }
 }
 
 internal debug_element *
-GetElementFromEvent(debug_state *DebugState, debug_event *Event, 
+GetElementFromEvent(debug_state *DebugState, debug_event *Event,
     debug_variable_link *Parent, u32 Op);
 void
 DEBUGMarkEditedEvent(debug_state *DebugState, debug_event *Event)
@@ -1575,7 +1472,11 @@ DEBUGInit(u32 Width, u32 Height)
     debug_event RootProfileEvent = {};
     RootProfileEvent.GUID = DEBUG_NAME("RootProfile");
     DebugState->RootProfileElement = GetElementFromEvent(DebugState, &RootProfileEvent, 0, 0);
-        
+
+    DebugState->ProfileGraphType = DebugType_TopClocksList;
+    DebugState->ProfileGraphID.Value[0] = DebugState;
+    DebugState->ProfileGraphID.Value[1] = &DebugState->ProfileGraphType;
+
     DebugState->Initialized = true;
 
     AddTree(DebugState, DebugState->RootGroup, V2(-0.5f*Width, 0.5f*Height));
@@ -1596,7 +1497,7 @@ DEBUGStart(debug_state *DebugState)
 }
 
 internal void
-DEBUGEnd(debug_state *DebugState, engine_input *Input)
+DEBUGEnd(debug_state *DebugState, engine_memory *Memory, engine_input *Input)
 {
     TIMED_FUNCTION();
 
@@ -1612,11 +1513,25 @@ DEBUGEnd(debug_state *DebugState, engine_input *Input)
 
     nk_context *nk = DebugState->nk;
 
-    if (nk_begin(nk, "Profiler", nk_rect(0, 0, (f32)1920, (f32)1080),
+    if (nk_begin(nk, "Profiler", nk_rect(0, 0, (f32)UI_BASE_RESOLUTION_X, (f32)UI_BASE_RESOLUTION_Y),
                    NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
     {
         nk_window_show(nk, "Profiler", NK_SHOWN);
-        DrawTrees(DebugState);
+
+        DrawFrameRate(DebugState);
+
+        // NOTE(pvlso): The panels take the height left under the frame rate
+        r32 PanelHeight = (r32)UI_BASE_RESOLUTION_Y - 60.0f;
+        nk_layout_row_begin(nk, NK_STATIC, PanelHeight, 2);
+        {
+            nk_layout_row_push(nk, DEBUG_PROFILE_WIDTH);
+            DrawProfiler(DebugState, PanelHeight);
+
+            // NOTE(pvlso): The running project's dev controls live here, the main window is all game
+            nk_layout_row_push(nk, DEBUG_PROJECT_WIDTH);
+            DrawProjectPanel(Memory->EditorState, nk, PanelHeight);
+        }
+        nk_layout_row_end(nk);
     }
     nk_end(nk);
 }
@@ -1644,6 +1559,6 @@ extern "C" DEBUG_EDITOR_FRAME_END(DEBUGEditorFrameEnd)
     {
         DEBUGStart(DebugState);
         CollateDebugRecords(DebugState, EventCount, GlobalDebugTable->Events[EventArrayIndex]);
-        DEBUGEnd(DebugState, Input);
+        DEBUGEnd(DebugState, Memory, Input);
     }
 }

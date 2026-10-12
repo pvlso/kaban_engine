@@ -187,8 +187,7 @@ UpdateAndRenderProjects(editor_state *EditorState, transient_state *TranState,
             RefreshProjectList(EditorState, TitleScreen);
         }
 
-        // TODO(pvlso): Compile the project first (projects plan phase 3), for now Run loads
-        // an already built projects/<name>/build/<name>.dll|so
+        // NOTE(pvlso): The game mode builds the project, then runs it
         b32 CanRun = (TitleScreen->SelectedProject >= 0);
         if(!CanRun) nk_widget_disable_begin(Nk);
         b32 RunPressed = nk_button_label(Nk, "Run");
@@ -196,8 +195,8 @@ UpdateAndRenderProjects(editor_state *EditorState, transient_state *TranState,
 
         if(RunPressed && CanRun)
         {
-            Result = PlayGame(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject],
-                              TitleScreen->ProjectStatus, sizeof(TitleScreen->ProjectStatus));
+            PlayGame(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
+            Result = true;
         }
 
         // NOTE(pvlso): Once the game runs, the mode arena that held TitleScreen is gone

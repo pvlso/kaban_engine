@@ -357,6 +357,36 @@ typedef PLATFORM_UNLOAD_CODE(platform_unload_code);
 typedef PLATFORM_GET_PROC_ADDRESS(platform_get_proc_address);
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): PROJECTS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+typedef struct platform_process
+{
+    u64 OSHandle;
+} platform_process;
+
+typedef struct platform_process_state
+{
+    b32 StartedSuccessfully;
+    b32 IsRunning;
+    s32 ReturnCode;
+} platform_process_state;
+
+// NOTE(pvlso): Starts "build.bat|build.sh project <name>" in the background, in the same mode
+// (debug/release) as the editor. Its output goes to projects/<name>/build/build.log.
+#define PLATFORM_BUILD_PROJECT(name) platform_process name(char *ProjectName)
+typedef PLATFORM_BUILD_PROJECT(platform_build_project);
+
+// NOTE(pvlso): Poll until IsRunning is false, the process is cleaned up then and further
+// calls return an empty state.
+#define PLATFORM_GET_PROCESS_STATE(name) platform_process_state name(platform_process *Process)
+typedef PLATFORM_GET_PROCESS_STATE(platform_get_process_state);
+
+// NOTE(pvlso): Newest write time of the project's source files (.cpp .c .h .hpp .inl, in
+// projects/<name> and its subdirectories except build/), 0 if there are none
+#define PLATFORM_GET_PROJECT_WRITE_TIME(name) u64 name(char *ProjectName)
+typedef PLATFORM_GET_PROJECT_WRITE_TIME(platform_get_project_write_time);
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): WORK QUEUES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 struct platform_work_queue;
@@ -416,6 +446,9 @@ typedef struct platform_api
     platform_list_files_in_directory *ListFilesInDirectory;
     platform_list_projects *ListProjects;
     platform_make_directory *MakeDirectory;
+    platform_build_project *BuildProject;
+    platform_get_process_state *GetProcessState;
+    platform_get_project_write_time *GetProjectWriteTime;
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;

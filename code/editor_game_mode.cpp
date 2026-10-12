@@ -145,18 +145,28 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState)
     return(Result);
 }
 
+#define GAME_SOURCE_CHECK_INTERVAL 0.5f
+
+internal void
+StartGameBuild(editor_mode_game *Game)
+{
+    Game->BuiltSourceWriteTime = Platform.GetProjectWriteTime(Game->ProjectName);
+    Game->BuildProcess = Platform.BuildProject(Game->ProjectName);
+    Game->Building = true;
+    ++Game->BuildCount;
+
+    FormatString(sizeof(Game->Status), Game->Status, "Building %s...", Game->ProjectName);
+}
+
+// NOTE(pvlso): The new library is loaded before the old one goes, so a library that doesn't
+// load leaves the old code running
 internal b32
-PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName,
-         char *Status, umm StatusCount)
+LoadGameCode(editor_mode_game *Game)
 {
     b32 Result = false;
 
-    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
-    char Name[PROJECT_NAME_COUNT];
-    FormatString(sizeof(Name), Name, "%s", ProjectName);
-
     char ModuleName[256];
-    FormatString(sizeof(ModuleName), ModuleName, "%s/build/%s", Name, Name);
+    FormatString(sizeof(ModuleName), ModuleName, "%s/build/%s", Game->ProjectName, Game->ProjectName);
 
     platform_loaded_code Code = Platform.LoadCode(ModuleName, PlatformFileType_Project);
     game_update_and_render *UpdateAndRender = 0;
@@ -167,28 +177,18 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
 
     if(UpdateAndRender)
     {
-        SetEditorMode(EditorState, TranState, EditorMode_Game);
+        if(Game->UpdateAndRender)
+        {
+            Platform.UnloadCode(&Game->Code);
+        }
 
-        editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
-        FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
         Game->Code = Code;
         Game->UpdateAndRender = UpdateAndRender;
-        Game->Assets = LoadGameAssets(EditorState, TranState);
-
-        EditorState->Game = Game;
+        ++Game->LoadCount;
         Result = true;
     }
     else
     {
-        if(Code.NoErrors)
-        {
-            FormatString(StatusCount, Status, "projects/%s/build has no GameUpdateAndRender export", Name);
-        }
-        else
-        {
-            FormatString(StatusCount, Status, "Could not load projects/%s/build/%s, is it built?", Name, Name);
-        }
-
         Platform.UnloadCode(&Code);
     }
 
@@ -196,18 +196,180 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
 }
 
 internal void
+ReadGameBuildLog(editor_mode_game *Game, transient_state *TranState)
+{
+    Game->BuildLog[0] = 0;
+
+    char FileName[256];
+    FormatString(sizeof(FileName), FileName, "%s/build/build.log", Game->ProjectName);
+
+    temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
+    read_file_result File = Platform.ReadEntireFile(FileName, PlatformFileType_Project, TempMem.Arena, true);
+    if(File.Contents)
+    {
+        FormatString(sizeof(Game->BuildLog), Game->BuildLog, "%s", (char *)File.Contents);
+    }
+    EndTemporaryMemory(TempMem);
+}
+
+internal void
+UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
+{
+    if(Game->Building)
+    {
+        platform_process_state State = Platform.GetProcessState(&Game->BuildProcess);
+        if(!State.IsRunning)
+        {
+            Game->Building = false;
+            ReadGameBuildLog(Game, TranState);
+
+            Game->BuildFailed = true;
+            if(!State.StartedSuccessfully)
+            {
+                FormatString(sizeof(Game->Status), Game->Status, "Could not start the build of %s", Game->ProjectName);
+            }
+            else if(State.ReturnCode != 0)
+            {
+                FormatString(sizeof(Game->Status), Game->Status, "%s: build failed%s", Game->ProjectName,
+                             Game->UpdateAndRender ? ", the last good build keeps running" : "");
+            }
+            else if(!LoadGameCode(Game))
+            {
+                FormatString(sizeof(Game->Status), Game->Status,
+                             "%s built, but it doesn't load or has no GameUpdateAndRender export", Game->ProjectName);
+            }
+            else
+            {
+                Game->BuildFailed = false;
+                FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
+            }
+        }
+    }
+
+    // NOTE(pvlso): A save during a build is caught here once that build is done
+    Game->SourceCheckTimer -= dt;
+    if(!Game->Building && (Game->SourceCheckTimer <= 0.0f))
+    {
+        Game->SourceCheckTimer = GAME_SOURCE_CHECK_INTERVAL;
+        if(Platform.GetProjectWriteTime(Game->ProjectName) != Game->BuiltSourceWriteTime)
+        {
+            StartGameBuild(Game);
+        }
+    }
+}
+
+internal void
+PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName)
+{
+    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
+    char Name[PROJECT_NAME_COUNT];
+    FormatString(sizeof(Name), Name, "%s", ProjectName);
+
+    SetEditorMode(EditorState, TranState, EditorMode_Game);
+
+    editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
+    FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
+    Game->Assets = LoadGameAssets(EditorState, TranState);
+    EditorState->Game = Game;
+
+    // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
+    StartGameBuild(Game);
+}
+
+internal void
+ClearGameMemory(editor_mode_game *Game)
+{
+    Clear(&Game->Memory.PermanentArena);
+    Clear(&Game->Memory.TransientArena);
+    Game->Memory.GameState = 0;
+}
+
+internal void
 StopGame(editor_state *EditorState, transient_state *TranState)
 {
     editor_mode_game *Game = EditorState->Game;
 
+    // NOTE(pvlso): A build left running would race the next Run's build for the same files.
+    // Stopping mid build is rare, so just wait for it.
+    while(Game->Building && Platform.GetProcessState(&Game->BuildProcess).IsRunning)
+    {
+        Platform.Sleep(10);
+    }
+
     // NOTE(pvlso): Asset loads still in flight write into the mode arena
     Platform.CompleteAllWork(TranState->LowPriorityQueue);
 
-    Clear(&Game->Memory.PermanentArena);
-    Clear(&Game->Memory.TransientArena);
-    Platform.UnloadCode(&Game->Code);
+    ClearGameMemory(Game);
+    if(Game->UpdateAndRender)
+    {
+        Platform.UnloadCode(&Game->Code);
+    }
 
     PlayTitleScreen(EditorState, TranState);
+}
+
+internal void
+DrawGameBuildLog(editor_mode_game *Game, nk_context *Nk, r32 Height)
+{
+    nk_layout_row_dynamic(Nk, Height, 1);
+    if(nk_group_begin(Nk, "Build Log", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
+    {
+        nk_layout_row_dynamic(Nk, 18, 1);
+
+        char *LineStart = Game->BuildLog;
+        for(char *At = Game->BuildLog;; ++At)
+        {
+            if((*At == '\n') || (*At == 0))
+            {
+                int Length = (int)(At - LineStart);
+                if(Length && (LineStart[Length - 1] == '\r'))
+                {
+                    --Length;
+                }
+                nk_text(Nk, LineStart, Length, NK_TEXT_ALIGN_LEFT);
+
+                if(*At == 0)
+                {
+                    break;
+                }
+                LineStart = At + 1;
+            }
+        }
+
+        nk_group_end(Nk);
+    }
+}
+
+// NOTE(pvlso): The dev controls of a running project: Stop, Restart, the build status and counts,
+// the log of a failed build. Internal builds draw them in the debug window (engine_debug.cpp),
+// others in the main window. The buttons only set requests: the debug window is drawn after the
+// frame's render commands are built, and those still point into the mode arena that Stop frees.
+// Fits a narrow panel: buttons, then status and counts on their own rows, then the log.
+internal void
+DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
+{
+    nk_layout_row_static(Nk, 30, 110, 2);
+    if(nk_button_label(Nk, "Stop"))
+    {
+        Game->StopRequested = true;
+    }
+    if(nk_button_label(Nk, "Restart"))
+    {
+        Game->RestartRequested = true;
+    }
+
+    nk_layout_row_dynamic(Nk, 30, 1);
+    nk_label(Nk, Game->Status, NK_TEXT_ALIGN_LEFT);
+
+    char Counts[128];
+    FormatString(sizeof(Counts), Counts, "Builds: %u   Reloads: %u", Game->BuildCount,
+                 Game->LoadCount ? (Game->LoadCount - 1) : 0);
+    nk_label(Nk, Counts, NK_TEXT_ALIGN_LEFT);
+
+    if(Game->BuildFailed && Game->BuildLog[0])
+    {
+        DrawGameBuildLog(Game, Nk, LogHeight);
+    }
 }
 
 internal b32
@@ -219,26 +381,32 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     editor_mode_game *Game = EditorState->Game;
     nk_context *Nk = EditorState->UIState.Nk;
 
-    char Buffer[256];
-    FormatString(sizeof(Buffer), Buffer, "Running %s", Game->ProjectName);
+    UpdateGameBuild(Game, TranState, Input->dtForFrame);
 
-    nk_layout_row_begin(Nk, NK_STATIC, 30, 2);
-    nk_layout_row_push(Nk, 80);
-    b32 StopPressed = nk_button_label(Nk, "Stop");
-    nk_layout_row_push(Nk, 400);
-    nk_label(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-    nk_layout_row_end(Nk);
+#if !EDITOR_INTERNAL
+    DrawGameControls(Game, Nk, 400.0f);
+#endif
 
-    if(StopPressed)
+    if(Game->StopRequested)
     {
         StopGame(EditorState, TranState);
         Result = true;
     }
     else
     {
-        Game->Memory.PlatformAPI = Platform;
-        Game->Memory.EngineAPI = GetEngineAPI();
-        Game->UpdateAndRender(&Game->Memory, Input, RenderCommands, Game->Assets, Nk);
+        // NOTE(pvlso): The game starts over with empty memory, the code stays
+        if(Game->RestartRequested)
+        {
+            ClearGameMemory(Game);
+            Game->RestartRequested = false;
+        }
+
+        if(Game->UpdateAndRender)
+        {
+            Game->Memory.PlatformAPI = Platform;
+            Game->Memory.EngineAPI = GetEngineAPI();
+            Game->UpdateAndRender(&Game->Memory, Input, RenderCommands, Game->Assets, Nk);
+        }
     }
 
     return(Result);

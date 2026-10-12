@@ -137,14 +137,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
     DebugGlobalMemory = Memory;
-    
-    {DEBUG_DATA_BLOCK("Profile");
-        DEBUG_UI_ELEMENT(DebugType_FrameSlider, FrameSlider);
-        DEBUG_UI_ELEMENT(DebugType_LastFrameInfo, LastFrame);
-        DEBUG_UI_ELEMENT(DebugType_DebugMemoryInfo, DebugMemory);
-        DEBUG_UI_ELEMENT(DebugType_TopClocksList, EditorUpdateAndRender);
-    }
-
 #endif
 
     TIMED_FUNCTION();
