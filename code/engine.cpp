@@ -99,6 +99,7 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
+#include "editor_game_mode.cpp"
 //#include "arkham/arkham.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
@@ -249,6 +250,11 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                     b32 Exit = true;
                     if(Exit)
                         PlayTitleScreen(EditorState, TranState);
+                } break;
+
+                case EditorMode_Game:
+                {
+                    Rerun = UpdateAndRenderGame(EditorState, TranState, Input, RenderCommands);
                 } break;
 
                 InvalidDefaultCase;

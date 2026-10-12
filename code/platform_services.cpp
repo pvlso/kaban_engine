@@ -585,28 +585,37 @@ PlatformMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
 // NOTE(pvlso): CODE LOADING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
-PlatformInitCode(platform_code *Code, char *ModuleName)
+PlatformInitCode(platform_code *Code, char *ModuleName, platform_file_type Type)
 {
     *Code = {};
 
     char FileName[PLATFORM_PATH_COUNT];
     snprintf(FileName, sizeof(FileName), "%s%s", ModuleName, OS_LIBRARY_EXTENSION);
-    PlatformBuildEXEPathFileName(FileName, Code->SourceLibraryName, sizeof(Code->SourceLibraryName));
+    PlatformBuildDataPath(FileName, Type, Code->SourceLibraryName, sizeof(Code->SourceLibraryName));
 
     // NOTE(pvlso): Every load gets its own temp file ("engine_temp_3.so"). dlopen hands
     // back the already loaded library for a path it has seen if the old one couldn't be
     // fully unloaded, which would silently skip the reload.
     snprintf(FileName, sizeof(FileName), "%s_temp_%u%s", ModuleName, GlobalTempLibraryCounter++, OS_LIBRARY_EXTENSION);
-    PlatformBuildEXEPathFileName(FileName, Code->TempLibraryName, sizeof(Code->TempLibraryName));
+    PlatformBuildDataPath(FileName, Type, Code->TempLibraryName, sizeof(Code->TempLibraryName));
 
-    // NOTE(pvlso): The build writes lock.tmp while a library is being written
-    PlatformBuildEXEPathFileName("lock.tmp", Code->LockFileName, sizeof(Code->LockFileName));
+    // NOTE(pvlso): The build writes lock.tmp next to the library while it's being written
+    int DirectoryLength = 0;
+    for(char *At = ModuleName; *At; ++At)
+    {
+        if(IsPathSeparator(*At))
+        {
+            DirectoryLength = (int)(At - ModuleName) + 1;
+        }
+    }
+    snprintf(FileName, sizeof(FileName), "%.*slock.tmp", DirectoryLength, ModuleName);
+    PlatformBuildDataPath(FileName, Type, Code->LockFileName, sizeof(Code->LockFileName));
 }
 
 internal b32
-PlatformLoadCodeFile(platform_code *Code, char *ModuleName)
+PlatformLoadCodeFile(platform_code *Code, char *ModuleName, platform_file_type Type)
 {
-    PlatformInitCode(Code, ModuleName);
+    PlatformInitCode(Code, ModuleName, Type);
 
     if(!OSFileExists(Code->LockFileName))
     {
@@ -662,7 +671,7 @@ PLATFORM_LOAD_CODE(PlatformLoadCode)
     platform_code *Code = (platform_code *)OSAllocateMemory(sizeof(platform_code));
     if(Code)
     {
-        Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName);
+        Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName, Type);
         Result.Platform = Code;
     }
 
@@ -706,7 +715,7 @@ PlatformLoadEngineCode(char *ModuleName)
 {
     platform_engine_code Result = {};
 
-    if(PlatformLoadCodeFile(&Result.Code, ModuleName))
+    if(PlatformLoadCodeFile(&Result.Code, ModuleName, PlatformFileType_None))
     {
         Result.UpdateAndRender = (engine_update_and_render *)
             OSGetLibrarySymbol(Result.Code.Library, "EngineUpdateAndRender");

@@ -145,42 +145,7 @@ struct engine_assets
     u32 InFlightGenerations[16];
 };
 
-struct asset_tag_pair
-{
-    char *Key;
-    char *Value;
-};
-
-struct asset_tag_vector
-{
-    u32 PairCount;
-    asset_tag_pair Pairs[24];
-};
-
-struct asset_best_match_result
-{
-    u32 AssetCount;
-
-    union
-    {
-        u32 Index;
-        u32 *Indecies;
-    };
-};
-
-inline void
-TagVectorAdd(asset_tag_vector *Vector, char *Key, char *Value)
-{
-    asset_tag_pair *Pair = Vector->Pairs + Vector->PairCount++; 
-    Pair->Key = Key;
-    Pair->Value = Value;
-}
-
-inline void
-ClearTagVector(asset_tag_vector *Vector)
-{
-    Vector->PairCount = 0;
-}
+// NOTE(pvlso): asset_tag_vector and asset_best_match_result live in engine_api.h, games use them too
 
 inline void
 BeginAssetLock(engine_assets *Assets)

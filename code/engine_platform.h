@@ -343,9 +343,11 @@ typedef struct platform_loaded_code
     void *Platform;
 } platform_loaded_code;
 
-// NOTE(pvlso): ModuleName is the bare name of the library ("arkham"), the platform layer
-// adds the OS specific prefix/extension and looks for it next to the executable.
-#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *ModuleName)
+// NOTE(pvlso): ModuleName is the library name without the extension, the platform layer adds
+// the OS specific one. It's relative to the Type's directory like every other file:
+// PlatformFileType_None looks next to the executable, PlatformFileType_Project takes
+// "game/build/game". The build writes lock.tmp next to the library while it's being written.
+#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *ModuleName, platform_file_type Type)
 typedef PLATFORM_LOAD_CODE(platform_load_code);
 
 #define PLATFORM_UNLOAD_CODE(name) void name(platform_loaded_code *Code)
