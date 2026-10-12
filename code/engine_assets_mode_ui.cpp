@@ -139,7 +139,7 @@ inline void
 DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk)
 {
     char Text[256];
-    nk_layout_space_push(Nk, nk_rect(612, -810, 1290, 1068));
+    nk_layout_space_push(Nk, nk_rect(612, -825, 1290, 1068));
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
     if(nk_group_begin(Nk, "Asset Advance View", NK_WINDOW_NO_SCROLLBAR))
@@ -1496,15 +1496,15 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
             DrawShowStoredAssets(AssetsMode, UIState, Nk);
             
             nk_layout_space_begin(Nk, NK_STATIC, 40, INT_MAX);
-            nk_layout_space_push(Nk, nk_rect(0, 238, 130, 40));
+            nk_layout_space_push(Nk, nk_rect(0, 200, 130, 40));
             if(nk_button_label(Nk, "Exit"))
                 AddAction(AssetsMode, AM_Exit);
 
-            nk_layout_space_push(Nk, nk_rect(134, 238, 130, 40));
+            nk_layout_space_push(Nk, nk_rect(134, 200, 130, 40));
             if(nk_button_label(Nk, "Write Assets"))
                 AddAction(AssetsMode, AM_WriteAssets);
 
-            nk_layout_space_push(Nk, nk_rect(268, 238, 130, 40));
+            nk_layout_space_push(Nk, nk_rect(268, 200, 130, 40));
             if(nk_button_label(Nk, "Write SSA"))
                 AddAction(AssetsMode, AM_WriteKEA);
             nk_layout_space_end(Nk);
