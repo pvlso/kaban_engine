@@ -17,7 +17,7 @@ If you want to learn more about the engine development check out my [website](ht
 
 ### Current State
 
-Kaban Engine builds and runs on **Windows (Win32 + OpenGL)**. It contains multiple core systems, some functional and some still in their earliest stage:
+Kaban Engine builds and runs on **Windows and Linux (X11)**. The platform layer uses **GLFW** for windows and input, **OpenGL** for rendering and **miniaudio** for sound, with a thin per-OS layer underneath. It contains multiple core systems, some functional and some still in their earliest stage:
 
 **Implemented components include:**
 
@@ -26,13 +26,16 @@ Kaban Engine builds and runs on **Windows (Win32 + OpenGL)**. It contains multip
 * Basic rendering pipeline
 * Prototype navigation mesh generation & agent movement
 * Internal tools for game data management
+* Hot reloading of the engine code
+* Separate debug/profiler window (on a second monitor when one is available)
 
 **Not yet ready / incomplete:**
 
+* Projects system: games will live in `projects/` and be compiled and hot reloaded by the editor (only the project list exists so far)
 * Entity system (very early)
 * Animation system (mostly conceptual)
 * Several editor tools depend on unfinished systems
-* No external documentation or build guidance yet
+* No external documentation yet
 * No guarantees of stability or compatibility
 
 This repository is published to **show progress openly** and provide a reference for anyone interested in building similar systems from scratch.
@@ -52,15 +55,39 @@ It is **not** intended to be used as a base for commercial games.
 
 ### Building the Engine
 
-Most required third-party libraries are included in the repository, but the project **currently requires manual setup of include paths and build configuration**.
+All third-party libraries (GLFW, GLEW, Nuklear, miniaudio, stb_image) are included in the repository as source and built by the build scripts. Output goes to `build/`.
 
-There are no guaranteed build instructions yet. If you choose to compile it:
+**Windows**
 
-* You will need a Windows toolchain (Visual Studio recommended)
-* You may need to adjust include/library paths manually
-* Expect missing features, breakage, or incomplete subsystems
+Requires Visual Studio or the VS Build Tools with the *Desktop development with C++* workload (for the Windows SDK). The script finds and sets up the MSVC environment itself, so a normal terminal works.
 
-The project will eventually include proper build instructions as it matures.
+```
+build.bat                debug build (clang-cl if installed, otherwise cl)
+build.bat release        optimized build
+build.bat clang | msvc   force a compiler
+build.bat clean          remove the build directory
+```
+
+Run `build\kaban.exe`.
+
+**Linux**
+
+Requires clang (or gcc) and the X11 development headers (X11, Xrandr, Xinerama, Xcursor, Xi). If something is missing, the script prints the install command for your package manager.
+
+```
+./build.sh               debug build (clang if installed, otherwise gcc)
+./build.sh release       optimized build
+./build.sh clean         remove the build directory
+```
+
+Run `build/kaban`.
+
+**Notes**
+
+* The engine looks for `data/` and `projects/` next to the `build/` directory and creates them if they're missing. Game assets are not part of the repository.
+* Rebuilding while the editor is running hot reloads the engine code.
+* Editor keys: `Alt+E` toggles the UI, `Alt+M` mutes audio, `Alt+Enter` toggles fullscreen, `Alt+F4` quits.
+* Expect missing features, breakage, or incomplete subsystems.
 
 ---
 
@@ -73,7 +100,7 @@ You may share derivative works publicly, but **commercial use is prohibited**.
 Some parts of this engine contain code influenced by **Handmade Hero**, which is also shared for educational purposes only. Third-party libraries remain under their own licenses.
 
 For complete terms, see:
-→ **[`LICENSE.txt`](./LICENSE.md)**
+→ **[`LICENSE.md`](./LICENSE.md)**
 
 ---
 
