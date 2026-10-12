@@ -13,6 +13,7 @@
 
 global_variable platform_paths GlobalPaths;
 global_variable u32 GlobalTempLibraryCounter;
+global_variable platform_code GlobalLoadedCodeSentinel;
 
 global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
@@ -831,6 +832,16 @@ PLATFORM_LOAD_CODE(PlatformLoadCode)
     {
         Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName, Type);
         Result.Platform = Code;
+
+        platform_code *Sentinel = &GlobalLoadedCodeSentinel;
+        if(!Sentinel->NextLoaded)
+        {
+            Sentinel->NextLoaded = Sentinel->PrevLoaded = Sentinel;
+        }
+        Code->PrevLoaded = Sentinel;
+        Code->NextLoaded = Sentinel->NextLoaded;
+        Code->NextLoaded->PrevLoaded = Code;
+        Code->PrevLoaded->NextLoaded = Code;
     }
 
     return(Result);
@@ -842,12 +853,35 @@ PLATFORM_UNLOAD_CODE(PlatformUnloadCode)
     platform_code *PlatformCode = (platform_code *)Code->Platform;
     if(PlatformCode)
     {
+        PlatformCode->PrevLoaded->NextLoaded = PlatformCode->NextLoaded;
+        PlatformCode->NextLoaded->PrevLoaded = PlatformCode->PrevLoaded;
+
         PlatformUnloadCodeFile(PlatformCode);
         OSDeallocateMemory(PlatformCode);
         Code->Platform = 0;
     }
 
     Code->NoErrors = false;
+}
+
+// NOTE(pvlso): At shutdown. Quitting while a game runs doesn't go through Stop, so its
+// library is still loaded here and its temp copy would be left in the project's build/
+internal void
+PlatformUnloadAllCode(void)
+{
+    platform_code *Sentinel = &GlobalLoadedCodeSentinel;
+    if(Sentinel->NextLoaded)
+    {
+        while(Sentinel->NextLoaded != Sentinel)
+        {
+            platform_code *Code = Sentinel->NextLoaded;
+            Sentinel->NextLoaded = Code->NextLoaded;
+            Code->NextLoaded->PrevLoaded = Sentinel;
+
+            PlatformUnloadCodeFile(Code);
+            OSDeallocateMemory(Code);
+        }
+    }
 }
 
 internal

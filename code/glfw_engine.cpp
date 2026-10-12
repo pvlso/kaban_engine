@@ -1208,6 +1208,7 @@ main(int ArgCount, char **Args)
 #endif
 
     PlatformUnloadEngineCode(&Engine);
+    PlatformUnloadAllCode();
 
 #if EDITOR_INTERNAL
     if(State->DebugWindow.Handle)

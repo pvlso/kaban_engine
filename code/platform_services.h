@@ -56,6 +56,11 @@ struct platform_code
     char TempLibraryName[PLATFORM_PATH_COUNT];
     char LockFileName[PLATFORM_PATH_COUNT];
     b32 IsValid;
+
+    // NOTE(pvlso): Code loaded through Platform.LoadCode is kept in a list, so shutdown can
+    // unload what's still loaded and delete its temp copy
+    platform_code *NextLoaded;
+    platform_code *PrevLoaded;
 };
 
 struct platform_engine_code
