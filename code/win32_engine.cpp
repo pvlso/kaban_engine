@@ -2913,7 +2913,6 @@ WinMain(HINSTANCE Instance,
     DEBUGSetEventRecording(true);
 
     win32_state Win32State = {};
-    Win32InitializeFontDC();
     Win32CreateKeyTables(&Win32State);
 
     LARGE_INTEGER PerfCountFrequencyResult;
@@ -3107,9 +3106,11 @@ WinMain(HINSTANCE Instance,
                 rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                         Dimension.Width, Dimension.Height);
 
+#if EDITOR_INTERNAL
                 win32_window_dimension DebugDimension = Win32GetWindowDimension(DebugWindow);
                 rectangle2i DebugDrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                              DebugDimension.Width, DebugDimension.Height);
+#endif
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): Input Processing
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3425,9 +3426,9 @@ WinMain(HINSTANCE Instance,
                 glClear(GL_COLOR_BUFFER_BIT);
 //                Win32DisplayBufferInWindow(&HighPriorityQueue, &RenderCommands, DebugDeviceContext,
 //                                           DebugDrawRegion, DebugDimension.Width, DebugDimension.Height, &FrameTempArena);
-#endif
                 NKOpenGLRenderCommands(&Win32State.DebugWindow.Nk, DebugDrawRegion, NK_ANTI_ALIASING_ON);
                 wglMakeCurrent(DeviceContext, OpenGLRC);
+#endif
 
                 SwapBuffers(DeviceContext);
                 ReleaseDC(Window, DeviceContext);

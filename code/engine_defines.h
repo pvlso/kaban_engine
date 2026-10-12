@@ -38,7 +38,7 @@
 // TODO(casey): Complete assertion macro - don't worry everyone!
 #define Assert(Expression) if(!(Expression)) {*(volatile int *)0 = 0;}
 #else
-#define Assert(Expression)
+#define Assert(Expression) ((void)0)
 #endif
 
 #define InvalidCodePath Assert(!"InvalidCodePath")

@@ -87,7 +87,7 @@ if "%CC%"=="cl" (
     set Warnings=-WX -W4 -wd4201 -wd4100 -wd4189 -wd4505 -wd4456 -wd4127 -wd4996 -wd4116 -wd4146
     set CommonFlags=!CommonFlags! -Gm- -Zo
 ) else (
-    set Warnings=-W3 -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -Wno-missing-braces -Wno-switch -Wno-unused-value -Wno-sign-compare -Wno-missing-field-initializers -Wno-format -Wno-enum-compare -Wno-writable-strings -Wno-null-dereference -Wno-microsoft-cast -Wno-unused-command-line-argument -Wno-deprecated-declarations
+    set Warnings=-W3 -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-unused-but-set-variable -Wno-missing-braces -Wno-switch -Wno-unused-value -Wno-sign-compare -Wno-missing-field-initializers -Wno-format -Wno-enum-compare -Wno-writable-strings -Wno-null-dereference -Wno-microsoft-cast -Wno-unused-command-line-argument -Wno-deprecated-declarations -Wno-microsoft-string-literal-from-predefined
     set CommonFlags=!CommonFlags! -mavx2
 )
 
