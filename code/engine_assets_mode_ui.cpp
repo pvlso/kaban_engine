@@ -139,7 +139,7 @@ inline void
 DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk)
 {
     char Text[256];
-    nk_layout_space_push(Nk, nk_rect(612, -790, 1290, 1068));
+    nk_layout_space_push(Nk, nk_rect(612, -810, 1290, 1068));
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[0]);
     if(nk_group_begin(Nk, "Asset Advance View", NK_WINDOW_NO_SCROLLBAR))
@@ -1475,6 +1475,9 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
             nk_layout_row_static(Nk, 30, 300, 1);
 
             struct nk_rect Rect = nk_widget_bounds(Nk);
+            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+            nk_labelf(Nk, NK_TEXT_LEFT, "  Project: %s", AssetsMode->ProjectName);
+            Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
             nk_labelf(Nk, NK_TEXT_LEFT, "  Asset Count: %d",
                          AssetsMode->StoredHeader.AssetCount);

@@ -20,6 +20,8 @@ struct editor_mode_game
 
     game_memory Memory;
     engine_assets *Assets;
+    // NOTE(pvlso): The KEA in the project's data/keas that Assets was loaded from, empty when there's none
+    char AssetFileName[256];
 
     // NOTE(pvlso): The sources are checked every SourceCheckInterval seconds, a build starts
     // when their newest write time differs from the one the last build started with

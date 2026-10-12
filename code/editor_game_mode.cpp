@@ -107,12 +107,13 @@ ParseGameDataKEAVersion(char *Name, u32 *Version)
     return(Result);
 }
 
-// TODO(pvlso): Every project gets its own data/ and KEA (projects plan phase 4), until then
-// the games use the newest game_data_<version>.kea in data/keas, like Arkham did.
+// NOTE(pvlso): The newest game_data_<version>.kea in the project's data/keas (the data root is the
+// project's while it runs), the assets mode writes those. Its name goes to FileName, empty when there's none.
 internal engine_assets *
-LoadGameAssets(editor_state *EditorState, transient_state *TranState)
+LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *FileName, umm FileNameCount)
 {
     engine_assets *Result = 0;
+    FileName[0] = 0;
 
     temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
     u32 FileCount = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
@@ -138,6 +139,7 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState)
         {
             Result = AllocateAssets(BestFileName, &EditorState->ModeArena, TempMem.Arena,
                                     TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
+            FormatString(FileNameCount, FileName, "%s", BestFileName);
         }
     }
     EndTemporaryMemory(TempMem);
@@ -267,9 +269,12 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
 
     SetEditorMode(EditorState, TranState, EditorMode_Game);
 
+    // NOTE(pvlso): The game's assets come from its own data/
+    UseDataOf(EditorState, Name);
+
     editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
     FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
-    Game->Assets = LoadGameAssets(EditorState, TranState);
+    Game->Assets = LoadGameAssets(EditorState, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
     EditorState->Game = Game;
 
     // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
@@ -360,6 +365,18 @@ DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
 
     nk_layout_row_dynamic(Nk, 30, 1);
     nk_label(Nk, Game->Status, NK_TEXT_ALIGN_LEFT);
+
+    char Assets[320];
+    if(Game->AssetFileName[0])
+    {
+        FormatString(sizeof(Assets), Assets, "Assets: %s/data/keas/%s", Game->ProjectName, Game->AssetFileName);
+    }
+    else
+    {
+        FormatString(sizeof(Assets), Assets, "Assets: none (no game_data_<version>.kea in %s/data/keas)",
+                     Game->ProjectName);
+    }
+    nk_label(Nk, Assets, NK_TEXT_ALIGN_LEFT);
 
     char Counts[128];
     FormatString(sizeof(Counts), Counts, "Builds: %u   Reloads: %u", Game->BuildCount,

@@ -130,6 +130,9 @@ struct new_tag_map
 
 struct editor_mode_assets
 {
+    // NOTE(pvlso): The project whose data/ this edits
+    char ProjectName[PROJECT_NAME_COUNT];
+
     b32 AssetsInitialized;
     
     u32 Actions;
@@ -278,7 +281,7 @@ GetTag(editor_mode_assets *AssetsMode, u64 GUID)
     return(Result);
 }
 
-internal void PlayAssetsMode(editor_state *EditorState, transient_state *TranState);
+internal void PlayAssetsMode(editor_state *EditorState, transient_state *TranState, char *ProjectName);
 
 #define EDITOR_ASSETS_MODE_H
 #endif

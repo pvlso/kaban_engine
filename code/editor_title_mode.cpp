@@ -148,7 +148,8 @@ internal void
 PlayTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
     SetEditorMode(EditorState, TranState, EditorMode_TitleScreen);
-    
+    UseDataOf(EditorState, 0);
+
     editor_mode_title_screen *Result = PushStruct(&EditorState->ModeArena, editor_mode_title_screen);
     Result->ModeToPlay = EditorMode_None;
     RefreshProjectList(EditorState, Result);
@@ -238,13 +239,19 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     nk_context *Nk = UIState->Nk;
     if(!Result)
     {
-        char Buffer[256];
         nk_layout_row_begin(Nk, NK_STATIC, 40, 7);
         {
             nk_layout_row_push(Nk, 130);
-            if(nk_button_label(Nk, "Assets Mode"))
+
+            // NOTE(pvlso): Edits the data of the project selected in the Projects list
+            b32 HasProject = (TitleScreen->SelectedProject >= 0);
+            if(!HasProject) nk_widget_disable_begin(Nk);
+            b32 AssetsPressed = nk_button_label(Nk, "Assets Mode");
+            if(!HasProject) nk_widget_disable_end(Nk);
+
+            if(AssetsPressed && HasProject)
             {
-                PlayAssetsMode(EditorState, TranState);
+                PlayAssetsMode(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
                 Result = true;
                 return(Result);
             }
@@ -264,13 +271,6 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
         nk_layout_row_end(Nk);
 
         nk_layout_row_dynamic(Nk, 40, 1);
-        nk_spacer(Nk);
-
-        editor_meta EditorMeta = EditorState->EditorMeta;
-        FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d",
-                     EditorMeta.KESAVersion[0], EditorMeta.KESAVersion[1],
-                     EditorMeta.KESAVersion[2], EditorMeta.KESAVersion[3]);
-        nk_label(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
         nk_spacer(Nk);
 
         if(UpdateAndRenderProjects(EditorState, TranState, TitleScreen, Nk))

@@ -18,14 +18,16 @@ global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
     "",             "keas",         "kesas",      "kewms",      "kets",
     "bmps",         "spritesheets", "tilesets",   "solidtiles", "wavs",
-    "txts",         "jsons",        "ttfs",       "bins",       ""
+    "txts",         "jsons",        "ttfs",       "bins",       "",
+    ""
 };
 
 global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
     ".bmp",  ".bmp",  ".bmp",  ".bmp",  ".wav",
-    ".txt",  ".json", ".ttf",  ".bin",  ".*"
+    ".txt",  ".json", ".ttf",  ".bin",  ".*",
+    ".*"
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -79,6 +81,11 @@ PlatformBuildTypeDirectory(platform_file_type Type, char *Dest, umm DestCount)
     {
         snprintf(Dest, DestCount, "%sprojects", GlobalPaths.ROOTPath);
     }
+    else if(Type == PlatformFileType_DataRoot)
+    {
+        int Length = (int)StringLength(GlobalPaths.DATARootPath);
+        snprintf(Dest, DestCount, "%.*s", Length ? (Length - 1) : 0, GlobalPaths.DATARootPath);
+    }
     else
     {
         snprintf(Dest, DestCount, "%s%s", GlobalPaths.DATAPath, GlobalDataDirs[Type]);
@@ -98,6 +105,25 @@ PlatformBuildDataPath(char *FileName, platform_file_type Type, char *Dest, umm D
     else
     {
         PlatformBuildEXEPathFileName(FileName, Dest, DestCount);
+    }
+}
+
+// NOTE(pvlso): RootPath holds the data/ directory and ends with a separator. Creates data/<type dir>
+// for every type (and projects/, which doesn't move).
+internal void
+PlatformSetDataRoot(char *RootPath)
+{
+    snprintf(GlobalPaths.DATARootPath, sizeof(GlobalPaths.DATARootPath), "%s", RootPath);
+    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%sdata/", RootPath);
+    OSCreateDirectory(GlobalPaths.DATAPath);
+
+    char DirPath[PLATFORM_PATH_COUNT];
+    for(u32 Type = 1;
+        Type < PlatformFileType_Count;
+        ++Type)
+    {
+        PlatformBuildTypeDirectory((platform_file_type)Type, DirPath, sizeof(DirPath));
+        OSCreateDirectory(DirPath);
     }
 }
 
@@ -141,18 +167,7 @@ PlatformInitPaths(void)
     int RootLength = (int)(SlashBeforeBuild - GlobalPaths.EXEFileName);
     snprintf(GlobalPaths.ROOTPath, sizeof(GlobalPaths.ROOTPath), "%.*s",
              RootLength, GlobalPaths.EXEFileName);
-    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%sdata/", GlobalPaths.ROOTPath);
-    OSCreateDirectory(GlobalPaths.DATAPath);
-
-    // NOTE(pvlso): Creates data/<type dir> for every type and projects/
-    char DirPath[PLATFORM_PATH_COUNT];
-    for(u32 Type = 1;
-        Type < PlatformFileType_Count;
-        ++Type)
-    {
-        PlatformBuildTypeDirectory((platform_file_type)Type, DirPath, sizeof(DirPath));
-        OSCreateDirectory(DirPath);
-    }
+    PlatformSetDataRoot(GlobalPaths.ROOTPath);
 
     // NOTE(pvlso): Third party code (nuklear fonts) opens files relative to the working directory
     char EXEDirectory[PLATFORM_PATH_COUNT];
@@ -392,6 +407,31 @@ internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
     OSCloseDirectory(&Directory);
 
     return(ProjectCount);
+}
+
+internal PLATFORM_SET_DATA_PROJECT(PlatformSetDataProject)
+{
+    b32 Result = false;
+
+    if(ProjectName)
+    {
+        char ProjectPath[PLATFORM_PATH_COUNT];
+        snprintf(ProjectPath, sizeof(ProjectPath), "%sprojects/%s", GlobalPaths.ROOTPath, ProjectName);
+        if(OSFileExists(ProjectPath))
+        {
+            char RootPath[PLATFORM_PATH_COUNT];
+            snprintf(RootPath, sizeof(RootPath), "%s/", ProjectPath);
+            PlatformSetDataRoot(RootPath);
+            Result = true;
+        }
+    }
+    else
+    {
+        PlatformSetDataRoot(GlobalPaths.ROOTPath);
+        Result = true;
+    }
+
+    return(Result);
 }
 
 internal PLATFORM_BUILD_PROJECT(PlatformBuildProject)
@@ -892,6 +932,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.FileError = PlatformFileError;
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
     Memory->PlatformAPI.ListProjects = PlatformListProjects;
+    Memory->PlatformAPI.SetDataProject = PlatformSetDataProject;
     Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;
     Memory->PlatformAPI.BuildProject = PlatformBuildProject;
     Memory->PlatformAPI.GetProcessState = PlatformGetProcessState;

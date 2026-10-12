@@ -900,8 +900,8 @@ DrawProjectPanel(editor_state *EditorState, nk_context *nk, r32 Height)
     {
         if(EditorState && (EditorState->EditorMode == EditorMode_Game))
         {
-            // NOTE(pvlso): The log gets what's left under the title, the buttons, status and counts
-            DrawGameControls(EditorState->Game, nk, Height - 3.0f*DEBUG_WINDOW_ROW_HEIGHT - 80.0f);
+            // NOTE(pvlso): The log gets what's left under the title, the buttons, status, assets and counts
+            DrawGameControls(EditorState->Game, nk, Height - 4.0f*DEBUG_WINDOW_ROW_HEIGHT - 84.0f);
         }
         else
         {

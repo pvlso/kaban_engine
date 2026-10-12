@@ -59,6 +59,53 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     EditorState->EditorMode = EditorMode;
 }
 
+// NOTE(pvlso): Next to every data/ directory (the engine's, each project's), holds the version
+// of the stored assets (stored_assets_<version>.kesa) that the assets mode bumps on every write
+#define EDITOR_METADATA_FILE_NAME "editor_metadata.json"
+
+internal void
+LoadEditorMetadata(editor_state *EditorState)
+{
+    ZeroStruct(EditorState->EditorMeta);
+
+    temporary_memory TempMem = BeginTemporaryMemory(&EditorState->TotalArena);
+    json_object *Metadata = ParseJson(EDITOR_METADATA_FILE_NAME, TempMem.Arena, PlatformFileType_DataRoot);
+    if(Metadata)
+    {
+        json_value *KEASVersion = JsonLookupObjectElement(Metadata, "keas_version");
+        Assert(KEASVersion->Type == JsonValue_Array);
+
+        for(u32 I = 0; I < KEASVersion->Array.Count; ++I)
+        {
+            EditorState->EditorMeta.KESAVersion[I] =
+                (u8)KEASVersion->Array.Items[I]->Int;
+        }
+    }
+    else
+    {
+        char Data[256];
+        FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
+        Platform.WriteEntireFile(EDITOR_METADATA_FILE_NAME, PlatformFileType_DataRoot, (u8 *)Data, StringLength(Data));
+    }
+
+    EndTemporaryMemory(TempMem);
+}
+
+// NOTE(pvlso): Points every data file at a project (projects/<name>/data/ and its editor_metadata.json),
+// or at the engine's data/ when ProjectName is 0. The assets mode and a running game use their
+// project's data, the title screen goes back to the engine's.
+internal b32
+UseDataOf(editor_state *EditorState, char *ProjectName)
+{
+    b32 Result = Platform.SetDataProject(ProjectName);
+    if(Result)
+    {
+        LoadEditorMetadata(EditorState);
+    }
+
+    return(Result);
+}
+
 internal u32
 UpdateEditorVersionFile(editor_state *EditorState)
 {
@@ -78,7 +125,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
     EditorMeta->KESAVersion[3] = (Result)       & 0xff;
 
     platform_file_handle EditorMetaHandle =
-        Platform.OpenFile("../editor_metadata.json", PlatformFileType_None, PlatformFileOp_Write);
+        Platform.OpenFile(EDITOR_METADATA_FILE_NAME, PlatformFileType_DataRoot, PlatformFileOp_Write);
 
     char Data[256];
     FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [%d, %d, %d, %d]\n}",
@@ -103,32 +150,6 @@ platform_api Platform;
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
 
-internal void
-EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
-{
-    temporary_memory TempMem = BeginTemporaryMemory(&EditorState->TotalArena);
-    json_object *Metadata = ParseJson(MetadataSource, TempMem.Arena, true);
-    if(Metadata)
-    {
-        json_value *KEASVersion = JsonLookupObjectElement(Metadata, "keas_version");
-        Assert(KEASVersion->Type == JsonValue_Array);
-
-        for(u32 I = 0; I < KEASVersion->Array.Count; ++I)
-        {
-            EditorState->EditorMeta.KESAVersion[I] =
-                (u8)KEASVersion->Array.Items[I]->Int;
-        }
-    }
-    else
-    {
-        char Data[256];
-        FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
-        Platform.WriteEntireFile(MetadataSource, PlatformFileType_None, (u8 *)Data, StringLength(Data));
-    }
-    
-    EndTemporaryMemory(TempMem);
-}
-
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
     Platform = Memory->PlatformAPI;    
@@ -150,7 +171,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
-        EngineLoadEditorMetadata(EditorState, "../editor_metadata.json");
+        LoadEditorMetadata(EditorState);
         
         EditorState->UIEnable = true;
     }

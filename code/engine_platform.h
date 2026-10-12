@@ -254,7 +254,11 @@ typedef enum platform_file_type
 
     // NOTE(pvlso): Relative to the projects directory (next to data/), e.g. "game_name/game_name.cpp"
     PlatformFileType_Project,
-    
+
+    // NOTE(pvlso): Relative to the directory that holds the current data/ (see SetDataProject),
+    // e.g. "editor_metadata.json"
+    PlatformFileType_DataRoot,
+
     PlatformFileType_Count,
 } platform_file_type;
 
@@ -312,6 +316,12 @@ typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
 // game_name/game_name.cpp. Dest and Arena can be 0 to only count, otherwise at most DestCount are stored.
 #define PLATFORM_LIST_PROJECTS(name) u32 name(char **Dest, u32 DestCount, memory_arena *Arena)
 typedef PLATFORM_LIST_PROJECTS(platform_list_projects);
+
+// NOTE(pvlso): Every data file type (KEA, BMP, ...) resolves into one data directory: the engine's
+// data/ when ProjectName is 0, projects/<name>/data/ otherwise. Its type directories are created.
+// False (and nothing changes) when projects/<name> doesn't exist.
+#define PLATFORM_SET_DATA_PROJECT(name) b32 name(char *ProjectName)
+typedef PLATFORM_SET_DATA_PROJECT(platform_set_data_project);
 
 // NOTE(pvlso): Path is relative to the Type's directory. False if it already exists or can't be created.
 #define PLATFORM_MAKE_DIRECTORY(name) b32 name(char *Path, platform_file_type Type)
@@ -445,6 +455,7 @@ typedef struct platform_api
 
     platform_list_files_in_directory *ListFilesInDirectory;
     platform_list_projects *ListProjects;
+    platform_set_data_project *SetDataProject;
     platform_make_directory *MakeDirectory;
     platform_build_project *BuildProject;
     platform_get_process_state *GetProcessState;

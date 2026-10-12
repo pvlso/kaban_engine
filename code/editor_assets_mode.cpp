@@ -265,11 +265,19 @@ WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 }
 
 internal void
-PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
+PlayAssetsMode(editor_state *EditorState, transient_state *TranState, char *ProjectName)
 {
+    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
+    char Name[PROJECT_NAME_COUNT];
+    FormatString(sizeof(Name), Name, "%s", ProjectName);
+
     SetEditorMode(EditorState, TranState, EditorMode_AssetsMode);
-    
+
+    // NOTE(pvlso): Every file below (source files, stored assets, tags, the KEA it writes) is the project's
+    UseDataOf(EditorState, Name);
+
     editor_mode_assets *Result = PushStruct(&EditorState->ModeArena, editor_mode_assets);
+    FormatString(sizeof(Result->ProjectName), Result->ProjectName, "%s", Name);
     Result->EditMode = EditMode_None;
     SubArena(&Result->UtilityTempArena, &EditorState->ModeArena, Megabytes(1));
     SubArena(&Result->UtilityArena, &EditorState->ModeArena, Megabytes(1));
