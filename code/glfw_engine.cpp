@@ -755,7 +755,7 @@ main(int ArgCount, char **Args)
     State->Monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *Mode = glfwGetVideoMode(State->Monitor);
 
-    // NOTE(pvlso): Render at the monitor resolution, like the win32 layer
+    // NOTE(pvlso): Render at the monitor resolution
     GlobalFramebufferWidth = Mode->width;
     GlobalFramebufferHeight = Mode->height;
 

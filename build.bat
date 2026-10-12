@@ -115,7 +115,6 @@ if errorlevel 1 goto :Failed
 :GLEWDone
 
 REM NOTE(pvlso): GLFW is static, so it must use the same CRT (-MT/-MTd) as the exe
-if not exist "%Code%\glfw_engine.cpp" goto :GLFWDone
 if exist glfw_%CRT%.lib goto :GLFWDone
 echo Building GLFW
 if not exist glfw_obj mkdir glfw_obj
@@ -147,21 +146,15 @@ del lock.tmp
 if not "%BuildError%"=="0" goto :Failed
 
 REM -----------------------------------------------------------------------------
-REM NOTE(pvlso): Platform layers. win32_engine stays until glfw_engine replaces it.
+REM NOTE(pvlso): Platform layer
 REM -----------------------------------------------------------------------------
-echo Building Win32 Platform
-"%CC%" %CommonFlags% %Warnings% "%Code%\win32_engine.cpp" nuklear.lib /link %LinkFlags% user32.lib gdi32.lib winmm.lib opengl32.lib glew.lib
-if errorlevel 1 goto :Failed
-
-if not exist "%Code%\glfw_engine.cpp" goto :PlatformDone
-echo Building GLFW Platform
+echo Building Platform
 REM NOTE(pvlso): glfw_engine.cpp uses a plain main on every OS. Debug keeps the console for
 REM stderr output, release is a windows subsystem exe that still enters through main.
 set GLFWSubsystem=-SUBSYSTEM:CONSOLE
 if "%Mode%"=="release" set GLFWSubsystem=-SUBSYSTEM:WINDOWS -ENTRY:mainCRTStartup
 "%CC%" %CommonFlags% %Warnings% -I "%Code%\glfw\include" "%Code%\glfw_engine.cpp" -Fekaban.exe nuklear.lib glfw_%CRT%.lib /link %LinkFlags% %GLFWSubsystem% user32.lib gdi32.lib shell32.lib winmm.lib opengl32.lib glew.lib
 if errorlevel 1 goto :Failed
-:PlatformDone
 
 popd
 echo Done.

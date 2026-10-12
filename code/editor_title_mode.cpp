@@ -6,9 +6,6 @@
    $Notice:  $
    ======================================================================== */
 
-// NOTE(pvlso): The old win32 layer doesn't implement the project calls
-#define PLATFORM_HAS_PROJECTS (Platform.ListProjects && Platform.MakeDirectory)
-
 // NOTE(pvlso): Every refresh pushes a new list into the mode arena, it's only freed when the mode changes.
 // Refreshes are rare (entering the title screen, creating a project, the refresh button) so that's fine.
 internal void
@@ -17,14 +14,11 @@ RefreshProjectList(editor_state *EditorState, editor_mode_title_screen *TitleScr
     TitleScreen->ProjectCount = 0;
     TitleScreen->SelectedProject = -1;
 
-    if(PLATFORM_HAS_PROJECTS)
+    u32 MaxCount = Platform.ListProjects(0, 0, 0);
+    if(MaxCount)
     {
-        u32 MaxCount = Platform.ListProjects(0, 0, 0);
-        if(MaxCount)
-        {
-            TitleScreen->ProjectNames = PushArray(&EditorState->ModeArena, MaxCount, char *);
-            TitleScreen->ProjectCount = Platform.ListProjects(TitleScreen->ProjectNames, MaxCount, &EditorState->ModeArena);
-        }
+        TitleScreen->ProjectNames = PushArray(&EditorState->ModeArena, MaxCount, char *);
+        TitleScreen->ProjectCount = Platform.ListProjects(TitleScreen->ProjectNames, MaxCount, &EditorState->ModeArena);
     }
 }
 
@@ -131,57 +125,49 @@ UpdateAndRenderProjects(editor_state *EditorState, editor_mode_title_screen *Tit
     nk_layout_row_static(Nk, 400, 600, 1);
     if(nk_group_begin(Nk, "Projects", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
     {
-        if(!PLATFORM_HAS_PROJECTS)
+        nk_layout_row_dynamic(Nk, 30, 1);
+        if(TitleScreen->ProjectCount == 0)
         {
-            nk_layout_row_dynamic(Nk, 30, 1);
-            nk_label(Nk, "Projects are not supported by this platform layer", NK_TEXT_ALIGN_LEFT);
+            nk_label(Nk, "No projects yet", NK_TEXT_ALIGN_LEFT);
         }
-        else
+
+        for(u32 ProjectIndex = 0; ProjectIndex < TitleScreen->ProjectCount; ++ProjectIndex)
         {
-            nk_layout_row_dynamic(Nk, 30, 1);
-            if(TitleScreen->ProjectCount == 0)
+            nk_bool Selected = (TitleScreen->SelectedProject == (s32)ProjectIndex);
+            if(nk_selectable_label(Nk, TitleScreen->ProjectNames[ProjectIndex], NK_TEXT_ALIGN_LEFT, &Selected))
             {
-                nk_label(Nk, "No projects yet", NK_TEXT_ALIGN_LEFT);
+                TitleScreen->SelectedProject = Selected ? (s32)ProjectIndex : -1;
             }
+        }
 
-            for(u32 ProjectIndex = 0; ProjectIndex < TitleScreen->ProjectCount; ++ProjectIndex)
-            {
-                nk_bool Selected = (TitleScreen->SelectedProject == (s32)ProjectIndex);
-                if(nk_selectable_label(Nk, TitleScreen->ProjectNames[ProjectIndex], NK_TEXT_ALIGN_LEFT, &Selected))
-                {
-                    TitleScreen->SelectedProject = Selected ? (s32)ProjectIndex : -1;
-                }
-            }
+        nk_layout_row_dynamic(Nk, 30, 2);
+        if(nk_button_label(Nk, "Refresh"))
+        {
+            RefreshProjectList(EditorState, TitleScreen);
+        }
 
-            nk_layout_row_dynamic(Nk, 30, 2);
-            if(nk_button_label(Nk, "Refresh"))
+        // TODO(pvlso): Compile and run the selected project
+        nk_widget_disable_begin(Nk);
+        nk_button_label(Nk, "Run");
+        nk_widget_disable_end(Nk);
+
+        nk_layout_row_dynamic(Nk, 30, 2);
+        nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD, TitleScreen->NewProjectName,
+                                       sizeof(TitleScreen->NewProjectName), nk_filter_ascii);
+        if(nk_button_label(Nk, "New Project"))
+        {
+            if(CreateProject(TitleScreen->NewProjectName, TitleScreen->ProjectStatus,
+                             sizeof(TitleScreen->ProjectStatus)))
             {
+                TitleScreen->NewProjectName[0] = 0;
                 RefreshProjectList(EditorState, TitleScreen);
             }
+        }
 
-            // TODO(pvlso): Compile and run the selected project
-            nk_widget_disable_begin(Nk);
-            nk_button_label(Nk, "Run");
-            nk_widget_disable_end(Nk);
-
-            nk_layout_row_dynamic(Nk, 30, 2);
-            nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD, TitleScreen->NewProjectName,
-                                           sizeof(TitleScreen->NewProjectName), nk_filter_ascii);
-            if(nk_button_label(Nk, "New Project"))
-            {
-                if(CreateProject(TitleScreen->NewProjectName, TitleScreen->ProjectStatus,
-                                 sizeof(TitleScreen->ProjectStatus)))
-                {
-                    TitleScreen->NewProjectName[0] = 0;
-                    RefreshProjectList(EditorState, TitleScreen);
-                }
-            }
-
-            if(TitleScreen->ProjectStatus[0])
-            {
-                nk_layout_row_dynamic(Nk, 30, 1);
-                nk_label(Nk, TitleScreen->ProjectStatus, NK_TEXT_ALIGN_LEFT);
-            }
+        if(TitleScreen->ProjectStatus[0])
+        {
+            nk_layout_row_dynamic(Nk, 30, 1);
+            nk_label(Nk, TitleScreen->ProjectStatus, NK_TEXT_ALIGN_LEFT);
         }
 
         nk_group_end(Nk);
