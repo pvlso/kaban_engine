@@ -141,9 +141,13 @@ if errorlevel 1 goto :Failed
 rmdir /s /q glfw_obj
 :GLFWDone
 
+REM NOTE(pvlso): Like the others only built when missing: a running editor has nuklear.dll loaded,
+REM rebuilding it every time failed the build before the engine, so hot reload never happened
+if exist nuklear.dll goto :NuklearDone
 echo Building Nuklear
 "%CC%" %CommonFlags% -W0 -DNUKLEAR_DLL_BUILD "%Code%\nuklear\nuklear_imp.c" -LD /link %LinkFlags% -PDB:nuklear.pdb /OUT:nuklear.dll /IMPLIB:nuklear.lib
 if errorlevel 1 goto :Failed
+:NuklearDone
 
 REM -----------------------------------------------------------------------------
 REM NOTE(pvlso): Engine, hot reloaded by the platform layer. lock.tmp tells the
@@ -158,8 +162,16 @@ del lock.tmp
 if not "%BuildError%"=="0" goto :Failed
 
 REM -----------------------------------------------------------------------------
-REM NOTE(pvlso): Platform layer
+REM NOTE(pvlso): Platform layer. A running editor locks kaban.exe, then only the engine
+REM (hot reloaded) is rebuilt. Opening it for append fails while it's locked.
 REM -----------------------------------------------------------------------------
+set PlatformLocked=0
+if exist kaban.exe 2>nul (>>kaban.exe (call )) || set PlatformLocked=1
+if "%PlatformLocked%"=="0" goto :BuildPlatform
+echo Skipping Platform, kaban.exe is running (the engine hot reloads)
+goto :PlatformDone
+
+:BuildPlatform
 echo Building Platform
 REM NOTE(pvlso): glfw_engine.cpp uses a plain main on every OS. Debug keeps the console for
 REM stderr output, release is a windows subsystem exe that still enters through main.
@@ -167,6 +179,7 @@ set GLFWSubsystem=-SUBSYSTEM:CONSOLE
 if "%Mode%"=="release" set GLFWSubsystem=-SUBSYSTEM:WINDOWS -ENTRY:mainCRTStartup
 "%CC%" %CommonFlags% %Warnings% -I "%Code%\glfw\include" "%Code%\glfw_engine.cpp" -Fekaban.exe nuklear.lib glfw_%CRT%.lib /link %LinkFlags% %GLFWSubsystem% user32.lib gdi32.lib shell32.lib winmm.lib opengl32.lib glew.lib
 if errorlevel 1 goto :Failed
+:PlatformDone
 
 popd
 echo Done.

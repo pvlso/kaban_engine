@@ -179,8 +179,11 @@ if [ ! -f libglew.a ]; then
     rm -f glew.o
 fi
 
-echo "Building Nuklear"
-$CC $LibFlags -DNUKLEAR_DLL_BUILD -shared "$Code/nuklear/nuklear_imp.c" -o libnuklear.so -lm
+# NOTE(pvlso): Like the others only built when missing, same as build.bat (a running editor has it loaded)
+if [ ! -f libnuklear.so ]; then
+    echo "Building Nuklear"
+    $CC $LibFlags -DNUKLEAR_DLL_BUILD -shared "$Code/nuklear/nuklear_imp.c" -o libnuklear.so -lm
+fi
 
 #
 # NOTE(pvlso): Engine, hot reloaded by the platform layer. lock.tmp tells the
@@ -193,12 +196,14 @@ mv -f engine_temp.so engine.so
 rm -f lock.tmp
 
 #
-# NOTE(pvlso): Platform layer
+# NOTE(pvlso): Platform layer. Written under a temp name and renamed, so a running editor keeps
+# its copy (the engine hot reloads, the new kaban is used on the next start).
 #
 if [ -f "$Code/glfw_engine.cpp" ]; then
     echo "Building Platform"
-    $CXX $CommonFlags $Warnings -DGLEW_STATIC -DGLEW_NO_GLU -I"$Code/glfw/include" "$Code/glfw_engine.cpp" -o kaban \
+    $CXX $CommonFlags $Warnings -DGLEW_STATIC -DGLEW_NO_GLU -I"$Code/glfw/include" "$Code/glfw_engine.cpp" -o kaban_temp \
          -L. -lglfw -lglew -lnuklear -l:libGL.so.1 -ldl -lpthread -lm -Wl,-rpath,'$ORIGIN'
+    mv -f kaban_temp kaban
 else
     echo "NOTE: code/glfw_engine.cpp doesn't exist yet, skipping the platform executable."
 fi
