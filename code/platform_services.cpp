@@ -414,6 +414,20 @@ internal PLATFORM_FREE_FILE_MEMORY(PlatformFreeFileMemory)
     OSDeallocateMemory(Memory);
 }
 
+// NOTE(pvlso): InitSize is the size Source was allocated with (the OS doesn't tell us), the
+// smaller of the two sizes is copied into a new block and Source is freed. Source can be 0.
+internal PLATFORM_REALLOCATE_MEMORY(PlatformReallocateMemory)
+{
+    void *Result = OSAllocateMemory(Size);
+    if(Result && Source)
+    {
+        Copy((InitSize < Size) ? InitSize : Size, Source, Result);
+    }
+    OSDeallocateMemory(Source);
+
+    return(Result);
+}
+
 internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
 {
     read_file_result Result = {};
@@ -784,6 +798,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
 
     Memory->PlatformAPI.AllocateMemory = OSAllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = OSDeallocateMemory;
+    Memory->PlatformAPI.ReallocateMemory = PlatformReallocateMemory;
 
     Memory->PlatformAPI.LoadCode = PlatformLoadCode;
     Memory->PlatformAPI.UnloadCode = PlatformUnloadCode;

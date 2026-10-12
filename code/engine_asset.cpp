@@ -993,6 +993,12 @@ GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector)
     Result.AssetCount = KeepMostFrequent(Result.Indecies, Result.AssetCount);
     if(Result.AssetCount > 1)
         Result.Indecies = (u32 *)Platform.ReallocateMemory(Result.Indecies, IndeciesSize, Result.AssetCount*sizeof(u32));
+    else if(Result.AssetCount == 0)
+    {
+        // NOTE(pvlso): No tag matched, Indecies may still hold a block from a partial match
+        Platform.DeallocateMemory(Result.Indecies);
+        Result = {};
+    }
     else
     {
         u32 Index = Result.Indecies[0];
