@@ -39,12 +39,12 @@ GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id
 }
 
 internal asset_best_match_result
-GameGetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector)
+GameGetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena)
 {
     asset_best_match_result Result = {};
     if(Assets)
     {
-        Result = GetBestMatchAssets(Assets, Vector);
+        Result = GetBestMatchAssets(Assets, Vector, Arena);
     }
 
     return(Result);

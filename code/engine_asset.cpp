@@ -949,61 +949,56 @@ KeepMostFrequent(u32 *Array, u32 Count)
     return(Result);
 }
 
+// NOTE(pvlso): One match comes back in Index. Several (a tie) come back in Indecies, pushed on
+// the caller's Arena, so they live as long as the caller wants. Without an Arena only the count
+// of a tie is returned. The work array lives on Assets->UtilArena and is always freed.
 inline asset_best_match_result
-GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector)
+GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena)
 {
     asset_best_match_result Result = {};
 
-    u64 *GUIDs = PushArray(&Assets->UtilArena, Vector->PairCount, u64);
+    kea_tag_lookup_entry *Entries[ArrayCount(Vector->Pairs)];
+    u32 EntryCount = 0;
+    u32 TotalCount = 0;
     char Buffer[128];
     for(u32 I = 0; I < Vector->PairCount; ++I)
     {
         asset_tag_pair *Pair = Vector->Pairs + I;
         FormatString(ArrayCount(Buffer), Buffer, "%s%s", Pair->Key, Pair->Value);
-        GUIDs[I] = GUIDFromString(Buffer);
-    }
-
-    kea_tag_lookup_entry *Entry = TagTableGet(&Assets->TagTable, GUIDs[0]);
-    u32 IndeciesSize = 0;
-    if(Entry)
-    {
-        IndeciesSize = sizeof(u32)*Entry->Count;
-        Result.AssetCount = Entry->Count;
-        Result.Indecies = (u32 *)Platform.ReallocateMemory(0, 0, IndeciesSize);
-        Copy(IndeciesSize, Assets->TagTable.TagedAssetsIndecies + Entry->AssetsFirstIndex, Result.Indecies);
-    }
-
-    for(u32 I = 1; I < Vector->PairCount; ++I)
-    {
-        kea_tag_lookup_entry *Entry = TagTableGet(&Assets->TagTable, GUIDs[I]);
-        if(Entry)
+        kea_tag_lookup_entry *Entry = TagTableGet(&Assets->TagTable, GUIDFromString(Buffer));
+        if(Entry && Entry->Count)
         {
-            u32 EntryIndeciesSize = Entry->Count*sizeof(u32);
-            u32 NewIndeciesSize = IndeciesSize + EntryIndeciesSize;
-            Result.Indecies = (u32 *)Platform.ReallocateMemory(Result.Indecies, IndeciesSize, NewIndeciesSize);
-
-            Copy(EntryIndeciesSize, Assets->TagTable.TagedAssetsIndecies + Entry->AssetsFirstIndex, (u8 *)Result.Indecies + IndeciesSize);
-            IndeciesSize = NewIndeciesSize;
-            Result.AssetCount += Entry->Count;
+            Entries[EntryCount++] = Entry;
+            TotalCount += Entry->Count;
         }
     }
 
-    InsertionSort(Result.AssetCount, Result.Indecies);
+    if(TotalCount)
+    {
+        temporary_memory TempMem = BeginTemporaryMemory(&Assets->UtilArena);
 
-    Result.AssetCount = KeepMostFrequent(Result.Indecies, Result.AssetCount);
-    if(Result.AssetCount > 1)
-        Result.Indecies = (u32 *)Platform.ReallocateMemory(Result.Indecies, IndeciesSize, Result.AssetCount*sizeof(u32));
-    else if(Result.AssetCount == 0)
-    {
-        // NOTE(pvlso): No tag matched, Indecies may still hold a block from a partial match
-        Platform.DeallocateMemory(Result.Indecies);
-        Result = {};
-    }
-    else
-    {
-        u32 Index = Result.Indecies[0];
-        Platform.DeallocateMemory(Result.Indecies);
-        Result.Index = Index;
+        u32 *Indecies = PushArray(&Assets->UtilArena, TotalCount, u32, NoClear());
+        u32 *At = Indecies;
+        for(u32 I = 0; I < EntryCount; ++I)
+        {
+            kea_tag_lookup_entry *Entry = Entries[I];
+            Copy(Entry->Count*sizeof(u32), Assets->TagTable.TagedAssetsIndecies + Entry->AssetsFirstIndex, At);
+            At += Entry->Count;
+        }
+
+        InsertionSort(TotalCount, Indecies);
+        Result.AssetCount = KeepMostFrequent(Indecies, TotalCount);
+        if(Result.AssetCount == 1)
+        {
+            Result.Index = Indecies[0];
+        }
+        else if(Arena)
+        {
+            Result.Indecies = PushArray(Arena, Result.AssetCount, u32, NoClear());
+            Copy(Result.AssetCount*sizeof(u32), Indecies, Result.Indecies);
+        }
+
+        EndTemporaryMemory(TempMem);
     }
 
     return(Result);

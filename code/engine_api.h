@@ -101,7 +101,9 @@ struct engine_api
     void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
                               s32 Segments, v4 Color);
 
-    asset_best_match_result (*GetBestMatchAssets)(engine_assets *Assets, asset_tag_vector *Vector);
+    // NOTE(pvlso): A tie (AssetCount > 1) is pushed on Arena, nothing is pushed for 0 or 1 matches.
+    // Arena can be 0 when only one match is expected, a tie then returns only its count.
+    asset_best_match_result (*GetBestMatchAssets)(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena);
 };
 
 // NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
@@ -184,9 +186,9 @@ PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Cen
 }
 
 inline asset_best_match_result
-GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector)
+GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
-    asset_best_match_result Result = Engine.GetBestMatchAssets(Assets, Vector);
+    asset_best_match_result Result = Engine.GetBestMatchAssets(Assets, Vector, Arena);
     return(Result);
 }
 #endif
