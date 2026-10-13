@@ -17,6 +17,7 @@
     win32_os.cpp          - Windows implementation
     platform_services.cpp - the platform_api handed to the engine (files, work queues, code loading)
     platform_sound.cpp    - sound output through miniaudio
+    platform_log.cpp      - the log (internal builds), writes entries and build/kaban.log
     glfw_engine.cpp       - window, input, nuklear, main loop
 */
 
@@ -58,6 +59,7 @@
 #endif
 #include "platform_services.cpp"
 #include "platform_sound.cpp"
+#include "platform_log.cpp"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): GLOBAL VARIABLES
@@ -547,6 +549,7 @@ internal void
 GLFWErrorCallback(int Error, const char *Description)
 {
     fprintf(stderr, "GLFW ERROR %d: %s\n", Error, Description);
+    LOG_ERROR("GLFW error %d: %s", Error, Description);
 }
 
 internal void
@@ -717,6 +720,7 @@ GLFWInitOpenGL(void)
         OpenGLSupportsSRGBFramebuffer = (GLEW_ARB_framebuffer_sRGB || GLEW_EXT_framebuffer_sRGB);
 
         opengl_info Info = OpenGLInit(true, OpenGLSupportsSRGBFramebuffer);
+        LOG("OpenGL %s, %s (%s)", Info.Version, Info.Renderer, Info.Vendor);
 
         glfwSwapInterval(1);
 
@@ -752,12 +756,17 @@ main(int ArgCount, char **Args)
 
     GlobalPerfCountFrequency = glfwGetTimerFrequency();
 
+    PlatformInitLog();
+    LOG("Editor started: %s", GlobalPaths.EXEFileName);
+    LOG("Root directory: %s", GlobalPaths.ROOTPath);
+
     State->Monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *Mode = glfwGetVideoMode(State->Monitor);
 
     // NOTE(pvlso): Render at the monitor resolution
     GlobalFramebufferWidth = Mode->width;
     GlobalFramebufferHeight = Mode->height;
+    LOG("Primary monitor %dx%d @ %dHz", Mode->width, Mode->height, Mode->refreshRate);
 
 #if EDITOR_INTERNAL
     s32 MonitorCount = 0;
@@ -798,6 +807,7 @@ main(int ArgCount, char **Args)
     if(!Window)
     {
         fprintf(stderr, "GLFW PLATFORM: Could not create the window / OpenGL context.\n");
+        LOG_ERROR("Could not create the window / OpenGL context");
         glfwTerminate();
         return(1);
     }
@@ -818,6 +828,7 @@ main(int ArgCount, char **Args)
     if(!GLFWInitOpenGL())
     {
         fprintf(stderr, "GLFW PLATFORM: glewInit failed.\n");
+        LOG_ERROR("glewInit failed");
         glfwTerminate();
         return(1);
     }
@@ -840,10 +851,12 @@ main(int ArgCount, char **Args)
         // NOTE(pvlso): Only the main window waits for vsync, otherwise every frame waits twice
         glfwSwapInterval(0);
         glfwMakeContextCurrent(Window);
+        LOG("Debug window on the %s monitor", State->DebugMonitor ? "second" : "primary");
     }
     else
     {
         fprintf(stderr, "GLFW PLATFORM: Could not create the debug window.\n");
+        LOG_ERROR("Could not create the debug window");
     }
 #endif
 
@@ -900,6 +913,11 @@ main(int ArgCount, char **Args)
     if(!Engine.IsValid)
     {
         fprintf(stderr, "GLFW PLATFORM: Could not load %s\n", Engine.Code.SourceLibraryName);
+        LOG_ERROR("Could not load %s", Engine.Code.SourceLibraryName);
+    }
+    else
+    {
+        LOG("Engine code loaded");
     }
     DEBUGSetEventRecording(Engine.IsValid);
 
@@ -1105,6 +1123,14 @@ main(int ArgCount, char **Args)
 
             EngineMemory.ExecutableReloaded = true;
             DEBUGSetEventRecording(Engine.IsValid);
+            if(Engine.IsValid)
+            {
+                LOG("Engine code reloaded");
+            }
+            else
+            {
+                LOG_ERROR("Engine code didn't reload");
+            }
         }
 
         END_BLOCK();
@@ -1208,6 +1234,10 @@ main(int ArgCount, char **Args)
 #endif
 
     PlatformUnloadEngineCode(&Engine);
+    PlatformUnloadAllCode();
+
+    LOG("Editor quit");
+    PlatformShutdownLog();
 
 #if EDITOR_INTERNAL
     if(State->DebugWindow.Handle)

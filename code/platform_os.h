@@ -17,6 +17,8 @@
     os_directory     - a directory being iterated
     os_semaphore     - a counting semaphore
     OS_LIBRARY_EXTENSION - ".so", ".dll"
+    OS_BUILD_PROJECT_COMMAND - printf format of the command that builds a project, takes the
+                               project name and the mode ("debug"/"release")
 
   Paths are UTF-8 and use '/' as the separator, the OS file converts if it has to.
 */
@@ -94,6 +96,11 @@ internal void OSWaitSemaphore(os_semaphore *Semaphore);
 //
 // NOTE(pvlso): Processes
 //
+// NOTE(pvlso): Runs CommandLine through the shell (cmd.exe / sh) in WorkingDirectory without a
+// window, stdout and stderr go to OutputPath (truncated first)
+internal platform_process OSExecuteCommand(char *WorkingDirectory, char *CommandLine, char *OutputPath);
+internal platform_process_state OSGetProcessState(platform_process *Process);
+
 #if EDITOR_INTERNAL
 internal DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(OSDEBUGExecuteSystemCommand);
 internal DEBUG_PLATFORM_GET_PROCESS_STATE(OSDEBUGGetProcessState);

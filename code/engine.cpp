@@ -52,11 +52,68 @@ EndTaskWithMemory(task_with_memory *Task)
 internal void
 SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode EditorMode)
 {
+    TIMED_FUNCTION();
+
     b32 NeedToWait = false;
     Platform.CompleteAllWork(TranState->LowPriorityQueue);
 
     Clear(&EditorState->ModeArena);
     EditorState->EditorMode = EditorMode;
+
+    char *ModeNames[] = {"None", "Title Screen", "Assets Mode", "Map Editor", "Game"};
+    LOG("Editor mode: %s", (EditorMode < ArrayCount(ModeNames)) ? ModeNames[EditorMode] : "?");
+}
+
+// NOTE(pvlso): Next to every data/ directory (the engine's, each project's), holds the version
+// of the stored assets (stored_assets_<version>.kesa) that the assets mode bumps on every write
+#define EDITOR_METADATA_FILE_NAME "editor_metadata.json"
+
+internal void
+LoadEditorMetadata(editor_state *EditorState)
+{
+    ZeroStruct(EditorState->EditorMeta);
+
+    temporary_memory TempMem = BeginTemporaryMemory(&EditorState->TotalArena);
+    json_object *Metadata = ParseJson(EDITOR_METADATA_FILE_NAME, TempMem.Arena, PlatformFileType_DataRoot);
+    if(Metadata)
+    {
+        json_value *KEASVersion = JsonLookupObjectElement(Metadata, "keas_version");
+        Assert(KEASVersion->Type == JsonValue_Array);
+
+        for(u32 I = 0; I < KEASVersion->Array.Count; ++I)
+        {
+            EditorState->EditorMeta.KESAVersion[I] =
+                (u8)KEASVersion->Array.Items[I]->Int;
+        }
+
+        u8 *Version = EditorState->EditorMeta.KESAVersion;
+        LOG("%s: stored assets version %d.%d.%d.%d", EDITOR_METADATA_FILE_NAME,
+            Version[0], Version[1], Version[2], Version[3]);
+    }
+    else
+    {
+        LOG_WARNING("No %s, writing a new one (version 0)", EDITOR_METADATA_FILE_NAME);
+        char Data[256];
+        FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
+        Platform.WriteEntireFile(EDITOR_METADATA_FILE_NAME, PlatformFileType_DataRoot, (u8 *)Data, StringLength(Data));
+    }
+
+    EndTemporaryMemory(TempMem);
+}
+
+// NOTE(pvlso): Points every data file at a project (projects/<name>/data/ and its editor_metadata.json),
+// or at the engine's data/ when ProjectName is 0. The assets mode and a running game use their
+// project's data, the title screen goes back to the engine's.
+internal b32
+UseDataOf(editor_state *EditorState, char *ProjectName)
+{
+    b32 Result = Platform.SetDataProject(ProjectName);
+    if(Result)
+    {
+        LoadEditorMetadata(EditorState);
+    }
+
+    return(Result);
 }
 
 internal u32
@@ -78,7 +135,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
     EditorMeta->KESAVersion[3] = (Result)       & 0xff;
 
     platform_file_handle EditorMetaHandle =
-        Platform.OpenFile("../editor_metadata.json", PlatformFileType_None, PlatformFileOp_Write);
+        Platform.OpenFile(EDITOR_METADATA_FILE_NAME, PlatformFileType_DataRoot, PlatformFileOp_Write);
 
     char Data[256];
     FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [%d, %d, %d, %d]\n}",
@@ -86,6 +143,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
                  EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
     Platform.WriteDataToFile(&EditorMetaHandle, 0, StringLength(Data), Data);
     Platform.CloseFile(&EditorMetaHandle);
+    LOG("Stored assets version is now %u", Result);
 
     return(Result);
 }
@@ -99,35 +157,9 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
-//#include "arkham/arkham.cpp"
+#include "editor_game_mode.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
-
-internal void
-EngineLoadEditorMetadata(editor_state *EditorState, char *MetadataSource)
-{
-    temporary_memory TempMem = BeginTemporaryMemory(&EditorState->TotalArena);
-    json_object *Metadata = ParseJson(MetadataSource, TempMem.Arena, true);
-    if(Metadata)
-    {
-        json_value *KEASVersion = JsonLookupObjectElement(Metadata, "keas_version");
-        Assert(KEASVersion->Type == JsonValue_Array);
-
-        for(u32 I = 0; I < KEASVersion->Array.Count; ++I)
-        {
-            EditorState->EditorMeta.KESAVersion[I] =
-                (u8)KEASVersion->Array.Items[I]->Int;
-        }
-    }
-    else
-    {
-        char Data[256];
-        FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
-        Platform.WriteEntireFile(MetadataSource, PlatformFileType_None, (u8 *)Data, StringLength(Data));
-    }
-    
-    EndTemporaryMemory(TempMem);
-}
 
 extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 {
@@ -137,14 +169,6 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 #if EDITOR_INTERNAL
     GlobalDebugTable = Memory->DebugTable;
     DebugGlobalMemory = Memory;
-    
-    {DEBUG_DATA_BLOCK("Profile");
-        DEBUG_UI_ELEMENT(DebugType_FrameSlider, FrameSlider);
-        DEBUG_UI_ELEMENT(DebugType_LastFrameInfo, LastFrame);
-        DEBUG_UI_ELEMENT(DebugType_DebugMemoryInfo, DebugMemory);
-        DEBUG_UI_ELEMENT(DebugType_TopClocksList, EditorUpdateAndRender);
-    }
-
 #endif
 
     TIMED_FUNCTION();
@@ -158,9 +182,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         EditorState = Memory->EditorState = BootstrapPushStruct(editor_state, TotalArena);
         InitializeAudioState(&EditorState->AudioState, &EditorState->AudioArena);
 
-        EngineLoadEditorMetadata(EditorState, "../editor_metadata.json");
+        LoadEditorMetadata(EditorState);
         
         EditorState->UIEnable = true;
+        LOG("Editor state initialized");
     }
 
     // NOTE(casey): Transient initialization
@@ -209,11 +234,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(Input->AltDown && WasPressed(Input->Controllers[0].ToggleMute))
     {
         EditorState->AudioState.Muted = !EditorState->AudioState.Muted;
+        LOG("Audio %s", EditorState->AudioState.Muted ? "muted" : "unmuted");
     }
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
+    BEGIN_BLOCK("BeginUI");
     BeginUI(&EditorState->UIState, RenderCommands, 0, 0, RenderWidth, RenderHeight, nk, UIScale);
+    END_BLOCK();
 
     if(nk_begin(nk, "UI Window", nk_rect(0, 0, (f32)1920, (f32)1080),
                 (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
@@ -242,13 +270,9 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                 {
                 } break;
 
-                case EditorMode_Arkham:
+                case EditorMode_Game:
                 {
-//                    b32 Exit = ArkhamUpdateAndRender(EditorState->ArkhamGameState, nk, RenderCommands,
-//                                                     RenderWidth, RenderHeight, Input);
-                    b32 Exit = true;
-                    if(Exit)
-                        PlayTitleScreen(EditorState, TranState);
+                    Rerun = UpdateAndRenderGame(EditorState, TranState, Input, RenderCommands);
                 } break;
 
                 InvalidDefaultCase;
@@ -256,7 +280,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         } while(Rerun);
     }
     nk_end(nk);
+
+    BEGIN_BLOCK("EndUI");
     EndUI(EditorState, &EditorState->UIState, Input);
+    END_BLOCK();
     
     CheckArena(&EditorState->ModeArena);
     CheckArena(&TranState->TranArena);

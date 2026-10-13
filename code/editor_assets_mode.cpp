@@ -111,10 +111,12 @@ ReadTags(editor_mode_assets *AssetsMode)
         
         Platform.CloseFile(&KETHandle);
 
+        LOG("Read %s: %u tags", TagsFileName, Header->TagCount);
     }
     else
     {
         Result = false;
+        LOG_WARNING("No %s, writing one with only Tag_None", TagsFileName);
         KETHandle = Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
         if(PlatformNoFileErrors(&KETHandle))
         {
@@ -142,7 +144,7 @@ ReadTags(editor_mode_assets *AssetsMode)
         }
         else
         {
-            // TODO(pvlso): Logging
+            LOG_ERROR("Could not create %s", TagsFileName);
         }
     }
 
@@ -152,6 +154,8 @@ ReadTags(editor_mode_assets *AssetsMode)
 internal b32
 ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 {
+    TIMED_FUNCTION();
+
     b32 Result = true;
     kesa_header *StoredHeader = &AssetsMode->StoredHeader;
 
@@ -184,10 +188,14 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
                                   AssetsSize, AssetsMode->StoredAssets);
         
         Platform.CloseFile(&KESAHandle);
+
+        // NOTE(pvlso): The first stored asset is the null asset
+        LOG("Read %s: %u stored assets", StoredFileName, StoredHeader->AssetCount - 1);
     }
     else
     {
         Result = false;
+        LOG_WARNING("No %s, writing an empty one", StoredFileName);
         KESAHandle = Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Write);
         if(PlatformNoFileErrors(&KESAHandle))
         {
@@ -208,7 +216,7 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
         }
         else
         {
-            // TODO(pvlso): Logging
+            LOG_ERROR("Could not create %s", StoredFileName);
         }
     }
 
@@ -220,6 +228,8 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 internal void
 WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 {
+    TIMED_FUNCTION();
+
     if(AssetsMode->AddAssetCount || AssetsMode->StoredAssetChanged)
     {
         char FileName[256];
@@ -256,7 +266,17 @@ WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
             Platform.WriteDataToFile(&KESAHandle, Offset, AssetsSize, AssetsMode->AssetsToAdd);
 
             Platform.CloseFile(&KESAHandle);
+
+            LOG("Wrote %s: %u stored assets, %u new", FileName, StoredHeader->AssetCount - 1, AssetsMode->AddAssetCount);
         }
+        else
+        {
+            LOG_ERROR("Could not write %s", FileName);
+        }
+    }
+    else
+    {
+        LOG("Write Assets: nothing added or changed");
     }
 
     AssetsMode->AddAssetCount = 0;
@@ -265,11 +285,20 @@ WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 }
 
 internal void
-PlayAssetsMode(editor_state *EditorState, transient_state *TranState)
+PlayAssetsMode(editor_state *EditorState, transient_state *TranState, char *ProjectName)
 {
+    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
+    char Name[PROJECT_NAME_COUNT];
+    FormatString(sizeof(Name), Name, "%s", ProjectName);
+
     SetEditorMode(EditorState, TranState, EditorMode_AssetsMode);
-    
+    LOG("Assets Mode for %s", Name);
+
+    // NOTE(pvlso): Every file below (source files, stored assets, tags, the KEA it writes) is the project's
+    UseDataOf(EditorState, Name);
+
     editor_mode_assets *Result = PushStruct(&EditorState->ModeArena, editor_mode_assets);
+    FormatString(sizeof(Result->ProjectName), Result->ProjectName, "%s", Name);
     Result->EditMode = EditMode_None;
     SubArena(&Result->UtilityTempArena, &EditorState->ModeArena, Megabytes(1));
     SubArena(&Result->UtilityArena, &EditorState->ModeArena, Megabytes(1));
@@ -305,6 +334,8 @@ internal void
 CutSpriteSheet(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *SpriteSheetMode,
                kesa_spritesheet *Asset)
 {
+    TIMED_FUNCTION();
+
     loaded_bitmap *SpriteSheet = &SpriteSheetMode->SpriteSheetBitmap;
     for(u32 SpriteIndex = 0;
         SpriteIndex < Asset->SpriteCount;
@@ -435,6 +466,8 @@ LoadTileBitmap(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetM
 internal void
 CutTileset(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_tileset *Asset, b32 CutWithMerge)
 {
+    TIMED_FUNCTION();
+
     kesa_tileset *Tileset = Asset;
     loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
     u32 TileCountX = (TilesetBitmap->Width / Tileset->TileWidth);
@@ -512,6 +545,9 @@ AddCurrentAsset(editor_mode_assets *AssetsMode)
         AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
         ++AssetsMode->AddAssetCount;
     }
+
+    LOG("Added %s, %u asset(s) waiting for Write Assets", AssetsMode->CurrentAsset->SourceFileName,
+        AssetsMode->AddAssetCount);
 }
 
 inline void
@@ -542,6 +578,8 @@ enum update_tags_op
 internal void
 UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
 {
+    TIMED_FUNCTION();
+
     temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
     b32 Result = true;
     Assert(AssetsMode->StoredHeader.MagicValue);
@@ -697,6 +735,13 @@ UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
         Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), &AssetsMode->StoredHeader);
         Platform.CloseFile(&KESAHandle);
     }
+    else
+    {
+        LOG_ERROR("Could not update the header of %s", FileName);
+    }
+
+    char *OpNames[] = {"added", "edited", "removed"};
+    LOG("Tag %s, tags version is now %u", (Op < ArrayCount(OpNames)) ? OpNames[Op] : "?", TagFullVersion);
 
     AssetsMode->CurrentTagIndex = 0;
     
@@ -955,6 +1000,8 @@ inline void
 LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *StoredAsset,
                     b32 RememberEditMode = false)
 {
+    TIMED_FUNCTION();
+
     if(RememberEditMode)
     {
         AssetsMode->EditMode = AssetsEditModeFromStoredType(StoredAsset->Type);
@@ -1475,6 +1522,7 @@ RemoveStoredAsset(editor_mode_assets *AssetsMode)
     if(AssetsMode->ShowStoredAssetIndex)
     {
         kesa_asset *AssetToRemove = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
+        LOG("Removed stored asset %s (not written until Write Assets)", AssetToRemove->SourceFileName);
         *AssetToRemove = {};
         for(u32 StoredIndex = AssetsMode->ShowStoredAssetIndex;
             StoredIndex < AssetsMode->StoredHeader.AssetCount - 1;
@@ -1500,6 +1548,8 @@ internal b32
 UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState, engine_input *Input,
                           platform_texture_op_queue *TextureOpQueue)
 {
+    TIMED_FUNCTION();
+
     editor_mode_assets *AssetsMode = EditorState->AssetsMode;
     ui_state *UIState = &EditorState->UIState;
 
@@ -1545,10 +1595,16 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             }
 
             if(CheckRemoveAction(AssetsMode, AM_RemoveAssetTag))
+            {
                 RemoveCurrentAssetTag(AssetsMode, AssetsMode->CurrentAsset);
+                LOG("Removed a tag from %s", AssetsMode->CurrentAsset->SourceFileName);
+            }
         
             if(CheckRemoveAction(AssetsMode, AM_AddAssetTag))
+            {
                 AddTagToCurrentAsset(AssetsMode, AssetsMode->CurrentAsset);
+                LOG("Added a tag to %s", AssetsMode->CurrentAsset->SourceFileName);
+            }
 
             if(CheckRemoveAction(AssetsMode, AM_AddNewTag))
                 UpdateEditorTags(AssetsMode, UpdateTagsOp_AddNew);

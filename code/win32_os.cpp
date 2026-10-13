@@ -464,8 +464,87 @@ OSWaitSemaphore(os_semaphore *Semaphore)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): PROCESSES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-#if EDITOR_INTERNAL
 #define WIN32_INVALID_PROCESS_HANDLE ((u64)-1)
+
+internal platform_process
+OSExecuteCommand(char *WorkingDirectory, char *CommandLine, char *OutputPath)
+{
+    platform_process Result = {};
+    Result.OSHandle = WIN32_INVALID_PROCESS_HANDLE;
+
+    wchar_t OutputPathW[WIN32_OS_PATH_COUNT];
+    Win32UTF8ToWidePath(OutputPath, OutputPathW, ArrayCount(OutputPathW));
+
+    // NOTE(pvlso): Inheritable, the child writes into it directly
+    SECURITY_ATTRIBUTES Security = {sizeof(Security), 0, TRUE};
+    HANDLE Output = CreateFileW(OutputPathW, GENERIC_WRITE, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                                &Security, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    if(Output != INVALID_HANDLE_VALUE)
+    {
+        // NOTE(pvlso): Not a path, the '/' in "cmd.exe /c" must stay
+        char FullCommandLine[4096];
+        snprintf(FullCommandLine, sizeof(FullCommandLine), "cmd.exe /d /c %s", CommandLine);
+        wchar_t CommandLineW[4096];
+        if(!MultiByteToWideChar(CP_UTF8, 0, FullCommandLine, -1, CommandLineW, ArrayCount(CommandLineW)))
+        {
+            CommandLineW[0] = 0;
+        }
+
+        wchar_t WorkingDirectoryW[WIN32_OS_PATH_COUNT];
+        Win32UTF8ToWidePath(WorkingDirectory, WorkingDirectoryW, ArrayCount(WorkingDirectoryW));
+
+        STARTUPINFOW StartupInfo = {};
+        StartupInfo.cb = sizeof(StartupInfo);
+        StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        StartupInfo.hStdInput = 0;
+        StartupInfo.hStdOutput = Output;
+        StartupInfo.hStdError = Output;
+
+        PROCESS_INFORMATION ProcessInfo = {};
+        if(CommandLineW[0] &&
+           CreateProcessW(0, CommandLineW, 0, 0, TRUE, CREATE_NO_WINDOW, 0, WorkingDirectoryW, &StartupInfo, &ProcessInfo))
+        {
+            Assert(sizeof(Result.OSHandle) >= sizeof(ProcessInfo.hProcess));
+            *(HANDLE *)&Result.OSHandle = ProcessInfo.hProcess;
+            CloseHandle(ProcessInfo.hThread);
+        }
+
+        // NOTE(pvlso): The child has its own copy
+        CloseHandle(Output);
+    }
+
+    return(Result);
+}
+
+internal platform_process_state
+OSGetProcessState(platform_process *Process)
+{
+    platform_process_state Result = {};
+
+    if(Process->OSHandle != WIN32_INVALID_PROCESS_HANDLE)
+    {
+        Result.StartedSuccessfully = true;
+
+        HANDLE ProcessHandle = *(HANDLE *)&Process->OSHandle;
+        if(WaitForSingleObject(ProcessHandle, 0) == WAIT_OBJECT_0)
+        {
+            DWORD ReturnCode = 0;
+            GetExitCodeProcess(ProcessHandle, &ReturnCode);
+            Result.ReturnCode = (s32)ReturnCode;
+
+            CloseHandle(ProcessHandle);
+            Process->OSHandle = WIN32_INVALID_PROCESS_HANDLE;
+        }
+        else
+        {
+            Result.IsRunning = true;
+        }
+    }
+
+    return(Result);
+}
+
+#if EDITOR_INTERNAL
 
 internal
 DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(OSDEBUGExecuteSystemCommand)

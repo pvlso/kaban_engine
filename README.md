@@ -17,7 +17,7 @@ If you want to learn more about the engine development check out my [website](ht
 
 ### Current State
 
-Kaban Engine builds and runs on **Windows (Win32 + OpenGL)**. It contains multiple core systems, some functional and some still in their earliest stage:
+Kaban Engine builds and runs on **Windows and Linux (X11)**. The platform layer uses **GLFW** for windows and input, **OpenGL** for rendering and **miniaudio** for sound, with a thin per-OS layer underneath. It contains multiple core systems, some functional and some still in their earliest stage:
 
 **Implemented components include:**
 
@@ -26,13 +26,17 @@ Kaban Engine builds and runs on **Windows (Win32 + OpenGL)**. It contains multip
 * Basic rendering pipeline
 * Prototype navigation mesh generation & agent movement
 * Internal tools for game data management
+* Hot reloading of the engine code
+* Projects: games live in `projects/`, the editor compiles them, runs them and hot reloads them on save
+* Separate debug/profiler window (on a second monitor when one is available)
 
 **Not yet ready / incomplete:**
 
+* Games only run inside the editor, there is no standalone export yet
 * Entity system (very early)
 * Animation system (mostly conceptual)
 * Several editor tools depend on unfinished systems
-* No external documentation or build guidance yet
+* No external documentation yet
 * No guarantees of stability or compatibility
 
 This repository is published to **show progress openly** and provide a reference for anyone interested in building similar systems from scratch.
@@ -52,15 +56,53 @@ It is **not** intended to be used as a base for commercial games.
 
 ### Building the Engine
 
-Most required third-party libraries are included in the repository, but the project **currently requires manual setup of include paths and build configuration**.
+All third-party libraries (GLFW, GLEW, Nuklear, miniaudio, stb_image) are included in the repository as source and built by the build scripts. Output goes to `build/`.
 
-There are no guaranteed build instructions yet. If you choose to compile it:
+**Windows**
 
-* You will need a Windows toolchain (Visual Studio recommended)
-* You may need to adjust include/library paths manually
-* Expect missing features, breakage, or incomplete subsystems
+Requires Visual Studio or the VS Build Tools with the *Desktop development with C++* workload (for the Windows SDK). The script finds and sets up the MSVC environment itself, so a normal terminal works.
 
-The project will eventually include proper build instructions as it matures.
+```
+build.bat                debug build (clang-cl if installed, otherwise cl)
+build.bat release        optimized build
+build.bat clang | msvc   force a compiler
+build.bat clean          remove the build directory
+```
+
+Run `build\kaban.exe`.
+
+**Linux**
+
+Requires clang (or gcc) and the X11 development headers (X11, Xrandr, Xinerama, Xcursor, Xi). If something is missing, the script prints the install command for your package manager.
+
+```
+./build.sh               debug build (clang if installed, otherwise gcc)
+./build.sh release       optimized build
+./build.sh clean         remove the build directory
+```
+
+Run `build/kaban`.
+
+**Projects**
+
+A game is a folder `projects/<name>/` with `<name>.cpp` in it. The game includes only `code/engine_api.h` and exports `GameUpdateAndRender`. The title screen lists the projects, and **New Project** writes a small template to start from.
+
+**Run** builds the selected project, loads it, and rebuilds and hot reloads it whenever one of its source files changes. Build errors and the build log show up in the debug window's Project panel, along with Stop and Restart. A project can also be built by hand:
+
+```
+build.bat project <name> [debug|release] [clang|msvc]
+./build.sh project <name> [debug|release]
+```
+
+The output goes to `projects/<name>/build/`.
+
+**Notes**
+
+* The engine looks for `data/` and `projects/` next to the `build/` directory and creates them if they're missing.
+* Every project has its own assets in `projects/<name>/data/` and its own `editor_metadata.json`. The Assets Mode and a running game use the selected project's data. The engine's own `data/` is for the editor only. Game assets are not part of the repository.
+* Rebuilding while the editor is running hot reloads the engine code.
+* Editor keys: `Alt+E` toggles the UI, `Alt+M` mutes audio, `Alt+Enter` toggles fullscreen, `Alt+F4` quits.
+* Expect missing features, breakage, or incomplete subsystems.
 
 ---
 
@@ -73,7 +115,7 @@ You may share derivative works publicly, but **commercial use is prohibited**.
 Some parts of this engine contain code influenced by **Handmade Hero**, which is also shared for educational purposes only. Third-party libraries remain under their own licenses.
 
 For complete terms, see:
-→ **[`LICENSE.txt`](./LICENSE.md)**
+→ **[`LICENSE.md`](./LICENSE.md)**
 
 ---
 

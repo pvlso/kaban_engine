@@ -7,10 +7,14 @@
    $Notice: $
    ======================================================================== */
 
+// NOTE(pvlso): engine_api.h is shared with the games, this hides its game side wrappers
+#define ENGINE_BUILD 1
+
 #include "engine_platform.h"
 #include "engine_file_formats.h"
 #include "engine_config.h"
 #include "engine_shared.h"
+#include "engine_api.h"
 
 #define DLIST_INSERT(Sentinel, Element)         \
     (Element)->Next = (Sentinel)->Next;         \
@@ -77,9 +81,8 @@ struct task_with_memory
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
-//#include "arkham/arkham.h"
+#include "editor_game_mode.h"
 
-//#include "engine_api.h"
 //#include "engine_navigation_mesh.h"
 //#include "engine_map_editor_mode.h"
 
@@ -89,7 +92,7 @@ enum editor_mode
     EditorMode_TitleScreen,
     EditorMode_AssetsMode,
     EditorMode_MapEditor,
-    EditorMode_Arkham,
+    EditorMode_Game,
 };
 
 struct editor_meta
@@ -119,14 +122,11 @@ struct editor_state
     char window_title[64];
     editor_mode EditorMode;
 
-//    engine_api EngineAPI;
-//    platform_loaded_code ArkhamCode;
-//    arkham_update_and_render *Arkham;
     union
     {
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
-        game_state *ArkhamGameState;
+        editor_mode_game *Game;
 //        engine_map_editor *MapEditor;
 //        editor_game_simulate_mode *SimulateGame;
     };
@@ -137,8 +137,7 @@ struct transient_state
     memory_arena TranArena;    
 
     memory_arena AssetsArena;
-    engine_assets *ArkhamAssets;
-    
+
     task_with_memory Tasks[4];
 
     platform_work_queue *HighPriorityQueue;

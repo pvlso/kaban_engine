@@ -505,8 +505,70 @@ OSWaitSemaphore(os_semaphore *Semaphore)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): PROCESSES
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-#if EDITOR_INTERNAL
 #define LINUX_INVALID_PROCESS_HANDLE ((u64)-1)
+
+internal platform_process
+OSExecuteCommand(char *WorkingDirectory, char *CommandLine, char *OutputPath)
+{
+    platform_process Result = {};
+    Result.OSHandle = LINUX_INVALID_PROCESS_HANDLE;
+
+    // NOTE(pvlso): Opened before the fork, the child only does async-signal-safe calls
+    int Output = open(OutputPath, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0644);
+    if(Output >= 0)
+    {
+        pid_t ProcessID = fork();
+        if(ProcessID == 0)
+        {
+            // NOTE(pvlso): dup2 clears O_CLOEXEC on the copies
+            if((chdir(WorkingDirectory) != 0) ||
+               (dup2(Output, STDOUT_FILENO) < 0) ||
+               (dup2(Output, STDERR_FILENO) < 0))
+            {
+                _exit(127);
+            }
+
+            execl("/bin/sh", "sh", "-c", CommandLine, (char *)0);
+            _exit(127);
+        }
+        else if(ProcessID > 0)
+        {
+            Result.OSHandle = (u64)ProcessID;
+        }
+
+        close(Output);
+    }
+
+    return(Result);
+}
+
+internal platform_process_state
+OSGetProcessState(platform_process *Process)
+{
+    platform_process_state Result = {};
+
+    if(Process->OSHandle != LINUX_INVALID_PROCESS_HANDLE)
+    {
+        Result.StartedSuccessfully = true;
+
+        int Status = 0;
+        pid_t WaitResult = waitpid((pid_t)Process->OSHandle, &Status, WNOHANG);
+        if(WaitResult == 0)
+        {
+            Result.IsRunning = true;
+        }
+        else
+        {
+            // NOTE(pvlso): Killed by a signal (or waitpid failed) counts as a failure
+            Result.ReturnCode = ((WaitResult > 0) && WIFEXITED(Status)) ? WEXITSTATUS(Status) : -1;
+            Process->OSHandle = LINUX_INVALID_PROCESS_HANDLE;
+        }
+    }
+
+    return(Result);
+}
+
+#if EDITOR_INTERNAL
 
 internal
 DEBUG_PLATFORM_EXECUTE_SYSTEM_COMMAND(OSDEBUGExecuteSystemCommand)

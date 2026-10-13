@@ -5,12 +5,25 @@
 #   ./build.sh            debug build
 #   ./build.sh release    optimized build
 #   ./build.sh clean      remove the build directory
+#   ./build.sh project <name> [debug|release]
+#                         build projects/<name>/<name>.cpp into projects/<name>/build/<name>.so,
+#                         the editor runs this one
 #
 # Compiler: clang is preferred, gcc is used as fallback.
 # Override with CC=... CXX=... ./build.sh
 #
 
 set -e
+
+Project=""
+if [ "$1" == "project" ]; then
+    if [ -z "$2" ]; then
+        echo "Usage: ./build.sh project <name> [debug|release]"
+        exit 1
+    fi
+    Project="$2"
+    shift 2
+fi
 
 Mode=${1:-debug}
 Root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -67,9 +80,15 @@ fi
 
 #
 # NOTE(pvlso): System headers GLFW needs. These can't be vendored, they come from the distro.
+# Projects don't use GLFW, so they skip the check.
 #
 MissingHeaders=""
-for Header in X11/Xlib.h X11/extensions/Xrandr.h X11/extensions/Xinerama.h X11/Xcursor/Xcursor.h X11/extensions/XInput2.h; do
+if [ -n "$Project" ]; then
+    Headers=""
+else
+    Headers="X11/Xlib.h X11/extensions/Xrandr.h X11/extensions/Xinerama.h X11/Xcursor/Xcursor.h X11/extensions/XInput2.h"
+fi
+for Header in $Headers; do
     if ! echo "#include <$Header>" | $CC -x c -fsyntax-only - > /dev/null 2>&1; then
         MissingHeaders="$MissingHeaders $Header"
     fi
@@ -102,6 +121,36 @@ fi
 # NOTE(pvlso): Third party code is built with its own flags and without our warnings
 LibFlags="-O2 -g -fPIC -w -I$Code"
 
+#
+# NOTE(pvlso): A game project, hot reloaded by the editor. It's written under a temp name
+# and renamed, so the editor never sees a half written library.
+#
+if [ -n "$Project" ]; then
+    ProjectDir="$Root/projects/$Project"
+    if [ ! -f "$ProjectDir/$Project.cpp" ]; then
+        echo "ERROR: $ProjectDir/$Project.cpp doesn't exist."
+        exit 1
+    fi
+    if [ ! -f "$Build/libnuklear.so" ]; then
+        echo "ERROR: $Build/libnuklear.so doesn't exist, build the engine first."
+        exit 1
+    fi
+
+    mkdir -p "$ProjectDir/build"
+    cd "$ProjectDir/build"
+
+    echo "Building $Project"
+    # NOTE(pvlso): Copies left by editor runs that ended with the game loaded. Deleting the
+    # one in use is fine on Linux, the editor keeps its mapping.
+    rm -f "${Project}"_temp_*.so
+    $CXX $CommonFlags $Warnings -shared "$ProjectDir/$Project.cpp" -o "${Project}_build.so" \
+         -L"$Build" -lnuklear -Wl,-rpath,"$Build"
+    mv -f "${Project}_build.so" "$Project.so"
+
+    echo "Done."
+    exit 0
+fi
+
 mkdir -p "$Build"
 cd "$Build"
 
@@ -130,8 +179,11 @@ if [ ! -f libglew.a ]; then
     rm -f glew.o
 fi
 
-echo "Building Nuklear"
-$CC $LibFlags -DNUKLEAR_DLL_BUILD -shared "$Code/nuklear/nuklear_imp.c" -o libnuklear.so -lm
+# NOTE(pvlso): Like the others only built when missing, same as build.bat (a running editor has it loaded)
+if [ ! -f libnuklear.so ]; then
+    echo "Building Nuklear"
+    $CC $LibFlags -DNUKLEAR_DLL_BUILD -shared "$Code/nuklear/nuklear_imp.c" -o libnuklear.so -lm
+fi
 
 #
 # NOTE(pvlso): Engine, hot reloaded by the platform layer. lock.tmp tells the
@@ -144,12 +196,14 @@ mv -f engine_temp.so engine.so
 rm -f lock.tmp
 
 #
-# NOTE(pvlso): Platform layer
+# NOTE(pvlso): Platform layer. Written under a temp name and renamed, so a running editor keeps
+# its copy (the engine hot reloads, the new kaban is used on the next start).
 #
 if [ -f "$Code/glfw_engine.cpp" ]; then
     echo "Building Platform"
-    $CXX $CommonFlags $Warnings -DGLEW_STATIC -DGLEW_NO_GLU -I"$Code/glfw/include" "$Code/glfw_engine.cpp" -o kaban \
+    $CXX $CommonFlags $Warnings -DGLEW_STATIC -DGLEW_NO_GLU -I"$Code/glfw/include" "$Code/glfw_engine.cpp" -o kaban_temp \
          -L. -lglfw -lglew -lnuklear -l:libGL.so.1 -ldl -lpthread -lm -Wl,-rpath,'$ORIGIN'
+    mv -f kaban_temp kaban
 else
     echo "NOTE: code/glfw_engine.cpp doesn't exist yet, skipping the platform executable."
 fi

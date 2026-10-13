@@ -22,6 +22,7 @@
 #include <sys/wait.h>
 
 #define OS_LIBRARY_EXTENSION ".so"
+#define OS_BUILD_PROJECT_COMMAND "bash ./build.sh project %s %s"
 
 struct os_file
 {

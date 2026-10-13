@@ -13,6 +13,8 @@
 #include <mmsystem.h>
 
 #define OS_LIBRARY_EXTENSION ".dll"
+// NOTE(pvlso): .\ because cmd skips the current directory when NoDefaultCurrentDirectoryInExePath is set
+#define OS_BUILD_PROJECT_COMMAND ".\\build.bat project %s %s"
 
 #define WIN32_OS_PATH_COUNT 4096
 

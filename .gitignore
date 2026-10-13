@@ -1,12 +1,13 @@
 misc
 build
 data
-arkham.cpp
-arkham.h
 
 # Local dev log
-fetch_data.bat
 DEVLOG.md
+
+# Local scripts that copy the dev log to/from J:\
+fetch_data.bat
+update_data.bat
 
 # Game projects, each one can be its own repo
 projects/

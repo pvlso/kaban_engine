@@ -436,8 +436,10 @@ PrintTokens(json_parser *Parser)
 }
 
 internal json_object *
-ParseJson(char *FileName, memory_arena *Arena, b32 UseOriginalPath = false)
+ParseJson(char *FileName, memory_arena *Arena, platform_file_type Type = PlatformFileType_JSON)
 {
+    TIMED_FUNCTION();
+
     json_object *Head = 0;
 
     json_parser JsonParser = {};
@@ -445,9 +447,8 @@ ParseJson(char *FileName, memory_arena *Arena, b32 UseOriginalPath = false)
     JsonParser.CurrentTokenIndex = 1;
     JsonParser.Tokens = PushArray(Arena, 4096, json_token);
 
-    platform_file_type LoadType = (UseOriginalPath ? PlatformFileType_None : PlatformFileType_JSON);
     read_file_result ReadResult =
-        Platform.ReadEntireFile(FileName, LoadType, 0, true);
+        Platform.ReadEntireFile(FileName, Type, 0, true);
     if(ReadResult.Contents)
     {
         JsonTokenize(&JsonParser, (char *)ReadResult.Contents);
@@ -461,6 +462,7 @@ ParseJson(char *FileName, memory_arena *Arena, b32 UseOriginalPath = false)
         JsonParseObject(&JsonParser, Result);
 
         Head = &Result->Object;
+        LOG("Parsed %s: %u tokens", FileName, JsonParser.TokenCount);
     }
 
     Platform.FreeFileMemory(ReadResult.Contents);

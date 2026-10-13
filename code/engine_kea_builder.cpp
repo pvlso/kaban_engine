@@ -329,6 +329,8 @@ AddStoredAssetTags(kea_builder *Builder, kesa_asset *StoredAsset)
 internal void
 BuilderWriteKEA(kea_builder *Builder)
 {
+    TIMED_FUNCTION();
+
     kesa_header *KESAHeader = Builder->KESAHeader;
 
     char KEAFileName[256];
@@ -518,10 +520,19 @@ BuilderWriteKEA(kea_builder *Builder)
         
         Platform.WriteDataToFile(&Out, Header.AssetsOffset, AssetArraySize, KEAAssets);
         Platform.WriteDataToFile(&Out, 0, sizeof(kea_header), &Header);
+
+        if(PlatformNoFileErrors(&Out))
+        {
+            LOG("Wrote %s: %u assets, %u tags", KEAFileName, Builder->AssetCount, Builder->TagCount);
+        }
+        else
+        {
+            LOG_ERROR("Writing %s failed", KEAFileName);
+        }
     }
     else
     {
-        // TODO(pvlso): Logging
+        LOG_ERROR("Could not create %s", KEAFileName);
     }
 
     Platform.CloseFile(&Out);
@@ -549,9 +560,12 @@ TagTableInsert(kea_tag_lookup_entry *Table, u32 Capacity, kea_tag_lookup_entry E
 internal b32
 BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 {
+    TIMED_FUNCTION();
+
     b32 Result = true;
 
     kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
+    LOG("Building the KEA from %u stored assets", Builder->KESAHeader->AssetCount - 1);
 
     // NOTE(pvlso): Create raw asset list
     kesa_header *StoredHeader = Builder->KESAHeader;
@@ -587,6 +601,7 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
                 break;
 
             case KESA_SSWM:
+                LOG_ERROR("%s: SSWM assets can't be built yet", StoredAsset->SourceFileName);
                 Assert(!"Not implemented");
                 break;
 

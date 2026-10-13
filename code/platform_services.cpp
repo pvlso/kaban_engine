@@ -13,19 +13,22 @@
 
 global_variable platform_paths GlobalPaths;
 global_variable u32 GlobalTempLibraryCounter;
+global_variable platform_code GlobalLoadedCodeSentinel;
 
 global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
     "",             "keas",         "kesas",      "kewms",      "kets",
     "bmps",         "spritesheets", "tilesets",   "solidtiles", "wavs",
-    "txts",         "jsons",        "ttfs",       "bins",       ""
+    "txts",         "jsons",        "ttfs",       "bins",       "",
+    ""
 };
 
 global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
     ".bmp",  ".bmp",  ".bmp",  ".bmp",  ".wav",
-    ".txt",  ".json", ".ttf",  ".bin",  ".*"
+    ".txt",  ".json", ".ttf",  ".bin",  ".*",
+    ".*"
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -79,6 +82,11 @@ PlatformBuildTypeDirectory(platform_file_type Type, char *Dest, umm DestCount)
     {
         snprintf(Dest, DestCount, "%sprojects", GlobalPaths.ROOTPath);
     }
+    else if(Type == PlatformFileType_DataRoot)
+    {
+        int Length = (int)StringLength(GlobalPaths.DATARootPath);
+        snprintf(Dest, DestCount, "%.*s", Length ? (Length - 1) : 0, GlobalPaths.DATARootPath);
+    }
     else
     {
         snprintf(Dest, DestCount, "%s%s", GlobalPaths.DATAPath, GlobalDataDirs[Type]);
@@ -98,6 +106,25 @@ PlatformBuildDataPath(char *FileName, platform_file_type Type, char *Dest, umm D
     else
     {
         PlatformBuildEXEPathFileName(FileName, Dest, DestCount);
+    }
+}
+
+// NOTE(pvlso): RootPath holds the data/ directory and ends with a separator. Creates data/<type dir>
+// for every type (and projects/, which doesn't move).
+internal void
+PlatformSetDataRoot(char *RootPath)
+{
+    snprintf(GlobalPaths.DATARootPath, sizeof(GlobalPaths.DATARootPath), "%s", RootPath);
+    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%sdata/", RootPath);
+    OSCreateDirectory(GlobalPaths.DATAPath);
+
+    char DirPath[PLATFORM_PATH_COUNT];
+    for(u32 Type = 1;
+        Type < PlatformFileType_Count;
+        ++Type)
+    {
+        PlatformBuildTypeDirectory((platform_file_type)Type, DirPath, sizeof(DirPath));
+        OSCreateDirectory(DirPath);
     }
 }
 
@@ -141,18 +168,7 @@ PlatformInitPaths(void)
     int RootLength = (int)(SlashBeforeBuild - GlobalPaths.EXEFileName);
     snprintf(GlobalPaths.ROOTPath, sizeof(GlobalPaths.ROOTPath), "%.*s",
              RootLength, GlobalPaths.EXEFileName);
-    snprintf(GlobalPaths.DATAPath, sizeof(GlobalPaths.DATAPath), "%sdata/", GlobalPaths.ROOTPath);
-    OSCreateDirectory(GlobalPaths.DATAPath);
-
-    // NOTE(pvlso): Creates data/<type dir> for every type and projects/
-    char DirPath[PLATFORM_PATH_COUNT];
-    for(u32 Type = 1;
-        Type < PlatformFileType_Count;
-        ++Type)
-    {
-        PlatformBuildTypeDirectory((platform_file_type)Type, DirPath, sizeof(DirPath));
-        OSCreateDirectory(DirPath);
-    }
+    PlatformSetDataRoot(GlobalPaths.ROOTPath);
 
     // NOTE(pvlso): Third party code (nuklear fonts) opens files relative to the working directory
     char EXEDirectory[PLATFORM_PATH_COUNT];
@@ -291,6 +307,10 @@ internal PLATFORM_OPEN_FILE(PlatformOpenFile)
     char Path[PLATFORM_PATH_COUNT];
     PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
     Result.Platform = PlatformOpenOSFile(Path, Op, &Result.NoErrors);
+    if(!Result.NoErrors)
+    {
+        LOG_WARNING("Could not open %s", Path);
+    }
 
     return(Result);
 }
@@ -306,6 +326,7 @@ internal PLATFORM_FILE_ERROR(PlatformFileError)
 #if EDITOR_INTERNAL
     fprintf(stderr, "PLATFORM FILE ERROR: %s\n", Message);
 #endif
+    LOG_ERROR("File error: %s", Message);
 
     Handle->NoErrors = false;
 }
@@ -394,6 +415,135 @@ internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
     return(ProjectCount);
 }
 
+internal PLATFORM_SET_DATA_PROJECT(PlatformSetDataProject)
+{
+    b32 Result = false;
+
+    if(ProjectName)
+    {
+        char ProjectPath[PLATFORM_PATH_COUNT];
+        snprintf(ProjectPath, sizeof(ProjectPath), "%sprojects/%s", GlobalPaths.ROOTPath, ProjectName);
+        if(OSFileExists(ProjectPath))
+        {
+            char RootPath[PLATFORM_PATH_COUNT];
+            snprintf(RootPath, sizeof(RootPath), "%s/", ProjectPath);
+            PlatformSetDataRoot(RootPath);
+            Result = true;
+            LOG("Data root: projects/%s/data", ProjectName);
+        }
+        else
+        {
+            LOG_ERROR("No project directory %s", ProjectPath);
+        }
+    }
+    else
+    {
+        PlatformSetDataRoot(GlobalPaths.ROOTPath);
+        Result = true;
+        LOG("Data root: the engine's data");
+    }
+
+    return(Result);
+}
+
+internal PLATFORM_BUILD_PROJECT(PlatformBuildProject)
+{
+    char BuildDirectory[PLATFORM_PATH_COUNT];
+    snprintf(BuildDirectory, sizeof(BuildDirectory), "%sprojects/%s/build", GlobalPaths.ROOTPath, ProjectName);
+    OSCreateDirectory(BuildDirectory);
+
+    char LogPath[PLATFORM_PATH_COUNT];
+    snprintf(LogPath, sizeof(LogPath), "%s/build.log", BuildDirectory);
+
+#if EDITOR_INTERNAL
+    char *Mode = "debug";
+#else
+    char *Mode = "release";
+#endif
+    char CommandLine[PLATFORM_PATH_COUNT];
+    snprintf(CommandLine, sizeof(CommandLine), OS_BUILD_PROJECT_COMMAND, ProjectName, Mode);
+
+    // NOTE(pvlso): The build scripts live in the root directory
+    platform_process Result = OSExecuteCommand(GlobalPaths.ROOTPath, CommandLine, LogPath);
+    LOG("%s (output in projects/%s/build/build.log)", CommandLine, ProjectName);
+    return(Result);
+}
+
+internal PLATFORM_GET_PROCESS_STATE(PlatformGetProcessState)
+{
+    platform_process_state Result = OSGetProcessState(Process);
+    return(Result);
+}
+
+internal b32
+IsSourceFileName(char *FileName)
+{
+    b32 Result = (StringEndsWithNoCase(FileName, ".cpp") ||
+                  StringEndsWithNoCase(FileName, ".c") ||
+                  StringEndsWithNoCase(FileName, ".h") ||
+                  StringEndsWithNoCase(FileName, ".hpp") ||
+                  StringEndsWithNoCase(FileName, ".inl"));
+    return(Result);
+}
+
+internal u64
+PlatformNewestSourceWriteTime(char *Path, u32 Depth)
+{
+    u64 Result = 0;
+
+    os_directory Directory;
+    if(OSOpenDirectory(&Directory, Path))
+    {
+        while(char *Name = OSNextFileInDirectory(&Directory))
+        {
+            if(IsSourceFileName(Name))
+            {
+                char FilePath[PLATFORM_PATH_COUNT];
+                snprintf(FilePath, sizeof(FilePath), "%s/%s", Path, Name);
+                u64 WriteTime = OSGetLastWriteTime(FilePath);
+                if(WriteTime > Result)
+                {
+                    Result = WriteTime;
+                }
+            }
+        }
+    }
+    OSCloseDirectory(&Directory);
+
+    // NOTE(pvlso): build/ only holds what the build writes. The depth limit is there for links that loop.
+    if(Depth < 8)
+    {
+        if(OSOpenDirectory(&Directory, Path))
+        {
+            while(char *Name = OSNextDirectoryInDirectory(&Directory))
+            {
+                if(!((Depth == 0) && StringsAreEqual(Name, "build")))
+                {
+                    char SubPath[PLATFORM_PATH_COUNT];
+                    snprintf(SubPath, sizeof(SubPath), "%s/%s", Path, Name);
+                    u64 WriteTime = PlatformNewestSourceWriteTime(SubPath, Depth + 1);
+                    if(WriteTime > Result)
+                    {
+                        Result = WriteTime;
+                    }
+                }
+            }
+        }
+        OSCloseDirectory(&Directory);
+    }
+
+    return(Result);
+}
+
+internal PLATFORM_GET_PROJECT_WRITE_TIME(PlatformGetProjectWriteTime)
+{
+    char ProjectPath[PLATFORM_PATH_COUNT];
+    snprintf(ProjectPath, sizeof(ProjectPath), "%sprojects/%s", GlobalPaths.ROOTPath, ProjectName);
+
+    u64 Result = PlatformNewestSourceWriteTime(ProjectPath, 0);
+    return(Result);
+}
+
 internal PLATFORM_MAKE_DIRECTORY(PlatformMakeDirectory)
 {
     b32 Result = false;
@@ -414,6 +564,20 @@ internal PLATFORM_FREE_FILE_MEMORY(PlatformFreeFileMemory)
     OSDeallocateMemory(Memory);
 }
 
+// NOTE(pvlso): InitSize is the size Source was allocated with (the OS doesn't tell us), the
+// smaller of the two sizes is copied into a new block and Source is freed. Source can be 0.
+internal PLATFORM_REALLOCATE_MEMORY(PlatformReallocateMemory)
+{
+    void *Result = OSAllocateMemory(Size);
+    if(Result && Source)
+    {
+        Copy((InitSize < Size) ? InitSize : Size, Source, Result);
+    }
+    OSDeallocateMemory(Source);
+
+    return(Result);
+}
+
 internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
 {
     read_file_result Result = {};
@@ -423,7 +587,11 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
 
     b32 NoErrors = false;
     os_file *File = PlatformOpenOSFile(Path, PlatformFileOp_Read, &NoErrors);
-    if(NoErrors)
+    if(!NoErrors)
+    {
+        LOG_WARNING("Could not open %s", Path);
+    }
+    else
     {
         u64 FileSize = OSGetFileSize(File);
         if(FileSize != (u64)-1)
@@ -444,7 +612,7 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
                 }
                 else
                 {
-                    // TODO: Logging
+                    LOG_ERROR("Could not read %s", Path);
                     if(!Arena)
                     {
                         PlatformFreeFileMemory(Result.Contents);
@@ -475,6 +643,11 @@ internal PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFile)
         {
             Result = Size;
         }
+    }
+
+    if(Result != Size)
+    {
+        LOG_ERROR("Could not write %s", Path);
     }
 
     PlatformCloseOSFile(File);
@@ -585,41 +758,57 @@ PlatformMakeQueue(platform_work_queue *Queue, uint32 ThreadCount)
 // NOTE(pvlso): CODE LOADING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 internal void
-PlatformInitCode(platform_code *Code, char *ModuleName)
+PlatformInitCode(platform_code *Code, char *ModuleName, platform_file_type Type)
 {
     *Code = {};
 
     char FileName[PLATFORM_PATH_COUNT];
     snprintf(FileName, sizeof(FileName), "%s%s", ModuleName, OS_LIBRARY_EXTENSION);
-    PlatformBuildEXEPathFileName(FileName, Code->SourceLibraryName, sizeof(Code->SourceLibraryName));
+    PlatformBuildDataPath(FileName, Type, Code->SourceLibraryName, sizeof(Code->SourceLibraryName));
 
     // NOTE(pvlso): Every load gets its own temp file ("engine_temp_3.so"). dlopen hands
     // back the already loaded library for a path it has seen if the old one couldn't be
     // fully unloaded, which would silently skip the reload.
     snprintf(FileName, sizeof(FileName), "%s_temp_%u%s", ModuleName, GlobalTempLibraryCounter++, OS_LIBRARY_EXTENSION);
-    PlatformBuildEXEPathFileName(FileName, Code->TempLibraryName, sizeof(Code->TempLibraryName));
+    PlatformBuildDataPath(FileName, Type, Code->TempLibraryName, sizeof(Code->TempLibraryName));
 
-    // NOTE(pvlso): The build writes lock.tmp while a library is being written
-    PlatformBuildEXEPathFileName("lock.tmp", Code->LockFileName, sizeof(Code->LockFileName));
+    // NOTE(pvlso): The build writes lock.tmp next to the library while it's being written
+    int DirectoryLength = 0;
+    for(char *At = ModuleName; *At; ++At)
+    {
+        if(IsPathSeparator(*At))
+        {
+            DirectoryLength = (int)(At - ModuleName) + 1;
+        }
+    }
+    snprintf(FileName, sizeof(FileName), "%.*slock.tmp", DirectoryLength, ModuleName);
+    PlatformBuildDataPath(FileName, Type, Code->LockFileName, sizeof(Code->LockFileName));
 }
 
 internal b32
-PlatformLoadCodeFile(platform_code *Code, char *ModuleName)
+PlatformLoadCodeFile(platform_code *Code, char *ModuleName, platform_file_type Type)
 {
-    PlatformInitCode(Code, ModuleName);
+    PlatformInitCode(Code, ModuleName, Type);
 
     if(!OSFileExists(Code->LockFileName))
     {
         Code->LibraryLastWriteTime = OSGetLastWriteTime(Code->SourceLibraryName);
-#if EDITOR_INTERNAL
-        if(OSCopyFile(Code->SourceLibraryName, Code->TempLibraryName))
+
+        // NOTE(pvlso): Loading a copy keeps the library free for the next build. Projects
+        // always rebuild while they run, the engine only does in internal builds.
+        b32 LoadCopy = (EDITOR_INTERNAL || (Type == PlatformFileType_Project));
+        if(LoadCopy)
         {
-            Code->Library = OSLoadLibrary(Code->TempLibraryName);
+            if(OSCopyFile(Code->SourceLibraryName, Code->TempLibraryName))
+            {
+                Code->Library = OSLoadLibrary(Code->TempLibraryName);
+            }
         }
-#else
-        Code->TempLibraryName[0] = 0;
-        Code->Library = OSLoadLibrary(Code->SourceLibraryName);
-#endif
+        else
+        {
+            Code->TempLibraryName[0] = 0;
+            Code->Library = OSLoadLibrary(Code->SourceLibraryName);
+        }
         Code->IsValid = (Code->Library != 0);
     }
 
@@ -662,8 +851,22 @@ PLATFORM_LOAD_CODE(PlatformLoadCode)
     platform_code *Code = (platform_code *)OSAllocateMemory(sizeof(platform_code));
     if(Code)
     {
-        Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName);
+        Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName, Type);
         Result.Platform = Code;
+        if(!Result.NoErrors)
+        {
+            LOG_ERROR("Could not load %s", Code->SourceLibraryName);
+        }
+
+        platform_code *Sentinel = &GlobalLoadedCodeSentinel;
+        if(!Sentinel->NextLoaded)
+        {
+            Sentinel->NextLoaded = Sentinel->PrevLoaded = Sentinel;
+        }
+        Code->PrevLoaded = Sentinel;
+        Code->NextLoaded = Sentinel->NextLoaded;
+        Code->NextLoaded->PrevLoaded = Code;
+        Code->PrevLoaded->NextLoaded = Code;
     }
 
     return(Result);
@@ -675,12 +878,35 @@ PLATFORM_UNLOAD_CODE(PlatformUnloadCode)
     platform_code *PlatformCode = (platform_code *)Code->Platform;
     if(PlatformCode)
     {
+        PlatformCode->PrevLoaded->NextLoaded = PlatformCode->NextLoaded;
+        PlatformCode->NextLoaded->PrevLoaded = PlatformCode->PrevLoaded;
+
         PlatformUnloadCodeFile(PlatformCode);
         OSDeallocateMemory(PlatformCode);
         Code->Platform = 0;
     }
 
     Code->NoErrors = false;
+}
+
+// NOTE(pvlso): At shutdown. Quitting while a game runs doesn't go through Stop, so its
+// library is still loaded here and its temp copy would be left in the project's build/
+internal void
+PlatformUnloadAllCode(void)
+{
+    platform_code *Sentinel = &GlobalLoadedCodeSentinel;
+    if(Sentinel->NextLoaded)
+    {
+        while(Sentinel->NextLoaded != Sentinel)
+        {
+            platform_code *Code = Sentinel->NextLoaded;
+            Sentinel->NextLoaded = Code->NextLoaded;
+            Code->NextLoaded->PrevLoaded = Sentinel;
+
+            PlatformUnloadCodeFile(Code);
+            OSDeallocateMemory(Code);
+        }
+    }
 }
 
 internal
@@ -706,7 +932,7 @@ PlatformLoadEngineCode(char *ModuleName)
 {
     platform_engine_code Result = {};
 
-    if(PlatformLoadCodeFile(&Result.Code, ModuleName))
+    if(PlatformLoadCodeFile(&Result.Code, ModuleName, PlatformFileType_None))
     {
         Result.UpdateAndRender = (engine_update_and_render *)
             OSGetLibrarySymbol(Result.Code.Library, "EngineUpdateAndRender");
@@ -765,7 +991,11 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.FileError = PlatformFileError;
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
     Memory->PlatformAPI.ListProjects = PlatformListProjects;
+    Memory->PlatformAPI.SetDataProject = PlatformSetDataProject;
     Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;
+    Memory->PlatformAPI.BuildProject = PlatformBuildProject;
+    Memory->PlatformAPI.GetProcessState = PlatformGetProcessState;
+    Memory->PlatformAPI.GetProjectWriteTime = PlatformGetProjectWriteTime;
 
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;
@@ -775,6 +1005,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
 
     Memory->PlatformAPI.AllocateMemory = OSAllocateMemory;
     Memory->PlatformAPI.DeallocateMemory = OSDeallocateMemory;
+    Memory->PlatformAPI.ReallocateMemory = PlatformReallocateMemory;
 
     Memory->PlatformAPI.LoadCode = PlatformLoadCode;
     Memory->PlatformAPI.UnloadCode = PlatformUnloadCode;

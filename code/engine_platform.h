@@ -254,7 +254,11 @@ typedef enum platform_file_type
 
     // NOTE(pvlso): Relative to the projects directory (next to data/), e.g. "game_name/game_name.cpp"
     PlatformFileType_Project,
-    
+
+    // NOTE(pvlso): Relative to the directory that holds the current data/ (see SetDataProject),
+    // e.g. "editor_metadata.json"
+    PlatformFileType_DataRoot,
+
     PlatformFileType_Count,
 } platform_file_type;
 
@@ -313,6 +317,12 @@ typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
 #define PLATFORM_LIST_PROJECTS(name) u32 name(char **Dest, u32 DestCount, memory_arena *Arena)
 typedef PLATFORM_LIST_PROJECTS(platform_list_projects);
 
+// NOTE(pvlso): Every data file type (KEA, BMP, ...) resolves into one data directory: the engine's
+// data/ when ProjectName is 0, projects/<name>/data/ otherwise. Its type directories are created.
+// False (and nothing changes) when projects/<name> doesn't exist.
+#define PLATFORM_SET_DATA_PROJECT(name) b32 name(char *ProjectName)
+typedef PLATFORM_SET_DATA_PROJECT(platform_set_data_project);
+
 // NOTE(pvlso): Path is relative to the Type's directory. False if it already exists or can't be created.
 #define PLATFORM_MAKE_DIRECTORY(name) b32 name(char *Path, platform_file_type Type)
 typedef PLATFORM_MAKE_DIRECTORY(platform_make_directory);
@@ -343,9 +353,11 @@ typedef struct platform_loaded_code
     void *Platform;
 } platform_loaded_code;
 
-// NOTE(pvlso): ModuleName is the bare name of the library ("arkham"), the platform layer
-// adds the OS specific prefix/extension and looks for it next to the executable.
-#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *ModuleName)
+// NOTE(pvlso): ModuleName is the library name without the extension, the platform layer adds
+// the OS specific one. It's relative to the Type's directory like every other file:
+// PlatformFileType_None looks next to the executable, PlatformFileType_Project takes
+// "game/build/game". The build writes lock.tmp next to the library while it's being written.
+#define PLATFORM_LOAD_CODE(name) platform_loaded_code name(char *ModuleName, platform_file_type Type)
 typedef PLATFORM_LOAD_CODE(platform_load_code);
 
 #define PLATFORM_UNLOAD_CODE(name) void name(platform_loaded_code *Code)
@@ -353,6 +365,36 @@ typedef PLATFORM_UNLOAD_CODE(platform_unload_code);
 
 #define PLATFORM_GET_PROC_ADDRESS(name) void *name(platform_loaded_code *Code, char *FunctionName)
 typedef PLATFORM_GET_PROC_ADDRESS(platform_get_proc_address);
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): PROJECTS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+typedef struct platform_process
+{
+    u64 OSHandle;
+} platform_process;
+
+typedef struct platform_process_state
+{
+    b32 StartedSuccessfully;
+    b32 IsRunning;
+    s32 ReturnCode;
+} platform_process_state;
+
+// NOTE(pvlso): Starts "build.bat|build.sh project <name>" in the background, in the same mode
+// (debug/release) as the editor. Its output goes to projects/<name>/build/build.log.
+#define PLATFORM_BUILD_PROJECT(name) platform_process name(char *ProjectName)
+typedef PLATFORM_BUILD_PROJECT(platform_build_project);
+
+// NOTE(pvlso): Poll until IsRunning is false, the process is cleaned up then and further
+// calls return an empty state.
+#define PLATFORM_GET_PROCESS_STATE(name) platform_process_state name(platform_process *Process)
+typedef PLATFORM_GET_PROCESS_STATE(platform_get_process_state);
+
+// NOTE(pvlso): Newest write time of the project's source files (.cpp .c .h .hpp .inl, in
+// projects/<name> and its subdirectories except build/), 0 if there are none
+#define PLATFORM_GET_PROJECT_WRITE_TIME(name) u64 name(char *ProjectName)
+typedef PLATFORM_GET_PROJECT_WRITE_TIME(platform_get_project_write_time);
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): WORK QUEUES
@@ -413,7 +455,11 @@ typedef struct platform_api
 
     platform_list_files_in_directory *ListFilesInDirectory;
     platform_list_projects *ListProjects;
+    platform_set_data_project *SetDataProject;
     platform_make_directory *MakeDirectory;
+    platform_build_project *BuildProject;
+    platform_get_process_state *GetProcessState;
+    platform_get_project_write_time *GetProjectWriteTime;
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;

@@ -20,6 +20,8 @@ RefreshProjectList(editor_state *EditorState, editor_mode_title_screen *TitleScr
         TitleScreen->ProjectNames = PushArray(&EditorState->ModeArena, MaxCount, char *);
         TitleScreen->ProjectCount = Platform.ListProjects(TitleScreen->ProjectNames, MaxCount, &EditorState->ModeArena);
     }
+
+    LOG("Found %u project(s) in projects/", TitleScreen->ProjectCount);
 }
 
 // NOTE(pvlso): The name is used for the directory, the files and the include guard,
@@ -41,8 +43,8 @@ IsValidProjectName(char *Name)
     return(Result);
 }
 
-// TODO(pvlso): The template gets the engine API include and the game entry points once
-// the game <-> engine boundary exists
+// NOTE(pvlso): The template is a header with the game_state and a unity build .cpp with the
+// GameUpdateAndRender export (see engine_api.h)
 internal b32
 CreateProject(char *Name, char *Status, umm StatusCount)
 {
@@ -57,7 +59,7 @@ CreateProject(char *Name, char *Status, umm StatusCount)
     }
 
     char FileName[256];
-    char Contents[2048];
+    char Contents[4096];
 
     if(!IsValidProjectName(Name))
     {
@@ -73,10 +75,12 @@ CreateProject(char *Name, char *Status, umm StatusCount)
         umm HeaderSize = FormatString(sizeof(Contents), Contents,
                                       "#if !defined(%s_H)\n"
                                       "\n"
-                                      "// NOTE: Game state, the engine owns the memory so it survives hot reload\n"
+                                      "#include \"engine_api.h\"\n"
+                                      "\n"
+                                      "// NOTE: Lives in game_memory, which the engine owns, so it survives hot reload\n"
                                       "struct game_state\n"
                                       "{\n"
-                                      "    int IsInitialized;\n"
+                                      "    v2 P;\n"
                                       "};\n"
                                       "\n"
                                       "#define %s_H\n"
@@ -87,8 +91,48 @@ CreateProject(char *Name, char *Status, umm StatusCount)
 
         FormatString(sizeof(FileName), FileName, "%s/%s.cpp", Name, Name);
         umm SourceSize = FormatString(sizeof(Contents), Contents,
+                                      "#include \"%s.h\"\n"
+                                      "\n"
                                       "// NOTE: Unity build, include the rest of the game's .cpp files here\n"
-                                      "#include \"%s.h\"\n",
+                                      "\n"
+                                      "platform_api Platform;\n"
+                                      "engine_api Engine;\n"
+                                      "debug_table *GlobalDebugTable;\n"
+                                      "\n"
+                                      "GAME_EXPORT GAME_UPDATE_AND_RENDER(GameUpdateAndRender)\n"
+                                      "{\n"
+                                      "    // NOTE: The engine can be reloaded too, so the APIs are set every frame\n"
+                                      "    Platform = Memory->PlatformAPI;\n"
+                                      "    Engine = Memory->EngineAPI;\n"
+                                      "    GlobalDebugTable = Memory->DebugTable;\n"
+                                      "\n"
+                                      "    // NOTE: Profiler blocks show up in the debug window under GameUpdateAndRender\n"
+                                      "    TIMED_BLOCK(\"Game Update\");\n"
+                                      "\n"
+                                      "    game_state *GameState = (game_state *)Memory->GameState;\n"
+                                      "    if(!GameState)\n"
+                                      "    {\n"
+                                      "        GameState = PushStruct(&Memory->PermanentArena, game_state);\n"
+                                      "        Memory->GameState = GameState;\n"
+                                      "    }\n"
+                                      "\n"
+                                      "    engine_controller_input *Controller = GetController(Input, 0);\n"
+                                      "    v2 dP = {};\n"
+                                      "    if(Controller->MoveUp.EndedDown)    {dP.y += 1.0f;}\n"
+                                      "    if(Controller->MoveDown.EndedDown)  {dP.y -= 1.0f;}\n"
+                                      "    if(Controller->MoveLeft.EndedDown)  {dP.x -= 1.0f;}\n"
+                                      "    if(Controller->MoveRight.EndedDown) {dP.x += 1.0f;}\n"
+                                      "    GameState->P += 5.0f*Input->dtForFrame*dP;\n"
+                                      "\n"
+                                      "    render_group Group = BeginRenderGroup(Assets, RenderCommands);\n"
+                                      "    Orthographic(&Group, 50.0f);\n"
+                                      "    Clear(&Group, V4(0.1f, 0.1f, 0.15f, 1.0f));\n"
+                                      "\n"
+                                      "    object_transform Transform = DefaultFlatTransform();\n"
+                                      "    PushRect(&Group, &Transform, V3(GameState->P, 0.0f), V2(1.0f, 1.0f), V4(1.0f, 0.5f, 0.0f, 1.0f));\n"
+                                      "\n"
+                                      "    EndRenderGroup(&Group);\n"
+                                      "}\n",
                                       Name);
         b32 SourceWritten = (Platform.WriteEntireFile(FileName, PlatformFileType_Project,
                                                       (u8 *)Contents, (u32)SourceSize) == SourceSize);
@@ -104,6 +148,15 @@ CreateProject(char *Name, char *Status, umm StatusCount)
         }
     }
 
+    if(Result)
+    {
+        LOG("%s", Status);
+    }
+    else
+    {
+        LOG_ERROR("New Project: %s", Status);
+    }
+
     return(Result);
 }
 
@@ -111,7 +164,8 @@ internal void
 PlayTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
     SetEditorMode(EditorState, TranState, EditorMode_TitleScreen);
-    
+    UseDataOf(EditorState, 0);
+
     editor_mode_title_screen *Result = PushStruct(&EditorState->ModeArena, editor_mode_title_screen);
     Result->ModeToPlay = EditorMode_None;
     RefreshProjectList(EditorState, Result);
@@ -119,9 +173,13 @@ PlayTitleScreen(editor_state *EditorState, transient_state *TranState)
     EditorState->TitleScreen = Result;
 }
 
-internal void
-UpdateAndRenderProjects(editor_state *EditorState, editor_mode_title_screen *TitleScreen, nk_context *Nk)
+// NOTE(pvlso): True when the selected project started running, the title screen is gone then
+internal b32
+UpdateAndRenderProjects(editor_state *EditorState, transient_state *TranState,
+                        editor_mode_title_screen *TitleScreen, nk_context *Nk)
 {
+    b32 Result = false;
+
     nk_layout_row_static(Nk, 400, 600, 1);
     if(nk_group_begin(Nk, "Projects", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
     {
@@ -146,37 +204,52 @@ UpdateAndRenderProjects(editor_state *EditorState, editor_mode_title_screen *Tit
             RefreshProjectList(EditorState, TitleScreen);
         }
 
-        // TODO(pvlso): Compile and run the selected project
-        nk_widget_disable_begin(Nk);
-        nk_button_label(Nk, "Run");
-        nk_widget_disable_end(Nk);
+        // NOTE(pvlso): The game mode builds the project, then runs it
+        b32 CanRun = (TitleScreen->SelectedProject >= 0);
+        if(!CanRun) nk_widget_disable_begin(Nk);
+        b32 RunPressed = nk_button_label(Nk, "Run");
+        if(!CanRun) nk_widget_disable_end(Nk);
 
-        nk_layout_row_dynamic(Nk, 30, 2);
-        nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD, TitleScreen->NewProjectName,
-                                       sizeof(TitleScreen->NewProjectName), nk_filter_ascii);
-        if(nk_button_label(Nk, "New Project"))
+        if(RunPressed && CanRun)
         {
-            if(CreateProject(TitleScreen->NewProjectName, TitleScreen->ProjectStatus,
-                             sizeof(TitleScreen->ProjectStatus)))
-            {
-                TitleScreen->NewProjectName[0] = 0;
-                RefreshProjectList(EditorState, TitleScreen);
-            }
+            PlayGame(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
+            Result = true;
         }
 
-        if(TitleScreen->ProjectStatus[0])
+        // NOTE(pvlso): Once the game runs, the mode arena that held TitleScreen is gone
+        if(!Result)
         {
-            nk_layout_row_dynamic(Nk, 30, 1);
-            nk_label(Nk, TitleScreen->ProjectStatus, NK_TEXT_ALIGN_LEFT);
+            nk_layout_row_dynamic(Nk, 30, 2);
+            nk_edit_string_zero_terminated(Nk, NK_EDIT_FIELD, TitleScreen->NewProjectName,
+                                           sizeof(TitleScreen->NewProjectName), nk_filter_ascii);
+            if(nk_button_label(Nk, "New Project"))
+            {
+                if(CreateProject(TitleScreen->NewProjectName, TitleScreen->ProjectStatus,
+                                 sizeof(TitleScreen->ProjectStatus)))
+                {
+                    TitleScreen->NewProjectName[0] = 0;
+                    RefreshProjectList(EditorState, TitleScreen);
+                }
+            }
+
+            if(TitleScreen->ProjectStatus[0])
+            {
+                nk_layout_row_dynamic(Nk, 30, 1);
+                nk_label(Nk, TitleScreen->ProjectStatus, NK_TEXT_ALIGN_LEFT);
+            }
         }
 
         nk_group_end(Nk);
     }
+
+    return(Result);
 }
 
 internal b32
 UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
+    TIMED_FUNCTION();
+
     editor_mode_title_screen *TitleScreen = EditorState->TitleScreen;
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
 
@@ -184,20 +257,20 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
     nk_context *Nk = UIState->Nk;
     if(!Result)
     {
-        char Buffer[256];
-        nk_layout_row_begin(Nk, NK_STATIC, 40, 8);
+        nk_layout_row_begin(Nk, NK_STATIC, 40, 7);
         {
             nk_layout_row_push(Nk, 130);
-            if(nk_button_label(Nk, "Assets Mode"))
-            {
-                PlayAssetsMode(EditorState, TranState);
-                Result = true;
-                return(Result);
-            }
 
-            if(nk_button_label(Nk, "Play Game"))
+            // NOTE(pvlso): Edits the data of the project selected in the Projects list
+            b32 HasProject = (TitleScreen->SelectedProject >= 0);
+            if(!HasProject) nk_widget_disable_begin(Nk);
+            b32 AssetsPressed = nk_button_label(Nk, "Assets Mode");
+            if(!HasProject) nk_widget_disable_end(Nk);
+
+            if(AssetsPressed && HasProject)
             {
-//                PlayArkham(EditorState, TranState);
+                PlayAssetsMode(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
+                Result = true;
                 return(Result);
             }
 
@@ -218,14 +291,11 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
         nk_layout_row_dynamic(Nk, 40, 1);
         nk_spacer(Nk);
 
-        editor_meta EditorMeta = EditorState->EditorMeta;
-        FormatString(ArrayCount(Buffer), Buffer, "Stored Assets Version: %d.%d.%d.%d",
-                     EditorMeta.KESAVersion[0], EditorMeta.KESAVersion[1],
-                     EditorMeta.KESAVersion[2], EditorMeta.KESAVersion[3]);
-        nk_label(Nk, Buffer, NK_TEXT_ALIGN_LEFT);
-        nk_spacer(Nk);
-
-        UpdateAndRenderProjects(EditorState, TitleScreen, Nk);
+        if(UpdateAndRenderProjects(EditorState, TranState, TitleScreen, Nk))
+        {
+            Result = true;
+            return(Result);
+        }
 
 #if 0        
         if(EditorState->MapStartup.NewMap)

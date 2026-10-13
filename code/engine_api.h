@@ -7,43 +7,204 @@
    $Notice: $
    ======================================================================== */
 
-#include "engine_types.h"
-#include "engine_defines.h"
+/*
+  NOTE(pvlso): The game <-> engine boundary. This is the only header a game includes
+  (with code/ on the include path), the engine includes it too.
 
-struct bitmap_id;
-struct nk_context;
-struct engine_assets;
-struct editor_render_commands;
-struct engine_input;
-struct game_state;
+  Everything in here is compiled into the game (types, math, memory arenas, strings,
+  random, input, nuklear), except the engine_api table: the engine fills it in and
+  passes it to the game every frame, together with the platform_api.
+
+  The game is a library that exports GameUpdateAndRender (see GAME_UPDATE_AND_RENDER).
+  It's a unity build, so exactly one .cpp of the game defines the API globals:
+
+      platform_api Platform;
+      engine_api Engine;
+      debug_table *GlobalDebugTable;
+
+  and sets them from game_memory at the start of GameUpdateAndRender. GlobalDebugTable
+  makes the profiler macros (TIMED_FUNCTION, TIMED_BLOCK, BEGIN_BLOCK/END_BLOCK) work in the
+  game, its blocks show up in the debug window's Profile panel under "GameUpdateAndRender".
+  It also makes LOG / LOG_WARNING / LOG_ERROR (printf style) work, they go to the debug
+  window's Log panel and build/kaban.log.
+  It's 0 in release builds, where the macros compile to nothing. A TIMED_* in
+  GameUpdateAndRender itself has to come after GlobalDebugTable is set.
+*/
+
+#include "engine_platform.h"
+#include "engine_nuklear.h"
+
+#include "engine_math.h"
+#include "engine_random.h"
+#include "engine_memory.h"
+#include "engine_string.h"
 
 #include "engine_render_group.h"
-#include "engine_intrinsics.h"
-#include "engine_math.h"
 
-struct engine_api
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): ASSETS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+struct engine_assets;
+
+struct asset_tag_pair
 {
-    render_group (*BeginRenderGroup)(engine_assets *Assets, editor_render_commands *Commands, u32 GenerationID, b32 RendersInBackground,
-                                     s32 PixelWidth, s32 PixelHeight);
-    void (*EndRenderGroup)(render_group *RenderGroup);
-    void (*Perspective)(render_group *RenderGroup, real32 MetersToPixels, real32 FocalLength, real32 DistanceAboveTarget);
-    void (*Orthographic)(render_group *RenderGroup, real32 MetersToPixels);
-    void (*Clear)(render_group *Group, v4 Color);
-    void (*PushBitmap)(render_group *Group, object_transform *ObjectTransform,
-                       bitmap_id ID, real32 Height, v3 Offset, v4 Color, r32 CAlign);
-
-    u32 (*BeginGeneration)(engine_assets *Assets);
-    void (*EndGeneration)(engine_assets *Assets, u32 GenerationID);
-    asset_best_match_result (*GetBestMatchAssets)(engine_assets *Assets, asset_tag_vector *Vector);
-
-    
+    char *Key;
+    char *Value;
 };
 
-#define ARKHAM_UPDATE_AND_RENDER(name) b32 name(engine_api EngineAPI, engine_assets *Assets, \
-                                                editor_render_commands *Commands, nk_context *Nk, \
-                                                u32 RenderWidth, u32 RenderHeight)
+struct asset_tag_vector
+{
+    u32 PairCount;
+    asset_tag_pair Pairs[24];
+};
 
-typedef ARKHAM_UPDATE_AND_RENDER(arkham_update_and_render);
+struct asset_best_match_result
+{
+    u32 AssetCount;
+
+    union
+    {
+        u32 Index;
+        u32 *Indecies;
+    };
+};
+
+inline void
+TagVectorAdd(asset_tag_vector *Vector, char *Key, char *Value)
+{
+    asset_tag_pair *Pair = Vector->Pairs + Vector->PairCount++;
+    Pair->Key = Key;
+    Pair->Value = Value;
+}
+
+inline void
+ClearTagVector(asset_tag_vector *Vector)
+{
+    Vector->PairCount = 0;
+}
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): ENGINE API
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): Assets can be 0 (no asset file loaded), then bitmaps are skipped and
+// GetBestMatchAssets finds nothing.
+struct engine_api
+{
+    // NOTE(pvlso): Covers the whole render target (Commands->Width x Commands->Height)
+    render_group (*BeginRenderGroup)(engine_assets *Assets, editor_render_commands *Commands);
+    void (*EndRenderGroup)(render_group *Group);
+    void (*Perspective)(render_group *Group, r32 MetersToPixels, r32 FocalLength, r32 DistanceAboveTarget);
+    void (*Orthographic)(render_group *Group, r32 MetersToPixels);
+    void (*Clear)(render_group *Group, v4 Color);
+
+    void (*PushBitmap)(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
+                       v4 Color, r32 CAlign, r32 Angle);
+    void (*PushRect)(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 Dim, v4 Color);
+    void (*PushLine)(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color);
+    void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
+                              s32 Segments, v4 Color);
+
+    // NOTE(pvlso): A tie (AssetCount > 1) is pushed on Arena, nothing is pushed for 0 or 1 matches.
+    // Arena can be 0 when only one match is expected, a tie then returns only its count.
+    asset_best_match_result (*GetBestMatchAssets)(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena);
+};
+
+// NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
+// start empty and grow through Platform.AllocateMemory, the engine frees them when the game stops.
+struct game_memory
+{
+    memory_arena PermanentArena;
+    memory_arena TransientArena;
+
+    // NOTE(pvlso): The game's own state, usually pushed on the permanent arena on the first frame
+    void *GameState;
+
+    // NOTE(pvlso): Refilled before every call, the engine code can be reloaded as well
+    platform_api PlatformAPI;
+    engine_api EngineAPI;
+
+    // NOTE(pvlso): The profiler's event table, 0 in release builds
+    debug_table *DebugTable;
+};
+
+#define GAME_UPDATE_AND_RENDER(name) void name(game_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands, \
+                                               engine_assets *Assets, struct nk_context *Nk)
+typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
+
+#if COMPILER_MSVC
+#define GAME_EXPORT extern "C" __declspec(dllexport)
+#else
+#define GAME_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): GAME SIDE, calls through the engine_api with the same names and defaults the engine uses
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+#if !defined(ENGINE_BUILD)
+extern engine_api Engine;
+
+inline render_group
+BeginRenderGroup(engine_assets *Assets, editor_render_commands *Commands)
+{
+    render_group Result = Engine.BeginRenderGroup(Assets, Commands);
+    return(Result);
+}
+
+inline void EndRenderGroup(render_group *Group) {Engine.EndRenderGroup(Group);}
+
+inline void
+Perspective(render_group *Group, r32 MetersToPixels, r32 FocalLength, r32 DistanceAboveTarget)
+{
+    Engine.Perspective(Group, MetersToPixels, FocalLength, DistanceAboveTarget);
+}
+
+inline void Orthographic(render_group *Group, r32 MetersToPixels) {Engine.Orthographic(Group, MetersToPixels);}
+inline void Clear(render_group *Group, v4 Color) {Engine.Clear(Group, Color);}
+
+inline void
+PushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
+           v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f, r32 Angle = 0.0f)
+{
+    Engine.PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle);
+}
+
+inline void
+PushRect(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 Dim, v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushRect(Group, ObjectTransform, Offset, Dim, Color);
+}
+
+inline void
+PushLine(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushLine(Group, ObjectTransform, P0, P1, Color);
+}
+
+inline void
+PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius, s32 Segments,
+                  v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushCircleOutline(Group, ObjectTransform, Center, Radius, Segments, Color);
+}
+
+inline asset_best_match_result
+GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
+{
+    asset_best_match_result Result = Engine.GetBestMatchAssets(Assets, Vector, Arena);
+    return(Result);
+}
+#endif
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #define ENGINE_API_H
 #endif
