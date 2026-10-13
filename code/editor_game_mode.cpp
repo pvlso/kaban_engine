@@ -468,7 +468,14 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
         {
             Game->Memory.PlatformAPI = Platform;
             Game->Memory.EngineAPI = GetEngineAPI();
+#if EDITOR_INTERNAL
+            Game->Memory.DebugTable = GlobalDebugTable;
+#endif
+
+            // NOTE(pvlso): The game's own TIMED_* blocks nest under this one
+            BEGIN_BLOCK("GameUpdateAndRender");
             Game->UpdateAndRender(&Game->Memory, Input, RenderCommands, Game->Assets, Nk);
+            END_BLOCK();
         }
     }
 

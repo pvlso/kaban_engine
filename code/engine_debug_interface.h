@@ -22,6 +22,11 @@ struct debug_id
     void *Value[2];
 };
 
+// NOTE(pvlso): Declared in every build, so a game can define it without an #if. Only internal
+// builds record events into it (games get it through game_memory, see engine_api.h).
+struct debug_table;
+extern debug_table *GlobalDebugTable;
+
 #if EDITOR_INTERNAL
 enum debug_type
 {
@@ -99,8 +104,6 @@ struct debug_table
     u64 volatile EventArrayIndex_EventIndex;
     debug_event Events[2][16*65536];
 };
-
-extern debug_table *GlobalDebugTable;
 
 #define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
 #define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)

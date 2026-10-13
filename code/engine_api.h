@@ -16,12 +16,17 @@
   passes it to the game every frame, together with the platform_api.
 
   The game is a library that exports GameUpdateAndRender (see GAME_UPDATE_AND_RENDER).
-  It's a unity build, so exactly one .cpp of the game defines the two API globals:
+  It's a unity build, so exactly one .cpp of the game defines the API globals:
 
       platform_api Platform;
       engine_api Engine;
+      debug_table *GlobalDebugTable;
 
-  and sets them from game_memory at the start of GameUpdateAndRender.
+  and sets them from game_memory at the start of GameUpdateAndRender. GlobalDebugTable
+  makes the profiler macros (TIMED_FUNCTION, TIMED_BLOCK, BEGIN_BLOCK/END_BLOCK) work in the
+  game, its blocks show up in the debug window's Profile panel under "GameUpdateAndRender".
+  It's 0 in release builds, where the macros compile to nothing. A TIMED_* in
+  GameUpdateAndRender itself has to come after GlobalDebugTable is set.
 */
 
 #include "engine_platform.h"
@@ -119,6 +124,9 @@ struct game_memory
     // NOTE(pvlso): Refilled before every call, the engine code can be reloaded as well
     platform_api PlatformAPI;
     engine_api EngineAPI;
+
+    // NOTE(pvlso): The profiler's event table, 0 in release builds
+    debug_table *DebugTable;
 };
 
 #define GAME_UPDATE_AND_RENDER(name) void name(game_memory *Memory, engine_input *Input, editor_render_commands *RenderCommands, \
