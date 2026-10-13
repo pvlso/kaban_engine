@@ -307,6 +307,10 @@ internal PLATFORM_OPEN_FILE(PlatformOpenFile)
     char Path[PLATFORM_PATH_COUNT];
     PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
     Result.Platform = PlatformOpenOSFile(Path, Op, &Result.NoErrors);
+    if(!Result.NoErrors)
+    {
+        LOG_WARNING("Could not open %s", Path);
+    }
 
     return(Result);
 }
@@ -425,12 +429,18 @@ internal PLATFORM_SET_DATA_PROJECT(PlatformSetDataProject)
             snprintf(RootPath, sizeof(RootPath), "%s/", ProjectPath);
             PlatformSetDataRoot(RootPath);
             Result = true;
+            LOG("Data root: projects/%s/data", ProjectName);
+        }
+        else
+        {
+            LOG_ERROR("No project directory %s", ProjectPath);
         }
     }
     else
     {
         PlatformSetDataRoot(GlobalPaths.ROOTPath);
         Result = true;
+        LOG("Data root: the engine's data");
     }
 
     return(Result);
@@ -455,6 +465,7 @@ internal PLATFORM_BUILD_PROJECT(PlatformBuildProject)
 
     // NOTE(pvlso): The build scripts live in the root directory
     platform_process Result = OSExecuteCommand(GlobalPaths.ROOTPath, CommandLine, LogPath);
+    LOG("%s (output in projects/%s/build/build.log)", CommandLine, ProjectName);
     return(Result);
 }
 
@@ -576,7 +587,11 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
 
     b32 NoErrors = false;
     os_file *File = PlatformOpenOSFile(Path, PlatformFileOp_Read, &NoErrors);
-    if(NoErrors)
+    if(!NoErrors)
+    {
+        LOG_WARNING("Could not open %s", Path);
+    }
+    else
     {
         u64 FileSize = OSGetFileSize(File);
         if(FileSize != (u64)-1)
@@ -597,7 +612,7 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
                 }
                 else
                 {
-                    // TODO: Logging
+                    LOG_ERROR("Could not read %s", Path);
                     if(!Arena)
                     {
                         PlatformFreeFileMemory(Result.Contents);
@@ -628,6 +643,11 @@ internal PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFile)
         {
             Result = Size;
         }
+    }
+
+    if(Result != Size)
+    {
+        LOG_ERROR("Could not write %s", Path);
     }
 
     PlatformCloseOSFile(File);
@@ -833,6 +853,10 @@ PLATFORM_LOAD_CODE(PlatformLoadCode)
     {
         Result.NoErrors = PlatformLoadCodeFile(Code, ModuleName, Type);
         Result.Platform = Code;
+        if(!Result.NoErrors)
+        {
+            LOG_ERROR("Could not load %s", Code->SourceLibraryName);
+        }
 
         platform_code *Sentinel = &GlobalLoadedCodeSentinel;
         if(!Sentinel->NextLoaded)

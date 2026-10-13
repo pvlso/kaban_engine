@@ -112,6 +112,8 @@ ParseGameDataKEAVersion(char *Name, u32 *Version)
 internal engine_assets *
 LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *FileName, umm FileNameCount)
 {
+    TIMED_FUNCTION();
+
     engine_assets *Result = 0;
     FileName[0] = 0;
 
@@ -309,6 +311,9 @@ ClearGameMemory(editor_mode_game *Game)
 internal void
 FreeGameAssets(engine_assets *Assets)
 {
+    TIMED_FUNCTION();
+
+    u32 TextureCount = 0;
     if(Assets->Assets)
     {
         for(u32 AssetIndex = 0; AssetIndex < Assets->AssetCount; ++AssetIndex)
@@ -321,11 +326,13 @@ FreeGameAssets(engine_assets *Assets)
                 Op.IsAllocate = false;
                 Op.Deallocate.Handle = Asset->Header->Bitmap.TextureHandle;
                 AddOp(Assets->TextureOpQueue, &Op);
+                ++TextureCount;
             }
         }
     }
 
     Platform.CloseFile(&Assets->File.Handle);
+    LOG("Freed %u texture(s) of the game's assets", TextureCount);
 }
 
 // NOTE(pvlso): Stop takes two frames. The first one lets the in-flight asset loads finish
@@ -339,8 +346,14 @@ StopGame(editor_state *EditorState, transient_state *TranState)
 
     // NOTE(pvlso): A build left running would race the next Run's build for the same files.
     // Stopping mid build is rare, so just wait for it.
+    b32 Waited = false;
     while(Game->Building && Platform.GetProcessState(&Game->BuildProcess).IsRunning)
     {
+        if(!Waited)
+        {
+            LOG_WARNING("Stop: waiting for the running build of %s", Game->ProjectName);
+            Waited = true;
+        }
         Platform.Sleep(10);
     }
 
@@ -451,6 +464,8 @@ internal b32
 UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engine_input *Input,
                     editor_render_commands *RenderCommands)
 {
+    TIMED_FUNCTION();
+
     b32 Result = false;
 
     editor_mode_game *Game = EditorState->Game;

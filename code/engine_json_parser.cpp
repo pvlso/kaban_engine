@@ -438,6 +438,8 @@ PrintTokens(json_parser *Parser)
 internal json_object *
 ParseJson(char *FileName, memory_arena *Arena, platform_file_type Type = PlatformFileType_JSON)
 {
+    TIMED_FUNCTION();
+
     json_object *Head = 0;
 
     json_parser JsonParser = {};
@@ -460,6 +462,7 @@ ParseJson(char *FileName, memory_arena *Arena, platform_file_type Type = Platfor
         JsonParseObject(&JsonParser, Result);
 
         Head = &Result->Object;
+        LOG("Parsed %s: %u tokens", FileName, JsonParser.TokenCount);
     }
 
     Platform.FreeFileMemory(ReadResult.Contents);

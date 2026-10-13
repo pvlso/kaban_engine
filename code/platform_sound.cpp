@@ -83,6 +83,11 @@ PlatformInitSound(platform_sound_output *SoundOutput, s32 SamplesPerSecond, u32 
     if(!SoundOutput->IsValid)
     {
         fprintf(stderr, "PLATFORM: Failed to start audio device, running without sound.\n");
+        LOG_ERROR("Failed to start the audio device, running without sound");
+    }
+    else
+    {
+        LOG("Audio device started: %d Hz, %u samples latency", SamplesPerSecond, LatencySampleCount);
     }
 }
 

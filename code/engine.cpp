@@ -52,11 +52,16 @@ EndTaskWithMemory(task_with_memory *Task)
 internal void
 SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode EditorMode)
 {
+    TIMED_FUNCTION();
+
     b32 NeedToWait = false;
     Platform.CompleteAllWork(TranState->LowPriorityQueue);
 
     Clear(&EditorState->ModeArena);
     EditorState->EditorMode = EditorMode;
+
+    char *ModeNames[] = {"None", "Title Screen", "Assets Mode", "Map Editor", "Game"};
+    LOG("Editor mode: %s", (EditorMode < ArrayCount(ModeNames)) ? ModeNames[EditorMode] : "?");
 }
 
 // NOTE(pvlso): Next to every data/ directory (the engine's, each project's), holds the version
@@ -80,9 +85,14 @@ LoadEditorMetadata(editor_state *EditorState)
             EditorState->EditorMeta.KESAVersion[I] =
                 (u8)KEASVersion->Array.Items[I]->Int;
         }
+
+        u8 *Version = EditorState->EditorMeta.KESAVersion;
+        LOG("%s: stored assets version %d.%d.%d.%d", EDITOR_METADATA_FILE_NAME,
+            Version[0], Version[1], Version[2], Version[3]);
     }
     else
     {
+        LOG_WARNING("No %s, writing a new one (version 0)", EDITOR_METADATA_FILE_NAME);
         char Data[256];
         FormatString(ArrayCount(Data), Data, "{\n    \"keas_version\": [0, 0, 0, 0]\n}");
         Platform.WriteEntireFile(EDITOR_METADATA_FILE_NAME, PlatformFileType_DataRoot, (u8 *)Data, StringLength(Data));
@@ -133,6 +143,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
                  EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
     Platform.WriteDataToFile(&EditorMetaHandle, 0, StringLength(Data), Data);
     Platform.CloseFile(&EditorMetaHandle);
+    LOG("Stored assets version is now %u", Result);
 
     return(Result);
 }
@@ -174,6 +185,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         LoadEditorMetadata(EditorState);
         
         EditorState->UIEnable = true;
+        LOG("Editor state initialized");
     }
 
     // NOTE(casey): Transient initialization
@@ -222,11 +234,14 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
     if(Input->AltDown && WasPressed(Input->Controllers[0].ToggleMute))
     {
         EditorState->AudioState.Muted = !EditorState->AudioState.Muted;
+        LOG("Audio %s", EditorState->AudioState.Muted ? "muted" : "unmuted");
     }
 
     u32 RenderWidth = RenderCommands->Width;
     u32 RenderHeight = RenderCommands->Height;
+    BEGIN_BLOCK("BeginUI");
     BeginUI(&EditorState->UIState, RenderCommands, 0, 0, RenderWidth, RenderHeight, nk, UIScale);
+    END_BLOCK();
 
     if(nk_begin(nk, "UI Window", nk_rect(0, 0, (f32)1920, (f32)1080),
                 (!EditorState->UIEnable) ? NK_WINDOW_NOT_INTERACTIVE|NK_WINDOW_NO_SCROLLBAR : NK_WINDOW_REMOVE_ROM|NK_WINDOW_NO_SCROLLBAR))
@@ -265,7 +280,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
         } while(Rerun);
     }
     nk_end(nk);
+
+    BEGIN_BLOCK("EndUI");
     EndUI(EditorState, &EditorState->UIState, Input);
+    END_BLOCK();
     
     CheckArena(&EditorState->ModeArena);
     CheckArena(&TranState->TranArena);

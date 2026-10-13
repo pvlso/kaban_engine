@@ -20,6 +20,8 @@ RefreshProjectList(editor_state *EditorState, editor_mode_title_screen *TitleScr
         TitleScreen->ProjectNames = PushArray(&EditorState->ModeArena, MaxCount, char *);
         TitleScreen->ProjectCount = Platform.ListProjects(TitleScreen->ProjectNames, MaxCount, &EditorState->ModeArena);
     }
+
+    LOG("Found %u project(s) in projects/", TitleScreen->ProjectCount);
 }
 
 // NOTE(pvlso): The name is used for the directory, the files and the include guard,
@@ -146,6 +148,15 @@ CreateProject(char *Name, char *Status, umm StatusCount)
         }
     }
 
+    if(Result)
+    {
+        LOG("%s", Status);
+    }
+    else
+    {
+        LOG_ERROR("New Project: %s", Status);
+    }
+
     return(Result);
 }
 
@@ -237,6 +248,8 @@ UpdateAndRenderProjects(editor_state *EditorState, transient_state *TranState,
 internal b32
 UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState)
 {
+    TIMED_FUNCTION();
+
     editor_mode_title_screen *TitleScreen = EditorState->TitleScreen;
     b32 Result = false;//CheckForMetaInput(EditorState, TranState, Input);
 

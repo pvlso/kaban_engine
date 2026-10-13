@@ -92,6 +92,8 @@ LoadAssetWorkDirectly(load_asset_work *Work)
 
 internal PLATFORM_WORK_QUEUE_CALLBACK(LoadAssetWork)
 {
+    TIMED_FUNCTION();
+
     load_asset_work *Work = (load_asset_work *)Data;
 
     LoadAssetWorkDirectly(Work);
@@ -728,7 +730,7 @@ internal engine_assets *
 AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena, platform_work_queue *LowPriorityQueue,
                platform_texture_op_queue *TextureOpQueue, umm SizeMax = 0)
 {
-//    TIMED_FUNCTION();
+    TIMED_FUNCTION();
 
     engine_assets *Assets = PushStruct(Arena, engine_assets);
     Assets->TextureOpQueue = TextureOpQueue;
@@ -871,16 +873,21 @@ AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena
                 asset *Asset = Assets->Assets + AssetIndex;
                 Asset->KEA = KEAAssetArray[AssetIndex];
             }
+
+            LOG("Loaded %s: %u assets, %u tags, %u tag maps", AssetFileName, Assets->AssetCount,
+                Assets->TagCount, Assets->TagMapCount);
         }
         else
         {
             // TODO(casey): Eventually, have some way of notifying users of bogus files?
+            LOG_ERROR("%s is broken (reading its tables failed)", AssetFileName);
             InvalidCodePath;
         }
     }
     else
     {
         // TODO(pvlso): Popup faild to open an asset file with message
+        LOG_ERROR("Could not read %s", AssetFileName);
     }
     
     return(Assets);
@@ -955,6 +962,8 @@ KeepMostFrequent(u32 *Array, u32 Count)
 inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena)
 {
+    TIMED_FUNCTION();
+
     asset_best_match_result Result = {};
 
     kea_tag_lookup_entry *Entries[ArrayCount(Vector->Pairs)];
