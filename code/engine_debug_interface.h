@@ -65,6 +65,42 @@ enum debug_type
     DebugType_ArenaOccupancy,
 };
 typedef struct memory_arena *memory_arena_p;
+
+// NOTE(pvlso): The log. Entries go into a ring buffer in the debug_table, so the platform, the
+// engine and games all log into the same one and it survives code reloads. The platform
+// writes them (Log.Write) and appends each one to build/kaban.log, the debug window shows them.
+enum debug_log_level
+{
+    DebugLog_Info,
+    DebugLog_Warning,
+    DebugLog_Error,
+};
+
+#define DEBUG_LOG_ENTRY_COUNT 1024
+struct debug_log_entry
+{
+    r64 Seconds; // since the editor started
+    u32 Level;
+    // NOTE(pvlso): Copies, the strings of a library can go away when it's reloaded
+    char FileName[64];
+    char Function[64];
+    char Message[256];
+};
+
+#define DEBUG_LOG_WRITE(name) void name(u32 Level, char const *File, char const *Function, char const *Format, ...)
+typedef DEBUG_LOG_WRITE(debug_log_write);
+
+struct debug_log
+{
+    debug_log_write *Write;
+
+    // NOTE(pvlso): Held while writing an entry and while the debug window reads them
+    ticket_mutex Mutex;
+    // NOTE(pvlso): Every entry ever written, the newest is at (EntryCount - 1) % DEBUG_LOG_ENTRY_COUNT
+    u64 EntryCount;
+    debug_log_entry Entries[DEBUG_LOG_ENTRY_COUNT];
+};
+
 struct debug_event
 {
     u64 Clock;
@@ -103,7 +139,18 @@ struct debug_table
     // only need 1 bit to store which array we're using...
     u64 volatile EventArrayIndex_EventIndex;
     debug_event Events[2][16*65536];
+
+    debug_log Log;
 };
+
+// NOTE(pvlso): printf style. Does nothing until GlobalDebugTable is set (a game sets it at the
+// start of GameUpdateAndRender).
+#define LOG_(Level, Format, ...)                                        \
+    {if(GlobalDebugTable && GlobalDebugTable->Log.Write)                \
+        {GlobalDebugTable->Log.Write(Level, __FILE__, __FUNCTION__, Format, ## __VA_ARGS__);}}
+#define LOG(Format, ...) LOG_(DebugLog_Info, Format, ## __VA_ARGS__)
+#define LOG_WARNING(Format, ...) LOG_(DebugLog_Warning, Format, ## __VA_ARGS__)
+#define LOG_ERROR(Format, ...) LOG_(DebugLog_Error, Format, ## __VA_ARGS__)
 
 #define UniqueFileCounterString__(A, B, C, D) A "|" #B "|" #C "|" D
 #define UniqueFileCounterString_(A, B, C, D) UniqueFileCounterString__(A, B, C, D)
@@ -172,11 +219,15 @@ struct timed_block
 
 #else
 
-#define TIMED_BLOCK(...) 
-#define TIMED_FUNCTION(...) 
+#define TIMED_BLOCK(...)
+#define TIMED_FUNCTION(...)
 #define BEGIN_BLOCK(...)
 #define END_BLOCK(...)
 #define FRAME_MARKER(...)
+
+#define LOG(...)
+#define LOG_WARNING(...)
+#define LOG_ERROR(...)
 
 #endif
 

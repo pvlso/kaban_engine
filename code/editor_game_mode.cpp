@@ -158,6 +158,7 @@ StartGameBuild(editor_mode_game *Game)
     ++Game->BuildCount;
 
     FormatString(sizeof(Game->Status), Game->Status, "Building %s...", Game->ProjectName);
+    LOG("Building %s", Game->ProjectName);
 }
 
 // NOTE(pvlso): The new library is loaded before the old one goes, so a library that doesn't
@@ -229,21 +230,25 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
             if(!State.StartedSuccessfully)
             {
                 FormatString(sizeof(Game->Status), Game->Status, "Could not start the build of %s", Game->ProjectName);
+                LOG_ERROR("Could not start the build of %s", Game->ProjectName);
             }
             else if(State.ReturnCode != 0)
             {
                 FormatString(sizeof(Game->Status), Game->Status, "%s: build failed%s", Game->ProjectName,
                              Game->UpdateAndRender ? ", the last good build keeps running" : "");
+                LOG_ERROR("%s: build failed (exit code %d)", Game->ProjectName, State.ReturnCode);
             }
             else if(!LoadGameCode(Game))
             {
                 FormatString(sizeof(Game->Status), Game->Status,
                              "%s built, but it doesn't load or has no GameUpdateAndRender export", Game->ProjectName);
+                LOG_ERROR("%s built, but it doesn't load or has no GameUpdateAndRender export", Game->ProjectName);
             }
             else
             {
                 Game->BuildFailed = false;
                 FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
+                LOG("%s %s", Game->ProjectName, (Game->LoadCount > 1) ? "reloaded" : "loaded");
             }
         }
     }
@@ -276,6 +281,16 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
     FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
     Game->Assets = LoadGameAssets(EditorState, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
     EditorState->Game = Game;
+
+    LOG("Run %s", Game->ProjectName);
+    if(Game->Assets)
+    {
+        LOG("%s assets: %s", Game->ProjectName, Game->AssetFileName);
+    }
+    else
+    {
+        LOG_WARNING("%s has no game_data_<version>.kea in its data/keas", Game->ProjectName);
+    }
 
     // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
     StartGameBuild(Game);
@@ -340,6 +355,7 @@ StopGame(editor_state *EditorState, transient_state *TranState)
     }
 
     Game->Stopping = true;
+    LOG("Stop %s", Game->ProjectName);
     FormatString(sizeof(Game->Status), Game->Status, "Stopping %s...", Game->ProjectName);
 }
 
@@ -462,6 +478,7 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
         {
             ClearGameMemory(Game);
             Game->RestartRequested = false;
+            LOG("Restart %s", Game->ProjectName);
         }
 
         if(Game->UpdateAndRender)

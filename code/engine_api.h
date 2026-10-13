@@ -25,6 +25,8 @@
   and sets them from game_memory at the start of GameUpdateAndRender. GlobalDebugTable
   makes the profiler macros (TIMED_FUNCTION, TIMED_BLOCK, BEGIN_BLOCK/END_BLOCK) work in the
   game, its blocks show up in the debug window's Profile panel under "GameUpdateAndRender".
+  It also makes LOG / LOG_WARNING / LOG_ERROR (printf style) work, they go to the debug
+  window's Log panel and build/kaban.log.
   It's 0 in release builds, where the macros compile to nothing. A TIMED_* in
   GameUpdateAndRender itself has to come after GlobalDebugTable is set.
 */

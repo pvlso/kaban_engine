@@ -771,9 +771,10 @@ DrawFrameSlider(debug_state *DebugState, debug_id SliderID, debug_element *RootE
 //   | Pause Oldest Most Recent | Root Threads | | Stop Restart                |
 //   | Frames Clocks                           | | status, builds / reloads    |
 //   | frame slider                            | | build log of a failed build |
-//   | viewing frame info                      | |                             |
-//   | graph (fills the rest)                  | |                             |
-//   | debug memory                            | |                             |
+//   | viewing frame info                      | +-----------------------------+
+//   | graph (fills the rest)                  | +- Log ----------------------+
+//   |                                         | | time file function message  |
+//   | debug memory                            | | (newest first)              |
 //   +-----------------------------------------+ +-----------------------------+
 //
 // Everything is in UI units, the window is UI_BASE_RESOLUTION_X x UI_BASE_RESOLUTION_Y.
@@ -911,6 +912,82 @@ DrawProjectPanel(editor_state *EditorState, nk_context *nk, r32 Height)
 
         nk_group_end(nk);
     }
+}
+
+// NOTE(pvlso): Newest entry first, so a new one never needs a scroll. Hovering a message shows
+// the whole line, the columns cut long ones.
+internal void
+DrawLogPanel(nk_context *nk)
+{
+    if(nk_group_begin(nk, "Log", NK_WINDOW_BORDER|NK_WINDOW_TITLE))
+    {
+        r32 ColumnRatios[] = {0.12f, 0.2f, 0.24f, 0.44f};
+        r32 RowHeight = 20.0f;
+
+        nk_layout_row(nk, NK_DYNAMIC, RowHeight, ArrayCount(ColumnRatios), ColumnRatios);
+        nk_label(nk, "Time", NK_TEXT_LEFT);
+        nk_label(nk, "File", NK_TEXT_LEFT);
+        nk_label(nk, "Function", NK_TEXT_LEFT);
+        nk_label(nk, "Message", NK_TEXT_LEFT);
+
+        debug_log *Log = &GlobalDebugTable->Log;
+        BeginTicketMutex(&Log->Mutex);
+
+        u64 Count = (Log->EntryCount < DEBUG_LOG_ENTRY_COUNT) ? Log->EntryCount : DEBUG_LOG_ENTRY_COUNT;
+        for(u64 Index = 0; Index < Count; ++Index)
+        {
+            debug_log_entry *Entry = Log->Entries + ((Log->EntryCount - 1 - Index) % DEBUG_LOG_ENTRY_COUNT);
+
+            nk_color Color = nk->style.text.color;
+            if(Entry->Level == DebugLog_Warning)
+            {
+                Color = nk_rgb(255, 200, 0);
+            }
+            else if(Entry->Level == DebugLog_Error)
+            {
+                Color = nk_rgb(255, 80, 80);
+            }
+
+            char Time[32];
+            FormatString(sizeof(Time), Time, "%.3fs", Entry->Seconds);
+
+            nk_layout_row(nk, NK_DYNAMIC, RowHeight, ArrayCount(ColumnRatios), ColumnRatios);
+            nk_label_colored(nk, Time, NK_TEXT_LEFT, Color);
+            nk_label_colored(nk, Entry->FileName, NK_TEXT_LEFT, Color);
+            nk_label_colored(nk, Entry->Function, NK_TEXT_LEFT, Color);
+            if(nk_widget_is_hovered(nk))
+            {
+                nk_tooltip(nk, Entry->Message);
+            }
+            nk_label_colored(nk, Entry->Message, NK_TEXT_LEFT, Color);
+        }
+
+        EndTicketMutex(&Log->Mutex);
+
+        nk_group_end(nk);
+    }
+}
+
+// NOTE(pvlso): The right column, the project's controls over the log
+internal void
+DrawProjectAndLog(editor_state *EditorState, nk_context *nk, r32 Height)
+{
+    nk_style_push_vec2(nk, &nk->style.window.group_padding, nk_vec2(0, 0));
+    if(nk_group_begin(nk, "ProjectAndLog", NK_WINDOW_NO_SCROLLBAR))
+    {
+        r32 Spacing = nk->style.window.spacing.y;
+        r32 ProjectHeight = 0.45f*Height;
+        r32 LogHeight = Height - ProjectHeight - 2.0f*Spacing;
+
+        nk_layout_row_dynamic(nk, ProjectHeight, 1);
+        DrawProjectPanel(EditorState, nk, ProjectHeight);
+
+        nk_layout_row_dynamic(nk, LogHeight, 1);
+        DrawLogPanel(nk);
+
+        nk_group_end(nk);
+    }
+    nk_style_pop_vec2(nk);
 }
 
 internal debug_element *
@@ -1529,7 +1606,7 @@ DEBUGEnd(debug_state *DebugState, engine_memory *Memory, engine_input *Input)
 
             // NOTE(pvlso): The running project's dev controls live here, the main window is all game
             nk_layout_row_push(nk, DEBUG_PROJECT_WIDTH);
-            DrawProjectPanel(Memory->EditorState, nk, PanelHeight);
+            DrawProjectAndLog(Memory->EditorState, nk, PanelHeight);
         }
         nk_layout_row_end(nk);
     }

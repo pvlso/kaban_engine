@@ -322,6 +322,7 @@ internal PLATFORM_FILE_ERROR(PlatformFileError)
 #if EDITOR_INTERNAL
     fprintf(stderr, "PLATFORM FILE ERROR: %s\n", Message);
 #endif
+    LOG_ERROR("File error: %s", Message);
 
     Handle->NoErrors = false;
 }

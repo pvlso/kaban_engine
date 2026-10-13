@@ -17,6 +17,7 @@
     win32_os.cpp          - Windows implementation
     platform_services.cpp - the platform_api handed to the engine (files, work queues, code loading)
     platform_sound.cpp    - sound output through miniaudio
+    platform_log.cpp      - the log (internal builds), writes entries and build/kaban.log
     glfw_engine.cpp       - window, input, nuklear, main loop
 */
 
@@ -58,6 +59,7 @@
 #endif
 #include "platform_services.cpp"
 #include "platform_sound.cpp"
+#include "platform_log.cpp"
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): GLOBAL VARIABLES
@@ -752,6 +754,9 @@ main(int ArgCount, char **Args)
 
     GlobalPerfCountFrequency = glfwGetTimerFrequency();
 
+    PlatformInitLog();
+    LOG("Editor started");
+
     State->Monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *Mode = glfwGetVideoMode(State->Monitor);
 
@@ -1105,6 +1110,14 @@ main(int ArgCount, char **Args)
 
             EngineMemory.ExecutableReloaded = true;
             DEBUGSetEventRecording(Engine.IsValid);
+            if(Engine.IsValid)
+            {
+                LOG("Engine code reloaded");
+            }
+            else
+            {
+                LOG_ERROR("Engine code didn't reload");
+            }
         }
 
         END_BLOCK();
@@ -1209,6 +1222,9 @@ main(int ArgCount, char **Args)
 
     PlatformUnloadEngineCode(&Engine);
     PlatformUnloadAllCode();
+
+    LOG("Editor quit");
+    PlatformShutdownLog();
 
 #if EDITOR_INTERNAL
     if(State->DebugWindow.Handle)
