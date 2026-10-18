@@ -643,6 +643,7 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_A:      GLFWProcessKeyboardMessage(&KeyboardController->MoveLeft, IsDown); break;
             case GLFW_KEY_S:      GLFWProcessKeyboardMessage(&KeyboardController->MoveDown, IsDown); break;
             case GLFW_KEY_D:      GLFWProcessKeyboardMessage(&KeyboardController->MoveRight, IsDown); break;
+            case GLFW_KEY_Q:      GLFWProcessKeyboardMessage(&KeyboardController->LeftShoulder, IsDown); break;
             case GLFW_KEY_E:      GLFWProcessKeyboardMessage(&KeyboardController->RightShoulder, IsDown); break;
             case GLFW_KEY_F:      GLFWProcessKeyboardMessage(&KeyboardController->Fill, IsDown); break;
             case GLFW_KEY_U:      GLFWProcessKeyboardMessage(&KeyboardController->Undo, IsDown); break;
