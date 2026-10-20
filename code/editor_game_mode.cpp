@@ -67,6 +67,10 @@ GetEngineAPI(void)
     Result.PushLine = PushLine;
     Result.PushCircleOutline = PushCircleOutline;
 
+    Result.GetFont = GameGetFont;
+    Result.PushText = GamePushText;
+    Result.GetTextDim = GameGetTextDim;
+
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
 
     return(Result);
@@ -380,6 +384,7 @@ FinishStopGame(editor_state *EditorState, transient_state *TranState)
     {
         FreeGameAssets(Game->Assets);
     }
+    FreeGameFonts(&Game->Fonts, TranState->TextureOpQueue);
 
     PlayTitleScreen(EditorState, TranState);
 }
@@ -504,10 +509,16 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
             Game->Memory.DebugTable = GlobalDebugTable;
 #endif
 
+            // NOTE(pvlso): The engine_api font calls work on the running game's fonts
+            Game->Fonts.TextureOpQueue = TranState->TextureOpQueue;
+            GlobalGameFonts = &Game->Fonts;
+
             // NOTE(pvlso): The game's own TIMED_* blocks nest under this one
             BEGIN_BLOCK("GameUpdateAndRender");
             Game->UpdateAndRender(&Game->Memory, Input, RenderCommands, Game->Assets, Nk);
             END_BLOCK();
+
+            GlobalGameFonts = 0;
         }
     }
 

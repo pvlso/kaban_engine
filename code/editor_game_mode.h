@@ -20,6 +20,8 @@ struct editor_mode_game
 
     game_memory Memory;
     engine_assets *Assets;
+    // NOTE(pvlso): The fonts the game asked for (GetFont), freed when it stops
+    game_fonts Fonts;
     // NOTE(pvlso): The KEA in the project's data/keas that Assets was loaded from, empty when there's none
     char AssetFileName[256];
 

@@ -88,6 +88,34 @@ ClearTagVector(asset_tag_vector *Vector)
 
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): FONTS
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): A .ttf from the project's data/ttfs. The engine owns it, the pointer stays good until the game stops
+// (Restart and hot reloads keep it).
+struct engine_font;
+
+enum text_align
+{
+    TextAlign_Left,
+    TextAlign_Center,
+    TextAlign_Right,
+};
+
+// NOTE(pvlso): In meters, for the text drawn at that Height with that render group's camera
+struct text_dim
+{
+    r32 Width;       // NOTE(pvlso): the widest line
+    r32 Ascent;      // NOTE(pvlso): above the baseline
+    r32 Descent;     // NOTE(pvlso): below the baseline, negative
+    r32 LineAdvance; // NOTE(pvlso): baseline to baseline
+    u32 LineCount;
+};
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// ...........................................................................................................................................................
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+// -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): ENGINE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): Assets can be 0 (no asset file loaded), then bitmaps are skipped and
@@ -107,6 +135,15 @@ struct engine_api
     void (*PushLine)(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color);
     void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
                               s32 Segments, v4 Color);
+
+    // NOTE(pvlso): Loads data/ttfs/<FileName> the first time, 0 when it's missing or not a font (logged once).
+    engine_font *(*GetFont)(char *FileName);
+    // NOTE(pvlso): P is where the first line's baseline starts (Align moves the line around it), Height is the
+    // font's height from ascent to descent in meters, rounded to whole screen pixels. '\n' starts a new line
+    // below. Text is UTF-8, anything outside ASCII and Latin-1 draws as '?'. A Font of 0 draws nothing.
+    void (*PushText)(render_group *Group, object_transform *ObjectTransform, engine_font *Font, char *Text, v3 P,
+                     r32 Height, v4 Color, text_align Align);
+    text_dim (*GetTextDim)(render_group *Group, engine_font *Font, char *Text, r32 Height);
 
     // NOTE(pvlso): A tie (AssetCount > 1) is pushed on Arena, nothing is pushed for 0 or 1 matches.
     // Arena can be 0 when only one match is expected, a tie then returns only its count.
@@ -199,6 +236,22 @@ inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
     asset_best_match_result Result = Engine.GetBestMatchAssets(Assets, Vector, Arena);
+    return(Result);
+}
+
+inline engine_font *GetFont(char *FileName) {return(Engine.GetFont(FileName));}
+
+inline void
+PushText(render_group *Group, object_transform *ObjectTransform, engine_font *Font, char *Text, v3 P, r32 Height,
+         v4 Color = V4(1, 1, 1, 1), text_align Align = TextAlign_Left)
+{
+    Engine.PushText(Group, ObjectTransform, Font, Text, P, Height, Color, Align);
+}
+
+inline text_dim
+GetTextDim(render_group *Group, engine_font *Font, char *Text, r32 Height)
+{
+    text_dim Result = Engine.GetTextDim(Group, Font, Text, Height);
     return(Result);
 }
 #endif

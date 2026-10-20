@@ -53,11 +53,17 @@ PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Typ
     
     void *Result = 0;
 
-    Size += sizeof(render_group_entry_header);
-    
+    // NOTE(pvlso): Entries hold v4s, which are __m128 and so 16 byte aligned: the compiler may store
+    // them with aligned SSE moves. Padding goes before the header so the entry right after it starts on
+    // a 16 byte address (the clip rects in the same buffer leave it anywhere).
+    umm DataAt = (umm)(Commands->PushBufferBase + Commands->PushBufferSize + sizeof(render_group_entry_header));
+    u32 Padding = (u32)(Align16(DataAt) - DataAt);
+    Size += Padding + sizeof(render_group_entry_header);
+
     if((Commands->PushBufferSize + Size) < (Commands->SortEntryAt - sizeof(sort_entry)))
     {
-        render_group_entry_header *Header = (render_group_entry_header *)(Commands->PushBufferBase + Commands->PushBufferSize);
+        u32 HeaderAt = Commands->PushBufferSize + Padding;
+        render_group_entry_header *Header = (render_group_entry_header *)(Commands->PushBufferBase + HeaderAt);
         Header->Type = (u16)Type;
         Header->ClipRectIndex = SafeTruncateToU16(Group->CurrentClipRectIndex);
         Result = (uint8 *)Header + sizeof(*Header);
@@ -65,7 +71,7 @@ PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Typ
         Commands->SortEntryAt -= sizeof(sort_entry);
         sort_entry *Entry = (sort_entry *)(Commands->PushBufferBase + Commands->SortEntryAt);
         Entry->SortKey = SortKey;
-        Entry->Index = Commands->PushBufferSize;
+        Entry->Index = HeaderAt;
 
         Commands->PushBufferSize += Size;
         ++Commands->PushBufferElementCount;
@@ -125,6 +131,15 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
             Entry->P = Dim.Basis.P;
             Entry->Color = Color;
             Entry->Size = Size;
+
+            // NOTE(pvlso): The whole bitmap, one texel in from the edges (moved here from the OpenGL code)
+            if(Bitmap->Width && Bitmap->Height)
+            {
+                r32 OneTexelU = 1.0f / (r32)Bitmap->Width;
+                r32 OneTexelV = 1.0f / (r32)Bitmap->Height;
+                Entry->MinUV = V2(OneTexelU, OneTexelV);
+                Entry->MaxUV = V2(1.0f - OneTexelU, 1.0f - OneTexelV);
+            }
 
             Entry->RotateAngle = Angle;
         }

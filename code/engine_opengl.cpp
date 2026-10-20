@@ -432,13 +432,7 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
 
                         glBindTexture(GL_TEXTURE_2D, (GLuint)U32FromPointer(Entry->Bitmap->TextureHandle));
 
-                        r32 OneTexelU = 1.0f / (r32)Entry->Bitmap->Width;
-                        r32 OneTexelV = 1.0f / (r32)Entry->Bitmap->Height;
-
-                        v2 MinUV = V2(OneTexelU, OneTexelV);
-                        v2 MaxUV = V2(1.0f - OneTexelU, 1.0f - OneTexelV);
-
-                        OpenGLQuad(P0, P1, P2, P3, Entry->Color, MinUV, MaxUV);                        
+                        OpenGLQuad(P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV);
                     }
                 } break;
 

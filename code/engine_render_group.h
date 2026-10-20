@@ -73,6 +73,9 @@ struct render_entry_bitmap
     v4 Color;
     v2 P;
     v2 Size;
+    // NOTE(pvlso): The part of the texture drawn, a font's glyph in its atlas or a whole bitmap
+    v2 MinUV;
+    v2 MaxUV;
 
     f32 RotateAngle;
 };

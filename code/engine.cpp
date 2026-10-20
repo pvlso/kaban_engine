@@ -11,6 +11,7 @@
 #include "engine_json_parser.cpp"
 #include "engine_render_group.cpp"
 #include "engine_asset.cpp"
+#include "engine_font.cpp"
 #include "editor_audio.cpp"
 #include "engine_ui.cpp"
 #include "engine_math.cpp"
