@@ -140,6 +140,24 @@ struct camera_transform
     r32 DistanceAboveTarget;
 };
 
+// NOTE(pvlso): The clip rects of the pixel world use these as their render target. Upright things (an
+// object_transform with Upright) pushed in the pixel world aren't drawn into its image: they go on the screen over
+// it, scaled by the same whole number but placed to the screen pixel, so moving characters don't step a whole image
+// pixel at a time.
+#define RENDER_TARGET_PIXEL_WORLD 0xFFFF
+#define RENDER_TARGET_PIXEL_WORLD_UPRIGHT 0xFFFE
+
+// NOTE(pvlso): What BeginPixelWorld made
+struct pixel_world
+{
+    s32 Width;   // NOTE(pvlso): the image, in its own pixels, one more on each side than the screen shows
+    s32 Height;
+    s32 Scale;   // NOTE(pvlso): screen pixels per image pixel
+    // NOTE(pvlso): Render command pixels per image pixel, Scale in the commands' resolution. A camera with
+    // MetersToPixels*RenderPixelsPerPixel draws after EndPixelWorld exactly over the world.
+    r32 RenderPixelsPerPixel;
+};
+
 struct render_group
 {
     struct engine_assets *Assets; 
@@ -158,6 +176,14 @@ struct render_group
     
     u32 GenerationID;
     editor_render_commands *Commands;
+
+    // NOTE(pvlso): The screen's, kept while the pixel world is drawn
+    b32 InPixelWorld;
+    rectangle2 ScreenScreenArea;
+    v2 ScreenMonitorHalfDimInMeters;
+    camera_transform ScreenCameraTransform;
+    u32 ScreenClipRectIndex;
+    u32 UprightClipRectIndex;
 };
 
 struct entity_basis_p_result

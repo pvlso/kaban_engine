@@ -61,6 +61,9 @@ GetEngineAPI(void)
     Result.Perspective = Perspective;
     Result.Orthographic = Orthographic;
     Result.Clear = Clear;
+    Result.BeginPixelWorld = BeginPixelWorld;
+    Result.EndPixelWorld = EndPixelWorld;
+    Result.SetPixelWorldScroll = SetPixelWorldScroll;
 
     Result.PushBitmap = GamePushBitmap;
     Result.PushRect = PushRect;

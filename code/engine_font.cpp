@@ -416,7 +416,7 @@ GamePushText(render_group *Group, object_transform *ObjectTransform, engine_font
             stbtt_packedchar *Glyph = Size->Glyphs + FontGlyphIndex(CodePoint);
             if((Glyph->x1 > Glyph->x0) && (Glyph->y1 > Glyph->y0))
             {
-                render_entry_bitmap *Entry = PushRenderElement(Group, render_entry_bitmap, Basis.SortKey);
+                render_entry_bitmap *Entry = PushTransformedElement(Group, ObjectTransform, render_entry_bitmap, Basis.SortKey);
                 if(Entry)
                 {
                     Entry->Bitmap = &Size->Atlas;

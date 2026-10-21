@@ -129,6 +129,15 @@ struct engine_api
     void (*Orthographic)(render_group *Group, r32 MetersToPixels);
     void (*Clear)(render_group *Group, v4 Color);
 
+    // NOTE(pvlso): Pixel art: what is pushed between these goes into an image of whole pixels (at least MinWidth x
+    // MinHeight) scaled up on screen by a whole number, under everything pushed outside them. Set the camera
+    // after BeginPixelWorld, in the image's pixels; EndPixelWorld puts the screen's camera back.
+    pixel_world (*BeginPixelWorld)(render_group *Group, s32 MinWidth, s32 MinHeight);
+    void (*EndPixelWorld)(render_group *Group);
+    // NOTE(pvlso): For smooth scrolling: the camera's position past whole image pixels (0 to 1), when the world
+    // is drawn with the camera rounded down to them
+    void (*SetPixelWorldScroll)(render_group *Group, v2 Scroll);
+
     void (*PushBitmap)(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
                        v4 Color, r32 CAlign, r32 Angle);
     void (*PushRect)(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 Dim, v4 Color);
@@ -205,6 +214,16 @@ Perspective(render_group *Group, r32 MetersToPixels, r32 FocalLength, r32 Distan
 
 inline void Orthographic(render_group *Group, r32 MetersToPixels) {Engine.Orthographic(Group, MetersToPixels);}
 inline void Clear(render_group *Group, v4 Color) {Engine.Clear(Group, Color);}
+
+inline pixel_world
+BeginPixelWorld(render_group *Group, s32 MinWidth, s32 MinHeight)
+{
+    pixel_world Result = Engine.BeginPixelWorld(Group, MinWidth, MinHeight);
+    return(Result);
+}
+
+inline void EndPixelWorld(render_group *Group) {Engine.EndPixelWorld(Group);}
+inline void SetPixelWorldScroll(render_group *Group, v2 Scroll) {Engine.SetPixelWorldScroll(Group, Scroll);}
 
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,

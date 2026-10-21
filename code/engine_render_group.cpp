@@ -46,8 +46,12 @@ GetRenderEntityBasisP(camera_transform CameraTransform, object_transform *Object
 }
 
 #define PushRenderElement(Group, type, SortKey) (type *)PushRenderElement_(Group, sizeof(type), RenderGroupEntryType_##type, SortKey)
+// NOTE(pvlso): For entries with a transform: upright ones in the pixel world go to its upright pass
+#define PushTransformedElement(Group, ObjectTransform, type, SortKey) \
+    (type *)PushRenderElement_(Group, sizeof(type), RenderGroupEntryType_##type, SortKey, ObjectTransform)
 inline void *
-PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Type, r32 SortKey)
+PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Type, r32 SortKey,
+                   object_transform *ObjectTransform = 0)
 {
     editor_render_commands *Commands = Group->Commands;
     
@@ -65,7 +69,12 @@ PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Typ
         u32 HeaderAt = Commands->PushBufferSize + Padding;
         render_group_entry_header *Header = (render_group_entry_header *)(Commands->PushBufferBase + HeaderAt);
         Header->Type = (u16)Type;
-        Header->ClipRectIndex = SafeTruncateToU16(Group->CurrentClipRectIndex);
+        u32 ClipRectIndex = Group->CurrentClipRectIndex;
+        if(Group->InPixelWorld && ObjectTransform && ObjectTransform->Upright)
+        {
+            ClipRectIndex = Group->UprightClipRectIndex;
+        }
+        Header->ClipRectIndex = SafeTruncateToU16(ClipRectIndex);
         Result = (uint8 *)Header + sizeof(*Header);
 
         Commands->SortEntryAt -= sizeof(sort_entry);
@@ -124,7 +133,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     {
         v2 Size = Dim.Basis.Scale*Dim.Size;
         rectangle2 ScreenArea = RectMinDim(Dim.Basis.P, Size);
-        render_entry_bitmap *Entry = PushRenderElement(Group, render_entry_bitmap, Dim.Basis.SortKey);
+        render_entry_bitmap *Entry = PushTransformedElement(Group, ObjectTransform, render_entry_bitmap, Dim.Basis.SortKey);
         if(Entry)
         {
             Entry->Bitmap = Bitmap;
@@ -181,7 +190,7 @@ PushLine(render_group *Group, object_transform *ObjectTransform, v3 Point0, v3 P
     if(Basis0.Valid && Basis1.Valid)
     {
         rectangle2 ScreenArea = RectMinMax(Basis0.P, Basis1.P);
-        render_entry_line *Line = PushRenderElement(Group, render_entry_line, Basis0.SortKey);
+        render_entry_line *Line = PushTransformedElement(Group, ObjectTransform, render_entry_line, Basis0.SortKey);
         if(Line)
         {
             Line->P0 = Basis0.P;
@@ -202,7 +211,7 @@ PushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B,
     entity_basis_p_result Basis2 = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, P2);
     if(Basis0.Valid && Basis1.Valid)
     {
-        render_entry_triangle *Triangle = PushRenderElement(Group, render_entry_triangle, Basis0.SortKey);
+        render_entry_triangle *Triangle = PushTransformedElement(Group, ObjectTransform, render_entry_triangle, Basis0.SortKey);
         if(Triangle)
         {
             Triangle->A = Basis0.P;
@@ -227,7 +236,7 @@ PushRect(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 D
     if(Basis.Valid)
     {
         v2 ScaledDim = Basis.Scale*Dim;
-        render_entry_rectangle *Rect = PushRenderElement(Group, render_entry_rectangle, Basis.SortKey);
+        render_entry_rectangle *Rect = PushTransformedElement(Group, ObjectTransform, render_entry_rectangle, Basis.SortKey);
         if(Rect)
         {
             Rect->P = Basis.P;
@@ -244,7 +253,7 @@ PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Cen
     if(Basis.Valid)
     {
         f32 ScaledRadius = Basis.Scale*Radius;
-        render_entry_circle_outline *Circle = PushRenderElement(Group, render_entry_circle_outline, Basis.SortKey);
+        render_entry_circle_outline *Circle = PushTransformedElement(Group, ObjectTransform, render_entry_circle_outline, Basis.SortKey);
         if(Circle)
         {
             Circle->Center = Basis.P;
@@ -317,7 +326,8 @@ PushClipRect(render_group *Group, u32 X, u32 Y, u32 W, u32 H, u32 RenderTargetIn
         Rect->Rect.Max.y = Y + H;
 
         Rect->RenderTargetIndex = RenderTargetIndex;
-        if(Group->Commands->MaxRenderTargetIndex < RenderTargetIndex)
+        if((RenderTargetIndex < RENDER_TARGET_PIXEL_WORLD_UPRIGHT) &&
+           (Group->Commands->MaxRenderTargetIndex < RenderTargetIndex))
         {
             Group->Commands->MaxRenderTargetIndex = RenderTargetIndex;
         }
@@ -534,6 +544,68 @@ BeginRenderGroup(engine_assets *Assets, editor_render_commands *Commands, u32 Ge
     Result.CurrentClipRectIndex = PushClipRect(&Result, 0, 0, PixelWidth, PixelHeight, 0);
     
     return(Result);
+}
+
+// NOTE(pvlso): Everything pushed until EndPixelWorld goes into a small image of whole pixels, at least MinWidth x
+// MinHeight, that is drawn under everything else scaled up by the biggest whole number that fits the screen. The
+// image grows past the minimum to fill screens of other shapes (always an even size, so its centre is on a pixel)
+// and has one more pixel on each side for SetPixelWorldScroll. The group's screen area becomes the image, so set
+// the camera (Orthographic) after this.
+internal pixel_world
+BeginPixelWorld(render_group *Group, s32 MinWidth, s32 MinHeight)
+{
+    pixel_world Result = {};
+
+    editor_render_commands *Commands = Group->Commands;
+    s32 ScreenWidth = Commands->ScreenWidth ? Commands->ScreenWidth : Commands->Width;
+    s32 ScreenHeight = Commands->ScreenHeight ? Commands->ScreenHeight : Commands->Height;
+    MinWidth = Maximum(MinWidth, 1);
+    MinHeight = Maximum(MinHeight, 1);
+
+    Result.Scale = Maximum(1, Minimum(ScreenWidth / MinWidth, ScreenHeight / MinHeight));
+    Result.Width = (ScreenWidth + Result.Scale - 1) / Result.Scale;
+    Result.Height = (ScreenHeight + Result.Scale - 1) / Result.Scale;
+    Result.Width += (Result.Width & 1) + 2;
+    Result.Height += (Result.Height & 1) + 2;
+    Result.RenderPixelsPerPixel = (r32)Result.Scale*((r32)Commands->Width / (r32)ScreenWidth);
+
+    Commands->PixelWorld.Width = Result.Width;
+    Commands->PixelWorld.Height = Result.Height;
+    Commands->PixelWorld.Scale = Result.Scale;
+
+    Assert(!Group->InPixelWorld);
+    Group->InPixelWorld = true;
+    Group->ScreenScreenArea = Group->ScreenArea;
+    Group->ScreenMonitorHalfDimInMeters = Group->MonitorHalfDimInMeters;
+    Group->ScreenCameraTransform = Group->CameraTransform;
+    Group->ScreenClipRectIndex = Group->CurrentClipRectIndex;
+
+    Group->ScreenArea = RectMinDim(V2(0, 0), V2((r32)Result.Width, (r32)Result.Height));
+    Group->CurrentClipRectIndex = PushClipRect(Group, 0, 0, Result.Width, Result.Height, RENDER_TARGET_PIXEL_WORLD);
+    Group->UprightClipRectIndex = PushClipRect(Group, 0, 0, Result.Width, Result.Height, RENDER_TARGET_PIXEL_WORLD_UPRIGHT);
+
+    return(Result);
+}
+
+// NOTE(pvlso): Smooth scrolling. Draw the world with the camera on whole image pixels (rounded down) and pass what
+// was rounded off, in image pixels: the image is moved by that many screen pixels, so the world scrolls a screen
+// pixel at a time while it stays on whole pixels inside the image.
+internal void
+SetPixelWorldScroll(render_group *Group, v2 Scroll)
+{
+    Group->Commands->PixelWorld.Scroll = V2(Clamp01(Scroll.x), Clamp01(Scroll.y));
+}
+
+// NOTE(pvlso): Back to the screen, with the camera the group had before BeginPixelWorld
+internal void
+EndPixelWorld(render_group *Group)
+{
+    Assert(Group->InPixelWorld);
+    Group->InPixelWorld = false;
+    Group->ScreenArea = Group->ScreenScreenArea;
+    Group->MonitorHalfDimInMeters = Group->ScreenMonitorHalfDimInMeters;
+    Group->CameraTransform = Group->ScreenCameraTransform;
+    Group->CurrentClipRectIndex = Group->ScreenClipRectIndex;
 }
 
 inline void

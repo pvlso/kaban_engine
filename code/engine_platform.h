@@ -37,8 +37,18 @@ extern "C" {
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): RENDERING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): The pixel world's image (BeginPixelWorld), Width 0 when there is none this frame
+typedef struct render_pixel_world
+{
+    u32 Width;
+    u32 Height;
+    u32 Scale; // NOTE(pvlso): screen pixels per image pixel
+    v2 Scroll; // NOTE(pvlso): image pixels (0 to 1) the image is moved left and down on screen (SetPixelWorldScroll)
+} render_pixel_world;
+
 typedef struct editor_render_commands
 {
+    // NOTE(pvlso): The resolution the commands are in (the monitor's), stretched over the window
     u32 Width;
     u32 Height;
     
@@ -57,6 +67,12 @@ typedef struct editor_render_commands
 
     struct render_entry_cliprect *FirstRect;
     struct render_entry_cliprect *LastRect;
+
+    // NOTE(pvlso): The pixels the commands really end up on this frame (the window's draw region)
+    u32 ScreenWidth;
+    u32 ScreenHeight;
+
+    render_pixel_world PixelWorld;
 } editor_render_commands;
 
 #define RenderCommandStruct(MaxPushBufferSize, PushBuffer, Width, Height) \

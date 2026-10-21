@@ -417,6 +417,61 @@ OpenGLCircleOutline(v2 Center, f32 Radius, int Segments, v4 Color)
     }
 }
 
+// NOTE(pvlso): The pixel world's image, remade when its size changes
+struct opengl_pixel_world
+{
+    GLuint Framebuffer;
+    GLuint Texture;
+    u32 Width;
+    u32 Height;
+};
+global_variable opengl_pixel_world OpenGLPixelWorld;
+
+// NOTE(pvlso): Where the image went on screen this frame (draw region pixels), for the upright pass
+global_variable v2 OpenGLUprightMinP;
+global_variable r32 OpenGLUprightScale;
+
+// NOTE(pvlso): An image pixel position on the screen, in draw region pixels
+inline v2
+OpenGLUprightP(v2 P)
+{
+    v2 Result = OpenGLUprightMinP + OpenGLUprightScale*P;
+    return(Result);
+}
+
+inline v2
+RoundV2(v2 P)
+{
+    v2 Result = V2((r32)RoundReal32ToInt32(P.x), (r32)RoundReal32ToInt32(P.y));
+    return(Result);
+}
+
+internal void
+OpenGLMakePixelWorld(u32 Width, u32 Height)
+{
+    opengl_pixel_world *World = &OpenGLPixelWorld;
+    if((World->Width != Width) || (World->Height != Height))
+    {
+        if(!World->Framebuffer)
+        {
+            glGenFramebuffers(1, &World->Framebuffer);
+        }
+        if(World->Texture)
+        {
+            glDeleteTextures(1, &World->Texture);
+        }
+
+        World->Texture = U32FromPointer(OpenGLAllocateTexture(Width, Height, 0));
+        World->Width = Width;
+        World->Height = Height;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, World->Framebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, World->Texture, 0);
+        GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        Assert(Status == GL_FRAMEBUFFER_COMPLETE);
+    }
+}
+
 global_variable u32 GlobalFramebufferCount = 1;
 global_variable GLuint GlobalFramebufferHandles[256] = {0};
 global_variable GLuint GlobalFramebufferTextures[256] = {0};
@@ -437,6 +492,9 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
         glViewport(DrawRegion.Min.x, DrawRegion.Min.y, WindowWidth, WindowHeight);
     }
 }
+
+internal void OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
+                                  b32 PixelWorld);
 
 internal void
 OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
@@ -490,12 +548,65 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
-    r32 Transform[16];
-    OpenGLScreenspaceTransform(Transform, Commands->Width, Commands->Height);
-    OpenGLUseProgram(&OpenGLBasicProgram, Transform);
+    glUseProgram(OpenGLBasicProgram.Handle);
+    glUniform1i(OpenGLBasicProgram.TextureID, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(OpenGLBatch.VertexArray);
     OpenGLBatch.VertexCount = 0;
 
+    // NOTE(pvlso): The pixel world is drawn whole first, then put on the screen under everything else
+    render_pixel_world *PixelWorld = &Commands->PixelWorld;
+    if(PixelWorld->Width && PixelWorld->Height)
+    {
+        OpenGLMakePixelWorld(PixelWorld->Width, PixelWorld->Height);
+        glBindFramebuffer(GL_FRAMEBUFFER, OpenGLPixelWorld.Framebuffer);
+        glViewport(0, 0, PixelWorld->Width, PixelWorld->Height);
+        glScissor(0, 0, PixelWorld->Width, PixelWorld->Height);
+        glClearColor(Commands->ClearColor.r, Commands->ClearColor.g,
+                     Commands->ClearColor.b, Commands->ClearColor.a);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        OpenGLRenderEntries(Commands, Prep, DrawRegion, true);
+
+        // NOTE(pvlso): In the screen's own pixels, so each image pixel is exactly Scale x Scale, centered and
+        // moved by the scroll in whole screen pixels. The image's extra pixel on each side covers the move.
+        s32 DrawWidth = GetWidth(DrawRegion);
+        s32 DrawHeight = GetHeight(DrawRegion);
+        s32 Scale = PixelWorld->Scale;
+        s32 ScrollX = RoundReal32ToInt32(PixelWorld->Scroll.x*(r32)Scale);
+        s32 ScrollY = RoundReal32ToInt32(PixelWorld->Scroll.y*(r32)Scale);
+        v2 MinP = V2((r32)((DrawWidth - Scale*(s32)PixelWorld->Width) / 2 - ScrollX),
+                     (r32)((DrawHeight - Scale*(s32)PixelWorld->Height) / 2 - ScrollY));
+        v2 MaxP = MinP + V2((r32)(Scale*PixelWorld->Width), (r32)(Scale*PixelWorld->Height));
+        // NOTE(pvlso): Upright things go where the image would be without rounding the scroll, so something the
+        // camera follows stays on the same screen spot every frame (the ground is at most half a pixel off)
+        OpenGLUprightMinP = V2((r32)((DrawWidth - Scale*(s32)PixelWorld->Width) / 2) - PixelWorld->Scroll.x*(r32)Scale,
+                               (r32)((DrawHeight - Scale*(s32)PixelWorld->Height) / 2) - PixelWorld->Scroll.y*(r32)Scale);
+        OpenGLUprightScale = (r32)Scale;
+
+        OpenGLBindFramebuffer(0, DrawRegion);
+        glScissor(DrawRegion.Min.x, DrawRegion.Min.y, DrawWidth, DrawHeight);
+        r32 Transform[16];
+        OpenGLScreenspaceTransform(Transform, DrawWidth, DrawHeight);
+        glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
+        OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1));
+        OpenGLFlushBatch();
+    }
+
+    OpenGLRenderEntries(Commands, Prep, DrawRegion, false);
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// NOTE(pvlso): The entries of the pixel world, or all the others. Sets the transform for whichever target it draws to.
+internal void
+OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
+                    b32 PixelWorld)
+{
+    u32 MaxRenderTargetIndex = Commands->MaxRenderTargetIndex;
     u32 SortEntryCount = Commands->PushBufferElementCount;
     sort_entry *SortEntries = (sort_entry *)(Commands->PushBufferBase + Commands->SortEntryAt);
 
@@ -508,12 +619,18 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     {
         render_group_entry_header *Header = (render_group_entry_header *)
             (Commands->PushBufferBase + SortEntry->Index);
+        Assert(Header->ClipRectIndex < Commands->ClipRectCount);
+        b32 InPixelWorld = (Prep->ClipRects[Header->ClipRectIndex].RenderTargetIndex == RENDER_TARGET_PIXEL_WORLD);
+        if(InPixelWorld != PixelWorld)
+        {
+            continue;
+        }
+
         if(ClipRectIndex != Header->ClipRectIndex)
         {
             OpenGLFlushBatch();
 
             ClipRectIndex = Header->ClipRectIndex;
-            Assert(ClipRectIndex < Commands->ClipRectCount);
 
             render_entry_cliprect *Clip = Prep->ClipRects + ClipRectIndex;
 
@@ -521,17 +638,45 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
             if(CurrentRenderTargetIndex != Clip->RenderTargetIndex)
             {
                 CurrentRenderTargetIndex = Clip->RenderTargetIndex;
-                Assert(CurrentRenderTargetIndex <= MaxRenderTargetIndex);
-                OpenGLBindFramebuffer(CurrentRenderTargetIndex, DrawRegion);
+
+                r32 Transform[16];
+                if(CurrentRenderTargetIndex == RENDER_TARGET_PIXEL_WORLD_UPRIGHT)
+                {
+                    // NOTE(pvlso): The entries are in image pixels, OpenGLUprightP puts them in these
+                    OpenGLBindFramebuffer(0, DrawRegion);
+                    OpenGLScreenspaceTransform(Transform, GetWidth(DrawRegion), GetHeight(DrawRegion));
+                }
+                else if(PixelWorld)
+                {
+                    glBindFramebuffer(GL_FRAMEBUFFER, OpenGLPixelWorld.Framebuffer);
+                    glViewport(0, 0, OpenGLPixelWorld.Width, OpenGLPixelWorld.Height);
+                    OpenGLScreenspaceTransform(Transform, OpenGLPixelWorld.Width, OpenGLPixelWorld.Height);
+                }
+                else
+                {
+                    Assert(CurrentRenderTargetIndex <= MaxRenderTargetIndex);
+                    OpenGLBindFramebuffer(CurrentRenderTargetIndex, DrawRegion);
+                    OpenGLScreenspaceTransform(Transform, Commands->Width, Commands->Height);
+                }
+                glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
             }
 
-            if(Clip->RenderTargetIndex == 0)
+            if(Clip->RenderTargetIndex == RENDER_TARGET_PIXEL_WORLD_UPRIGHT)
+            {
+                ClipRect = DrawRegion;
+            }
+            else if(Clip->RenderTargetIndex == 0)
             {
                 ClipRect = Offset(ClipRect, DrawRegion.Min.x, DrawRegion.Min.y);
             }
 
             glScissor(ClipRect.Min.x, ClipRect.Min.y, ClipRect.Max.x - ClipRect.Min.x, ClipRect.Max.y - ClipRect.Min.y);
         }
+
+        // NOTE(pvlso): Upright entries of the pixel world are moved to the screen here. Bitmaps and rects start on
+        // a whole screen pixel, so their texels and edges stay Scale wide.
+        b32 Upright = (CurrentRenderTargetIndex == RENDER_TARGET_PIXEL_WORLD_UPRIGHT);
+        r32 UprightScale = OpenGLUprightScale;
 
         void *Data = (uint8 *)Header + sizeof(*Header);
         switch(Header->Type)
@@ -557,6 +702,15 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                     v2 P1 = C + X - Y;
                     v2 P2 = C + X + Y;
                     v2 P3 = C - X + Y;
+                    if(Upright)
+                    {
+                        v2 Screen0 = OpenGLUprightP(P0);
+                        v2 Snap = RoundV2(Screen0) - Screen0;
+                        P0 = Screen0 + Snap;
+                        P1 = OpenGLUprightP(P1) + Snap;
+                        P2 = OpenGLUprightP(P2) + Snap;
+                        P3 = OpenGLUprightP(P3) + Snap;
+                    }
 
                     OpenGLQuad((GLuint)U32FromPointer(Entry->Bitmap->TextureHandle),
                                P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV);
@@ -566,25 +720,39 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
             case RenderGroupEntryType_render_entry_rectangle:
             {
                 render_entry_rectangle *Entry = (render_entry_rectangle *)Data;
-                OpenGLRectangle(OpenGLWhiteTexture, Entry->P, Entry->P + Entry->Dim, SRGB1ToLinear1(Entry->Color));
+                v2 MinP = Entry->P;
+                v2 MaxP = Entry->P + Entry->Dim;
+                if(Upright)
+                {
+                    MinP = RoundV2(OpenGLUprightP(MinP));
+                    MaxP = MinP + RoundV2(UprightScale*Entry->Dim);
+                }
+                OpenGLRectangle(OpenGLWhiteTexture, MinP, MaxP, SRGB1ToLinear1(Entry->Color));
             } break;
 
             case RenderGroupEntryType_render_entry_line:
             {
                 render_entry_line *Entry = (render_entry_line *)Data;
-                OpenGLLine(Entry->P0, Entry->P1, SRGB1ToLinear1(Entry->Color));
+                v2 P0 = Upright ? OpenGLUprightP(Entry->P0) : Entry->P0;
+                v2 P1 = Upright ? OpenGLUprightP(Entry->P1) : Entry->P1;
+                OpenGLLine(P0, P1, SRGB1ToLinear1(Entry->Color));
             } break;
 
             case RenderGroupEntryType_render_entry_triangle:
             {
                 render_entry_triangle *Entry = (render_entry_triangle *)Data;
-                OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
+                v2 A = Upright ? OpenGLUprightP(Entry->A) : Entry->A;
+                v2 B = Upright ? OpenGLUprightP(Entry->B) : Entry->B;
+                v2 C = Upright ? OpenGLUprightP(Entry->C) : Entry->C;
+                OpenGLTriangle(A, B, C, SRGB1ToLinear1(Entry->Color));
             } break;
 
             case RenderGroupEntryType_render_entry_circle_outline:
             {
                 render_entry_circle_outline *Entry = (render_entry_circle_outline *)Data;
-                OpenGLCircleOutline(Entry->Center, Entry->Radius, Entry->Segments, SRGB1ToLinear1(Entry->Color));
+                v2 Center = Upright ? OpenGLUprightP(Entry->Center) : Entry->Center;
+                r32 Radius = Upright ? UprightScale*Entry->Radius : Entry->Radius;
+                OpenGLCircleOutline(Center, Radius, Entry->Segments, SRGB1ToLinear1(Entry->Color));
             } break;
 
             case RenderGroupEntryType_render_entry_blend_render_target:
@@ -603,11 +771,6 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     }
 
     OpenGLFlushBatch();
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glUseProgram(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 internal void

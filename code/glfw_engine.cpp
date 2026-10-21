@@ -966,6 +966,8 @@ main(int ArgCount, char **Args)
         glfwGetFramebufferSize(Window, &DimensionWidth, &DimensionHeight);
         rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                 DimensionWidth, DimensionHeight);
+        RenderCommands.ScreenWidth = GetWidth(DrawRegion);
+        RenderCommands.ScreenHeight = GetHeight(DrawRegion);
 
 #if EDITOR_INTERNAL
         s32 DebugDimensionWidth = 0, DebugDimensionHeight = 0;
