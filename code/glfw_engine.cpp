@@ -435,6 +435,9 @@ GLFWNkShutdown(nk_platform *NkGLFW)
     nk_font_atlas_clear(&NkGLFW->atlas);
     nk_free(&NkGLFW->ctx);
     glDeleteTextures(1, &dev->font_tex);
+    // NOTE(pvlso): The vertex array isn't deleted, it belongs to a context that may not be current
+    glDeleteBuffers(1, &dev->vbo);
+    glDeleteBuffers(1, &dev->ebo);
     nk_buffer_free(&dev->cmds);
     memset(NkGLFW, 0, sizeof(*NkGLFW));
 }
@@ -718,10 +721,15 @@ GLFWInitOpenGL(void)
     glewExperimental = GL_TRUE;
     if(glewInit() == GLEW_OK)
     {
+        // NOTE(pvlso): glewInit asks for the extension string the old way, which a core
+        // context answers with GL_INVALID_ENUM. Clear it so it isn't reported later.
+        while(glGetError() != GL_NO_ERROR) {}
+
         OpenGLSupportsSRGBFramebuffer = (GLEW_ARB_framebuffer_sRGB || GLEW_EXT_framebuffer_sRGB);
 
         opengl_info Info = OpenGLInit(true, OpenGLSupportsSRGBFramebuffer);
-        LOG("OpenGL %s, %s (%s)", Info.Version, Info.Renderer, Info.Vendor);
+        LOG("OpenGL %s, %s (%s), GLSL %s", Info.Version, Info.Renderer, Info.Vendor, Info.ShadingLanguageVersion);
+        OpenGLCreateObjects();
 
         glfwSwapInterval(1);
 
@@ -782,10 +790,11 @@ main(int ArgCount, char **Args)
     }
 #endif
 
-    // NOTE(pvlso): The renderer and nuklear backend use fixed function GL, so ask for
-    // a 3.0 context without a profile, which gives a compatibility context.
+    // NOTE(pvlso): The renderer and the nuklear backend draw with shaders (engine_opengl.cpp)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 #if EDITOR_INTERNAL

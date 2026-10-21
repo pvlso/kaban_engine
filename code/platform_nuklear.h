@@ -19,6 +19,8 @@ struct nk_opengl
     struct nk_buffer cmds;
     struct nk_draw_null_texture tex_null;
     GLuint font_tex;
+    // NOTE(pvlso): Made on the first draw, with the window's own context current
+    GLuint vao, vbo, ebo;
 };
 
 struct nk_platform

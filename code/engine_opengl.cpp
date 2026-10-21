@@ -8,6 +8,14 @@
 
 #include "engine_render_group.h"
 
+/*
+  NOTE(pvlso): OpenGL 3.3 core. Nothing is drawn with glBegin: the render commands and nuklear
+  both fill vertex buffers and draw them with shaders. The render commands go into one batch that
+  is drawn whenever the texture, the kind of primitive, the scissor, the blend or the target
+  changes. Programs, buffers and textures are shared with the debug window's context, vertex
+  arrays aren't, so each nuklear window makes its own on its first draw.
+*/
+
 struct opengl_info
 {
     b32 ModernContext;
@@ -16,8 +24,69 @@ struct opengl_info
     char *Renderer;
     char *Version;
     char *ShadingLanguageVersion;
-    char *Extensions;
+
+    s32 Major;
+    s32 Minor;
 };
+
+struct opengl_vertex
+{
+    v2 P;
+    v2 UV;
+    v4 Color;
+};
+
+struct opengl_program
+{
+    GLuint Handle;
+    GLint TransformID;
+    GLint TextureID;
+};
+
+#define OPENGL_MAX_BATCH_VERTICES (6*16384)
+struct opengl_batch
+{
+    GLuint VertexArray;
+    GLuint VertexBuffer;
+
+    GLenum Primitive;
+    GLuint Texture;
+    u32 VertexCount;
+    opengl_vertex Vertices[OPENGL_MAX_BATCH_VERTICES];
+};
+
+global_variable opengl_program OpenGLBasicProgram;
+global_variable GLuint OpenGLWhiteTexture;
+global_variable opengl_batch OpenGLBatch;
+
+// NOTE(pvlso): Untextured things draw with a white texture, so one program draws everything
+global_variable char *OpenGLBasicVertexCode = R"GLSL(
+#version 330 core
+uniform mat4 Transform;
+layout(location = 0) in vec2 InP;
+layout(location = 1) in vec2 InUV;
+layout(location = 2) in vec4 InColor;
+out vec2 FragUV;
+out vec4 FragColor;
+void main()
+{
+    gl_Position = Transform*vec4(InP, 0.0, 1.0);
+    FragUV = InUV;
+    FragColor = InColor;
+}
+)GLSL";
+
+global_variable char *OpenGLBasicFragmentCode = R"GLSL(
+#version 330 core
+uniform sampler2D Texture;
+in vec2 FragUV;
+in vec4 FragColor;
+out vec4 OutColor;
+void main()
+{
+    OutColor = texture(Texture, FragUV)*FragColor;
+}
+)GLSL";
 
 internal opengl_info
 OpenGLGetInfo(b32 ModernContext)
@@ -37,8 +106,6 @@ OpenGLGetInfo(b32 ModernContext)
         Result.ShadingLanguageVersion = "(none)";
     }
 
-    Result.Extensions = (char *)glGetString(GL_EXTENSIONS);
-
     char *MajorAt = Result.Version;
     char *MinorAt = 0;
     for(char *At = Result.Version;
@@ -52,16 +119,35 @@ OpenGLGetInfo(b32 ModernContext)
         }
     }
 
-    s32 Major = 1;
-    s32 Minor = 0;
+    Result.Major = 1;
+    Result.Minor = 0;
     if(MinorAt)
     {
-        Major = S32FromZ(MajorAt);
-        Minor = S32FromZ(MinorAt);
+        Result.Major = S32FromZ(MajorAt);
+        Result.Minor = S32FromZ(MinorAt);
     }
-    
+
     return(Result);
 }
+
+#if EDITOR_INTERNAL
+global_variable u32 OpenGLDebugMessageCount;
+
+// NOTE(pvlso): Only the first few, a mistake made every frame would fill the log otherwise
+internal void APIENTRY
+OpenGLDebugCallback(GLenum Source, GLenum Type, GLuint ID, GLenum Severity,
+                    GLsizei Length, const GLchar *Message, const void *UserParam)
+{
+    if((Severity == GL_DEBUG_SEVERITY_HIGH) || (Severity == GL_DEBUG_SEVERITY_MEDIUM))
+    {
+        if(OpenGLDebugMessageCount < 16)
+        {
+            ++OpenGLDebugMessageCount;
+            LOG_ERROR("OpenGL: %s", Message);
+        }
+    }
+}
+#endif
 
 internal opengl_info
 OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
@@ -71,26 +157,128 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
     // NOTE(casey): If we believe we can do full sRGB on the texture side
     // and the framebuffer side, then we can enable it, otherwise it is
     // safer for us to pass it straight through.
+    // NOTE(pvlso): sRGB textures are core since 2.1, only the framebuffer is checked
     OpenGLDefaultInternalTextureFormat = GL_RGBA8;
-    if(FramebufferSupportsSRGB && GLEW_EXT_texture_sRGB)
+    if(FramebufferSupportsSRGB)
     {
         OpenGLDefaultInternalTextureFormat = GL_SRGB8_ALPHA8;
 
         glEnable(GL_FRAMEBUFFER_SRGB);
     }
 
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+#if EDITOR_INTERNAL
+    if(glDebugMessageCallback)
+    {
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(OpenGLDebugCallback, 0);
+    }
+#endif
 
     return(Info);
-}       
+}
 
-inline void
-OpenGLSetScreenspace(s32 Width, s32 Height)
+internal GLuint
+OpenGLCompileShader(GLenum Type, char *Code)
 {
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    GLuint Result = glCreateShader(Type);
+    glShaderSource(Result, 1, &Code, 0);
+    glCompileShader(Result);
 
-    glMatrixMode(GL_PROJECTION);
+    GLint Compiled = 0;
+    glGetShaderiv(Result, GL_COMPILE_STATUS, &Compiled);
+    if(!Compiled)
+    {
+        char InfoLog[1024];
+        glGetShaderInfoLog(Result, sizeof(InfoLog), 0, InfoLog);
+        LOG_ERROR("Shader didn't compile: %s", InfoLog);
+    }
+
+    return(Result);
+}
+
+internal opengl_program
+OpenGLCreateProgram(char *VertexCode, char *FragmentCode)
+{
+    opengl_program Result = {};
+
+    GLuint VertexShader = OpenGLCompileShader(GL_VERTEX_SHADER, VertexCode);
+    GLuint FragmentShader = OpenGLCompileShader(GL_FRAGMENT_SHADER, FragmentCode);
+
+    Result.Handle = glCreateProgram();
+    glAttachShader(Result.Handle, VertexShader);
+    glAttachShader(Result.Handle, FragmentShader);
+    glLinkProgram(Result.Handle);
+    glDetachShader(Result.Handle, VertexShader);
+    glDetachShader(Result.Handle, FragmentShader);
+    glDeleteShader(VertexShader);
+    glDeleteShader(FragmentShader);
+
+    GLint Linked = 0;
+    glGetProgramiv(Result.Handle, GL_LINK_STATUS, &Linked);
+    if(!Linked)
+    {
+        char InfoLog[1024];
+        glGetProgramInfoLog(Result.Handle, sizeof(InfoLog), 0, InfoLog);
+        LOG_ERROR("Shader program didn't link: %s", InfoLog);
+    }
+
+    Result.TransformID = glGetUniformLocation(Result.Handle, "Transform");
+    Result.TextureID = glGetUniformLocation(Result.Handle, "Texture");
+
+    return(Result);
+}
+
+// NOTE(pvlso): Position, UV and colour at locations 0, 1, 2, as the basic program reads them.
+// The batch and nuklear lay out their vertices the same way.
+internal void
+OpenGLSetVertexLayout(GLsizei Stride, umm POffset, umm UVOffset, umm ColorOffset)
+{
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, Stride, (void *)POffset);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, Stride, (void *)UVOffset);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, Stride, (void *)ColorOffset);
+}
+
+// NOTE(pvlso): Called once, with the main window's context current
+internal void
+OpenGLCreateObjects(void)
+{
+    OpenGLBasicProgram = OpenGLCreateProgram(OpenGLBasicVertexCode, OpenGLBasicFragmentCode);
+
+    u32 White = 0xFFFFFFFF;
+    glGenTextures(1, &OpenGLWhiteTexture);
+    glBindTexture(GL_TEXTURE_2D, OpenGLWhiteTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &White);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    opengl_batch *Batch = &OpenGLBatch;
+    glGenVertexArrays(1, &Batch->VertexArray);
+    glGenBuffers(1, &Batch->VertexBuffer);
+    glBindVertexArray(Batch->VertexArray);
+    glBindBuffer(GL_ARRAY_BUFFER, Batch->VertexBuffer);
+    OpenGLSetVertexLayout(sizeof(opengl_vertex), OffsetOf(opengl_vertex, P),
+                          OffsetOf(opengl_vertex, UV), OffsetOf(opengl_vertex, Color));
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+internal void
+OpenGLUseProgram(opengl_program *Program, r32 *Transform)
+{
+    glUseProgram(Program->Handle);
+    glUniformMatrix4fv(Program->TransformID, 1, GL_FALSE, Transform);
+    glUniform1i(Program->TextureID, 0);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+// NOTE(pvlso): Pixels, (0, 0) bottom left to (Width, Height) top right. Column major.
+inline void
+OpenGLScreenspaceTransform(r32 *Transform, s32 Width, s32 Height)
+{
     r32 a = SafeRatio1(2.0f, (r32)Width);
     r32 b = SafeRatio1(2.0f, (r32)Height);
     r32 Proj[] =
@@ -100,7 +288,10 @@ OpenGLSetScreenspace(s32 Width, s32 Height)
          0,  0,  1,  0,
         -1, -1,  0,  1,
     };
-    glLoadMatrixf(Proj);
+    for(u32 Index = 0; Index < ArrayCount(Proj); ++Index)
+    {
+        Transform[Index] = Proj[Index];
+    }
 }
 
 internal void *
@@ -109,14 +300,14 @@ OpenGLAllocateTexture(u32 Width, u32 Height, void *Data)
     GLuint Handle;
     glGenTextures(1, &Handle);
     glBindTexture(GL_TEXTURE_2D, Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat, 
+    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat,
                  Width, Height, 0,
-                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, Data);
+                 GL_BGRA, GL_UNSIGNED_BYTE, Data);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -126,61 +317,104 @@ OpenGLAllocateTexture(u32 Width, u32 Height, void *Data)
     return(Result);
 }
 
+internal void
+OpenGLFlushBatch(void)
+{
+    opengl_batch *Batch = &OpenGLBatch;
+    if(Batch->VertexCount)
+    {
+        glBindTexture(GL_TEXTURE_2D, Batch->Texture);
+        glBindBuffer(GL_ARRAY_BUFFER, Batch->VertexBuffer);
+        // NOTE(pvlso): A new store every time, so the driver doesn't wait for the last draw
+        glBufferData(GL_ARRAY_BUFFER, Batch->VertexCount*sizeof(opengl_vertex), Batch->Vertices, GL_STREAM_DRAW);
+        glDrawArrays(Batch->Primitive, 0, Batch->VertexCount);
+
+        Batch->VertexCount = 0;
+    }
+}
+
+// NOTE(pvlso): Room for VertexCount more vertices with this primitive and texture
+inline opengl_vertex *
+OpenGLBatchVertices(GLenum Primitive, GLuint Texture, u32 VertexCount)
+{
+    opengl_batch *Batch = &OpenGLBatch;
+    if((Batch->Primitive != Primitive) ||
+       (Batch->Texture != Texture) ||
+       ((Batch->VertexCount + VertexCount) > ArrayCount(Batch->Vertices)))
+    {
+        OpenGLFlushBatch();
+        Batch->Primitive = Primitive;
+        Batch->Texture = Texture;
+    }
+
+    opengl_vertex *Result = Batch->Vertices + Batch->VertexCount;
+    Batch->VertexCount += VertexCount;
+
+    return(Result);
+}
+
+inline void
+OpenGLVertex(opengl_vertex *Vertex, v2 P, v2 UV, v4 Color)
+{
+    Vertex->P = P;
+    Vertex->UV = UV;
+    Vertex->Color = Color;
+}
+
 inline void
 OpenGLLine(v2 P0, v2 P1, v4 Color)
 {
-    glBegin(GL_LINES);
-
-    glColor4f(Color.r, Color.g, Color.b, Color.a);
-
-    glVertex2f(P0.x, P0.y);
-    glVertex2f(P1.x, P1.y);
-
-    glEnd();
+    opengl_vertex *V = OpenGLBatchVertices(GL_LINES, OpenGLWhiteTexture, 2);
+    OpenGLVertex(V++, P0, V2(0, 0), Color);
+    OpenGLVertex(V++, P1, V2(0, 0), Color);
 }
 
 inline void
 OpenGLTriangle(v2 a, v2 b, v2 c, v4 Color)
-{                    
-    glBegin(GL_TRIANGLES);
-
-    glColor4f(Color.r, Color.g, Color.b, Color.a);
-
-    glVertex2f(a.x, a.y);
-    glVertex2f(b.x, b.y);
-    glVertex2f(c.x, c.y);
-
-    glEnd();
+{
+    opengl_vertex *V = OpenGLBatchVertices(GL_TRIANGLES, OpenGLWhiteTexture, 3);
+    OpenGLVertex(V++, a, V2(0, 0), Color);
+    OpenGLVertex(V++, b, V2(0, 0), Color);
+    OpenGLVertex(V++, c, V2(0, 0), Color);
 }
 
 inline void
-OpenGLRectangle(v2 MinP, v2 MaxP, v4 Color, v2 MinUV = V2(0, 0), v2 MaxUV = V2(1, 1))
-{                    
-    glBegin(GL_TRIANGLES);
+OpenGLQuad(GLuint Texture, v2 P0, v2 P1, v2 P2, v2 P3,
+           v4 Color, v2 MinUV = V2(0,0), v2 MaxUV = V2(1,1))
+{
+    opengl_vertex *V = OpenGLBatchVertices(GL_TRIANGLES, Texture, 6);
 
-    glColor4f(Color.r, Color.g, Color.b, Color.a);
+    // Lower triangle: P0, P1, P2
+    OpenGLVertex(V++, P0, V2(MinUV.x, MinUV.y), Color);
+    OpenGLVertex(V++, P1, V2(MaxUV.x, MinUV.y), Color);
+    OpenGLVertex(V++, P2, V2(MaxUV.x, MaxUV.y), Color);
 
-    // NOTE(casey): Lower triangle
-    glTexCoord2f(MinUV.x, MinUV.y);
-    glVertex2f(MinP.x, MinP.y);
+    // Upper triangle: P0, P2, P3
+    OpenGLVertex(V++, P0, V2(MinUV.x, MinUV.y), Color);
+    OpenGLVertex(V++, P2, V2(MaxUV.x, MaxUV.y), Color);
+    OpenGLVertex(V++, P3, V2(MinUV.x, MaxUV.y), Color);
+}
 
-    glTexCoord2f(MaxUV.x, MinUV.y);
-    glVertex2f(MaxP.x, MinP.y);
+inline void
+OpenGLRectangle(GLuint Texture, v2 MinP, v2 MaxP, v4 Color, v2 MinUV = V2(0, 0), v2 MaxUV = V2(1, 1))
+{
+    OpenGLQuad(Texture, MinP, V2(MaxP.x, MinP.y), MaxP, V2(MinP.x, MaxP.y), Color, MinUV, MaxUV);
+}
 
-    glTexCoord2f(MaxUV.x, MaxUV.y);
-    glVertex2f(MaxP.x, MaxP.y);
+inline void
+OpenGLCircleOutline(v2 Center, f32 Radius, int Segments, v4 Color)
+{
+    v2 Last = V2(Center.x + Radius, Center.y);
+    for(int i = 1;
+        i <= Segments;
+        ++i)
+    {
+        f32 a = (2.0f*Pi32)*((f32)i / (f32)Segments);
+        v2 P = V2(Center.x + Radius*Cos(a), Center.y + Radius*Sin(a));
 
-    // NOTE(casey): Upper triangle
-    glTexCoord2f(MinUV.x, MinUV.y);
-    glVertex2f(MinP.x, MinP.y);
-
-    glTexCoord2f(MaxUV.x, MaxUV.y);
-    glVertex2f(MaxP.x, MaxP.y);
-
-    glTexCoord2f(MinUV.x, MaxUV.y);
-    glVertex2f(MinP.x, MaxP.y);
-
-    glEnd();
+        OpenGLLine(Last, P, Color);
+        Last = P;
+    }
 }
 
 global_variable u32 GlobalFramebufferCount = 1;
@@ -204,128 +438,24 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
     }
 }
 
-inline void
-OpenGLDisplayBitmap(s32 Width, s32 Height, void *Memory, int Pitch,
-                    rectangle2i DrawRegion, v4 ClearColor, GLuint BlitTexture)
-{
-    Assert(Pitch == Width*4);
-    OpenGLBindFramebuffer(0, DrawRegion);
-    
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_BLEND);
-    glBindTexture(GL_TEXTURE_2D, BlitTexture);
-
-    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat, Width, Height, 0,
-                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, Memory);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);    
-
-    glEnable(GL_TEXTURE_2D);
-
-    glClearColor(ClearColor.r, ClearColor.g, ClearColor.b, ClearColor.a);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glMatrixMode(GL_TEXTURE);
-    glLoadIdentity();
-
-    OpenGLSetScreenspace(Width, Height);
-
-    // TODO(casey): Decide how we want to handle aspect ratio - black bars or crop?
-
-    v2 MinP = {0, 0};
-    v2 MaxP = {(r32)Width, (r32)Height};
-    v4 Color = {1, 1, 1, 1};
-
-    OpenGLRectangle(MinP, MaxP, Color);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glEnable(GL_BLEND);
-}
-
-inline void
-OpenGLLineVertices(v2 MinP, v2 MaxP)
-{                    
-    glVertex2f(MinP.x, MinP.y);
-    glVertex2f(MaxP.x, MinP.y);
-
-    glVertex2f(MaxP.x, MinP.y);
-    glVertex2f(MaxP.x, MaxP.y);
-
-    glVertex2f(MaxP.x, MaxP.y);
-    glVertex2f(MinP.x, MaxP.y);
-
-    glVertex2f(MinP.x, MaxP.y);
-    glVertex2f(MinP.x, MinP.y);
-}
-
-inline void
-OpenGLQuad(v2 P0, v2 P1, v2 P2, v2 P3,
-           v4 Color, v2 MinUV = V2(0,0), v2 MaxUV = V2(1,1))
-{
-    glBegin(GL_TRIANGLES);
-    glColor4f(Color.r, Color.g, Color.b, Color.a);
-
-    // Lower triangle: P0, P1, P2
-    glTexCoord2f(MinUV.x, MinUV.y); glVertex2f(P0.x, P0.y);
-    glTexCoord2f(MaxUV.x, MinUV.y); glVertex2f(P1.x, P1.y);
-    glTexCoord2f(MaxUV.x, MaxUV.y); glVertex2f(P2.x, P2.y);
-
-    // Upper triangle: P0, P2, P3
-    glTexCoord2f(MinUV.x, MinUV.y); glVertex2f(P0.x, P0.y);
-    glTexCoord2f(MaxUV.x, MaxUV.y); glVertex2f(P2.x, P2.y);
-    glTexCoord2f(MinUV.x, MaxUV.y); glVertex2f(P3.x, P3.y);
-
-    glEnd();
-}
-
-inline void
-OpenGLCircleOutline(v2 Center, f32 Radius, int Segments, v4 Color)
-{
-    glBegin(GL_LINE_LOOP);
-    glColor4f(Color.r, Color.g, Color.b, Color.a);
-
-    for(int i = 0;
-        i < Segments;
-        ++i)
-    {
-        f32 a = (2.0f*Pi32)*((f32)i / (f32)Segments);
-        f32 x = Center.x + Radius*Cos(a);
-        f32 y = Center.y + Radius*Sin(a);
-
-        glVertex2f(x, y);
-    }
-
-    glEnd();
-}
-
 internal void
 OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
                      u32 WindowWidth, u32 WindowHeight)
-{    
-    glEnable(GL_TEXTURE_2D);
+{
     glEnable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    glMatrixMode(GL_TEXTURE);
-    glLoadIdentity();
-
-    b32 UseRenderTargets = (glBindFramebuffer != 0);
-
-    u32 MaxRenderTargetIndex = UseRenderTargets ? Commands->MaxRenderTargetIndex : 0;
-     if(MaxRenderTargetIndex >= GlobalFramebufferCount)
+    u32 MaxRenderTargetIndex = Commands->MaxRenderTargetIndex;
+    if(MaxRenderTargetIndex >= GlobalFramebufferCount)
     {
         u32 NewFramebufferCount = Commands->MaxRenderTargetIndex + 1;
         Assert(NewFramebufferCount < ArrayCount(GlobalFramebufferHandles));
         u32 NewCount = NewFramebufferCount - GlobalFramebufferCount;
         glGenFramebuffers(NewCount, GlobalFramebufferHandles + GlobalFramebufferCount);
-        glGenTextures(NewCount, GlobalFramebufferTextures + GlobalFramebufferCount);
-        
+
         for(u32 TargetIndex = GlobalFramebufferCount;
-            TargetIndex <= NewFramebufferCount;
+            TargetIndex < NewFramebufferCount;
             ++TargetIndex)
         {
             GLuint TextureHandle = U32FromPointer(OpenGLAllocateTexture(GetWidth(DrawRegion), GetHeight(DrawRegion), 0));
@@ -339,15 +469,12 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
 
         GlobalFramebufferCount = NewFramebufferCount;
     }
-    
+
     for(u32 TargetIndex = 0;
         TargetIndex <= MaxRenderTargetIndex;
         ++TargetIndex)
     {
-        if(UseRenderTargets)
-        {
-            OpenGLBindFramebuffer(TargetIndex, DrawRegion);
-        }
+        OpenGLBindFramebuffer(TargetIndex, DrawRegion);
 
         if(TargetIndex == 0)
         {
@@ -357,13 +484,17 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
         {
             glScissor(0, 0, GetWidth(DrawRegion), GetHeight(DrawRegion));
         }
-        
+
         glClearColor(Commands->ClearColor.r, Commands->ClearColor.g,
                      Commands->ClearColor.b, Commands->ClearColor.a);
         glClear(GL_COLOR_BUFFER_BIT);
     }
-    
-    OpenGLSetScreenspace(Commands->Width, Commands->Height);
+
+    r32 Transform[16];
+    OpenGLScreenspaceTransform(Transform, Commands->Width, Commands->Height);
+    OpenGLUseProgram(&OpenGLBasicProgram, Transform);
+    glBindVertexArray(OpenGLBatch.VertexArray);
+    OpenGLBatch.VertexCount = 0;
 
     u32 SortEntryCount = Commands->PushBufferElementCount;
     sort_entry *SortEntries = (sort_entry *)(Commands->PushBufferBase + Commands->SortEntryAt);
@@ -377,119 +508,106 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     {
         render_group_entry_header *Header = (render_group_entry_header *)
             (Commands->PushBufferBase + SortEntry->Index);
-        if(UseRenderTargets || (Prep->ClipRects[Header->ClipRectIndex].RenderTargetIndex <= MaxRenderTargetIndex))
+        if(ClipRectIndex != Header->ClipRectIndex)
         {
-            if(ClipRectIndex != Header->ClipRectIndex)
+            OpenGLFlushBatch();
+
+            ClipRectIndex = Header->ClipRectIndex;
+            Assert(ClipRectIndex < Commands->ClipRectCount);
+
+            render_entry_cliprect *Clip = Prep->ClipRects + ClipRectIndex;
+
+            rectangle2i ClipRect = Clip->Rect;
+            if(CurrentRenderTargetIndex != Clip->RenderTargetIndex)
             {
-                ClipRectIndex = Header->ClipRectIndex;
-                Assert(ClipRectIndex < Commands->ClipRectCount);
-            
-                render_entry_cliprect *Clip = Prep->ClipRects + ClipRectIndex;
-
-                rectangle2i ClipRect = Clip->Rect;
-                if(CurrentRenderTargetIndex != Clip->RenderTargetIndex)
-                {
-                    CurrentRenderTargetIndex = Clip->RenderTargetIndex;
-                    Assert(CurrentRenderTargetIndex <= MaxRenderTargetIndex);
-                    if(UseRenderTargets)
-                    {
-                        OpenGLBindFramebuffer(CurrentRenderTargetIndex, DrawRegion);
-                    }
-                }
-
-                if(!UseRenderTargets || (Clip->RenderTargetIndex == 0))
-                {
-                    ClipRect = Offset(ClipRect, DrawRegion.Min.x, DrawRegion.Min.y);
-                }
-            
-                glScissor(ClipRect.Min.x, ClipRect.Min.y, ClipRect.Max.x - ClipRect.Min.x, ClipRect.Max.y - ClipRect.Min.y);
+                CurrentRenderTargetIndex = Clip->RenderTargetIndex;
+                Assert(CurrentRenderTargetIndex <= MaxRenderTargetIndex);
+                OpenGLBindFramebuffer(CurrentRenderTargetIndex, DrawRegion);
             }
-            
-            void *Data = (uint8 *)Header + sizeof(*Header);
-            switch(Header->Type)
+
+            if(Clip->RenderTargetIndex == 0)
             {
-                case RenderGroupEntryType_render_entry_bitmap:
-                {
-                    render_entry_bitmap *Entry = (render_entry_bitmap *)Data;
-                    Assert(Entry->Bitmap);
-                    
-                    if(Entry->Bitmap->Width && Entry->Bitmap->Height)
-                    {
-                        r32 c = cosf(Entry->RotateAngle);
-                        r32 s = sinf(Entry->RotateAngle);
-
-                        v2 XAxis = { c, s };
-                        v2 YAxis = { -s, c };
-
-                        v2 X = 0.5f*Entry->Size.x*XAxis;
-                        v2 Y = 0.5f*Entry->Size.y*YAxis;
-                        v2 C = Entry->P + 0.5f*Entry->Size;
-
-                        v2 P0 = C - X - Y;
-                        v2 P1 = C + X - Y;
-                        v2 P2 = C + X + Y;
-                        v2 P3 = C - X + Y;
-
-                        glBindTexture(GL_TEXTURE_2D, (GLuint)U32FromPointer(Entry->Bitmap->TextureHandle));
-
-                        OpenGLQuad(P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV);
-                    }
-                } break;
-
-                case RenderGroupEntryType_render_entry_rectangle:
-                {
-                    render_entry_rectangle *Entry = (render_entry_rectangle *)Data;
-                    glDisable(GL_TEXTURE_2D);
-
-                    OpenGLRectangle(Entry->P, Entry->P + Entry->Dim, SRGB1ToLinear1(Entry->Color));
-                    glEnable(GL_TEXTURE_2D);
-                } break;
-
-                case RenderGroupEntryType_render_entry_line:
-                {
-                    render_entry_line *Entry = (render_entry_line *)Data;
-                    glDisable(GL_TEXTURE_2D);
-                    OpenGLLine(Entry->P0, Entry->P1, SRGB1ToLinear1(Entry->Color));
-                    glEnable(GL_TEXTURE_2D);
-                } break;
-
-                case RenderGroupEntryType_render_entry_triangle:
-                {
-                    render_entry_triangle *Entry = (render_entry_triangle *)Data;
-                    glDisable(GL_TEXTURE_2D);
-                    OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
-                    glEnable(GL_TEXTURE_2D);
-                } break;
-
-                case RenderGroupEntryType_render_entry_circle_outline:
-                {
-                    render_entry_circle_outline *Entry = (render_entry_circle_outline *)Data;
-                    glDisable(GL_TEXTURE_2D);
-                    OpenGLCircleOutline(Entry->Center, Entry->Radius, Entry->Segments, SRGB1ToLinear1(Entry->Color));
-                    glEnable(GL_TEXTURE_2D);
-                } break;
-
-                case RenderGroupEntryType_render_entry_blend_render_target:
-                {
-                    render_entry_blend_render_target *Entry = (render_entry_blend_render_target *)Data;
-                    if(UseRenderTargets)
-                    {
-                        glBindTexture(GL_TEXTURE_2D, GlobalFramebufferTextures[Entry->SourceTargetIndex]);
-                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                        OpenGLRectangle(V2(0, 0), V2i(Commands->Width, Commands->Height), V4(1, 1, 1, Entry->Alpha));
-                        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-                    }
-                } break;
-
-                InvalidDefaultCase;
+                ClipRect = Offset(ClipRect, DrawRegion.Min.x, DrawRegion.Min.y);
             }
+
+            glScissor(ClipRect.Min.x, ClipRect.Min.y, ClipRect.Max.x - ClipRect.Min.x, ClipRect.Max.y - ClipRect.Min.y);
+        }
+
+        void *Data = (uint8 *)Header + sizeof(*Header);
+        switch(Header->Type)
+        {
+            case RenderGroupEntryType_render_entry_bitmap:
+            {
+                render_entry_bitmap *Entry = (render_entry_bitmap *)Data;
+                Assert(Entry->Bitmap);
+
+                if(Entry->Bitmap->Width && Entry->Bitmap->Height)
+                {
+                    r32 c = cosf(Entry->RotateAngle);
+                    r32 s = sinf(Entry->RotateAngle);
+
+                    v2 XAxis = { c, s };
+                    v2 YAxis = { -s, c };
+
+                    v2 X = 0.5f*Entry->Size.x*XAxis;
+                    v2 Y = 0.5f*Entry->Size.y*YAxis;
+                    v2 C = Entry->P + 0.5f*Entry->Size;
+
+                    v2 P0 = C - X - Y;
+                    v2 P1 = C + X - Y;
+                    v2 P2 = C + X + Y;
+                    v2 P3 = C - X + Y;
+
+                    OpenGLQuad((GLuint)U32FromPointer(Entry->Bitmap->TextureHandle),
+                               P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV);
+                }
+            } break;
+
+            case RenderGroupEntryType_render_entry_rectangle:
+            {
+                render_entry_rectangle *Entry = (render_entry_rectangle *)Data;
+                OpenGLRectangle(OpenGLWhiteTexture, Entry->P, Entry->P + Entry->Dim, SRGB1ToLinear1(Entry->Color));
+            } break;
+
+            case RenderGroupEntryType_render_entry_line:
+            {
+                render_entry_line *Entry = (render_entry_line *)Data;
+                OpenGLLine(Entry->P0, Entry->P1, SRGB1ToLinear1(Entry->Color));
+            } break;
+
+            case RenderGroupEntryType_render_entry_triangle:
+            {
+                render_entry_triangle *Entry = (render_entry_triangle *)Data;
+                OpenGLTriangle(Entry->A, Entry->B, Entry->C, SRGB1ToLinear1(Entry->Color));
+            } break;
+
+            case RenderGroupEntryType_render_entry_circle_outline:
+            {
+                render_entry_circle_outline *Entry = (render_entry_circle_outline *)Data;
+                OpenGLCircleOutline(Entry->Center, Entry->Radius, Entry->Segments, SRGB1ToLinear1(Entry->Color));
+            } break;
+
+            case RenderGroupEntryType_render_entry_blend_render_target:
+            {
+                render_entry_blend_render_target *Entry = (render_entry_blend_render_target *)Data;
+                OpenGLFlushBatch();
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                OpenGLRectangle(GlobalFramebufferTextures[Entry->SourceTargetIndex],
+                                V2(0, 0), V2i(Commands->Width, Commands->Height), V4(1, 1, 1, Entry->Alpha));
+                OpenGLFlushBatch();
+                glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            } break;
+
+            InvalidDefaultCase;
         }
     }
 
-    if(UseRenderTargets)
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
+    OpenGLFlushBatch();
+
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 internal void
@@ -527,9 +645,9 @@ NkOpenGLUploadAtlas(nk_opengl *Ogl, const void *image, int width, int height)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat, (GLsizei)width, (GLsizei)height, 0,
-                 GL_BGRA_EXT, GL_UNSIGNED_BYTE, image);
+                 GL_BGRA, GL_UNSIGNED_BYTE, image);
 }
 
 struct nk_gl_vertex
@@ -549,37 +667,44 @@ NKOpenGLRenderCommands(nk_platform *NkPlatform, rectangle2i DrawRegion, enum nk_
       repo
     */
 
-    /* setup global state */
     struct nk_opengl *dev = &NkPlatform->ogl;
-    glPushAttrib(GL_ENABLE_BIT|GL_COLOR_BUFFER_BIT|GL_TRANSFORM_BIT);
+
+    // NOTE(pvlso): Made here, on the first draw, so the vertex array belongs to this window's context
+    if(!dev->vao)
+    {
+        glGenVertexArrays(1, &dev->vao);
+        glGenBuffers(1, &dev->vbo);
+        glGenBuffers(1, &dev->ebo);
+        glBindVertexArray(dev->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, dev->vbo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, dev->ebo);
+        OpenGLSetVertexLayout(sizeof(struct nk_gl_vertex), OffsetOf(struct nk_gl_vertex, position),
+                              OffsetOf(struct nk_gl_vertex, uv), OffsetOf(struct nk_gl_vertex, col));
+    }
+
+    /* setup global state */
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
-    glEnable(GL_TEXTURE_2D);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     /* setup viewport/project */
-//    glViewport(0,0,(GLsizei)NkPlatform->display_width,(GLsizei)NkPlatform->display_height);
     glViewport(DrawRegion.Min.x, DrawRegion.Min.y, (GLsizei)NkPlatform->display_width,(GLsizei)NkPlatform->display_height);
 
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(0.0f, NkPlatform->width, NkPlatform->height, 0.0f, -1.0f, 1.0f);
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
+    // NOTE(pvlso): What glOrtho(0, width, height, 0, -1, 1) made, column major
+    r32 Ortho[16] =
     {
-        GLsizei vs = sizeof(struct nk_gl_vertex);
-        size_t vp = offsetof(struct nk_gl_vertex, position);
-        size_t vt = offsetof(struct nk_gl_vertex, uv);
-        size_t vc = offsetof(struct nk_gl_vertex, col);
+        2.0f / (r32)NkPlatform->width, 0, 0, 0,
+        0, -2.0f / (r32)NkPlatform->height, 0, 0,
+        0, 0, -1, 0,
+        -1, 1, 0, 1,
+    };
+    OpenGLUseProgram(&OpenGLBasicProgram, Ortho);
+    glBindVertexArray(dev->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, dev->vbo);
 
+    {
         /* convert from command queue into draw list and draw to screen */
         const struct nk_draw_command *cmd;
         const nk_draw_index *offset = NULL;
@@ -611,14 +736,11 @@ NKOpenGLRenderCommands(nk_platform *NkPlatform, rectangle2i DrawRegion, enum nk_
         nk_buffer_init_default(&ebuf);
         nk_convert(&NkPlatform->ctx, &dev->cmds, &vbuf, &ebuf, &config);
 
-        /* setup vertex buffer pointer */
-        {const void *vertices = nk_buffer_memory_const(&vbuf);
-            glVertexPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vp));
-            glTexCoordPointer(2, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vt));
-            glColorPointer(4, GL_FLOAT, vs, (const void*)((const nk_byte*)vertices + vc));}
+        /* upload the vertices and indices (the index buffer binding lives in the vertex array) */
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vbuf.allocated, nk_buffer_memory_const(&vbuf), GL_STREAM_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ebuf.allocated, nk_buffer_memory_const(&ebuf), GL_STREAM_DRAW);
 
         /* iterate over and execute each draw command */
-        offset = (const nk_draw_index*)nk_buffer_memory_const(&ebuf);
         nk_draw_foreach(cmd, &NkPlatform->ctx, &dev->cmds)
         {
             if (!cmd->elem_count) continue;
@@ -639,13 +761,6 @@ NKOpenGLRenderCommands(nk_platform *NkPlatform, rectangle2i DrawRegion, enum nk_
             x += (GLint)CeilReal32ToInt32(DrawRegion.Min.x * NkPlatform->fb_scale.x);
             y += (GLint)CeilReal32ToInt32(DrawRegion.Min.y * NkPlatform->fb_scale.y);
 
-#if 0
-            GLint x = (GLint)CeilReal32ToInt32(cmd->clip_rect.x * NkPlatform->fb_scale.x);
-            GLint y = (GLint)CeilReal32ToInt32(((f32)NkPlatform->height - (cmd->clip_rect.y + cmd->clip_rect.h)) * NkPlatform->fb_scale.y);
-            GLint w = (GLint)CeilReal32ToInt32(cmd->clip_rect.w * NkPlatform->fb_scale.x);
-            GLint h = (GLint)CeilReal32ToInt32(cmd->clip_rect.h * NkPlatform->fb_scale.y);
-#endif
-
             glScissor(x, y, w, h);
             glDrawElements(GL_TRIANGLES, (GLsizei)cmd->elem_count, GL_UNSIGNED_SHORT, offset);
             offset += cmd->elem_count;
@@ -657,20 +772,11 @@ NKOpenGLRenderCommands(nk_platform *NkPlatform, rectangle2i DrawRegion, enum nk_
     }
 
     /* default OpenGL state */
-    glDisableClientState(GL_VERTEX_ARRAY);
-    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-    glDisableClientState(GL_COLOR_ARRAY);
-
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
-    glDisable(GL_TEXTURE_2D);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glMatrixMode(GL_MODELVIEW);
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glPopAttrib();
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glUseProgram(0);
 }
