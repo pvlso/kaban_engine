@@ -186,6 +186,21 @@ PlatformInitPaths(void)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): FILE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): The image directories (bmps, spritesheets, tilesets, solidtiles) take .png files too. A name ending in
+// _n is the normal map of the image without it, it isn't listed on its own.
+internal b32
+IsFileOfType(char *FileName, platform_file_type Type)
+{
+    b32 Result = StringEndsWithNoCase(FileName, GlobalFileExtentionsForType[Type]);
+    if((Type >= PlatformFileType_BMP) && (Type <= PlatformFileType_STBMP))
+    {
+        Result = ((Result || StringEndsWithNoCase(FileName, ".png")) &&
+                  !StringEndsWithNoCase(FileName, "_n.bmp") && !StringEndsWithNoCase(FileName, "_n.png"));
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Collects the names (not paths) of all files of a type in its data directory.
 // Dest and Arena can be 0 to only count.
 internal u32
@@ -201,8 +216,7 @@ PlatformCollectFilesOfType(platform_file_type Type, char **Dest, memory_arena *A
     {
         while(char *FileName = OSNextFileInDirectory(&Directory))
         {
-            if((Type != PlatformFileType_None) &&
-               !StringEndsWithNoCase(FileName, GlobalFileExtentionsForType[Type]))
+            if((Type != PlatformFileType_None) && !IsFileOfType(FileName, Type))
             {
                 continue;
             }

@@ -1018,7 +1018,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
             bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
             kesa_bitmap *StoredBitmap = &StoredAsset->Bitmap;
     
-            BitmapMode->Bitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_BMP, 0);
+            BitmapMode->Bitmap = LoadImageFile(StoredAsset->SourceFileName, PlatformFileType_BMP, 0);
             if(BitmapMode->Bitmap.Memory)
             {
                 loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
@@ -1031,7 +1031,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
             spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
             kesa_spritesheet *SpriteSheet = &StoredAsset->SpriteSheet;
 
-            SpriteSheetMode->SpriteSheetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_SSBMP, 0);
+            SpriteSheetMode->SpriteSheetBitmap = LoadImageFile(StoredAsset->SourceFileName, PlatformFileType_SSBMP, 0);
 
             loaded_bitmap *Bitmap = &SpriteSheetMode->SpriteSheetBitmap;
             AllocateBitmap(TextureOpQueue, Bitmap);
@@ -1043,11 +1043,11 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
             tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
             kesa_tileset *StoredTileset = &StoredAsset->Tileset;
     
-            TilesetMode->TilesetBitmap = LoadBMP(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
+            TilesetMode->TilesetBitmap = LoadImageFile(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
             loaded_bitmap *Bitmap = &TilesetMode->TilesetBitmap;
             AllocateBitmap(TextureOpQueue, Bitmap);
 
-            TilesetMode->MergeTileBitmap = LoadBMP(StoredTileset->MergeTileFileName, PlatformFileType_STBMP, 0);
+            TilesetMode->MergeTileBitmap = LoadImageFile(StoredTileset->MergeTileFileName, PlatformFileType_STBMP, 0);
             Bitmap = &TilesetMode->MergeTileBitmap;
             AllocateBitmap(TextureOpQueue, Bitmap);
 

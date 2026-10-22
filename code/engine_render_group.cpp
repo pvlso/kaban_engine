@@ -141,8 +141,11 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
             Entry->Color = Color;
             Entry->Size = Size;
 
-            // NOTE(pvlso): The whole bitmap, one texel in from the edges (moved here from the OpenGL code)
-            if(Bitmap->Width && Bitmap->Height)
+            // NOTE(pvlso): The whole bitmap, one texel in from the edges (moved here from the OpenGL code). Not in
+            // the pixel world: its bitmaps are pixel art, drawn texel for pixel, every texel counts.
+            Entry->MinUV = V2(0.0f, 0.0f);
+            Entry->MaxUV = V2(1.0f, 1.0f);
+            if(Bitmap->Width && Bitmap->Height && !Group->InPixelWorld)
             {
                 r32 OneTexelU = 1.0f / (r32)Bitmap->Width;
                 r32 OneTexelV = 1.0f / (r32)Bitmap->Height;

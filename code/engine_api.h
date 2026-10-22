@@ -157,6 +157,9 @@ struct engine_api
     // NOTE(pvlso): A tie (AssetCount > 1) is pushed on Arena, nothing is pushed for 0 or 1 matches.
     // Arena can be 0 when only one match is expected, a tie then returns only its count.
     asset_best_match_result (*GetBestMatchAssets)(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena);
+    // NOTE(pvlso): The sprite at SpriteIndex (left to right) of the sprite sheet at SheetIndex (found with
+    // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
+    bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
 };
 
 // NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
@@ -255,6 +258,13 @@ inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
     asset_best_match_result Result = Engine.GetBestMatchAssets(Assets, Vector, Arena);
+    return(Result);
+}
+
+inline bitmap_id
+GetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
+{
+    bitmap_id Result = Engine.GetSprite(Assets, SheetIndex, SpriteIndex);
     return(Result);
 }
 

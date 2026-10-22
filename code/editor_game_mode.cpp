@@ -50,6 +50,34 @@ GameGetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_a
     return(Result);
 }
 
+// NOTE(pvlso): The sheet only holds its sprites' GUIDs, so it's loaded right away the first time
+internal bitmap_id
+GameGetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
+{
+    bitmap_id Result = {};
+    if(Assets && SheetIndex && (SheetIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + SheetIndex;
+        if((Asset->KEA.Type == KEAType_SpriteSheet) && (SpriteIndex < Asset->KEA.SpriteSheet.SpriteCount))
+        {
+            spritesheet_id SheetID = {SheetIndex};
+            loaded_spritesheet *Sheet = GetSpriteSheet(Assets, SheetID, 0);
+            if(!Sheet)
+            {
+                LoadSpriteSheet(Assets, SheetID, true);
+                Sheet = GetSpriteSheet(Assets, SheetID, 0);
+            }
+
+            if(Sheet)
+            {
+                Result = Sheet->SpriteGUIDs[SpriteIndex];
+            }
+        }
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Built every frame, the function addresses change when the engine is reloaded
 internal engine_api
 GetEngineAPI(void)
@@ -75,6 +103,7 @@ GetEngineAPI(void)
     Result.GetTextDim = GameGetTextDim;
 
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
+    Result.GetSprite = GameGetSprite;
 
     return(Result);
 }

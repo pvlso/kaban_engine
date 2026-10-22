@@ -148,10 +148,10 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
 
     Builder->CurrentAsset = 0;
 
-    loaded_bitmap TilesetBitmap = LoadBMP(KESAAsset->SourceFileName, PlatformFileType_TSBMP, Builder->TempMem);
+    loaded_bitmap TilesetBitmap = LoadImageFile(KESAAsset->SourceFileName, PlatformFileType_TSBMP, Builder->TempMem);
     loaded_bitmap MergeTileBitmap = {};
     if(KESAAsset->Tileset.MergedTile)
-        MergeTileBitmap = LoadBMP(KESAAsset->Tileset.MergeTileFileName, PlatformFileType_STBMP, Builder->TempMem);
+        MergeTileBitmap = LoadImageFile(KESAAsset->Tileset.MergeTileFileName, PlatformFileType_STBMP, Builder->TempMem);
         
     builder_loaded_tiles TileBitmaps = {};
     TileBitmaps.Count = KESAAsset->Tileset.TileCount;
@@ -497,7 +497,7 @@ BuilderWriteKEA(kea_builder *Builder)
                 else
                 {
                     Assert(Source->Type == AssetType_Bitmap);
-                    Bitmap = LoadBMP(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
+                    Bitmap = LoadImageFile(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
                 }
 
                 Dest->Bitmap.Dim[0] = Bitmap.Width;
