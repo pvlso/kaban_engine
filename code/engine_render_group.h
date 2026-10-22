@@ -69,7 +69,8 @@ struct render_entry_cliprect
 struct render_entry_bitmap
 {
     loaded_bitmap *Bitmap;
-    
+    loaded_bitmap *NormalMap; // NOTE(pvlso): 0 for flat, facing the viewer
+
     v4 Color;
     v2 P;
     v2 Size;

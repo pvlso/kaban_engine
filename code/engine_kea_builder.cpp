@@ -100,7 +100,23 @@ BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
     return(Builder->CurrentAsset);
 }
 
+// NOTE(pvlso): The normal map of a sprite or tile (Image), from its sheet's _n file
 internal void
+AddNormalMapAsset(kea_builder *Builder, kesa_asset *Asset, kea_asset *Image, loaded_bitmap *Normals)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    KEAAsset->GUID = NormalMapGUID(Image->GUID);
+    KEAAsset->Type = KEAType_NormalMap;
+    KEAAsset->Bitmap.AlignPercentage[0] = Image->Bitmap.AlignPercentage[0];
+    KEAAsset->Bitmap.AlignPercentage[1] = Image->Bitmap.AlignPercentage[1];
+    BuilderAsset->Data.Sprite.SpriteBitmap = Normals;
+
+    Builder->CurrentAsset = 0;
+}
+
+internal kea_asset *
 AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_data *Data, u32 TileIndex,
              loaded_bitmap *TileBitmap)
 {
@@ -127,8 +143,10 @@ AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_d
     
     Data->Tileset.TileGUIDs[TileIndex] = KEAAsset->GUID;
     BuilderAsset->Data.Tile.TileBitmap = TileBitmap;
-    
+
     Builder->CurrentAsset = 0;
+
+    return(KEAAsset);
 }
 
 internal void
@@ -153,6 +171,23 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     if(KESAAsset->Tileset.MergedTile)
         MergeTileBitmap = LoadImageFile(KESAAsset->Tileset.MergeTileFileName, PlatformFileType_STBMP, Builder->TempMem);
         
+    // NOTE(pvlso): The tile set's normal map, cut the same way (without the merge tile)
+    char NormalsFileName[256];
+    NormalMapFileName(KESAAsset->SourceFileName, NormalsFileName, sizeof(NormalsFileName));
+    loaded_bitmap NormalsBitmap = {};
+    if(Platform.FileExists(NormalsFileName, PlatformFileType_TSBMP))
+    {
+        NormalsBitmap = LoadImageFile(NormalsFileName, PlatformFileType_TSBMP, Builder->TempMem, true);
+        if(NormalsBitmap.Memory &&
+           ((NormalsBitmap.Width != TilesetBitmap.Width) || (NormalsBitmap.Height != TilesetBitmap.Height)))
+        {
+            LOG_ERROR("%s isn't the size of %s, the tiles get no normal maps", NormalsFileName, KESAAsset->SourceFileName);
+            NormalsBitmap.Memory = 0;
+        }
+    }
+    kesa_tileset NormalsTileset = KESAAsset->Tileset;
+    NormalsTileset.MergedTile = false;
+
     builder_loaded_tiles TileBitmaps = {};
     TileBitmaps.Count = KESAAsset->Tileset.TileCount;
     TileBitmaps.TileBitmaps = PushArray(Builder->TempMem, KESAAsset->Tileset.TileCount, loaded_bitmap);
@@ -161,13 +196,19 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
         ++I)
     {
         TileBitmaps.TileBitmaps[I] = LoadTileBitmap(&KESAAsset->Tileset, &TilesetBitmap, &MergeTileBitmap, I, Builder->TempMem);
-        AddTileAsset(Builder, Asset, &BuilderAsset->Data, I, TileBitmaps.TileBitmaps + I);
+        kea_asset *Tile = AddTileAsset(Builder, Asset, &BuilderAsset->Data, I, TileBitmaps.TileBitmaps + I);
+        if(NormalsBitmap.Memory)
+        {
+            loaded_bitmap *Normals = PushStruct(Builder->TempMem, loaded_bitmap);
+            *Normals = LoadTileBitmap(&NormalsTileset, &NormalsBitmap, 0, I, Builder->TempMem);
+            AddNormalMapAsset(Builder, Asset, Tile, Normals);
+        }
     }
 
     Builder->CurrentAsset = BuilderAsset;
 }
 
-internal void
+internal kea_asset *
 AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data,
                u32 SpriteIndex, loaded_bitmap *Sprite)
 {
@@ -186,8 +227,10 @@ AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additi
     
     Data->SpriteSheet.SpriteGUIDs[SpriteIndex] = KEAAsset->GUID;
     BuilderAsset->Data.Sprite.SpriteBitmap = Sprite;
-    
+
     Builder->CurrentAsset = 0;
+
+    return(KEAAsset);
 }
 
 internal void
@@ -207,11 +250,25 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     Builder->CurrentAsset = 0;
 
     builder_loaded_sprites Sprites = LoadSprites(KESAAsset, Builder->TempMem);
+
+    // NOTE(pvlso): The sheet's normal map, when the art has one
+    char NormalsFileName[256];
+    NormalMapFileName(KESAAsset->SourceFileName, NormalsFileName, sizeof(NormalsFileName));
+    builder_loaded_sprites Normals = {};
+    if(Platform.FileExists(NormalsFileName, PlatformFileType_SSBMP))
+    {
+        Normals = LoadSprites(KESAAsset, Builder->TempMem, NormalsFileName, true);
+    }
+
     for(u32 I = 0;
         I < KESAAsset->SpriteSheet.SpriteCount;
         ++I)
     {
-        AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
+        kea_asset *Sprite = AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
+        if(I < Normals.Count)
+        {
+            AddNormalMapAsset(Builder, Asset, Sprite, Normals.Sprites + I);
+        }
     }
 
     Builder->CurrentAsset = BuilderAsset;
@@ -490,7 +547,7 @@ BuilderWriteKEA(kea_builder *Builder)
                 {
                     Bitmap = *BuilderAsset->Data.Tile.TileBitmap;
                 }
-                else if(Dest->Type == KEAType_Sprite)
+                else if((Dest->Type == KEAType_Sprite) || (Dest->Type == KEAType_NormalMap))
                 {
                     Bitmap = *BuilderAsset->Data.Sprite.SpriteBitmap;
                 }

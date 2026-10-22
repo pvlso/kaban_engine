@@ -420,6 +420,7 @@ GamePushText(render_group *Group, object_transform *ObjectTransform, engine_font
                 if(Entry)
                 {
                     Entry->Bitmap = &Size->Atlas;
+                    Entry->NormalMap = 0;
                     Entry->Color = TextColor;
                     Entry->P = V2((r32)RoundReal32ToInt32(PenX + Fit*Glyph->xoff),
                                   (r32)RoundReal32ToInt32(BaselineY - Fit*Glyph->yoff2));

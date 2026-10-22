@@ -73,6 +73,7 @@ LoadAssetWorkDirectly(load_asset_work *Work)
                 Op.Allocate.Height = Bitmap->Height;
                 Op.Allocate.Data = Bitmap->Memory;
                 Op.Allocate.ResultHandle = &Bitmap->TextureHandle;
+                Op.Allocate.Linear = (Work->Asset->KEA.Type == KEAType_NormalMap);
                 AddOp(Work->TextureOpQueue, &Op);
             } break;
 
@@ -835,8 +836,10 @@ AllocateAssets(char *AssetFileName, memory_arena *Arena, memory_arena *TempArena
         Platform.ReadDataFromFile(&File->Handle, File->Header.AssetTypeTableOffset,
                                   AssetTypeTableSize, Assets->TypeTable);
 
+        // NOTE(pvlso): A file from before a type was added has fewer
+        u32 TypeCount = Minimum(File->Header.AssetTypeCount, (u32)KEAType_Count);
         for(u32 Type = 0;
-            Type < KEAType_Count;
+            Type < TypeCount;
             ++Type)
         {
             kea_asset_type_table_entry *TypeEntry = Assets->TypeTable + Type;

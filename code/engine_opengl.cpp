@@ -41,6 +41,7 @@ struct opengl_program
     GLuint Handle;
     GLint TransformID;
     GLint TextureID;
+    GLint NormalTextureID; // NOTE(pvlso): texture unit 1
 };
 
 #define OPENGL_MAX_BATCH_VERTICES (6*16384)
@@ -51,12 +52,15 @@ struct opengl_batch
 
     GLenum Primitive;
     GLuint Texture;
+    GLuint NormalTexture;
     u32 VertexCount;
     opengl_vertex Vertices[OPENGL_MAX_BATCH_VERTICES];
 };
 
 global_variable opengl_program OpenGLBasicProgram;
 global_variable GLuint OpenGLWhiteTexture;
+// NOTE(pvlso): A 1x1 normal map facing the viewer, for everything without one
+global_variable GLuint OpenGLFlatNormalTexture;
 global_variable opengl_batch OpenGLBatch;
 
 // NOTE(pvlso): Untextured things draw with a white texture, so one program draws everything
@@ -76,15 +80,56 @@ void main()
 }
 )GLSL";
 
+// NOTE(pvlso): Into images with a normal buffer (the pixel world's) it writes the normal too, weighted like the colour
+// so blending mixes them the same way; elsewhere that output goes nowhere. Transparent normal texels count as flat.
 global_variable char *OpenGLBasicFragmentCode = R"GLSL(
 #version 330 core
 uniform sampler2D Texture;
+uniform sampler2D NormalTexture;
+in vec2 FragUV;
+in vec4 FragColor;
+layout(location = 0) out vec4 OutColor;
+layout(location = 1) out vec4 OutNormal;
+void main()
+{
+    OutColor = texture(Texture, FragUV)*FragColor;
+    vec4 Normal = texture(NormalTexture, FragUV);
+    OutNormal = vec4((Normal.a > 0.0) ? Normal.rgb : vec3(0.5, 0.5, 1.0), 1.0)*OutColor.a;
+}
+)GLSL";
+
+// NOTE(pvlso): The light pass: the world on screen (colour and normals) lit by the ambient and the lights, worked
+// out per world pixel (PixelOrigin, PixelScale, like a game shader), so the pixels stay square. Lights are in the
+// world image's pixels: x, y, height over the ground, radius. The same light as tools/art/normal_test.py.
+global_variable char *OpenGLLightFragmentCode = R"GLSL(
+#version 330 core
+uniform sampler2D Texture;
+uniform sampler2D NormalTexture;
+uniform vec2 ScreenSize;
+uniform float PixelScale;
+uniform vec2 PixelOrigin;
+uniform vec3 Ambient;
+uniform int LightCount;
+uniform vec4 Lights[64];
+uniform vec3 LightColors[64];
 in vec2 FragUV;
 in vec4 FragColor;
 out vec4 OutColor;
 void main()
 {
-    OutColor = texture(Texture, FragUV)*FragColor;
+    vec4 Albedo = texture(Texture, FragUV);
+    vec3 Normal = normalize(texture(NormalTexture, FragUV).rgb*2.0 - 1.0);
+    vec2 P = floor((FragUV*ScreenSize - PixelOrigin) / PixelScale) + 0.5;
+    vec3 Light = Ambient;
+    for(int Index = 0; Index < LightCount; ++Index)
+    {
+        vec3 ToLight = vec3(Lights[Index].xy - P, Lights[Index].z);
+        float Distance = max(length(ToLight), 0.001);
+        float Facing = clamp(dot(Normal, ToLight) / Distance, 0.0, 1.0);
+        float Falloff = clamp(1.0 - Distance / Lights[Index].w, 0.0, 1.0);
+        Light += Facing*Falloff*Falloff*LightColors[Index];
+    }
+    OutColor = vec4(Albedo.rgb*Light, Albedo.a);
 }
 )GLSL";
 
@@ -238,6 +283,7 @@ OpenGLLinkProgram(GLuint VertexShader, GLuint FragmentShader)
     {
         Result.TransformID = glGetUniformLocation(Result.Handle, "Transform");
         Result.TextureID = glGetUniformLocation(Result.Handle, "Texture");
+        Result.NormalTextureID = glGetUniformLocation(Result.Handle, "NormalTexture");
     }
 
     return(Result);
@@ -354,11 +400,42 @@ OpenGLSetVertexLayout(GLsizei Stride, umm POffset, umm UVOffset, umm ColorOffset
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, Stride, (void *)ColorOffset);
 }
 
+struct opengl_light_program
+{
+    opengl_program Program;
+    GLint ScreenSizeID;
+    GLint PixelScaleID;
+    GLint PixelOriginID;
+    GLint AmbientID;
+    GLint LightCountID;
+    GLint LightsID;
+    GLint LightColorsID;
+};
+global_variable opengl_light_program OpenGLLightProgram;
+
 // NOTE(pvlso): Called once, with the main window's context current
 internal void
 OpenGLCreateObjects(void)
 {
     OpenGLBasicProgram = OpenGLCreateProgram(OpenGLBasicVertexCode, OpenGLBasicFragmentCode);
+
+    opengl_light_program *Light = &OpenGLLightProgram;
+    Light->Program = OpenGLCreateProgram(OpenGLBasicVertexCode, OpenGLLightFragmentCode);
+    Light->ScreenSizeID = glGetUniformLocation(Light->Program.Handle, "ScreenSize");
+    Light->PixelScaleID = glGetUniformLocation(Light->Program.Handle, "PixelScale");
+    Light->PixelOriginID = glGetUniformLocation(Light->Program.Handle, "PixelOrigin");
+    Light->AmbientID = glGetUniformLocation(Light->Program.Handle, "Ambient");
+    Light->LightCountID = glGetUniformLocation(Light->Program.Handle, "LightCount");
+    Light->LightsID = glGetUniformLocation(Light->Program.Handle, "Lights");
+    Light->LightColorsID = glGetUniformLocation(Light->Program.Handle, "LightColors");
+
+    // NOTE(pvlso): B G R A in memory: (0.5, 0.5, 1)
+    u32 Flat = 0xFF8080FF;
+    glGenTextures(1, &OpenGLFlatNormalTexture);
+    glBindTexture(GL_TEXTURE_2D, OpenGLFlatNormalTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, &Flat);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     u32 White = 0xFFFFFFFF;
     glGenTextures(1, &OpenGLWhiteTexture);
@@ -385,6 +462,7 @@ OpenGLUseProgram(opengl_program *Program, r32 *Transform)
     glUseProgram(Program->Handle);
     glUniformMatrix4fv(Program->TransformID, 1, GL_FALSE, Transform);
     glUniform1i(Program->TextureID, 0);
+    glUniform1i(Program->NormalTextureID, 1);
     glActiveTexture(GL_TEXTURE0);
 }
 
@@ -407,13 +485,14 @@ OpenGLScreenspaceTransform(r32 *Transform, s32 Width, s32 Height)
     }
 }
 
+// NOTE(pvlso): Linear for what isn't colour (normal maps), read back as stored
 internal void *
-OpenGLAllocateTexture(u32 Width, u32 Height, void *Data)
+OpenGLAllocateTexture(u32 Width, u32 Height, void *Data, b32 Linear = false)
 {
     GLuint Handle;
     glGenTextures(1, &Handle);
     glBindTexture(GL_TEXTURE_2D, Handle);
-    glTexImage2D(GL_TEXTURE_2D, 0, OpenGLDefaultInternalTextureFormat,
+    glTexImage2D(GL_TEXTURE_2D, 0, Linear ? GL_RGBA8 : OpenGLDefaultInternalTextureFormat,
                  Width, Height, 0,
                  GL_BGRA, GL_UNSIGNED_BYTE, Data);
 
@@ -436,6 +515,9 @@ OpenGLFlushBatch(void)
     opengl_batch *Batch = &OpenGLBatch;
     if(Batch->VertexCount)
     {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, Batch->NormalTexture);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, Batch->Texture);
         glBindBuffer(GL_ARRAY_BUFFER, Batch->VertexBuffer);
         // NOTE(pvlso): A new store every time, so the driver doesn't wait for the last draw
@@ -446,18 +528,25 @@ OpenGLFlushBatch(void)
     }
 }
 
-// NOTE(pvlso): Room for VertexCount more vertices with this primitive and texture
+// NOTE(pvlso): Room for VertexCount more vertices with this primitive and texture (and normal map, 0 for flat)
 inline opengl_vertex *
-OpenGLBatchVertices(GLenum Primitive, GLuint Texture, u32 VertexCount)
+OpenGLBatchVertices(GLenum Primitive, GLuint Texture, u32 VertexCount, GLuint NormalTexture = 0)
 {
+    if(!NormalTexture)
+    {
+        NormalTexture = OpenGLFlatNormalTexture;
+    }
+
     opengl_batch *Batch = &OpenGLBatch;
     if((Batch->Primitive != Primitive) ||
        (Batch->Texture != Texture) ||
+       (Batch->NormalTexture != NormalTexture) ||
        ((Batch->VertexCount + VertexCount) > ArrayCount(Batch->Vertices)))
     {
         OpenGLFlushBatch();
         Batch->Primitive = Primitive;
         Batch->Texture = Texture;
+        Batch->NormalTexture = NormalTexture;
     }
 
     opengl_vertex *Result = Batch->Vertices + Batch->VertexCount;
@@ -493,9 +582,9 @@ OpenGLTriangle(v2 a, v2 b, v2 c, v4 Color)
 
 inline void
 OpenGLQuad(GLuint Texture, v2 P0, v2 P1, v2 P2, v2 P3,
-           v4 Color, v2 MinUV = V2(0,0), v2 MaxUV = V2(1,1))
+           v4 Color, v2 MinUV = V2(0,0), v2 MaxUV = V2(1,1), GLuint NormalTexture = 0)
 {
-    opengl_vertex *V = OpenGLBatchVertices(GL_TRIANGLES, Texture, 6);
+    opengl_vertex *V = OpenGLBatchVertices(GL_TRIANGLES, Texture, 6, NormalTexture);
 
     // Lower triangle: P0, P1, P2
     OpenGLVertex(V++, P0, V2(MinUV.x, MinUV.y), Color);
@@ -509,9 +598,10 @@ OpenGLQuad(GLuint Texture, v2 P0, v2 P1, v2 P2, v2 P3,
 }
 
 inline void
-OpenGLRectangle(GLuint Texture, v2 MinP, v2 MaxP, v4 Color, v2 MinUV = V2(0, 0), v2 MaxUV = V2(1, 1))
+OpenGLRectangle(GLuint Texture, v2 MinP, v2 MaxP, v4 Color, v2 MinUV = V2(0, 0), v2 MaxUV = V2(1, 1),
+                GLuint NormalTexture = 0)
 {
-    OpenGLQuad(Texture, MinP, V2(MaxP.x, MinP.y), MaxP, V2(MinP.x, MaxP.y), Color, MinUV, MaxUV);
+    OpenGLQuad(Texture, MinP, V2(MaxP.x, MinP.y), MaxP, V2(MinP.x, MaxP.y), Color, MinUV, MaxUV, NormalTexture);
 }
 
 inline void
@@ -535,13 +625,15 @@ struct opengl_image
 {
     GLuint Framebuffer;
     GLuint Texture;
+    GLuint NormalTexture; // NOTE(pvlso): a second colour buffer for the normals, when made with them
     u32 Width;
     u32 Height;
 };
-// NOTE(pvlso): The pixel world's image, and, when the game has a shader for it, the world on screen (the image with
-// its upright things over it) that the shader draws on the screen
+// NOTE(pvlso): The pixel world's image (with its normals). When the game lights it or has a shader for it: the world
+// on screen (the image with its upright things over it, with normals), and the lit world.
 global_variable opengl_image OpenGLPixelWorld;
 global_variable opengl_image OpenGLWorldOnScreen;
+global_variable opengl_image OpenGLLitWorld;
 
 // NOTE(pvlso): Which entries an OpenGLRenderEntries draws
 enum opengl_entry_pass
@@ -571,7 +663,7 @@ RoundV2(v2 P)
 }
 
 internal void
-OpenGLMakeImage(opengl_image *World, u32 Width, u32 Height)
+OpenGLMakeImage(opengl_image *World, u32 Width, u32 Height, b32 WithNormals = false)
 {
     if((World->Width != Width) || (World->Height != Height))
     {
@@ -583,6 +675,11 @@ OpenGLMakeImage(opengl_image *World, u32 Width, u32 Height)
         {
             glDeleteTextures(1, &World->Texture);
         }
+        if(World->NormalTexture)
+        {
+            glDeleteTextures(1, &World->NormalTexture);
+            World->NormalTexture = 0;
+        }
 
         World->Texture = U32FromPointer(OpenGLAllocateTexture(Width, Height, 0));
         World->Width = Width;
@@ -590,6 +687,13 @@ OpenGLMakeImage(opengl_image *World, u32 Width, u32 Height)
 
         glBindFramebuffer(GL_FRAMEBUFFER, World->Framebuffer);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, World->Texture, 0);
+        if(WithNormals)
+        {
+            World->NormalTexture = U32FromPointer(OpenGLAllocateTexture(Width, Height, 0, true));
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, World->NormalTexture, 0);
+            GLenum DrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+            glDrawBuffers(ArrayCount(DrawBuffers), DrawBuffers);
+        }
         GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         Assert(Status == GL_FRAMEBUFFER_COMPLETE);
     }
@@ -618,6 +722,14 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
 
 internal void OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
                                   opengl_entry_pass Pass, b32 UprightDrawn = false);
+
+// NOTE(pvlso): The bound image's normal buffer, to facing the viewer (glClear gave it the clear colour)
+inline void
+OpenGLClearNormals(void)
+{
+    GLfloat Flat[] = {0.5f, 0.5f, 1.0f, 1.0f};
+    glClearBufferfv(GL_COLOR, 1, Flat);
+}
 
 internal void
 OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
@@ -673,6 +785,7 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
 
     glUseProgram(OpenGLBasicProgram.Handle);
     glUniform1i(OpenGLBasicProgram.TextureID, 0);
+    glUniform1i(OpenGLBasicProgram.NormalTextureID, 1);
     glActiveTexture(GL_TEXTURE0);
     glBindVertexArray(OpenGLBatch.VertexArray);
     OpenGLBatch.VertexCount = 0;
@@ -682,13 +795,14 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     render_pixel_world *PixelWorld = &Commands->PixelWorld;
     if(PixelWorld->Width && PixelWorld->Height)
     {
-        OpenGLMakeImage(&OpenGLPixelWorld, PixelWorld->Width, PixelWorld->Height);
+        OpenGLMakeImage(&OpenGLPixelWorld, PixelWorld->Width, PixelWorld->Height, true);
         glBindFramebuffer(GL_FRAMEBUFFER, OpenGLPixelWorld.Framebuffer);
         glViewport(0, 0, PixelWorld->Width, PixelWorld->Height);
         glScissor(0, 0, PixelWorld->Width, PixelWorld->Height);
         glClearColor(Commands->ClearColor.r, Commands->ClearColor.g,
                      Commands->ClearColor.b, Commands->ClearColor.a);
         glClear(GL_COLOR_BUFFER_BIT);
+        OpenGLClearNormals();
 
         OpenGLRenderEntries(Commands, Prep, DrawRegion, OpenGLPass_PixelWorld);
 
@@ -711,32 +825,88 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
         r32 Transform[16];
         OpenGLScreenspaceTransform(Transform, DrawWidth, DrawHeight);
         opengl_game_shader *GameShader = PixelWorld->Shader.Source ? OpenGLGetGameShader(&PixelWorld->Shader) : 0;
-        if(GameShader && GameShader->Program.Handle)
+        if(GameShader && !GameShader->Program.Handle)
         {
-            // NOTE(pvlso): The image and the upright things go together into the world on screen first, so the
-            // shader covers all of the world. Same pixels as the draw region, without its offset.
-            OpenGLMakeImage(&OpenGLWorldOnScreen, DrawWidth, DrawHeight);
+            GameShader = 0;
+        }
+        if(GameShader || PixelWorld->Lit)
+        {
+            // NOTE(pvlso): The image and the upright things go together into the world on screen first (colour and
+            // normals), so the lights and the shader cover all of the world. Same pixels as the draw region,
+            // without its offset.
+            OpenGLMakeImage(&OpenGLWorldOnScreen, DrawWidth, DrawHeight, true);
             glBindFramebuffer(GL_FRAMEBUFFER, OpenGLWorldOnScreen.Framebuffer);
             glViewport(0, 0, DrawWidth, DrawHeight);
             glScissor(0, 0, DrawWidth, DrawHeight);
             glClear(GL_COLOR_BUFFER_BIT);
+            OpenGLClearNormals();
             glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
-            OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1));
+            OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1), V2(0, 0), V2(1, 1),
+                            OpenGLPixelWorld.NormalTexture);
             OpenGLFlushBatch();
             OpenGLRenderEntries(Commands, Prep, DrawRegion, OpenGLPass_Upright);
             UprightDrawn = true;
 
+            GLuint World = OpenGLWorldOnScreen.Texture;
+            if(PixelWorld->Lit)
+            {
+                // NOTE(pvlso): Lights in arrays of the light program's layout
+                r32 Lights[4*RENDER_MAX_LIGHTS];
+                r32 LightColors[3*RENDER_MAX_LIGHTS];
+                u32 LightCount = Minimum(PixelWorld->LightCount, (u32)RENDER_MAX_LIGHTS);
+                for(u32 LightIndex = 0; LightIndex < LightCount; ++LightIndex)
+                {
+                    render_light *Light = PixelWorld->Lights + LightIndex;
+                    Lights[4*LightIndex + 0] = Light->P.x;
+                    Lights[4*LightIndex + 1] = Light->P.y;
+                    Lights[4*LightIndex + 2] = Light->Height;
+                    Lights[4*LightIndex + 3] = Light->Radius;
+                    LightColors[3*LightIndex + 0] = Light->Color.r;
+                    LightColors[3*LightIndex + 1] = Light->Color.g;
+                    LightColors[3*LightIndex + 2] = Light->Color.b;
+                }
+
+                OpenGLMakeImage(&OpenGLLitWorld, DrawWidth, DrawHeight);
+                glBindFramebuffer(GL_FRAMEBUFFER, OpenGLLitWorld.Framebuffer);
+                glViewport(0, 0, DrawWidth, DrawHeight);
+                glClear(GL_COLOR_BUFFER_BIT);
+
+                opengl_light_program *Light = &OpenGLLightProgram;
+                OpenGLUseProgram(&Light->Program, Transform);
+                glUniform2f(Light->ScreenSizeID, (r32)DrawWidth, (r32)DrawHeight);
+                glUniform1f(Light->PixelScaleID, (r32)Scale);
+                glUniform2f(Light->PixelOriginID, MinP.x, MinP.y);
+                glUniform3f(Light->AmbientID, PixelWorld->Ambient.r, PixelWorld->Ambient.g, PixelWorld->Ambient.b);
+                glUniform1i(Light->LightCountID, (GLint)LightCount);
+                if(LightCount)
+                {
+                    glUniform4fv(Light->LightsID, LightCount, Lights);
+                    glUniform3fv(Light->LightColorsID, LightCount, LightColors);
+                }
+                OpenGLRectangle(World, V2(0, 0), V2((r32)DrawWidth, (r32)DrawHeight), V4(1, 1, 1, 1), V2(0, 0),
+                                V2(1, 1), OpenGLWorldOnScreen.NormalTexture);
+                OpenGLFlushBatch();
+                World = OpenGLLitWorld.Texture;
+            }
+
             OpenGLBindFramebuffer(0, DrawRegion);
             glScissor(DrawRegion.Min.x, DrawRegion.Min.y, DrawWidth, DrawHeight);
-            render_shader_params *Params = &PixelWorld->Shader.Params;
-            OpenGLUseProgram(&GameShader->Program, Transform);
-            glUniform2f(GameShader->ScreenSizeID, (r32)DrawWidth, (r32)DrawHeight);
-            glUniform2f(GameShader->ImageSizeID, (r32)PixelWorld->Width, (r32)PixelWorld->Height);
-            glUniform1f(GameShader->PixelScaleID, (r32)Scale);
-            glUniform2f(GameShader->PixelOriginID, MinP.x, MinP.y);
-            glUniform1f(GameShader->TimeID, Params->Time);
-            glUniform4fv(GameShader->ParamsID, ArrayCount(Params->Params), (r32 *)Params->Params);
-            OpenGLRectangle(OpenGLWorldOnScreen.Texture, V2(0, 0), V2((r32)DrawWidth, (r32)DrawHeight), V4(1, 1, 1, 1));
+            if(GameShader)
+            {
+                render_shader_params *Params = &PixelWorld->Shader.Params;
+                OpenGLUseProgram(&GameShader->Program, Transform);
+                glUniform2f(GameShader->ScreenSizeID, (r32)DrawWidth, (r32)DrawHeight);
+                glUniform2f(GameShader->ImageSizeID, (r32)PixelWorld->Width, (r32)PixelWorld->Height);
+                glUniform1f(GameShader->PixelScaleID, (r32)Scale);
+                glUniform2f(GameShader->PixelOriginID, MinP.x, MinP.y);
+                glUniform1f(GameShader->TimeID, Params->Time);
+                glUniform4fv(GameShader->ParamsID, ArrayCount(Params->Params), (r32 *)Params->Params);
+            }
+            else
+            {
+                OpenGLUseProgram(&OpenGLBasicProgram, Transform);
+            }
+            OpenGLRectangle(World, V2(0, 0), V2((r32)DrawWidth, (r32)DrawHeight), V4(1, 1, 1, 1));
             OpenGLFlushBatch();
             OpenGLUseProgram(&OpenGLBasicProgram, Transform);
         }
@@ -900,8 +1070,9 @@ OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, 
                         P3 = OpenGLUprightP(P3) + Snap;
                     }
 
+                    GLuint NormalTexture = Entry->NormalMap ? (GLuint)U32FromPointer(Entry->NormalMap->TextureHandle) : 0;
                     OpenGLQuad((GLuint)U32FromPointer(Entry->Bitmap->TextureHandle),
-                               P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV);
+                               P0, P1, P2, P3, Entry->Color, Entry->MinUV, Entry->MaxUV, NormalTexture);
                 }
             } break;
 
@@ -971,7 +1142,7 @@ OpenGLManageTextures(texture_op *First)
         if(Op->IsAllocate)
         {
             *Op->Allocate.ResultHandle = OpenGLAllocateTexture(Op->Allocate.Width, Op->Allocate.Height,
-                                                               Op->Allocate.Data);
+                                                               Op->Allocate.Data, Op->Allocate.Linear);
         }
         else
         {

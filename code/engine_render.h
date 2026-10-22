@@ -14,6 +14,7 @@ struct texture_op_allocate
     void *Data;
 
     void **ResultHandle;
+    b32 Linear; // NOTE(pvlso): not colour (a normal map), so not sRGB
 };
 
 struct texture_op_deallocate

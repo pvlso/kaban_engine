@@ -126,7 +126,7 @@ StoreColor(object_transform *Transform, v4 Source)
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            loaded_bitmap *Bitmap, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1),
-           f32 CAlign = 1.0f, f32 Angle = 0.0f)
+           f32 CAlign = 1.0f, f32 Angle = 0.0f, loaded_bitmap *NormalMap = 0)
 {
     used_bitmap_dim Dim = GetBitmapDim(Group, ObjectTransform, Bitmap, Height, Offset, CAlign);
     if(Dim.Basis.Valid)
@@ -137,6 +137,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
         if(Entry)
         {
             Entry->Bitmap = Bitmap;
+            Entry->NormalMap = NormalMap;
             Entry->P = Dim.Basis.P;
             Entry->Color = Color;
             Entry->Size = Size;
@@ -161,7 +162,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f,
-           f32 Angle = 0.0f)
+           f32 Angle = 0.0f, bitmap_id NormalMap = {})
 {
     
     loaded_bitmap *Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
@@ -173,7 +174,17 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     
     if(Bitmap)
     {
-        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign, Angle);
+        // NOTE(pvlso): Drawn flat until its normal map is in
+        loaded_bitmap *NormalBitmap = 0;
+        if(NormalMap.Value)
+        {
+            NormalBitmap = GetBitmap(Group->Assets, NormalMap, Group->GenerationID);
+            if(!NormalBitmap)
+            {
+                LoadAsset(Group->Assets, AssetType_Bitmap, NormalMap.Value, false);
+            }
+        }
+        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign, Angle, NormalBitmap);
     }
     else
     {
@@ -597,6 +608,35 @@ internal void
 SetPixelWorldScroll(render_group *Group, v2 Scroll)
 {
     Group->Commands->PixelWorld.Scroll = V2(Clamp01(Scroll.x), Clamp01(Scroll.y));
+}
+
+// NOTE(pvlso): Lights the pixel world: Ambient everywhere, plus the lights pushed this frame
+internal void
+SetPixelWorldLighting(render_group *Group, v3 Ambient)
+{
+    render_pixel_world *PixelWorld = &Group->Commands->PixelWorld;
+    PixelWorld->Lit = true;
+    PixelWorld->Ambient = Ambient;
+}
+
+// NOTE(pvlso): P.z is the light's height over the ground. Only in the pixel world, up to RENDER_MAX_LIGHTS a frame
+// (more are dropped).
+internal void
+PushLight(render_group *Group, object_transform *ObjectTransform, v3 P, r32 Radius, v3 Color)
+{
+    render_pixel_world *PixelWorld = &Group->Commands->PixelWorld;
+    if(Group->InPixelWorld && (PixelWorld->LightCount < ArrayCount(PixelWorld->Lights)))
+    {
+        entity_basis_p_result Basis = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, V3(P.xy, 0.0f));
+        if(Basis.Valid)
+        {
+            render_light *Light = PixelWorld->Lights + PixelWorld->LightCount++;
+            Light->P = Basis.P;
+            Light->Height = Basis.Scale*P.z;
+            Light->Radius = Basis.Scale*Radius;
+            Light->Color = Color;
+        }
+    }
 }
 
 // NOTE(pvlso): Back to the screen, with the camera the group had before BeginPixelWorld

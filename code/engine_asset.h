@@ -147,6 +147,14 @@ struct engine_assets
 
 // NOTE(pvlso): asset_tag_vector and asset_best_match_result live in engine_api.h, games use them too
 
+// NOTE(pvlso): A normal map (KEAType_NormalMap) is found from the GUID of its image, so the image needs no room for it
+inline u64
+NormalMapGUID(u64 ImageGUID)
+{
+    u64 Result = HashU64(ImageGUID ^ 0x6E6F726D616C6D70ULL);
+    return(Result);
+}
+
 inline void
 BeginAssetLock(engine_assets *Assets)
 {

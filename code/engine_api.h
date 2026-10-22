@@ -152,9 +152,16 @@ struct engine_api
     // image pixel ((FragUV*ScreenSize - PixelOrigin) / PixelScale), so the pixels stay square. A shader that doesn't
     // compile is logged (once for each version of it) and the world is drawn without it. 0 for no shader.
     void (*SetPixelWorldShader)(render_group *Group, u32 ShaderIndex, render_shader_params Params);
+    // NOTE(pvlso): Lighting for the pixel world. Each world pixel's colour is multiplied by Ambient plus the lights
+    // reaching it (falling off over Radius meters, more where its normal map faces the light). Called every frame it
+    // should be lit, before the game's shader runs on the lit world. Without it the world isn't lit at all.
+    void (*SetPixelWorldLighting)(render_group *Group, v3 Ambient);
+    // NOTE(pvlso): A light at P, P.z meters above the ground (in the pixel world, up to 64 a frame)
+    void (*PushLight)(render_group *Group, object_transform *ObjectTransform, v3 P, r32 Radius, v3 Color);
 
+    // NOTE(pvlso): NormalMap (GetNormalMap, or 0) makes it catch the pixel world's lights by its shape
     void (*PushBitmap)(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
-                       v4 Color, r32 CAlign, r32 Angle);
+                       v4 Color, r32 CAlign, r32 Angle, bitmap_id NormalMap);
     void (*PushRect)(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 Dim, v4 Color);
     void (*PushLine)(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color);
     void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
@@ -175,6 +182,8 @@ struct engine_api
     // NOTE(pvlso): The sprite at SpriteIndex (left to right) of the sprite sheet at SheetIndex (found with
     // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
     bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
+    // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
+    bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
 
 // NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
@@ -250,9 +259,28 @@ SetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params P
 
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
-           v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f, r32 Angle = 0.0f)
+           v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f, r32 Angle = 0.0f, bitmap_id NormalMap = {})
 {
-    Engine.PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle);
+    Engine.PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle, NormalMap);
+}
+
+inline void
+SetPixelWorldLighting(render_group *Group, v3 Ambient)
+{
+    Engine.SetPixelWorldLighting(Group, Ambient);
+}
+
+inline void
+PushLight(render_group *Group, object_transform *ObjectTransform, v3 P, r32 Radius, v3 Color)
+{
+    Engine.PushLight(Group, ObjectTransform, P, Radius, Color);
+}
+
+inline bitmap_id
+GetNormalMap(engine_assets *Assets, bitmap_id Bitmap)
+{
+    bitmap_id Result = Engine.GetNormalMap(Assets, Bitmap);
+    return(Result);
 }
 
 inline void

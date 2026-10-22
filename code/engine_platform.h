@@ -54,6 +54,16 @@ typedef struct render_shader
     render_shader_params Params;
 } render_shader;
 
+// NOTE(pvlso): A light in the pixel world (PushLight), in its image's pixels
+#define RENDER_MAX_LIGHTS 64
+typedef struct render_light
+{
+    v2 P;
+    r32 Height;
+    r32 Radius;
+    v3 Color;
+} render_light;
+
 typedef struct render_pixel_world
 {
     u32 Width;
@@ -61,6 +71,12 @@ typedef struct render_pixel_world
     u32 Scale; // NOTE(pvlso): screen pixels per image pixel
     v2 Scroll; // NOTE(pvlso): image pixels (0 to 1) the image is moved left and down on screen (SetPixelWorldScroll)
     render_shader Shader; // NOTE(pvlso): draws the image on screen, the plain copy without one
+
+    // NOTE(pvlso): SetPixelWorldLighting turns it on: the world is lit by Ambient plus its lights
+    b32 Lit;
+    v3 Ambient;
+    u32 LightCount;
+    render_light Lights[RENDER_MAX_LIGHTS];
 } render_pixel_world;
 
 typedef struct editor_render_commands
@@ -376,6 +392,10 @@ typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) u32 name(char *FileName, platform_file_type Type, u8 *Data, u32 Size)
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 
+// NOTE(pvlso): Whether the file can be opened, without logging when it can't
+#define PLATFORM_FILE_EXISTS(name) b32 name(char *FileName, platform_file_type Type)
+typedef PLATFORM_FILE_EXISTS(platform_file_exists);
+
 #define PlatformNoFileErrors(Handle) ((Handle)->NoErrors)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -497,6 +517,7 @@ typedef struct platform_api
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;
+    platform_file_exists *FileExists;
 
     platform_seek_file *FileSeek;
     platform_file_tell *FileTell;

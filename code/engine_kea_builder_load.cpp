@@ -47,9 +47,10 @@ PremultipliedTexel(v4 Texel)
     return(Result);
 }
 
-// NOTE(pvlso): Bottom row first, like a BMP. The pixels go on Arena, or Platform.AllocateMemory without one.
+// NOTE(pvlso): Bottom row first, like a BMP. The pixels go on Arena, or Platform.AllocateMemory without one. A normal
+// map's pixels are directions, not colours: they're kept as they are.
 internal loaded_bitmap
-ParsePNG(char *FileName, read_file_result File, memory_arena *Arena)
+ParsePNG(char *FileName, read_file_result File, memory_arena *Arena, b32 NormalMap)
 {
     loaded_bitmap Result = {};
 
@@ -78,7 +79,14 @@ ParsePNG(char *FileName, read_file_result File, memory_arena *Arena)
                 X < Width;
                 ++X)
             {
-                *Dest++ = PremultipliedTexel(V4(Source[0], Source[1], Source[2], Source[3]));
+                if(NormalMap)
+                {
+                    *Dest++ = (((u32)Source[3] << 24) | ((u32)Source[0] << 16) | ((u32)Source[1] << 8) | (u32)Source[2]);
+                }
+                else
+                {
+                    *Dest++ = PremultipliedTexel(V4(Source[0], Source[1], Source[2], Source[3]));
+                }
                 Source += 4;
             }
         }
@@ -170,9 +178,9 @@ ParseBMP(read_file_result ReadResult)
 
 // NOTE(pvlso): A .bmp or a .png of a data directory (told apart by their first bytes), bottom row first and
 // premultiplied. Without an Arena the memory comes from the platform, Platform.FreeFileMemory frees a PNG's
-// (a BMP's pixels are inside its file's memory).
+// (a BMP's pixels are inside its file's memory). Normal maps are PNGs.
 internal loaded_bitmap
-LoadImageFile(char *FileName, platform_file_type Type, memory_arena *Arena)
+LoadImageFile(char *FileName, platform_file_type Type, memory_arena *Arena, b32 NormalMap = false)
 {
     loaded_bitmap Result = {};
 
@@ -181,7 +189,7 @@ LoadImageFile(char *FileName, platform_file_type Type, memory_arena *Arena)
     if((ReadResult.Size >= 8) &&
        (Bytes[0] == 0x89) && (Bytes[1] == 'P') && (Bytes[2] == 'N') && (Bytes[3] == 'G'))
     {
-        Result = ParsePNG(FileName, ReadResult, Arena);
+        Result = ParsePNG(FileName, ReadResult, Arena, NormalMap);
         if(!Arena)
         {
             Platform.FreeFileMemory(ReadResult.Contents);
@@ -365,13 +373,46 @@ LoadWAV(char *FileName, u32 SectionFirstSampleIndex, u32 SectionSampleCount, voi
     return(Result);
 }
 
+// NOTE(pvlso): "oak.png" -> "oak_n.png", the normal map the art scripts write next to an image
+internal void
+NormalMapFileName(char *FileName, char *Dest, u32 DestCount)
+{
+    char *Dot = 0;
+    for(char *At = FileName; *At; ++At)
+    {
+        if(*At == '.') {Dot = At;}
+    }
+
+    if(Dot)
+    {
+        FormatString(DestCount, Dest, "%.*s_n%s", (int)(Dot - FileName), FileName, Dot);
+    }
+    else
+    {
+        FormatString(DestCount, Dest, "%s_n", FileName);
+    }
+}
+
+// NOTE(pvlso): The sheet's sprites, or with FileName (and NormalMap) the same cut of another image, its normal map
 internal builder_loaded_sprites
-LoadSprites(kesa_asset *KESAAsset, memory_arena *Arena)
+LoadSprites(kesa_asset *KESAAsset, memory_arena *Arena, char *FileName = 0, b32 NormalMap = false)
 {
     builder_loaded_sprites Result = {};
-    loaded_bitmap SpriteSheetBitmap = LoadImageFile(KESAAsset->SourceFileName, PlatformFileType_SSBMP, Arena);
+    if(!FileName)
+    {
+        FileName = KESAAsset->SourceFileName;
+    }
+    loaded_bitmap SpriteSheetBitmap = LoadImageFile(FileName, PlatformFileType_SSBMP, Arena, NormalMap);
 
-    if(SpriteSheetBitmap.Memory)
+    kesa_spritesheet *Sheet = &KESAAsset->SpriteSheet;
+    if(SpriteSheetBitmap.Memory &&
+       ((SpriteSheetBitmap.Width < (s32)(Sheet->SpriteCount*Sheet->SpriteWidth)) ||
+        (SpriteSheetBitmap.Height < (s32)Sheet->SpriteHeight)))
+    {
+        LOG_ERROR("%s is smaller than %u sprites of %ux%u", FileName, Sheet->SpriteCount, Sheet->SpriteWidth,
+                  Sheet->SpriteHeight);
+    }
+    else if(SpriteSheetBitmap.Memory)
     {
         Result.Count = KESAAsset->SpriteSheet.SpriteCount;
         Result.Sprites = PushArray(Arena, KESAAsset->SpriteSheet.SpriteCount, loaded_bitmap);

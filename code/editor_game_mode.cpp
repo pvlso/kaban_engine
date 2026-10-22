@@ -30,12 +30,30 @@ GameEndRenderGroup(render_group *Group)
 
 internal void
 GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
-               v4 Color, r32 CAlign, r32 Angle)
+               v4 Color, r32 CAlign, r32 Angle, bitmap_id NormalMap)
 {
     if(Group->Assets)
     {
-        PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle);
+        PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle, NormalMap);
     }
+}
+
+internal bitmap_id
+GameGetNormalMap(engine_assets *Assets, bitmap_id Bitmap)
+{
+    bitmap_id Result = {};
+    if(Assets && Bitmap.Value)
+    {
+        // NOTE(pvlso): An ID is an asset index or a GUID
+        u64 GUID = (Bitmap.Value < Assets->AssetCount) ? Assets->Assets[Bitmap.Value].KEA.GUID : Bitmap.Value;
+        u64 NormalGUID = NormalMapGUID(GUID);
+        if(GetAssetByGUID(Assets, NormalGUID))
+        {
+            Result.Value = NormalGUID;
+        }
+    }
+
+    return(Result);
 }
 
 internal asset_best_match_result
@@ -124,6 +142,8 @@ GetEngineAPI(void)
     Result.EndPixelWorld = EndPixelWorld;
     Result.SetPixelWorldScroll = SetPixelWorldScroll;
     Result.SetPixelWorldShader = GameSetPixelWorldShader;
+    Result.SetPixelWorldLighting = SetPixelWorldLighting;
+    Result.PushLight = PushLight;
 
     Result.PushBitmap = GamePushBitmap;
     Result.PushRect = PushRect;
@@ -136,6 +156,7 @@ GetEngineAPI(void)
 
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
     Result.GetSprite = GameGetSprite;
+    Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);
 }

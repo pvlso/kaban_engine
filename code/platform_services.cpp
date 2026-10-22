@@ -646,6 +646,18 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
     return(Result);
 }
 
+internal PLATFORM_FILE_EXISTS(PlatformFileExists)
+{
+    char Path[PLATFORM_PATH_COUNT];
+    PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
+
+    b32 Result = false;
+    os_file *File = PlatformOpenOSFile(Path, PlatformFileOp_Read, &Result);
+    PlatformCloseOSFile(File);
+
+    return(Result);
+}
+
 internal PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFile)
 {
     u32 Result = 0;
@@ -1017,6 +1029,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
 
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;
+    Memory->PlatformAPI.FileExists = PlatformFileExists;
     Memory->PlatformAPI.FreeFileMemory = PlatformFreeFileMemory;
     Memory->PlatformAPI.FileSeek = PlatformSeekFile;
     Memory->PlatformAPI.FileTell = PlatformFileTell;

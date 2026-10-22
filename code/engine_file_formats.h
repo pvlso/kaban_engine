@@ -162,6 +162,7 @@ enum kea_asset_type
     KEAType_TXT,
     KEAType_BIN,
     KEAType_SSWM,
+    KEAType_NormalMap, // NOTE(pvlso): a sprite's or tile's normal map, its GUID is NormalMapGUID(the image's GUID)
 
     KEAType_Count,
 };
