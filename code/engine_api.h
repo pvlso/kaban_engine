@@ -137,6 +137,21 @@ struct engine_api
     // NOTE(pvlso): For smooth scrolling: the camera's position past whole image pixels (0 to 1), when the world
     // is drawn with the camera rounded down to them
     void (*SetPixelWorldScroll)(render_group *Group, v2 Scroll);
+    // NOTE(pvlso): A game shader draws the world on screen: the world image with its upright things over it, as they
+    // would be on screen, so it covers everything pushed in the pixel world. The text asset at ShaderIndex (found
+    // with GetBestMatchAssets) is a GLSL 330 fragment shader without its declarations, the engine puts these before:
+    //     uniform sampler2D Texture;  // the world on screen, ScreenSize screen pixels, read at FragUV
+    //     uniform vec2 ScreenSize;
+    //     uniform vec2 ImageSize;     // the world image, in its pixels
+    //     uniform float PixelScale;   // screen pixels per image pixel
+    //     uniform vec2 PixelOrigin;   // where image pixel (0, 0) starts, in screen pixels
+    //     uniform float Time;         // Params.Time
+    //     uniform vec4 Params[4];     // Params.Params
+    //     in vec2 FragUV;  in vec4 FragColor;  out vec4 OutColor;
+    // It runs for every screen pixel. Something that changes across the screen (a vignette) should be worked out per
+    // image pixel ((FragUV*ScreenSize - PixelOrigin) / PixelScale), so the pixels stay square. A shader that doesn't
+    // compile is logged (once for each version of it) and the world is drawn without it. 0 for no shader.
+    void (*SetPixelWorldShader)(render_group *Group, u32 ShaderIndex, render_shader_params Params);
 
     void (*PushBitmap)(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
                        v4 Color, r32 CAlign, r32 Angle);
@@ -227,6 +242,11 @@ BeginPixelWorld(render_group *Group, s32 MinWidth, s32 MinHeight)
 
 inline void EndPixelWorld(render_group *Group) {Engine.EndPixelWorld(Group);}
 inline void SetPixelWorldScroll(render_group *Group, v2 Scroll) {Engine.SetPixelWorldScroll(Group, Scroll);}
+inline void
+SetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
+{
+    Engine.SetPixelWorldShader(Group, ShaderIndex, Params);
+}
 
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,

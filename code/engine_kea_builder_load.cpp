@@ -416,7 +416,7 @@ internal loaded_text
 LoadText(char *FileName, memory_arena *Arena)
 {
     loaded_text Result = {};
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, 0);    
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, true);
     Result.String = (char *)ReadResult.Contents;
 
     return(Result);

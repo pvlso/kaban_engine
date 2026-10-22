@@ -177,32 +177,43 @@ OpenGLInit(b32 ModernContext, b32 FramebufferSupportsSRGB)
     return(Info);
 }
 
+// NOTE(pvlso): The code can come in parts (Lengths 0 when they're all 0 terminated)
 internal GLuint
-OpenGLCompileShader(GLenum Type, char *Code)
+OpenGLCompileShader(GLenum Type, GLsizei PartCount, char **Parts, GLint *Lengths, b32 *Compiled = 0)
 {
     GLuint Result = glCreateShader(Type);
-    glShaderSource(Result, 1, &Code, 0);
+    glShaderSource(Result, PartCount, Parts, Lengths);
     glCompileShader(Result);
 
-    GLint Compiled = 0;
-    glGetShaderiv(Result, GL_COMPILE_STATUS, &Compiled);
-    if(!Compiled)
+    GLint Status = 0;
+    glGetShaderiv(Result, GL_COMPILE_STATUS, &Status);
+    if(!Status)
     {
         char InfoLog[1024];
         glGetShaderInfoLog(Result, sizeof(InfoLog), 0, InfoLog);
         LOG_ERROR("Shader didn't compile: %s", InfoLog);
     }
 
+    if(Compiled)
+    {
+        *Compiled = (Status != 0);
+    }
+
     return(Result);
 }
 
+inline GLuint
+OpenGLCompileShader(GLenum Type, char *Code)
+{
+    GLuint Result = OpenGLCompileShader(Type, 1, &Code, 0);
+    return(Result);
+}
+
+// NOTE(pvlso): Handle is 0 when it didn't link
 internal opengl_program
-OpenGLCreateProgram(char *VertexCode, char *FragmentCode)
+OpenGLLinkProgram(GLuint VertexShader, GLuint FragmentShader)
 {
     opengl_program Result = {};
-
-    GLuint VertexShader = OpenGLCompileShader(GL_VERTEX_SHADER, VertexCode);
-    GLuint FragmentShader = OpenGLCompileShader(GL_FRAGMENT_SHADER, FragmentCode);
 
     Result.Handle = glCreateProgram();
     glAttachShader(Result.Handle, VertexShader);
@@ -220,10 +231,112 @@ OpenGLCreateProgram(char *VertexCode, char *FragmentCode)
         char InfoLog[1024];
         glGetProgramInfoLog(Result.Handle, sizeof(InfoLog), 0, InfoLog);
         LOG_ERROR("Shader program didn't link: %s", InfoLog);
+        glDeleteProgram(Result.Handle);
+        Result.Handle = 0;
+    }
+    else
+    {
+        Result.TransformID = glGetUniformLocation(Result.Handle, "Transform");
+        Result.TextureID = glGetUniformLocation(Result.Handle, "Texture");
     }
 
-    Result.TransformID = glGetUniformLocation(Result.Handle, "Transform");
-    Result.TextureID = glGetUniformLocation(Result.Handle, "Texture");
+    return(Result);
+}
+
+internal opengl_program
+OpenGLCreateProgram(char *VertexCode, char *FragmentCode)
+{
+    GLuint VertexShader = OpenGLCompileShader(GL_VERTEX_SHADER, VertexCode);
+    GLuint FragmentShader = OpenGLCompileShader(GL_FRAGMENT_SHADER, FragmentCode);
+    opengl_program Result = OpenGLLinkProgram(VertexShader, FragmentShader);
+
+    return(Result);
+}
+
+// NOTE(pvlso): Games' shaders (render_shader), compiled the first time a source is seen and kept by its hash, so an
+// edited shader is a new one. One that doesn't compile is kept too, with Handle 0, so it's logged only once.
+struct opengl_game_shader
+{
+    u64 Hash;
+    opengl_program Program;
+    GLint ScreenSizeID;
+    GLint ImageSizeID;
+    GLint PixelScaleID;
+    GLint PixelOriginID;
+    GLint TimeID;
+    GLint ParamsID;
+};
+
+global_variable opengl_game_shader OpenGLGameShaders[8];
+global_variable u32 OpenGLNextGameShader;
+
+// NOTE(pvlso): Put before a game shader's code, the declarations SetPixelWorldShader promises (engine_api.h)
+global_variable char *OpenGLGameShaderHeader = R"GLSL(#version 330 core
+uniform sampler2D Texture;
+uniform vec2 ScreenSize;
+uniform vec2 ImageSize;
+uniform float PixelScale;
+uniform vec2 PixelOrigin;
+uniform float Time;
+uniform vec4 Params[4];
+in vec2 FragUV;
+in vec4 FragColor;
+out vec4 OutColor;
+#line 1
+)GLSL";
+
+internal opengl_game_shader *
+OpenGLGetGameShader(render_shader *Shader)
+{
+    // NOTE(pvlso): FNV-1a
+    u64 Hash = 14695981039346656037ULL;
+    for(u32 Index = 0; Index < Shader->SourceLength; ++Index)
+    {
+        Hash ^= (u8)Shader->Source[Index];
+        Hash *= 1099511628211ULL;
+    }
+
+    opengl_game_shader *Result = 0;
+    for(u32 Index = 0; Index < ArrayCount(OpenGLGameShaders); ++Index)
+    {
+        if(OpenGLGameShaders[Index].Hash == Hash)
+        {
+            Result = OpenGLGameShaders + Index;
+            break;
+        }
+    }
+
+    if(!Result)
+    {
+        Result = OpenGLGameShaders + (OpenGLNextGameShader++ % ArrayCount(OpenGLGameShaders));
+        if(Result->Program.Handle)
+        {
+            glDeleteProgram(Result->Program.Handle);
+        }
+        *Result = {};
+        Result->Hash = Hash;
+
+        char *Parts[] = {OpenGLGameShaderHeader, Shader->Source};
+        GLint Lengths[] = {-1, (GLint)Shader->SourceLength};
+        b32 Compiled = false;
+        GLuint FragmentShader = OpenGLCompileShader(GL_FRAGMENT_SHADER, ArrayCount(Parts), Parts, Lengths, &Compiled);
+        if(Compiled)
+        {
+            GLuint VertexShader = OpenGLCompileShader(GL_VERTEX_SHADER, OpenGLBasicVertexCode);
+            Result->Program = OpenGLLinkProgram(VertexShader, FragmentShader);
+            Result->ScreenSizeID = glGetUniformLocation(Result->Program.Handle, "ScreenSize");
+            Result->ImageSizeID = glGetUniformLocation(Result->Program.Handle, "ImageSize");
+            Result->PixelScaleID = glGetUniformLocation(Result->Program.Handle, "PixelScale");
+            Result->PixelOriginID = glGetUniformLocation(Result->Program.Handle, "PixelOrigin");
+            Result->TimeID = glGetUniformLocation(Result->Program.Handle, "Time");
+            Result->ParamsID = glGetUniformLocation(Result->Program.Handle, "Params");
+        }
+        else
+        {
+            glDeleteShader(FragmentShader);
+            LOG_ERROR("The game's world shader didn't compile, the world is drawn without it");
+        }
+    }
 
     return(Result);
 }
@@ -417,15 +530,26 @@ OpenGLCircleOutline(v2 Center, f32 Radius, int Segments, v4 Color)
     }
 }
 
-// NOTE(pvlso): The pixel world's image, remade when its size changes
-struct opengl_pixel_world
+// NOTE(pvlso): An image drawn into, remade when its size changes
+struct opengl_image
 {
     GLuint Framebuffer;
     GLuint Texture;
     u32 Width;
     u32 Height;
 };
-global_variable opengl_pixel_world OpenGLPixelWorld;
+// NOTE(pvlso): The pixel world's image, and, when the game has a shader for it, the world on screen (the image with
+// its upright things over it) that the shader draws on the screen
+global_variable opengl_image OpenGLPixelWorld;
+global_variable opengl_image OpenGLWorldOnScreen;
+
+// NOTE(pvlso): Which entries an OpenGLRenderEntries draws
+enum opengl_entry_pass
+{
+    OpenGLPass_PixelWorld, // NOTE(pvlso): into the pixel world's image
+    OpenGLPass_Upright,    // NOTE(pvlso): the pixel world's upright things, into OpenGLWorldOnScreen
+    OpenGLPass_Screen,     // NOTE(pvlso): everything else, with the upright things unless the upright pass had them
+};
 
 // NOTE(pvlso): Where the image went on screen this frame (draw region pixels), for the upright pass
 global_variable v2 OpenGLUprightMinP;
@@ -447,9 +571,8 @@ RoundV2(v2 P)
 }
 
 internal void
-OpenGLMakePixelWorld(u32 Width, u32 Height)
+OpenGLMakeImage(opengl_image *World, u32 Width, u32 Height)
 {
-    opengl_pixel_world *World = &OpenGLPixelWorld;
     if((World->Width != Width) || (World->Height != Height))
     {
         if(!World->Framebuffer)
@@ -494,7 +617,7 @@ OpenGLBindFramebuffer(u32 TargetIndex, rectangle2i DrawRegion)
 }
 
 internal void OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
-                                  b32 PixelWorld);
+                                  opengl_entry_pass Pass, b32 UprightDrawn = false);
 
 internal void
 OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
@@ -555,10 +678,11 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     OpenGLBatch.VertexCount = 0;
 
     // NOTE(pvlso): The pixel world is drawn whole first, then put on the screen under everything else
+    b32 UprightDrawn = false;
     render_pixel_world *PixelWorld = &Commands->PixelWorld;
     if(PixelWorld->Width && PixelWorld->Height)
     {
-        OpenGLMakePixelWorld(PixelWorld->Width, PixelWorld->Height);
+        OpenGLMakeImage(&OpenGLPixelWorld, PixelWorld->Width, PixelWorld->Height);
         glBindFramebuffer(GL_FRAMEBUFFER, OpenGLPixelWorld.Framebuffer);
         glViewport(0, 0, PixelWorld->Width, PixelWorld->Height);
         glScissor(0, 0, PixelWorld->Width, PixelWorld->Height);
@@ -566,7 +690,7 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                      Commands->ClearColor.b, Commands->ClearColor.a);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        OpenGLRenderEntries(Commands, Prep, DrawRegion, true);
+        OpenGLRenderEntries(Commands, Prep, DrawRegion, OpenGLPass_PixelWorld);
 
         // NOTE(pvlso): In the screen's own pixels, so each image pixel is exactly Scale x Scale, centered and
         // moved by the scroll in whole screen pixels. The image's extra pixel on each side covers the move.
@@ -584,16 +708,49 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
                                (r32)((DrawHeight - Scale*(s32)PixelWorld->Height) / 2) - PixelWorld->Scroll.y*(r32)Scale);
         OpenGLUprightScale = (r32)Scale;
 
-        OpenGLBindFramebuffer(0, DrawRegion);
-        glScissor(DrawRegion.Min.x, DrawRegion.Min.y, DrawWidth, DrawHeight);
         r32 Transform[16];
         OpenGLScreenspaceTransform(Transform, DrawWidth, DrawHeight);
-        glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
-        OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1));
-        OpenGLFlushBatch();
+        opengl_game_shader *GameShader = PixelWorld->Shader.Source ? OpenGLGetGameShader(&PixelWorld->Shader) : 0;
+        if(GameShader && GameShader->Program.Handle)
+        {
+            // NOTE(pvlso): The image and the upright things go together into the world on screen first, so the
+            // shader covers all of the world. Same pixels as the draw region, without its offset.
+            OpenGLMakeImage(&OpenGLWorldOnScreen, DrawWidth, DrawHeight);
+            glBindFramebuffer(GL_FRAMEBUFFER, OpenGLWorldOnScreen.Framebuffer);
+            glViewport(0, 0, DrawWidth, DrawHeight);
+            glScissor(0, 0, DrawWidth, DrawHeight);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
+            OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1));
+            OpenGLFlushBatch();
+            OpenGLRenderEntries(Commands, Prep, DrawRegion, OpenGLPass_Upright);
+            UprightDrawn = true;
+
+            OpenGLBindFramebuffer(0, DrawRegion);
+            glScissor(DrawRegion.Min.x, DrawRegion.Min.y, DrawWidth, DrawHeight);
+            render_shader_params *Params = &PixelWorld->Shader.Params;
+            OpenGLUseProgram(&GameShader->Program, Transform);
+            glUniform2f(GameShader->ScreenSizeID, (r32)DrawWidth, (r32)DrawHeight);
+            glUniform2f(GameShader->ImageSizeID, (r32)PixelWorld->Width, (r32)PixelWorld->Height);
+            glUniform1f(GameShader->PixelScaleID, (r32)Scale);
+            glUniform2f(GameShader->PixelOriginID, MinP.x, MinP.y);
+            glUniform1f(GameShader->TimeID, Params->Time);
+            glUniform4fv(GameShader->ParamsID, ArrayCount(Params->Params), (r32 *)Params->Params);
+            OpenGLRectangle(OpenGLWorldOnScreen.Texture, V2(0, 0), V2((r32)DrawWidth, (r32)DrawHeight), V4(1, 1, 1, 1));
+            OpenGLFlushBatch();
+            OpenGLUseProgram(&OpenGLBasicProgram, Transform);
+        }
+        else
+        {
+            OpenGLBindFramebuffer(0, DrawRegion);
+            glScissor(DrawRegion.Min.x, DrawRegion.Min.y, DrawWidth, DrawHeight);
+            glUniformMatrix4fv(OpenGLBasicProgram.TransformID, 1, GL_FALSE, Transform);
+            OpenGLRectangle(OpenGLPixelWorld.Texture, MinP, MaxP, V4(1, 1, 1, 1));
+            OpenGLFlushBatch();
+        }
     }
 
-    OpenGLRenderEntries(Commands, Prep, DrawRegion, false);
+    OpenGLRenderEntries(Commands, Prep, DrawRegion, OpenGLPass_Screen, UprightDrawn);
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -601,11 +758,13 @@ OpenGLRenderCommands(editor_render_commands *Commands, editor_render_prep *Prep,
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-// NOTE(pvlso): The entries of the pixel world, or all the others. Sets the transform for whichever target it draws to.
+// NOTE(pvlso): The entries of one pass (opengl_entry_pass). Sets the transform for whichever target it draws to.
+// UprightDrawn: the screen pass leaves out the upright things, the upright pass had them.
 internal void
 OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, rectangle2i DrawRegion,
-                    b32 PixelWorld)
+                    opengl_entry_pass Pass, b32 UprightDrawn)
 {
+    b32 PixelWorld = (Pass == OpenGLPass_PixelWorld);
     u32 MaxRenderTargetIndex = Commands->MaxRenderTargetIndex;
     u32 SortEntryCount = Commands->PushBufferElementCount;
     sort_entry *SortEntries = (sort_entry *)(Commands->PushBufferBase + Commands->SortEntryAt);
@@ -620,8 +779,25 @@ OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, 
         render_group_entry_header *Header = (render_group_entry_header *)
             (Commands->PushBufferBase + SortEntry->Index);
         Assert(Header->ClipRectIndex < Commands->ClipRectCount);
-        b32 InPixelWorld = (Prep->ClipRects[Header->ClipRectIndex].RenderTargetIndex == RENDER_TARGET_PIXEL_WORLD);
-        if(InPixelWorld != PixelWorld)
+        u32 EntryTarget = Prep->ClipRects[Header->ClipRectIndex].RenderTargetIndex;
+        opengl_entry_pass EntryPass = OpenGLPass_Screen;
+        if(EntryTarget == RENDER_TARGET_PIXEL_WORLD)
+        {
+            EntryPass = OpenGLPass_PixelWorld;
+        }
+        else if((EntryTarget == RENDER_TARGET_PIXEL_WORLD_UPRIGHT) && UprightDrawn)
+        {
+            EntryPass = OpenGLPass_Upright;
+        }
+        if(Pass == OpenGLPass_Upright)
+        {
+            // NOTE(pvlso): Called only for it, so these are the upright things
+            if(EntryTarget != RENDER_TARGET_PIXEL_WORLD_UPRIGHT)
+            {
+                continue;
+            }
+        }
+        else if(EntryPass != Pass)
         {
             continue;
         }
@@ -643,7 +819,15 @@ OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, 
                 if(CurrentRenderTargetIndex == RENDER_TARGET_PIXEL_WORLD_UPRIGHT)
                 {
                     // NOTE(pvlso): The entries are in image pixels, OpenGLUprightP puts them in these
-                    OpenGLBindFramebuffer(0, DrawRegion);
+                    if(Pass == OpenGLPass_Upright)
+                    {
+                        glBindFramebuffer(GL_FRAMEBUFFER, OpenGLWorldOnScreen.Framebuffer);
+                        glViewport(0, 0, OpenGLWorldOnScreen.Width, OpenGLWorldOnScreen.Height);
+                    }
+                    else
+                    {
+                        OpenGLBindFramebuffer(0, DrawRegion);
+                    }
                     OpenGLScreenspaceTransform(Transform, GetWidth(DrawRegion), GetHeight(DrawRegion));
                 }
                 else if(PixelWorld)
@@ -664,6 +848,10 @@ OpenGLRenderEntries(editor_render_commands *Commands, editor_render_prep *Prep, 
             if(Clip->RenderTargetIndex == RENDER_TARGET_PIXEL_WORLD_UPRIGHT)
             {
                 ClipRect = DrawRegion;
+                if(Pass == OpenGLPass_Upright)
+                {
+                    ClipRect = Offset(DrawRegion, -DrawRegion.Min.x, -DrawRegion.Min.y);
+                }
             }
             else if(Clip->RenderTargetIndex == 0)
             {

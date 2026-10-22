@@ -78,6 +78,37 @@ GameGetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
     return(Result);
 }
 
+// NOTE(pvlso): The renderer compiles the source, the text only has to stay loaded through this frame
+internal void
+GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
+{
+    render_shader *Shader = &Group->Commands->PixelWorld.Shader;
+    *Shader = {};
+    Shader->Params = Params;
+
+    engine_assets *Assets = Group->Assets;
+    if(Assets && ShaderIndex && (ShaderIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + ShaderIndex;
+        if(Asset->KEA.Type == KEAType_TXT)
+        {
+            text_id TextID = {ShaderIndex};
+            loaded_text *Text = GetText(Assets, TextID, Group->GenerationID);
+            if(!Text)
+            {
+                LoadText(Assets, TextID, true);
+                Text = GetText(Assets, TextID, Group->GenerationID);
+            }
+
+            if(Text)
+            {
+                Shader->Source = Text->String;
+                Shader->SourceLength = Asset->KEA.Text.Length;
+            }
+        }
+    }
+}
+
 // NOTE(pvlso): Built every frame, the function addresses change when the engine is reloaded
 internal engine_api
 GetEngineAPI(void)
@@ -92,6 +123,7 @@ GetEngineAPI(void)
     Result.BeginPixelWorld = BeginPixelWorld;
     Result.EndPixelWorld = EndPixelWorld;
     Result.SetPixelWorldScroll = SetPixelWorldScroll;
+    Result.SetPixelWorldShader = GameSetPixelWorldShader;
 
     Result.PushBitmap = GamePushBitmap;
     Result.PushRect = PushRect;

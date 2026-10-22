@@ -187,7 +187,7 @@ PlatformInitPaths(void)
 // NOTE(pvlso): FILE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): The image directories (bmps, spritesheets, tilesets, solidtiles) take .png files too. A name ending in
-// _n is the normal map of the image without it, it isn't listed on its own.
+// _n is the normal map of the image without it, it isn't listed on its own. Texts can be .glsl (game shaders).
 internal b32
 IsFileOfType(char *FileName, platform_file_type Type)
 {
@@ -196,6 +196,10 @@ IsFileOfType(char *FileName, platform_file_type Type)
     {
         Result = ((Result || StringEndsWithNoCase(FileName, ".png")) &&
                   !StringEndsWithNoCase(FileName, "_n.bmp") && !StringEndsWithNoCase(FileName, "_n.png"));
+    }
+    else if(Type == PlatformFileType_TXT)
+    {
+        Result = (Result || StringEndsWithNoCase(FileName, ".glsl"));
     }
 
     return(Result);

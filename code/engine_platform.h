@@ -38,12 +38,29 @@ extern "C" {
 // NOTE(pvlso): RENDERING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): The pixel world's image (BeginPixelWorld), Width 0 when there is none this frame
+// NOTE(pvlso): The values a game shader gets as its uniforms Time and Params
+typedef struct render_shader_params
+{
+    r32 Time;
+    v4 Params[4];
+} render_shader_params;
+
+// NOTE(pvlso): A game's shader (SetPixelWorldShader): the body of a fragment shader, from a text asset, not
+// 0 terminated. Source is 0 for none.
+typedef struct render_shader
+{
+    char *Source;
+    u32 SourceLength;
+    render_shader_params Params;
+} render_shader;
+
 typedef struct render_pixel_world
 {
     u32 Width;
     u32 Height;
     u32 Scale; // NOTE(pvlso): screen pixels per image pixel
     v2 Scroll; // NOTE(pvlso): image pixels (0 to 1) the image is moved left and down on screen (SetPixelWorldScroll)
+    render_shader Shader; // NOTE(pvlso): draws the image on screen, the plain copy without one
 } render_pixel_world;
 
 typedef struct editor_render_commands
