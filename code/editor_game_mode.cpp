@@ -97,6 +97,34 @@ GameGetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
 }
 
 // NOTE(pvlso): The renderer compiles the source, the text only has to stay loaded through this frame
+// NOTE(pvlso): Like a sprite sheet, the set only holds its tiles' GUIDs
+internal bitmap_id
+GameGetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
+{
+    bitmap_id Result = {};
+    if(Assets && TilesetIndex && (TilesetIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + TilesetIndex;
+        if((Asset->KEA.Type == KEAType_Tileset) && (TileIndex < Asset->KEA.Tileset.TileCount))
+        {
+            tileset_id TilesetID = {TilesetIndex};
+            loaded_tileset *Tileset = GetTileset(Assets, TilesetID, 0);
+            if(!Tileset)
+            {
+                LoadTileset(Assets, TilesetID, true);
+                Tileset = GetTileset(Assets, TilesetID, 0);
+            }
+
+            if(Tileset)
+            {
+                Result = Tileset->TileGUIDs[TileIndex];
+            }
+        }
+    }
+
+    return(Result);
+}
+
 internal void
 GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
 {
@@ -156,7 +184,8 @@ GetEngineAPI(void)
 
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
     Result.GetSprite = GameGetSprite;
-    Result.GetNormalMap = GameGetNormalMap;
+    Result.GetTilesetTile = GameGetTilesetTile;
+Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);
 }

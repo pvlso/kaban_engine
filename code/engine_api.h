@@ -182,7 +182,11 @@ struct engine_api
     // NOTE(pvlso): The sprite at SpriteIndex (left to right) of the sprite sheet at SheetIndex (found with
     // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
     bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
-    // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
+    // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets), for
+    // PushBitmap. Tiles are numbered from the image's bottom row up, left to right, skipping the cells filled red.
+    // 0 when it isn't a tile set or has no such tile.
+    bitmap_id (*GetTilesetTile)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex);
+// NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
 
@@ -313,6 +317,13 @@ inline bitmap_id
 GetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
 {
     bitmap_id Result = Engine.GetSprite(Assets, SheetIndex, SpriteIndex);
+    return(Result);
+}
+
+inline bitmap_id
+GetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
+{
+    bitmap_id Result = Engine.GetTilesetTile(Assets, TilesetIndex, TileIndex);
     return(Result);
 }
 
