@@ -16,7 +16,8 @@ struct loaded_sound
 
 struct loaded_tileset
 {
-    bitmap_id *TileGUIDs;
+    kea_tile *Tiles;
+    bitmap_id *Frames; // NOTE(pvlso): the animated tiles' frames, after the tiles
 };
 
 struct loaded_spritesheet

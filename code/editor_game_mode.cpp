@@ -97,28 +97,79 @@ GameGetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
 }
 
 // NOTE(pvlso): The renderer compiles the source, the text only has to stay loaded through this frame
-// NOTE(pvlso): Like a sprite sheet, the set only holds its tiles' GUIDs
+// NOTE(pvlso): The tile set at TilesetIndex, loaded now if it isn't yet; 0 when it isn't a tile set
+internal loaded_tileset *
+GameLoadedTileset(engine_assets *Assets, u32 TilesetIndex, kea_tileset **Info)
+{
+    loaded_tileset *Result = 0;
+    if(Assets && TilesetIndex && (TilesetIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + TilesetIndex;
+        if(Asset->KEA.Type == KEAType_Tileset)
+        {
+            tileset_id TilesetID = {TilesetIndex};
+            Result = GetTileset(Assets, TilesetID, 0);
+            if(!Result)
+            {
+                LoadTileset(Assets, TilesetID, true);
+                Result = GetTileset(Assets, TilesetID, 0);
+            }
+            *Info = &Asset->KEA.Tileset;
+        }
+    }
+
+    return(Result);
+}
+
 internal bitmap_id
 GameGetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
 {
     bitmap_id Result = {};
-    if(Assets && TilesetIndex && (TilesetIndex < Assets->AssetCount))
+    kea_tileset *Info = 0;
+    loaded_tileset *Tileset = GameLoadedTileset(Assets, TilesetIndex, &Info);
+    if(Tileset && (TileIndex < Info->TileCount))
     {
-        asset *Asset = Assets->Assets + TilesetIndex;
-        if((Asset->KEA.Type == KEAType_Tileset) && (TileIndex < Asset->KEA.Tileset.TileCount))
-        {
-            tileset_id TilesetID = {TilesetIndex};
-            loaded_tileset *Tileset = GetTileset(Assets, TilesetID, 0);
-            if(!Tileset)
-            {
-                LoadTileset(Assets, TilesetID, true);
-                Tileset = GetTileset(Assets, TilesetID, 0);
-            }
+        Result.Value = Tileset->Tiles[TileIndex].BitmapGUID;
+    }
 
-            if(Tileset)
-            {
-                Result = Tileset->TileGUIDs[TileIndex];
-            }
+    return(Result);
+}
+
+internal tileset_info
+GameGetTilesetInfo(engine_assets *Assets, u32 TilesetIndex)
+{
+    tileset_info Result = {};
+    kea_tileset *Info = 0;
+    if(GameLoadedTileset(Assets, TilesetIndex, &Info))
+    {
+        Result.TileCount = Info->TileCount;
+        Result.GridWidth = Info->GridWidth;
+        Result.GridHeight = Info->GridHeight;
+        Result.TileSize = Info->TileSize;
+    }
+
+    return(Result);
+}
+
+internal tile_info
+GameGetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time)
+{
+    tile_info Result = {};
+    kea_tileset *Info = 0;
+    loaded_tileset *Tileset = GameLoadedTileset(Assets, TilesetIndex, &Info);
+    if(Tileset && (TileIndex < Info->TileCount))
+    {
+        kea_tile *Tile = Tileset->Tiles + TileIndex;
+        Result.Bitmap.Value = Tile->BitmapGUID;
+        Result.Flags = Tile->Flags;
+        Result.GridX = Tile->GridX;
+        Result.GridY = Tile->GridY;
+        Result.Animated = (Tile->FrameCount > 1);
+        FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_TILE_NAME_LENGTH, Tile->Name);
+        if(Result.Animated && (Tile->FirstFrame + Tile->FrameCount <= Info->FrameCount))
+        {
+            u32 Frame = (u32)FloorReal32ToInt32(Time*Tile->FramesPerSecond) % Tile->FrameCount;
+            Result.Bitmap = Tileset->Frames[Tile->FirstFrame + Frame];
         }
     }
 
@@ -185,6 +236,8 @@ GetEngineAPI(void)
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
     Result.GetSprite = GameGetSprite;
     Result.GetTilesetTile = GameGetTilesetTile;
+    Result.GetTilesetInfo = GameGetTilesetInfo;
+    Result.GetTileInfo = GameGetTileInfo;
 Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);

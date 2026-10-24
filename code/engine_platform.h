@@ -294,8 +294,7 @@ typedef enum platform_file_type
 
     PlatformFileType_BMP,
     PlatformFileType_SSBMP, // Sprite Sheet
-    PlatformFileType_TSBMP, // Tile Set
-    PlatformFileType_STBMP, // Solid Tile
+    PlatformFileType_TSBMP, // Tile Set: a curated set's text file in tilesets/
     PlatformFileType_WAV,
     PlatformFileType_TXT,
     PlatformFileType_JSON,

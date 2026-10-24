@@ -256,13 +256,34 @@ struct kea_sound
     */
 };
 
+// NOTE(pvlso): A curated tile set (data/tilesets/<name>.txt): tiles gathered from any sheets, laid out in the set's
+// own grid, each with the project's flags (data/txts/tile_flags.txt), a name and maybe animation frames
+#define KEA_TILE_NAME_LENGTH 32
+
+struct kea_tile
+{
+    u64 BitmapGUID; // NOTE(pvlso): the tile, the first frame when it's animated
+    u32 Flags;
+    u16 GridX;
+    u16 GridY;
+    u32 FirstFrame; // NOTE(pvlso): into the set's FrameGUIDs
+    u32 FrameCount; // NOTE(pvlso): 0 when it isn't animated
+    r32 FramesPerSecond;
+    char Name[KEA_TILE_NAME_LENGTH];
+};
+
 struct kea_tileset
 {
     u32 TileCount;
+    u16 GridWidth;
+    u16 GridHeight;
+    u32 FrameCount;
+    u32 TileSize;
 
-    /* NOTE(paul): Data is:
+    /* NOTE(pvlso): Data is:
 
        kea_tile Tiles[TileCount];
+       u64 FrameGUIDs[FrameCount];
     */
 };
 
@@ -408,19 +429,18 @@ struct kesa_spritesheet
     v2 SpriteAlignPercentage;
 };
 
+// NOTE(pvlso): The set itself is its text file (SourceFileName in data/tilesets), this only remembers what it held
+// when it was added or last saved. Kept at the size the old tile set had, so stored assets written before still read.
 struct kesa_tileset
 {
-    char MergeTileFileName[256];
-
-    b32 MergedTile;
     u32 TileCount;
+    u32 GridWidth;
+    u32 GridHeight;
+    u32 TileSize;
 
-    u32 TileWidth;
-    u32 TileHeight;
-
-    u8 TileOffsetsX[512];
-    u8 TileOffsetsY[512];
+    u8 Unused[1280];
 };
+static_assert(sizeof(kesa_tileset) == 1296, "kesa_asset's size would change, and older stored assets stop reading");
 
 struct kesa_sound
 {
@@ -451,8 +471,7 @@ struct kesa_tag
 
 struct kesa_asset
 {
-    // NOTE(pvlso): made of SourceFileName, for
-    // Tileset made of SourceFileName + MergeTileFileName
+    // NOTE(pvlso): made of SourceFileName
     u64 GUID; 
 
     kesa_type Type;

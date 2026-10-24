@@ -69,6 +69,25 @@ struct asset_best_match_result
     };
 };
 
+// NOTE(pvlso): A curated tile set (made in the assets mode from any sheets): its tiles laid out in a grid of its own
+struct tileset_info
+{
+    u32 TileCount;
+    u32 GridWidth;
+    u32 GridHeight;
+    u32 TileSize; // NOTE(pvlso): in pixels
+};
+
+struct tile_info
+{
+    bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
+    u32 Flags;        // NOTE(pvlso): bit n is the n-th name in the project's data/txts/tile_flags.txt
+    u32 GridX;        // NOTE(pvlso): its place in the set's grid, from the top left
+    u32 GridY;
+    b32 Animated;
+    char Name[32];
+};
+
 inline void
 TagVectorAdd(asset_tag_vector *Vector, char *Key, char *Value)
 {
@@ -183,9 +202,14 @@ struct engine_api
     // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
     bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
     // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets), for
-    // PushBitmap. Tiles are numbered from the image's bottom row up, left to right, skipping the cells filled red.
+    // PushBitmap: its first frame when it's animated. Tiles are numbered in the order the set lists them.
     // 0 when it isn't a tile set or has no such tile.
     bitmap_id (*GetTilesetTile)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex);
+    // NOTE(pvlso): All zero when TilesetIndex isn't a tile set
+    tileset_info (*GetTilesetInfo)(engine_assets *Assets, u32 TilesetIndex);
+    // NOTE(pvlso): Time in seconds picks an animated tile's frame (any running clock). All zero when there's no
+    // such tile.
+    tile_info (*GetTileInfo)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -324,6 +348,20 @@ inline bitmap_id
 GetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
 {
     bitmap_id Result = Engine.GetTilesetTile(Assets, TilesetIndex, TileIndex);
+    return(Result);
+}
+
+inline tileset_info
+GetTilesetInfo(engine_assets *Assets, u32 TilesetIndex)
+{
+    tileset_info Result = Engine.GetTilesetInfo(Assets, TilesetIndex);
+    return(Result);
+}
+
+inline tile_info
+GetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time = 0.0f)
+{
+    tile_info Result = Engine.GetTileInfo(Assets, TilesetIndex, TileIndex, Time);
     return(Result);
 }
 

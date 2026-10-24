@@ -312,8 +312,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
         case AssetType_Tileset:
         {
             kea_tileset *Info = &Asset->KEA.Tileset;
-            u32 TilesSize = sizeof(u64)*Info->TileCount;
-            Size.Data = TilesSize;
+            Size.Data = sizeof(kea_tile)*Info->TileCount + sizeof(u64)*Info->FrameCount;
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
@@ -405,9 +404,10 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
         case AssetType_Tileset:
         {
             loaded_tileset *Tileset = &Asset->Header->Tileset;
-            Tileset->TileGUIDs = (bitmap_id *)(Asset->Header + 1);
-                
-            Result.LoadDest = Tileset->TileGUIDs;
+            Tileset->Tiles = (kea_tile *)(Asset->Header + 1);
+            Tileset->Frames = (bitmap_id *)(Tileset->Tiles + Asset->KEA.Tileset.TileCount);
+
+            Result.LoadDest = Tileset->Tiles;
             Result.FinalizeOp = FinalizeAsset_None;
             Result.FinalState = AssetState_Loaded;
         } break;

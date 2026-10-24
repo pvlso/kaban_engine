@@ -7,6 +7,8 @@
    $Notice: $
    ======================================================================== */
 
+#include "engine_tileset_file.h"
+
 enum assets_edit_mode
 {
     EditMode_None,
@@ -35,17 +37,17 @@ struct spritesheet_mode
     loaded_bitmap Sprites[256];
 };
 
-// NOTE(paul): Tilesets
+// NOTE(pvlso): Curated tile sets (engine_tileset_file.h): the set read from its text file and its tiles cut from
+// their sheets, shown in the set's own grid. Everything but the textures lives in Arena, cleared with the view.
 struct tileset_mode
 {
-    b32 CutTileset;
-    b32 CutWithMergeTileset;
-    b32 ShowTiles;
-    u32 CurrentTileIndex;
+    memory_arena Arena;
+    b32 Loaded;
+    tile_flag_names FlagNames;
+    tileset_file File;
+    s32 HoverTile; // NOTE(pvlso): -1 when the mouse isn't on a tile
 
-    loaded_bitmap MergeTileBitmap;
-    loaded_bitmap TilesetBitmap;
-    loaded_bitmap Tiles[512];
+    loaded_bitmap Tiles[TILESET_MAX_TILES]; // NOTE(pvlso): each tile's first frame
 };
 
 // NOTE(paul): Sounds
@@ -175,8 +177,6 @@ struct editor_mode_assets
     
     u32 SourceFileCounts[KESA_Count];
     char **SourceFiles[KESA_Count];
-    u32 SolidTileFileCount;
-    char **SolidTileFiles;
 
     b32 CreatingNewTag;
     b32 EditingTag;

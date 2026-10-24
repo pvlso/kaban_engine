@@ -6,6 +6,7 @@
    $Notice:  $
    ======================================================================== */
 
+#include "engine_tileset_file.cpp"
 #include "engine_kea_builder.cpp"
 #include "engine_assets_mode_ui.cpp"
 
@@ -315,16 +316,6 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState, char *Proj
             Result->SourceFiles[I] = PushArray(&EditorState->ModeArena, Result->SourceFileCounts[I], char *);
             Platform.ListFilesInDirectory(StoredToSourceTypeMap[I], Result->SourceFiles[I], &EditorState->ModeArena);
         }
-
-        if(I == KESA_Tileset)
-        {
-            Result->SolidTileFileCount = Platform.ListFilesInDirectory(PlatformFileType_STBMP, 0, 0);
-            if(Result->SolidTileFileCount)
-            {
-                Result->SolidTileFiles = PushArray(&EditorState->ModeArena, Result->SolidTileFileCount, char *);
-                Platform.ListFilesInDirectory(PlatformFileType_STBMP, Result->SolidTileFiles, &EditorState->ModeArena);
-            }
-        }
     }
 
     EditorState->AssetsMode = Result;
@@ -379,142 +370,64 @@ CutSpriteSheet(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *Spri
     }
 }
 
+internal void AllocateBitmap(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Bitmap);
+
+// NOTE(pvlso): Reads a curated tile set and cuts each tile's first frame from its sheets, to show the set
 internal void
-LoadTileBitmap(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_tileset *Tileset,
-               loaded_bitmap *TilesetBitmap, u32 TileIndex, loaded_bitmap *MergeTile = 0)
-{
-    loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-    Tile->Width = Tileset->TileWidth;
-    Tile->Height = Tileset->TileHeight;
-    Tile->WidthOverHeight = (r32)Tile->Width/(r32)Tile->Height;
-    Tile->AlignPercentage = V2(0.5f, 0.5f);
-    Tile->Pitch = Tile->Width*BITMAP_BYTES_PER_PIXEL;
-    u32 MemorySize = Tile->Height*Tile->Pitch;
-    Tile->Memory = Platform.AllocateMemory(MemorySize);
-
-    u8 *DestRow = (u8 *)Tile->Memory;
-
-    u32 MainSurfaceIndexX = Tileset->TileOffsetsX[TileIndex]*Tile->Width;
-    u32 MainSurfaceIndexY = Tileset->TileOffsetsY[TileIndex]*Tile->Height;
-    u8 *MainSurfaceSource = (u8 *)TilesetBitmap->Memory + (MainSurfaceIndexY*TilesetBitmap->Pitch +
-                                                          MainSurfaceIndexX*BITMAP_BYTES_PER_PIXEL);
-    if(MergeTile)
-    {
-        u8 *MergeSurfaceSource = (u8 *)MergeTile->Memory;
-        for(s32 Y = 0;
-            Y < Tile->Height;
-            ++Y)
-        {
-            u32 *MergeSource = (u32 *)MergeSurfaceSource;
-            u32 *MainSource = (u32 *)MainSurfaceSource;
-            u32 *Dest = (u32 *)DestRow;
-            for(s32 X = 0;
-                X < Tile->Width;
-                ++X)
-            {
-                if(*MainSource)
-                {
-                    *Dest = *MainSource;
-                }
-                else
-                {
-                    *Dest = *MergeSource;
-                }
-
-                ++MainSource;
-                ++MergeSource;
-                ++Dest;
-            }
-
-            MainSurfaceSource += TilesetBitmap->Pitch;
-            MergeSurfaceSource += MergeTile->Pitch;
-            DestRow += Tile->Pitch;
-        }
-    }
-    else
-    {
-        for(s32 Y = 0;
-            Y < Tile->Height;
-            ++Y)
-        {
-            u32 *MainSource = (u32 *)MainSurfaceSource;
-            u32 *Dest = (u32 *)DestRow;
-            for(s32 X = 0;
-                X < Tile->Width;
-                ++X)
-            {
-                *Dest = *MainSource;
-
-                ++MainSource;
-                ++Dest;
-            }
-
-            MainSurfaceSource += TilesetBitmap->Pitch;
-            DestRow += Tile->Pitch;
-        }
-    }
-
-    texture_op Op = {};
-    Op.IsAllocate = true;
-    Op.Allocate.Width = Tile->Width;
-    Op.Allocate.Height = Tile->Height;
-    Op.Allocate.Data = Tile->Memory;
-    Op.Allocate.ResultHandle = &Tile->TextureHandle;
-    AddOp(TextureOpQueue, &Op);
-}
-
-internal void
-CutTileset(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_tileset *Asset, b32 CutWithMerge)
+LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_asset *Asset)
 {
     TIMED_FUNCTION();
 
-    kesa_tileset *Tileset = Asset;
-    loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
-    u32 TileCountX = (TilesetBitmap->Width / Tileset->TileWidth);
-    u32 TileCountY = (TilesetBitmap->Height / Tileset->TileHeight);
-    Tileset->TileCount = TileCountX*TileCountY;
+    memory_arena *Arena = &TilesetMode->Arena;
+    TilesetMode->FlagNames = ReadTileFlagNames(Arena);
+    TilesetMode->File = ReadTilesetFile(Asset->SourceFileName, &TilesetMode->FlagNames, Arena);
+    TilesetMode->HoverTile = -1;
+    tileset_file *File = &TilesetMode->File;
 
-    u32 TileIndex = 0;
-    for(u8 Y = 0;
-        Y < TileCountY;
-        ++Y)
+    loaded_bitmap *Sheets = PushArray(Arena, TILESET_MAX_SHEETS, loaded_bitmap);
+    for(u32 SheetIndex = 0; SheetIndex < File->SheetCount; ++SheetIndex)
     {
-        for(u8 X = 0;
-            X < TileCountX;
-            ++X)
+        Sheets[SheetIndex] = LoadImageFile(File->Sheets[SheetIndex], PlatformFileType_DataRoot, Arena);
+        if(!Sheets[SheetIndex].Memory)
         {
-            u32 *Pixel = (u32 *)(TilesetBitmap->Memory) + (Y*TilesetBitmap->Width*Tileset->TileHeight +
-                                                           X*Tileset->TileWidth);
-            if(*Pixel != 0xFFFF0000)
-            {
-                Tileset->TileOffsetsX[TileIndex] = X;
-                Tileset->TileOffsetsY[TileIndex] = Y;
-                ++TileIndex;
-            }
-            else
-            {
-                --Tileset->TileCount;
-            }
+            LOG_ERROR("Tile set %s: can't read the sheet %s", Asset->SourceFileName, File->Sheets[SheetIndex]);
         }
     }
 
-    loaded_bitmap *MergeTile = 0;
-    if(CutWithMerge)
+    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
     {
-        MergeTile = &TilesetMode->MergeTileBitmap;
-        Tileset->MergedTile = true;
+        tileset_file_cell Cell = File->Tiles[TileIndex].Frames[0];
+        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
+        *Tile = CutTilesetCell(Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, Arena);
+        if(Tile->Memory)
+        {
+            AllocateBitmap(TextureOpQueue, Tile);
+        }
     }
-    else
+
+    Asset->Tileset.TileCount = File->TileCount;
+    Asset->Tileset.GridWidth = File->GridWidth;
+    Asset->Tileset.GridHeight = File->GridHeight;
+    Asset->Tileset.TileSize = File->TileSize;
+    TilesetMode->Loaded = File->Loaded;
+}
+
+// NOTE(pvlso): The tiles' pixels are in the view's arena, so only their textures are released one by one
+internal void
+ClearTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
+{
+    for(u32 TileIndex = 0; TileIndex < ArrayCount(TilesetMode->Tiles); ++TileIndex)
     {
-        Tileset->MergedTile = false;
+        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
+        if(Tile->TextureHandle)
+        {
+            texture_op Op = {};
+            Op.IsAllocate = false;
+            Op.Deallocate.Handle = Tile->TextureHandle;
+            AddOp(TextureOpQueue, &Op);
+        }
     }
-    
-    for(u32 TileIndex = 0;
-        TileIndex < Tileset->TileCount;
-        ++TileIndex)
-    {
-        LoadTileBitmap(TextureOpQueue, TilesetMode, Tileset, TilesetBitmap, TileIndex, MergeTile);
-    }
+    Clear(&TilesetMode->Arena);
 }
 
 internal void
@@ -530,21 +443,8 @@ AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 internal void
 AddCurrentAsset(editor_mode_assets *AssetsMode)
 {
-    if((AssetsMode->CurrentAsset->Type == KESA_Tileset) &&
-       AssetsMode->CurrentAsset->Tileset.MergedTile)
-    {
-        char Buffer[512];
-        FormatString(ArrayCount(Buffer), Buffer, "%s%s",
-                     AssetsMode->CurrentAsset->SourceFileName,
-                     AssetsMode->CurrentAsset->Tileset.MergeTileFileName);
-        AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(Buffer);
-        ++AssetsMode->AddAssetCount;
-    }
-    else
-    {
-        AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
-        ++AssetsMode->AddAssetCount;
-    }
+    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
+    ++AssetsMode->AddAssetCount;
 
     LOG("Added %s, %u asset(s) waiting for Write Assets", AssetsMode->CurrentAsset->SourceFileName,
         AssetsMode->AddAssetCount);
@@ -871,20 +771,6 @@ ClearSpriteSheetSprites(platform_texture_op_queue *TextureOpQueue, spritesheet_m
     ZeroArray(ArrayCount(SpriteSheetMode->Sprites), SpriteSheetMode->Sprites);
 }
 
-inline void
-ClearTilesetTiles(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
-{
-    for(u32 TileIndex = 0;
-        TileIndex < ArrayCount(TilesetMode->Tiles);
-        ++TileIndex)
-    {
-        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        DeallocateBitmap(TextureOpQueue, Tile);
-    }
-                                
-    ZeroArray(ArrayCount(TilesetMode->Tiles), TilesetMode->Tiles);
-}
-
 internal void
 ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue,
                      kesa_type Type, audio_state *AudioState = 0)
@@ -913,12 +799,7 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *
 
         case KESA_Tileset:
         {
-            // NOTE(paul): Clear Tileset Mode data
-            tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-            DeallocateBitmap(TextureOpQueue, &TilesetMode->MergeTileBitmap);
-            DeallocateBitmap(TextureOpQueue, &TilesetMode->TilesetBitmap);
-
-            ClearTilesetTiles(TextureOpQueue, TilesetMode);
+            ClearTilesetView(TextureOpQueue, &AssetsMode->TilesetMode);
         } break;
 
         case KESA_Sound:
@@ -999,16 +880,6 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode,
     ClearStoredAssetData(AssetsMode, TextureOpQueue, Type, &EditorState->AudioState);
 }
 
-inline b32
-AbleToCut(u32 TilesetBitmapWidth, u32 TilesetBitmapHeight, kesa_tileset *Asset)
-{
-    b32 Result = ((Asset->TileWidth >= 32) && (Asset->TileHeight >= 32) &&
-                  ((TilesetBitmapWidth % Asset->TileWidth) == 0) &&
-                  ((TilesetBitmapHeight % Asset->TileHeight) == 0));
-
-    return(Result);
-}
-
 inline void
 LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *StoredAsset,
                     b32 RememberEditMode = false)
@@ -1053,21 +924,7 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
 
         case KESA_Tileset:
         {
-            tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-            kesa_tileset *StoredTileset = &StoredAsset->Tileset;
-    
-            TilesetMode->TilesetBitmap = LoadImageFile(StoredAsset->SourceFileName, PlatformFileType_TSBMP, 0);
-            loaded_bitmap *Bitmap = &TilesetMode->TilesetBitmap;
-            AllocateBitmap(TextureOpQueue, Bitmap);
-
-            TilesetMode->MergeTileBitmap = LoadImageFile(StoredTileset->MergeTileFileName, PlatformFileType_STBMP, 0);
-            Bitmap = &TilesetMode->MergeTileBitmap;
-            AllocateBitmap(TextureOpQueue, Bitmap);
-
-            if(AbleToCut(TilesetMode->TilesetBitmap.Width, TilesetMode->TilesetBitmap.Height, StoredTileset))
-            {
-                CutTileset(TextureOpQueue, TilesetMode, StoredTileset, StoredTileset->MergedTile);
-            }
+            LoadTilesetView(TextureOpQueue, &AssetsMode->TilesetMode, StoredAsset);
         } break;
 
         case KESA_Sound:
@@ -1133,14 +990,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *Te
 
         case KESA_Tileset:
         {
-            if(AssetsMode->SolidTileFileCount)
-            {
-                char *SolidTileFileName = AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex];
-                StringCopy(SolidTileFileName, Asset->Tileset.MergeTileFileName);
-            }
-            
             LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-            Asset->Tileset.TileWidth = Asset->Tileset.TileHeight = 32;
         } break;
 
         case KESA_Text:
@@ -1340,105 +1190,55 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
     }
 }
 
-inline void
-DrawTileOutlines(render_group *RenderGroup, object_transform *Flat, r32 TilesetBitmapScale,
-                 kesa_tileset *Tileset, r32 TileWidthOverHeight, v2 TilesetDim)
-{
-    r32 TileHeight = TilesetBitmapScale*Tileset->TileHeight;
-    r32 TileWidth = TileHeight*TileWidthOverHeight;
-    v2 Dim = V2(TileWidth, TileHeight);
-    v2 Offset = V2(-0.5f*TilesetDim.x + 0.5f*Dim.x, -0.5f*TilesetDim.y + 0.5f*Dim.y);
-
-    for(u32 TileIndex = 0;
-        TileIndex < Tileset->TileCount;
-        ++TileIndex)
-    {
-        r32 TileX = (r32)Tileset->TileOffsetsX[TileIndex]*TileWidth;
-        r32 TileY = (r32)Tileset->TileOffsetsY[TileIndex]*TileHeight;
-        PushRectOutline(RenderGroup, Flat, V3(Offset + V2(TileX, TileY), 10.0f), Dim, V4(1, 0, 0, 1), 1.0f);
-    }
-}
-
+// NOTE(pvlso): The set in its own grid, fitted to the canvas, the tile under the mouse outlined (its details are in the
+// side panel), animated tiles outlined in blue
 internal void
 UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, platform_texture_op_queue *TextureOpQueue,
                                    render_group *RenderGroup, object_transform *Flat, v2 MouseP,
                                    rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
 {
     v2 CanvasDim = GetDim(CanvasRect);
-    v2 CanvasCenter = GetCenter(CanvasRect);
     r32 CanvasSize = CanvasDim.x;
-    r32 HalfCanvasSize = 0.5f*CanvasSize;
 
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, V2(0, 0));
 
-    kesa_tileset *StoredTileset = &Asset->Tileset;
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-    if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) ||
-       (AssetsMode->SubFileIndex != AssetsMode->LastSubFileIndex))
+    if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Tileset);
-        StoredTileset->TileCount = 0;
-
         LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
-
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
-        AssetsMode->LastSubFileIndex = AssetsMode->SubFileIndex;
-        TilesetMode->ShowTiles = false;
-        TilesetMode->CurrentTileIndex = 0;
     }
 
-    loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
-    if(TilesetMode->CutTileset || TilesetMode->CutWithMergeTileset)
+    PushRect(RenderGroup, Flat, V3(0, 0, 5.0f), V2(CanvasSize, CanvasSize), V4(0.25f, 0.25f, 0.25f, 1.0f));
+
+    tileset_file *File = &TilesetMode->File;
+    TilesetMode->HoverTile = -1;
+    if(TilesetMode->Loaded && File->GridWidth && File->GridHeight)
     {
-        if(AbleToCut(TilesetBitmap->Width, TilesetBitmap->Height, StoredTileset))
+        u32 Cells = Maximum(File->GridWidth, File->GridHeight);
+        r32 Cell = CanvasSize / (r32)Cells;
+        v2 TopLeft = V2(-0.5f*Cell*(r32)File->GridWidth, 0.5f*Cell*(r32)File->GridHeight);
+        for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
         {
-            ClearTilesetTiles(TextureOpQueue, TilesetMode);
-            CutTileset(TextureOpQueue, TilesetMode, StoredTileset, TilesetMode->CutWithMergeTileset);
+            tileset_file_tile *Tile = File->Tiles + TileIndex;
+            v2 Center = TopLeft + V2(((r32)Tile->GridX + 0.5f)*Cell, -((r32)Tile->GridY + 0.5f)*Cell);
+            loaded_bitmap *Bitmap = TilesetMode->Tiles + TileIndex;
+            if(Bitmap->Memory)
+            {
+                PushBitmap(RenderGroup, Flat, Bitmap, Cell, V3(Center, 7.0f));
+            }
+            rectangle2 Rect = RectCenterDim(Center, V2(Cell, Cell));
+            if(IsInRectangle(Rect, MouseP))
+            {
+                TilesetMode->HoverTile = (s32)TileIndex;
+                PushRectOutline(RenderGroup, Flat, Rect, 8.0f, V4(1, 1, 0, 1), 2.0f);
+            }
+            else if(Tile->FrameCount > 1)
+            {
+                PushRectOutline(RenderGroup, Flat, Rect, 8.0f, V4(0, 0.8f, 1, 1), 1.0f);
+            }
         }
-
-        TilesetMode->CutTileset = false;
-        TilesetMode->CutWithMergeTileset = false;
-    }
-
-    if(TilesetMode->ShowTiles)
-    {
-        loaded_bitmap *TileBitmap = TilesetMode->Tiles + TilesetMode->CurrentTileIndex;
-        if(TileBitmap->Memory)
-        {
-            r32 TileCanvasSize = CanvasSize - 96.0f;
-            r32 TileBitmapScale =
-                CalculateBitmapScaleForSquareCanvas(TileCanvasSize, TileBitmap->Width, TileBitmap->Height);
-
-            r32 TileHeight = TileBitmapScale*TileBitmap->Height;
-            r32 TileWidth = TileBitmap->WidthOverHeight*TileHeight;
-                    
-            PushRect(RenderGroup, Flat, V3(0, 0, 5.0f), CanvasDim, UI_COLOR_RGBA1_EFE4B0FF);
-
-            PushRect(RenderGroup, Flat, V3(0, 0, 6.0f), V2(TileWidth, TileHeight) + V2(4.0f, 4.0f),
-                     UI_COLOR_RGBA1_4D3020FF);
-
-            PushBitmap(RenderGroup, Flat, TileBitmap, TileHeight, V3(0, 0, 7.0f), V4(1, 1, 1, 1.0f));
-        }
-    }
-    else
-    {
-        PushRect(RenderGroup, Flat, V3(0, 0, 5.0f), V2(CanvasSize, CanvasSize), V4(0.25f, 0.25f, 0.25f, 1.0f));
-
-        r32 TilesetBitmapScale =
-            CalculateBitmapScaleForSquareCanvas(CanvasSize, TilesetBitmap->Width, TilesetBitmap->Height);
-
-        r32 TileSize = TilesetBitmapScale*TileDim;
-        DrawTileGrid(RenderGroup, Flat, HalfCanvasSize, TileSize, 6.0f, V4(0, 1, 0, 1));
-
-        r32 TilesetHeight = TilesetBitmapScale*TilesetBitmap->Height;
-        r32 TilesetWidth = TilesetBitmap->WidthOverHeight*TilesetHeight;
-        rectangle2 BitmapRect = RectCenterDim(V2(0, 0), V2(TilesetWidth, TilesetHeight));
-                    
-        PushBitmap(RenderGroup, Flat, TilesetBitmap, TilesetHeight, V3(0, 0, 7.0f));
-        PushRectOutline(RenderGroup, Flat, BitmapRect, 7.0f, V4(0, 0, 1, 1), 1.0f);
-
-        DrawTileOutlines(RenderGroup, Flat, TilesetBitmapScale, StoredTileset,
-                         TilesetMode->Tiles[0].WidthOverHeight, V2(TilesetWidth, TilesetHeight));
     }
 }
 

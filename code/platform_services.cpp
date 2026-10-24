@@ -18,7 +18,7 @@ global_variable platform_code GlobalLoadedCodeSentinel;
 global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
     "",             "keas",         "kesas",      "kewms",      "kets",
-    "bmps",         "spritesheets", "tilesets",   "solidtiles", "wavs",
+    "bmps",         "spritesheets", "tilesets",   "wavs",
     "txts",         "jsons",        "ttfs",       "bins",       "",
     ""
 };
@@ -26,7 +26,7 @@ global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
-    ".bmp",  ".bmp",  ".bmp",  ".bmp",  ".wav",
+    ".bmp",  ".bmp",  ".txt",  ".wav",
     ".txt",  ".json", ".ttf",  ".bin",  ".*",
     ".*"
 };
@@ -186,13 +186,13 @@ PlatformInitPaths(void)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): FILE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(pvlso): The image directories (bmps, spritesheets, tilesets, solidtiles) take .png files too. A name ending in
-// _n is the normal map of the image without it, it isn't listed on its own. Texts can be .glsl (game shaders).
+// NOTE(pvlso): The image directories (bmps, spritesheets) take .png files too. A name ending in _n is the normal map
+// of the image without it, it isn't listed on its own. Texts can be .glsl (game shaders). Tile sets are text files.
 internal b32
 IsFileOfType(char *FileName, platform_file_type Type)
 {
     b32 Result = StringEndsWithNoCase(FileName, GlobalFileExtentionsForType[Type]);
-    if((Type >= PlatformFileType_BMP) && (Type <= PlatformFileType_STBMP))
+    if((Type >= PlatformFileType_BMP) && (Type <= PlatformFileType_SSBMP))
     {
         Result = ((Result || StringEndsWithNoCase(FileName, ".png")) &&
                   !StringEndsWithNoCase(FileName, "_n.bmp") && !StringEndsWithNoCase(FileName, "_n.png"));
