@@ -398,6 +398,56 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(PlatformListFilesInDirectory)
     return(FileCount);
 }
 
+// NOTE(pvlso): Path is where to look, Relative the same place as the caller names it. A directory listing gives files
+// and directories from one iteration, so each directory is opened twice: once for its images, once to go deeper.
+internal void
+PlatformCollectImagesUnder(char *Path, char *Relative, char **Dest, memory_arena *Arena, u32 *Count, u32 Depth)
+{
+    os_directory Directory;
+    if(OSOpenDirectory(&Directory, Path))
+    {
+        while(char *FileName = OSNextFileInDirectory(&Directory))
+        {
+            if((StringEndsWithNoCase(FileName, ".png") || StringEndsWithNoCase(FileName, ".bmp")) &&
+               !StringEndsWithNoCase(FileName, "_n.png") && !StringEndsWithNoCase(FileName, "_n.bmp"))
+            {
+                if(Dest && Arena)
+                {
+                    char Name[PLATFORM_PATH_COUNT];
+                    snprintf(Name, sizeof(Name), "%s/%s", Relative, FileName);
+                    Dest[*Count] = PushString(Arena, Name);
+                }
+                ++*Count;
+            }
+        }
+    }
+    OSCloseDirectory(&Directory);
+
+    if((Depth < 12) && OSOpenDirectory(&Directory, Path))
+    {
+        while(char *DirectoryName = OSNextDirectoryInDirectory(&Directory))
+        {
+            char SubPath[PLATFORM_PATH_COUNT];
+            char SubRelative[PLATFORM_PATH_COUNT];
+            snprintf(SubPath, sizeof(SubPath), "%s/%s", Path, DirectoryName);
+            snprintf(SubRelative, sizeof(SubRelative), "%s/%s", Relative, DirectoryName);
+            PlatformCollectImagesUnder(SubPath, SubRelative, Dest, Arena, Count, Depth + 1);
+        }
+    }
+    OSCloseDirectory(&Directory);
+}
+
+internal PLATFORM_LIST_IMAGES_UNDER_DATA(PlatformListImagesUnderData)
+{
+    u32 Count = 0;
+    char Path[PLATFORM_PATH_COUNT];
+    int Length = (int)StringLength(GlobalPaths.DATAPath);
+    snprintf(Path, sizeof(Path), "%.*s", Length ? (Length - 1) : 0, GlobalPaths.DATAPath);
+    PlatformCollectImagesUnder(Path, "data", Dest, Arena, &Count, 0);
+
+    return(Count);
+}
+
 internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
 {
     u32 ProjectCount = 0;
@@ -1020,6 +1070,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.WriteDataToFile = PlatformWriteDataToFile;
     Memory->PlatformAPI.FileError = PlatformFileError;
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
+    Memory->PlatformAPI.ListImagesUnderData = PlatformListImagesUnderData;
     Memory->PlatformAPI.ListProjects = PlatformListProjects;
     Memory->PlatformAPI.SetDataProject = PlatformSetDataProject;
     Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;

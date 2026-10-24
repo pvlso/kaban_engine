@@ -244,7 +244,8 @@ GLFWNkKeyCallback(nk_platform *NkGLFW, int key, int action)
         case GLFW_KEY_V:         NkGLFW->key_events[NK_KEY_PASTE] = a; break;
         case GLFW_KEY_X:         NkGLFW->key_events[NK_KEY_CUT] = a; break;
         case GLFW_KEY_Z:         NkGLFW->key_events[NK_KEY_TEXT_UNDO] = a; break;
-        case GLFW_KEY_R:         NkGLFW->key_events[NK_KEY_TEXT_REDO] = a; break;
+        case GLFW_KEY_R:
+        case GLFW_KEY_Y:         NkGLFW->key_events[NK_KEY_TEXT_REDO] = a; break;
         case GLFW_KEY_B:         NkGLFW->key_events[NK_KEY_TEXT_LINE_START] = a; break;
         case GLFW_KEY_E:         NkGLFW->key_events[NK_KEY_TEXT_LINE_END] = a; break;
         case GLFW_KEY_A:         NkGLFW->key_events[NK_KEY_TEXT_SELECT_ALL] = a; break;

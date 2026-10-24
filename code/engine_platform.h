@@ -361,6 +361,11 @@ typedef PLATFORM_FILE_ERROR(platform_file_error);
 #define PLATFORM_LIST_FILES_IN_DIRECTORY(name) u32 name(platform_file_type Type, char **Dest, memory_arena *Arena)
 typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
 
+// NOTE(pvlso): Every image (.png, .bmp, not the _n normal maps) anywhere under the current data/, as paths for
+// PlatformFileType_DataRoot ("data/game_assets/.../MainLev.png"). Dest and Arena can be 0 to only count.
+#define PLATFORM_LIST_IMAGES_UNDER_DATA(name) u32 name(char **Dest, memory_arena *Arena)
+typedef PLATFORM_LIST_IMAGES_UNDER_DATA(platform_list_images_under_data);
+
 // NOTE(pvlso): Names of the directories in projects/ that hold a project, which is
 // game_name/game_name.cpp. Dest and Arena can be 0 to only count, otherwise at most DestCount are stored.
 #define PLATFORM_LIST_PROJECTS(name) u32 name(char **Dest, u32 DestCount, memory_arena *Arena)
@@ -507,6 +512,7 @@ typedef struct platform_api
     platform_file_error *FileError;
 
     platform_list_files_in_directory *ListFilesInDirectory;
+    platform_list_images_under_data *ListImagesUnderData;
     platform_list_projects *ListProjects;
     platform_set_data_project *SetDataProject;
     platform_make_directory *MakeDirectory;

@@ -1095,6 +1095,8 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
     }
 }
 
+// NOTE(pvlso): The tile set editor's panel (editor_tileset_edit.cpp): a new set, the sheet to take tiles from, Save,
+// and the picked tile's name, flags, frames and speed. It only asks; the next update does it.
 internal void
 DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                           kesa_asset *CurrentAsset)
@@ -1105,54 +1107,106 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
     DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
 
     nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-    nk_layout_space_push(Nk, {1460, -140, 450, 520});
+    nk_layout_space_push(Nk, {1460, -140, 450, 760});
     struct nk_rect Rect = nk_widget_bounds(Nk);
     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    TilesetMode->TypingName = false;
     if(nk_group_begin(Nk, "Tileset Attributes", 0))
     {
         nk_layout_row_dynamic(Nk, 24, 1);
-        nk_labelf(Nk, NK_TEXT_LEFT, "%s", CurrentAsset->SourceFileName);
+        nk_label(Nk, "New tile set:", NK_TEXT_LEFT);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 80);
+        nk_layout_row_template_end(Nk);
+        nk_flags NewNameState = nk_edit_string(Nk, NK_EDIT_FIELD, TilesetMode->NewSetName, &TilesetMode->NewSetNameLength,
+                                               (int)sizeof(TilesetMode->NewSetName) - 1, nk_filter_default);
+        TilesetMode->NewSetName[TilesetMode->NewSetNameLength] = 0;
+        if(NewNameState & NK_EDIT_ACTIVE) {TilesetMode->TypingName = true;}
+        if(nk_button_label(Nk, "Create")) {TilesetMode->CreateRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_labelf(Nk, NK_TEXT_LEFT, "%s%s", CurrentAsset->SourceFileName, TilesetMode->Dirty ? "  (not saved)" : "");
         if(!TilesetMode->Loaded)
         {
             nk_label(Nk, "Can't read the file, see the log", NK_TEXT_LEFT);
         }
         else
         {
-            nk_labelf(Nk, NK_TEXT_LEFT, "%d tiles, grid %d x %d, %d px", File->TileCount, File->GridWidth,
-                      File->GridHeight, File->TileSize);
-            if(File->ErrorCount)
-            {
-                nk_labelf(Nk, NK_TEXT_LEFT, "%d mistakes in the file, see the log", File->ErrorCount);
-            }
-            for(u32 SheetIndex = 0; SheetIndex < File->SheetCount; ++SheetIndex)
-            {
-                nk_labelf(Nk, NK_TEXT_LEFT, "sheet %d: %s", SheetIndex, File->Sheets[SheetIndex]);
-            }
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d tiles, grid %d x %d, %d sheets", File->TileCount, File->GridWidth,
+                      File->GridHeight, File->SheetCount);
+            nk_layout_row_dynamic(Nk, 30, 1);
+            if(nk_button_label(Nk, TilesetMode->Dirty ? "Save *" : "Save")) {TilesetMode->SaveRequested = true;}
 
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Sheet (any image under data/):", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(Nk, 30, 1);
+            SearchBox(AssetsMode, Nk, TilesetMode->Images, TilesetMode->ImageCount, &TilesetMode->ImageIndex);
+
+            nk_layout_row_dynamic(Nk, 18, 1);
+            nk_label(Nk, "Drag on the sheet to select, click the grid to place.", NK_TEXT_LEFT);
+            nk_label(Nk, "Right click: remove (grid), clear selection (sheet).", NK_TEXT_LEFT);
+            nk_label(Nk, "Click a tile to pick it, Shift+click to move it.", NK_TEXT_LEFT);
+            nk_label(Nk, "Middle drag pans, wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(Nk, 24, 1);
             nk_label(Nk, "", NK_TEXT_LEFT);
-            if(TilesetMode->HoverTile >= 0)
+            if((TilesetMode->SelectedTile >= 0) && ((u32)TilesetMode->SelectedTile < File->TileCount))
             {
-                tileset_file_tile *Tile = File->Tiles + TilesetMode->HoverTile;
-                nk_labelf(Nk, NK_TEXT_LEFT, "Tile %d \"%s\" at %d,%d", TilesetMode->HoverTile, Tile->Name,
-                          Tile->GridX, Tile->GridY);
-                nk_labelf(Nk, NK_TEXT_LEFT, "From sheet %d, cell %d,%d", Tile->Frames[0].Sheet, Tile->Frames[0].X,
-                          Tile->Frames[0].Y);
-                if(Tile->FrameCount > 1)
-                {
-                    nk_labelf(Nk, NK_TEXT_LEFT, "Animated: %d frames, %.1f per second", Tile->FrameCount,
-                              Tile->FramesPerSecond);
-                }
+                tileset_file_tile *Tile = File->Tiles + TilesetMode->SelectedTile;
+                nk_labelf(Nk, NK_TEXT_LEFT, "Tile %d at %d,%d, from sheet %d cell %d,%d", TilesetMode->SelectedTile,
+                          Tile->GridX, Tile->GridY, Tile->Frames[0].Sheet, Tile->Frames[0].X, Tile->Frames[0].Y);
+
+                nk_layout_row_template_begin(Nk, 28);
+                nk_layout_row_template_push_static(Nk, 50);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_end(Nk);
+                nk_label(Nk, "Name", NK_TEXT_LEFT);
+                int NameLength = (int)StringLength(Tile->Name);
+                int OldLength = NameLength;
+                char OldName[KEA_TILE_NAME_LENGTH];
+                Copy(sizeof(OldName), Tile->Name, OldName);
+                nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, Tile->Name, &NameLength,
+                                                    KEA_TILE_NAME_LENGTH - 1, nk_filter_default);
+                Tile->Name[NameLength] = 0;
+                if(NameState & NK_EDIT_ACTIVE) {TilesetMode->TypingName = true;}
+                if((NameLength != OldLength) || !StringsAreEqual(OldName, Tile->Name)) {TilesetMode->TileChanged = true;}
+
+                nk_layout_row_dynamic(Nk, 24, 2);
                 for(u32 FlagIndex = 0; FlagIndex < TilesetMode->FlagNames.Count; ++FlagIndex)
                 {
-                    if(Tile->Flags & (1u << FlagIndex))
+                    nk_bool On = ((Tile->Flags & (1u << FlagIndex)) != 0);
+                    if(nk_checkbox_label(Nk, TilesetMode->FlagNames.Names[FlagIndex], &On))
                     {
-                        nk_labelf(Nk, NK_TEXT_LEFT, "  %s", TilesetMode->FlagNames.Names[FlagIndex]);
+                        Tile->Flags ^= (1u << FlagIndex);
+                        TilesetMode->TileChanged = true;
                     }
                 }
+                if(!TilesetMode->FlagNames.Count)
+                {
+                    nk_layout_row_dynamic(Nk, 24, 1);
+                    nk_label(Nk, "No flags: data/txts/tile_flags.txt", NK_TEXT_LEFT);
+                }
+
+                nk_layout_row_dynamic(Nk, 24, 1);
+                if(Tile->FrameCount > 1)
+                {
+                    nk_labelf(Nk, NK_TEXT_LEFT, "Animated: %d frames", Tile->FrameCount);
+                    r32 OldSpeed = Tile->FramesPerSecond;
+                    nk_property_float(Nk, "#frames per second", 0.5f, &Tile->FramesPerSecond, 60.0f, 0.5f, 0.1f);
+                    if(Tile->FramesPerSecond != OldSpeed) {TilesetMode->TileChanged = true;}
+                }
+                else
+                {
+                    nk_label(Nk, "Not animated", NK_TEXT_LEFT);
+                }
+                nk_layout_row_dynamic(Nk, 30, 2);
+                if(nk_button_label(Nk, "Frames from selection")) {TilesetMode->FramesRequested = true;}
+                if(nk_button_label(Nk, "Remove tile")) {TilesetMode->RemoveRequested = true;}
             }
             else
             {
-                nk_label(Nk, "Point at a tile to see it", NK_TEXT_LEFT);
+                nk_label(Nk, "Click a tile in the grid to pick it", NK_TEXT_LEFT);
             }
         }
 

@@ -8,6 +8,7 @@
 
 #include "engine_tileset_file.cpp"
 #include "engine_kea_builder.cpp"
+#include "editor_tileset_edit.cpp"
 #include "engine_assets_mode_ui.cpp"
 
 inline void
@@ -384,7 +385,7 @@ LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tileset
     TilesetMode->HoverTile = -1;
     tileset_file *File = &TilesetMode->File;
 
-    loaded_bitmap *Sheets = PushArray(Arena, TILESET_MAX_SHEETS, loaded_bitmap);
+    loaded_bitmap *Sheets = TilesetMode->Sheets;
     for(u32 SheetIndex = 0; SheetIndex < File->SheetCount; ++SheetIndex)
     {
         Sheets[SheetIndex] = LoadImageFile(File->Sheets[SheetIndex], PlatformFileType_DataRoot, Arena);
@@ -427,6 +428,7 @@ ClearTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tilese
             AddOp(TextureOpQueue, &Op);
         }
     }
+    ClearTilesetEditing(TextureOpQueue, TilesetMode);
     Clear(&TilesetMode->Arena);
 }
 
@@ -1190,19 +1192,64 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
     }
 }
 
-// NOTE(pvlso): The set in its own grid, fitted to the canvas, the tile under the mouse outlined (its details are in the
-// side panel), animated tiles outlined in blue
+// NOTE(pvlso): A new set's file: the name kept to letters, digits, '_' and '-'. The tile set files are listed again
+// and the new one picked, which loads it.
+internal void
+CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
+{
+    char Clean[64];
+    u32 Length = 0;
+    for(char *C = Name; *C && (Length < 59); ++C)
+    {
+        if(((*C >= 'a') && (*C <= 'z')) || ((*C >= 'A') && (*C <= 'Z')) || IsDigit(*C) || (*C == '_') || (*C == '-'))
+        {
+            Clean[Length++] = *C;
+        }
+    }
+    Clean[Length] = 0;
+    char FileName[80];
+    FormatString(sizeof(FileName), FileName, "%s.txt", Clean);
+    if(!Length)
+    {
+        LOG_ERROR("A new tile set needs a name");
+    }
+    else if(Platform.FileExists(FileName, PlatformFileType_TSBMP))
+    {
+        LOG_ERROR("Tile set %s already exists", FileName);
+    }
+    else
+    {
+        char *Text = "; A curated tile set (Kaban engine). Format: engine_tileset_file.h\nsize 32\n";
+        Platform.WriteEntireFile(FileName, PlatformFileType_TSBMP, (u8 *)Text, StringLength(Text));
+
+        u32 Count = Platform.ListFilesInDirectory(PlatformFileType_TSBMP, 0, 0);
+        AssetsMode->SourceFiles[KESA_Tileset] = PushArray(&AssetsMode->UtilityArena, Count, char *);
+        AssetsMode->SourceFileCounts[KESA_Tileset] =
+            Platform.ListFilesInDirectory(PlatformFileType_TSBMP, AssetsMode->SourceFiles[KESA_Tileset],
+                                          &AssetsMode->UtilityArena);
+        for(u32 Index = 0; Index < AssetsMode->SourceFileCounts[KESA_Tileset]; ++Index)
+        {
+            if(StringsAreEqual(AssetsMode->SourceFiles[KESA_Tileset][Index], FileName)) {AssetsMode->FileIndex = Index;}
+        }
+        AssetsMode->LastFileIndex = U32Maximum;
+        LOG("Made the tile set %s", FileName);
+    }
+}
+
+// NOTE(pvlso): Editing a curated tile set (editor_tileset_edit.cpp): the sheet on the left half of the canvas, the
+// set's grid on the right, the panel's requests, undo and redo
 internal void
 UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Input, platform_texture_op_queue *TextureOpQueue,
-                                   render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                                   rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset)
+                               render_group *RenderGroup, object_transform *Flat, v2 MouseP,
+                               rectangle2 CanvasRect, r32 TileDim, kesa_asset *Asset, nk_context *Nk)
 {
-    v2 CanvasDim = GetDim(CanvasRect);
-    r32 CanvasSize = CanvasDim.x;
-
-    DrawCanvasOutline(RenderGroup, Flat, CanvasDim, V2(0, 0));
-
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
+    if(TilesetMode->CreateRequested)
+    {
+        TilesetMode->CreateRequested = false;
+        CreateTilesetFile(AssetsMode, TilesetMode->NewSetName);
+    }
+
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Tileset);
@@ -1210,34 +1257,97 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 
-    PushRect(RenderGroup, Flat, V3(0, 0, 5.0f), V2(CanvasSize, CanvasSize), V4(0.25f, 0.25f, 0.25f, 1.0f));
-
     tileset_file *File = &TilesetMode->File;
-    TilesetMode->HoverTile = -1;
-    if(TilesetMode->Loaded && File->GridWidth && File->GridHeight)
+    if(!TilesetMode->Editing && TilesetMode->Loaded)
     {
-        u32 Cells = Maximum(File->GridWidth, File->GridHeight);
-        r32 Cell = CanvasSize / (r32)Cells;
-        v2 TopLeft = V2(-0.5f*Cell*(r32)File->GridWidth, 0.5f*Cell*(r32)File->GridHeight);
-        for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
+        TilesetMode->Editing = true;
+        TilesetMode->SheetZoom = 24.0f;
+        TilesetMode->SetZoom = 32.0f;
+        TilesetMode->SelectedTile = -1;
+        TilesetMode->ImageCount = Platform.ListImagesUnderData(0, 0);
+        TilesetMode->Images = PushArray(&TilesetMode->Arena, Maximum(1, TilesetMode->ImageCount), char *);
+        Platform.ListImagesUnderData(TilesetMode->Images, &TilesetMode->Arena);
+        TilesetMode->LastImageIndex = U32Maximum;
+        for(u32 Index = 0; File->SheetCount && (Index < TilesetMode->ImageCount); ++Index)
         {
-            tileset_file_tile *Tile = File->Tiles + TileIndex;
-            v2 Center = TopLeft + V2(((r32)Tile->GridX + 0.5f)*Cell, -((r32)Tile->GridY + 0.5f)*Cell);
-            loaded_bitmap *Bitmap = TilesetMode->Tiles + TileIndex;
-            if(Bitmap->Memory)
-            {
-                PushBitmap(RenderGroup, Flat, Bitmap, Cell, V3(Center, 7.0f));
-            }
-            rectangle2 Rect = RectCenterDim(Center, V2(Cell, Cell));
-            if(IsInRectangle(Rect, MouseP))
-            {
-                TilesetMode->HoverTile = (s32)TileIndex;
-                PushRectOutline(RenderGroup, Flat, Rect, 8.0f, V4(1, 1, 0, 1), 2.0f);
-            }
-            else if(Tile->FrameCount > 1)
-            {
-                PushRectOutline(RenderGroup, Flat, Rect, 8.0f, V4(0, 0.8f, 1, 1), 1.0f);
-            }
+            // NOTE(pvlso): The set's first sheet opens with it
+            if(StringsAreEqual(TilesetMode->Images[Index], File->Sheets[0])) {TilesetMode->ImageIndex = Index;}
+        }
+        RecordTilesetState(TilesetMode);
+    }
+    if(!TilesetMode->Editing)
+    {
+        return;
+    }
+
+    if(TilesetMode->ImageCount && (TilesetMode->ImageIndex != TilesetMode->LastImageIndex))
+    {
+        OpenSheetImage(TextureOpQueue, TilesetMode, TilesetMode->Images[TilesetMode->ImageIndex]);
+        TilesetMode->LastImageIndex = TilesetMode->ImageIndex;
+    }
+
+    b32 Changed = false;
+    if(TilesetMode->FramesRequested)
+    {
+        TilesetMode->FramesRequested = false;
+        if(TilesetMode->HasSelection && TilesetMode->SheetBitmap.Memory && (TilesetMode->SelectedTile >= 0))
+        {
+            SetFramesFromSelection(TextureOpQueue, TilesetMode);
+            Changed = true;
+        }
+    }
+    if(TilesetMode->RemoveRequested)
+    {
+        TilesetMode->RemoveRequested = false;
+        if(TilesetMode->SelectedTile >= 0)
+        {
+            RemoveTile(TextureOpQueue, TilesetMode, TilesetMode->SelectedTile);
+            RecountTilesetGrid(File);
+            Changed = true;
+        }
+    }
+    if(TilesetMode->TileChanged)
+    {
+        TilesetMode->TileChanged = false;
+        Changed = true;
+    }
+
+    if(!TilesetMode->TypingName)
+    {
+        if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_UNDO) && (TilesetMode->HistoryAt > 0))
+        {
+            RestoreTilesetState(TextureOpQueue, TilesetMode, TilesetMode->HistoryAt - 1);
+        }
+        else if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_REDO) &&
+                (TilesetMode->HistoryAt + 1 < TilesetMode->HistoryCount))
+        {
+            RestoreTilesetState(TextureOpQueue, TilesetMode, TilesetMode->HistoryAt + 1);
+        }
+    }
+
+    r32 Wheel = Nk->input.mouse.scroll_delta.y;
+    v2 Half = 0.5f*GetDim(CanvasRect);
+    rectangle2 SheetRect = RectMinMax(V2(-Half.x, -Half.y), V2(-4.0f, Half.y));
+    rectangle2 SetRect = RectMinMax(V2(4.0f, -Half.y), V2(Half.x, Half.y));
+    UpdateAndRenderSheetView(TilesetMode, Input, RenderGroup, Flat, MouseP, SheetRect, Wheel);
+    Changed |= UpdateAndRenderSetView(TextureOpQueue, TilesetMode, Input, RenderGroup, Flat, MouseP, SetRect, Wheel);
+
+    if(Changed)
+    {
+        RecordTilesetState(TilesetMode);
+        TilesetMode->Dirty = true;
+    }
+
+    if(TilesetMode->SaveRequested)
+    {
+        TilesetMode->SaveRequested = false;
+        if(WriteTilesetFile(Asset->SourceFileName, File, &TilesetMode->FlagNames, &TilesetMode->Arena))
+        {
+            TilesetMode->Dirty = false;
+            Asset->Tileset.TileCount = File->TileCount;
+            Asset->Tileset.GridWidth = File->GridWidth;
+            Asset->Tileset.GridHeight = File->GridHeight;
+            LOG("Saved the tile set %s: %u tiles", Asset->SourceFileName, File->TileCount);
         }
     }
 }
@@ -1514,7 +1624,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 case EditMode_Tileset:
                 {
                     UpdateAndRenderTilesetEditMode(AssetsMode, Input, TextureOpQueue, RenderGroup, &Flat, MouseP,
-                                                   CanvasRect, TileDim, AssetsMode->CurrentAsset);
+                                                   CanvasRect, TileDim, AssetsMode->CurrentAsset, UIState->Nk);
                 } break;
 
                 case EditMode_Sound:

@@ -315,3 +315,85 @@ CutTilesetCell(loaded_bitmap *Sheet, u32 TileSize, u32 CellX, u32 CellY, memory_
 
     return(Result);
 }
+
+// NOTE(pvlso): Writes the set to data/tilesets/<FileName> in the format ReadTilesetFile reads. Sheets no tile uses are
+// left out and the rest renumbered. False when the file can't be written.
+internal b32
+WriteTilesetFile(char *FileName, tileset_file *File, tile_flag_names *FlagNames, memory_arena *Arena)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+
+    u32 Used[TILESET_MAX_SHEETS] = {};
+    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
+    {
+        tileset_file_tile *Tile = File->Tiles + TileIndex;
+        for(u32 FrameIndex = 0; FrameIndex < Tile->FrameCount; ++FrameIndex)
+        {
+            Used[Tile->Frames[FrameIndex].Sheet] = 1;
+        }
+    }
+    u32 NewIndex[TILESET_MAX_SHEETS] = {};
+    u32 SheetCount = 0;
+    for(u32 SheetIndex = 0; SheetIndex < File->SheetCount; ++SheetIndex)
+    {
+        if(Used[SheetIndex]) {NewIndex[SheetIndex] = SheetCount++;}
+    }
+
+    umm Capacity = 4096 + (umm)File->TileCount*(512 + TILESET_MAX_TILE_FRAMES*16);
+    char *Text = (char *)PushSize(Arena, Capacity);
+    umm At = 0;
+#define TILESET_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
+    TILESET_OUT("; A curated tile set (Kaban engine), written by the assets mode. Format: engine_tileset_file.h\n");
+    TILESET_OUT("size %d\n", File->TileSize);
+    for(u32 SheetIndex = 0; SheetIndex < File->SheetCount; ++SheetIndex)
+    {
+        if(Used[SheetIndex]) {TILESET_OUT("sheet %s\n", File->Sheets[SheetIndex]);}
+    }
+    TILESET_OUT("\n");
+    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
+    {
+        tileset_file_tile *Tile = File->Tiles + TileIndex;
+        tileset_file_cell Cell = Tile->Frames[0];
+        TILESET_OUT("tile %d %d  %d %d %d", Tile->GridX, Tile->GridY, NewIndex[Cell.Sheet], Cell.X, Cell.Y);
+        if(Tile->Name[0])
+        {
+            char Name[KEA_TILE_NAME_LENGTH];
+            u32 Length = 0;
+            for(char *C = Tile->Name; *C && (Length < KEA_TILE_NAME_LENGTH - 1); ++C)
+            {
+                if(*C != '"') {Name[Length++] = *C;}
+            }
+            Name[Length] = 0;
+            TILESET_OUT("  name \"%s\"", Name);
+        }
+        if(Tile->Flags)
+        {
+            TILESET_OUT("  flags");
+            for(u32 FlagIndex = 0; FlagIndex < FlagNames->Count; ++FlagIndex)
+            {
+                if(Tile->Flags & (1u << FlagIndex)) {TILESET_OUT(" %s", FlagNames->Names[FlagIndex]);}
+            }
+        }
+        if(Tile->FrameCount > 1)
+        {
+            TILESET_OUT("  frames");
+            for(u32 FrameIndex = 1; FrameIndex < Tile->FrameCount; ++FrameIndex)
+            {
+                tileset_file_cell Frame = Tile->Frames[FrameIndex];
+                TILESET_OUT(" %d %d %d", NewIndex[Frame.Sheet], Frame.X, Frame.Y);
+            }
+            TILESET_OUT("  fps %.2f", Tile->FramesPerSecond);
+        }
+        TILESET_OUT("\n");
+    }
+#undef TILESET_OUT
+
+    b32 Result = (Platform.WriteEntireFile(FileName, PlatformFileType_TSBMP, (u8 *)Text, (u32)At) != 0);
+    if(!Result)
+    {
+        LOG_ERROR("Tile set %s: can't write the file", FileName);
+    }
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}
