@@ -641,6 +641,19 @@ UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
                 TagStrings[Index] = PushArray(TempMem.Arena, TagStringSizes[Index], char);
                 NewTag->Tag.ValueGUIDs = PushArray(TempMem.Arena, NewTag->Tag.ValueCount, u64);
 
+                
+                new_tag_map_value *Prev = 0;
+                new_tag_map_value *Cur = NewTag->ValuesHead.Next;
+                while(Cur != 0)
+                {
+                    new_tag_map_value *Next = Cur->Next;
+                    Cur->Next = Prev;
+                    Prev = Cur;
+                    Cur = Next;
+                        
+                }
+                NewTag->ValuesHead.Next = Prev;
+                
                 char *TagStringAt = TagStrings[Index];
                 for(u32 ValueIndex = 0;
                     ValueIndex < NewTag->Tag.ValueCount;

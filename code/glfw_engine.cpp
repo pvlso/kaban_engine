@@ -900,7 +900,7 @@ main(int ArgCount, char **Args)
     u32 PushBufferSize = Megabytes(64);
     void *PushBuffer = OSAllocateMemory(PushBufferSize);
 
-    u32 TextureOpCount = 1024;
+    u32 TextureOpCount = 2048;
     platform_texture_op_queue *TextureOpQueue = &EngineMemory.TextureOpQueue;
     TextureOpQueue->FirstFree = (texture_op *)OSAllocateMemory(sizeof(texture_op)*TextureOpCount);
 
