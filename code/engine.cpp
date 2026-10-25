@@ -158,6 +158,7 @@ platform_api Platform;
 
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
+#include "editor_map_mode.cpp"
 #include "editor_game_mode.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
@@ -269,6 +270,7 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
 
                 case EditorMode_MapEditor:
                 {
+                    Rerun = UpdateAndRenderMapEditor(EditorState, TranState, Input, &Memory->TextureOpQueue);
                 } break;
 
                 case EditorMode_Game:
