@@ -20,6 +20,7 @@ global_variable char *GlobalDataDirs[PlatformFileType_Count] =
     "",             "keas",         "kesas",      "kewms",      "kets",
     "bmps",         "spritesheets", "tilesets",   "wavs",
     "txts",         "jsons",        "ttfs",       "bins",       "maps",
+    "entities",
     "",             ""
 };
 
@@ -28,6 +29,7 @@ global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
     ".bmp",  ".bmp",  ".txt",  ".wav",
     ".txt",  ".json", ".ttf",  ".bin",  ".txt",
+    ".txt",
     ".*",    ".*"
 };
 

@@ -83,6 +83,7 @@ struct task_with_memory
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
 #include "editor_map_mode.h"
+#include "editor_entity_mode.h"
 #include "editor_game_mode.h"
 
 //#include "engine_navigation_mesh.h"
@@ -95,6 +96,7 @@ enum editor_mode
     EditorMode_AssetsMode,
     EditorMode_MapEditor,
     EditorMode_Game,
+    EditorMode_EntityEditor,
 };
 
 struct editor_meta
@@ -129,6 +131,7 @@ struct editor_state
         editor_mode_title_screen *TitleScreen;
         editor_mode_assets *AssetsMode;
         editor_mode_map *MapMode;
+        editor_mode_entity *EntityMode;
         editor_mode_game *Game;
 //        engine_map_editor *MapEditor;
 //        editor_game_simulate_mode *SimulateGame;

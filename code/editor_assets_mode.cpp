@@ -8,6 +8,7 @@
 
 #include "engine_tileset_file.cpp"
 #include "engine_map_file.cpp"
+#include "engine_entity_file.cpp"
 #include "engine_kea_builder.cpp"
 #include "editor_tileset_edit.cpp"
 #include "editor_cut_edit.cpp"
@@ -155,6 +156,44 @@ ReadTags(editor_mode_assets *AssetsMode)
     return(Result);
 }
 
+// NOTE(pvlso): stored_assets_<version>.kesa, the version from the data's editor_metadata.json
+internal void
+StoredAssetsFileName(editor_meta *EditorMeta, char *Dest, u32 DestSize)
+{
+    FormatString(DestSize, Dest, "stored_assets_%d.%d.%d.%d.kesa",
+                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
+                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+}
+
+// NOTE(pvlso): Only reads the project's stored assets (the first is the null asset), for the modes that pick from
+// them; Platform.DeallocateMemory frees them. 0 without the file.
+internal kesa_asset *
+ReadStoredAssetList(editor_meta *EditorMeta, kesa_header *Header)
+{
+    kesa_asset *Result = 0;
+    char StoredFileName[256];
+    StoredAssetsFileName(EditorMeta, StoredFileName, sizeof(StoredFileName));
+    if(Platform.FileExists(StoredFileName, PlatformFileType_KESA))
+    {
+        platform_file_handle Handle = Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Read);
+        Platform.ReadDataFromFile(&Handle, 0, sizeof(kesa_header), Header);
+        if(PlatformNoFileErrors(&Handle) && (Header->SizeOfStoredAsset == sizeof(kesa_asset)) && Header->AssetCount)
+        {
+            u32 AssetsSize = Header->AssetCount*Header->SizeOfStoredAsset;
+            Result = (kesa_asset *)Platform.AllocateMemory(AssetsSize);
+            Platform.ReadDataFromFile(&Handle, Header->AssetsOffset, AssetsSize, Result);
+        }
+        Platform.CloseFile(&Handle);
+    }
+    if(!Result)
+    {
+        LOG_WARNING("Can't read %s, there are no stored assets to pick from", StoredFileName);
+        ZeroStruct(*Header);
+    }
+
+    return(Result);
+}
+
 internal b32
 ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 {
@@ -165,9 +204,7 @@ ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 
     editor_meta *EditorMeta = &EditorState->EditorMeta;
     char StoredFileName[256];
-    FormatString(ArrayCount(StoredFileName), StoredFileName, "stored_assets_%d.%d.%d.%d.kesa",
-                 EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
-                 EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+    StoredAssetsFileName(EditorMeta, StoredFileName, sizeof(StoredFileName));
 
     u32 FullVersion = (((u32)EditorMeta->KESAVersion[0] << 24) |
                        ((u32)EditorMeta->KESAVersion[1] << 16) |

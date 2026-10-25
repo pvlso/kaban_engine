@@ -61,7 +61,7 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     Clear(&EditorState->ModeArena);
     EditorState->EditorMode = EditorMode;
 
-    char *ModeNames[] = {"None", "Title Screen", "Assets Mode", "Map Editor", "Game"};
+    char *ModeNames[] = {"None", "Title Screen", "Assets Mode", "Map Editor", "Game", "Entity Editor"};
     LOG("Editor mode: %s", (EditorMode < ArrayCount(ModeNames)) ? ModeNames[EditorMode] : "?");
 }
 
@@ -159,6 +159,7 @@ platform_api Platform;
 #include "editor_title_mode.cpp"
 #include "editor_assets_mode.cpp"
 #include "editor_map_mode.cpp"
+#include "editor_entity_mode.cpp"
 #include "editor_game_mode.cpp"
 //#include "engine_navigation_mesh.cpp"
 //#include "engine_map_editor_mode.cpp"
@@ -276,6 +277,11 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
                 case EditorMode_Game:
                 {
                     Rerun = UpdateAndRenderGame(EditorState, TranState, Input, RenderCommands);
+                } break;
+
+                case EditorMode_EntityEditor:
+                {
+                    Rerun = UpdateAndRenderEntityEditor(EditorState, TranState, Input, &Memory->TextureOpQueue);
                 } break;
 
                 InvalidDefaultCase;
