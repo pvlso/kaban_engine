@@ -107,6 +107,7 @@ struct tile_info
 {
     bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
     u32 Flags;        // NOTE(pvlso): bit n is the n-th name in the project's data/txts/tile_flags.txt
+    u32 Kind;         // NOTE(pvlso): 0 for none, else the n-th name in the project's data/txts/tile_kinds.txt, from 1
     u32 GridX;        // NOTE(pvlso): its place in the set's grid, from the top left
     u32 GridY;
     b32 Animated;

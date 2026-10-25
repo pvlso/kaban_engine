@@ -191,6 +191,7 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
         tileset_file_tile *Source = File.Tiles + TileIndex;
         kea_tile *Tile = Data->Tiles + TileIndex;
         Tile->Flags = Source->Flags;
+        Tile->Kind = Source->Kind;
         Tile->GridX = Source->GridX;
         Tile->GridY = Source->GridY;
         Tile->FramesPerSecond = Source->FramesPerSecond;

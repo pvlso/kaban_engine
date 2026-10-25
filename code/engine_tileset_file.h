@@ -16,11 +16,12 @@
     sheet data/game_assets/useful/asset_packs/RPGW_AncientForest_v1.0/_PNG/MainLev.png
     sheet data/game_assets/useful/asset_packs/RPGW_GrassLand_v2.01/MainLev2.0.png
     tile 0 0  0 5 30  name "Grass"  flags Walkable
-    tile 1 0  1 40 39 name "Pond"   flags Water InteractableWater  frames 1 41 39 1 42 39  fps 6
+    tile 1 0  1 40 39 name "Pond"   kind Water  flags Water InteractableWater  frames 1 41 39 1 42 39  fps 6
 
   Sheets are numbered in the order they come, their paths are from the directory holding data/. A tile is its place
   in the set's grid (x, y from the top left), then the sheet and the cell it's cut from (x, y in tiles from the
-  sheet's top left), then optional parts in any order: its name, its flags (names from the project's
+  sheet's top left), then optional parts in any order: its name, its kind (one of the project's
+  data/txts/tile_kinds.txt, what the game takes the ground to be: Grass, Water...), its flags (names from the project's
   data/txts/tile_flags.txt, one per line), more animation frames after its own cell (sheet x y each), and their speed.
 */
 
@@ -28,6 +29,7 @@
 #define TILESET_MAX_TILES 2048
 #define TILESET_MAX_TILE_FRAMES 16
 #define TILESET_MAX_FLAGS 32
+#define TILESET_MAX_KINDS 64
 #define TILESET_FLAG_NAME_LENGTH 32
 #define TILESET_SHEET_PATH_LENGTH 256
 
@@ -43,6 +45,7 @@ struct tileset_file_tile
     u16 GridX;
     u16 GridY;
     u32 Flags;
+    u32 Kind; // NOTE(pvlso): 0 for none, else the n-th name in tile_kinds.txt, from 1
     r32 FramesPerSecond;
     char Name[KEA_TILE_NAME_LENGTH];
 
@@ -67,10 +70,13 @@ struct tileset_file
     tileset_file_tile *Tiles; // NOTE(pvlso): room for TILESET_MAX_TILES
 };
 
+// NOTE(pvlso): The project's names for tiles' flags (data/txts/tile_flags.txt) and kinds (data/txts/tile_kinds.txt)
 struct tile_flag_names
 {
     u32 Count;
     char Names[TILESET_MAX_FLAGS][TILESET_FLAG_NAME_LENGTH];
+    u32 KindCount;
+    char KindNames[TILESET_MAX_KINDS][TILESET_FLAG_NAME_LENGTH];
 };
 
 #define ENGINE_TILESET_FILE_H

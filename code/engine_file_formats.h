@@ -265,6 +265,7 @@ struct kea_tile
 {
     u64 BitmapGUID; // NOTE(pvlso): the tile, the first frame when it's animated
     u32 Flags;
+    u32 Kind;       // NOTE(pvlso): 0 for none, else the n-th name in the project's tile_kinds.txt, from 1
     u16 GridX;
     u16 GridY;
     u32 FirstFrame; // NOTE(pvlso): into the set's FrameGUIDs

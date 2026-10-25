@@ -1189,6 +1189,36 @@ DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_
                 if(NameState & NK_EDIT_ACTIVE) {TilesetMode->TypingName = true;}
                 if((NameLength != OldLength) || !StringsAreEqual(OldName, Tile->Name)) {TilesetMode->TileChanged = true;}
 
+                // NOTE(pvlso): Its kind, one of tile_kinds.txt
+                nk_layout_row_template_begin(Nk, 28);
+                nk_layout_row_template_push_static(Nk, 50);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_end(Nk);
+                nk_label(Nk, "Kind", NK_TEXT_LEFT);
+                tile_flag_names *Names = &TilesetMode->FlagNames;
+                const char *KindPreview = (Tile->Kind && (Tile->Kind <= Names->KindCount)) ?
+                    Names->KindNames[Tile->Kind - 1] : "(none)";
+                if(nk_combo_begin_label(Nk, KindPreview, nk_vec2(nk_widget_width(Nk), 240)))
+                {
+                    nk_layout_row_dynamic(Nk, 20, 1);
+                    for(u32 KindIndex = 0; KindIndex <= Names->KindCount; ++KindIndex)
+                    {
+                        nk_bool Selected = (Tile->Kind == KindIndex);
+                        char *Label = KindIndex ? Names->KindNames[KindIndex - 1] : (char *)"(none)";
+                        if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Selected))
+                        {
+                            if(Tile->Kind != KindIndex) {Tile->Kind = KindIndex; TilesetMode->TileChanged = true;}
+                            nk_combo_close(Nk);
+                        }
+                    }
+                    nk_combo_end(Nk);
+                }
+                if(!Names->KindCount)
+                {
+                    nk_layout_row_dynamic(Nk, 24, 1);
+                    nk_label(Nk, "No kinds: data/txts/tile_kinds.txt", NK_TEXT_LEFT);
+                }
+
                 nk_layout_row_dynamic(Nk, 24, 2);
                 for(u32 FlagIndex = 0; FlagIndex < TilesetMode->FlagNames.Count; ++FlagIndex)
                 {

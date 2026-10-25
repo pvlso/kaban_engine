@@ -162,6 +162,7 @@ GameGetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time
         kea_tile *Tile = Tileset->Tiles + TileIndex;
         Result.Bitmap.Value = Tile->BitmapGUID;
         Result.Flags = Tile->Flags;
+        Result.Kind = Tile->Kind;
         Result.GridX = Tile->GridX;
         Result.GridY = Tile->GridY;
         Result.Animated = (Tile->FrameCount > 1);

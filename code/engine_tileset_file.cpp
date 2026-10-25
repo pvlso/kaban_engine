@@ -78,21 +78,20 @@ R32FromTilesetToken(char *Token)
 internal b32
 IsTilesetKeyword(char *Token)
 {
-    b32 Result = (StringsAreEqual(Token, "name") || StringsAreEqual(Token, "flags") ||
+    b32 Result = (StringsAreEqual(Token, "name") || StringsAreEqual(Token, "flags") || StringsAreEqual(Token, "kind") ||
                   StringsAreEqual(Token, "frames") || StringsAreEqual(Token, "fps"));
     return(Result);
 }
 
-// NOTE(pvlso): data/txts/tile_flags.txt: one flag name per line (';' starts a comment), at most 32; the first is bit 0.
-// A project without the file has no flags.
-internal tile_flag_names
-ReadTileFlagNames(memory_arena *Arena)
+// NOTE(pvlso): A list of names in a text file in data/txts, one per line (';' starts a comment), at most MaxCount
+internal u32
+ReadTileNameList(char *FileName, char (*Names)[TILESET_FLAG_NAME_LENGTH], u32 MaxCount, memory_arena *Arena)
 {
-    tile_flag_names Result = {};
-    if(Platform.FileExists("tile_flags.txt", PlatformFileType_TXT))
+    u32 Count = 0;
+    if(Platform.FileExists(FileName, PlatformFileType_TXT))
     {
         temporary_memory TempMem = BeginTemporaryMemory(Arena);
-        read_file_result File = Platform.ReadEntireFile("tile_flags.txt", PlatformFileType_TXT, Arena, true);
+        read_file_result File = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, true);
         char *At = (char *)File.Contents;
         char *FileEnd = At ? At + StringLength(At) : 0; // NOTE(pvlso): a text file's Size counts its closing zero
         tileset_line_tokens *Tokens = PushStruct(Arena, tileset_line_tokens);
@@ -103,14 +102,13 @@ ReadTileFlagNames(memory_arena *Arena)
             TokenizeTilesetLine(At, LineEnd, Tokens);
             if(Tokens->Count)
             {
-                if(Result.Count < TILESET_MAX_FLAGS)
+                if(Count < MaxCount)
                 {
-                    FormatString(TILESET_FLAG_NAME_LENGTH, Result.Names[Result.Count++], "%s", Tokens->Tokens[0]);
+                    FormatString(TILESET_FLAG_NAME_LENGTH, Names[Count++], "%s", Tokens->Tokens[0]);
                 }
                 else
                 {
-                    LOG_ERROR("tile_flags.txt: more than %d flags, %s and the rest are left out", TILESET_MAX_FLAGS,
-                              Tokens->Tokens[0]);
+                    LOG_ERROR("%s: more than %d names, %s and the rest are left out", FileName, MaxCount, Tokens->Tokens[0]);
                 }
             }
             At = LineEnd;
@@ -118,6 +116,18 @@ ReadTileFlagNames(memory_arena *Arena)
         }
         EndTemporaryMemory(TempMem);
     }
+
+    return(Count);
+}
+
+// NOTE(pvlso): data/txts/tile_flags.txt (at most 32, the first is bit 0) and data/txts/tile_kinds.txt (at most 64, the
+// first is kind 1). A project without them has no flags or kinds.
+internal tile_flag_names
+ReadTileFlagNames(memory_arena *Arena)
+{
+    tile_flag_names Result = {};
+    Result.Count = ReadTileNameList("tile_flags.txt", Result.Names, TILESET_MAX_FLAGS, Arena);
+    Result.KindCount = ReadTileNameList("tile_kinds.txt", Result.KindNames, TILESET_MAX_KINDS, Arena);
 
     return(Result);
 }
@@ -224,6 +234,19 @@ ReadTilesetFile(char *FileName, tile_flag_names *FlagNames, memory_arena *Arena)
                 if(StringsAreEqual(Part, "name") && (Index < Tokens->Count))
                 {
                     FormatString(KEA_TILE_NAME_LENGTH, Tile->Name, "%s", Tokens->Tokens[Index++]);
+                }
+                else if(StringsAreEqual(Part, "kind") && (Index < Tokens->Count))
+                {
+                    char *Kind = Tokens->Tokens[Index++];
+                    for(u32 KindIndex = 0; KindIndex < FlagNames->KindCount; ++KindIndex)
+                    {
+                        if(StringsAreEqual(FlagNames->KindNames[KindIndex], Kind)) {Tile->Kind = KindIndex + 1;}
+                    }
+                    if(!Tile->Kind)
+                    {
+                        LOG_ERROR("Tile set %s, line %d: no kind %s in tile_kinds.txt", FileName, LineNumber, Kind);
+                        ++Result.ErrorCount;
+                    }
                 }
                 else if(StringsAreEqual(Part, "flags"))
                 {
@@ -365,6 +388,10 @@ WriteTilesetFile(char *FileName, tileset_file *File, tile_flag_names *FlagNames,
             }
             Name[Length] = 0;
             TILESET_OUT("  name \"%s\"", Name);
+        }
+        if(Tile->Kind && (Tile->Kind <= FlagNames->KindCount))
+        {
+            TILESET_OUT("  kind %s", FlagNames->KindNames[Tile->Kind - 1]);
         }
         if(Tile->Flags)
         {
