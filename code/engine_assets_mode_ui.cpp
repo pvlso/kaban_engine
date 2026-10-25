@@ -1478,6 +1478,107 @@ DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 }
 
+// NOTE(pvlso): The cut tool's panel (editor_cut_edit.cpp), on the left: it has no stored asset, so no tags
+internal void
+DrawAssetsCutEditMode(editor_mode_assets *AssetsMode, nk_context *Nk)
+{
+    cut_mode *CutMode = &AssetsMode->CutMode;
+
+    nk_layout_row_static(Nk, 760, 450, 1);
+    struct nk_rect Rect = nk_widget_bounds(Nk);
+    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(nk_group_begin(Nk, "Cut Sprites", NK_WINDOW_TITLE))
+    {
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "Image (any PNG under data/):", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(Nk, 30, 1);
+        SearchBox(AssetsMode, Nk, CutMode->Images, CutMode->ImageCount, &CutMode->ImageIndex);
+        nk_layout_row_dynamic(Nk, 24, 1);
+        if(CutMode->Pixels)
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d x %d pixels", CutMode->PixelsWidth, CutMode->PixelsHeight);
+        }
+        else
+        {
+            nk_label(Nk, "No image open, see the log", NK_TEXT_LEFT);
+        }
+        nk_property_int(Nk, "#Snap to cells of (0 = pixels)", 0, &CutMode->Snap, 512, 1, 0.2f);
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        if(CutMode->HasSelection)
+        {
+            nk_label(Nk, "Selection (pixels from the top left):", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(Nk, 26, 2);
+            nk_property_int(Nk, "#X", 0, &CutMode->Selection.X, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#Y", 0, &CutMode->Selection.Y, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#W", 1, &CutMode->Selection.W, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#H", 1, &CutMode->Selection.H, 1 << 16, 1, 0.2f);
+            nk_layout_row_dynamic(Nk, 30, 2);
+            if(nk_button_label(Nk, "Trim to the sprite")) {CutMode->TrimRequested = true;}
+            if(nk_button_label(Nk, "Clear selection")) {CutMode->HasSelection = false;}
+        }
+        else
+        {
+            nk_label(Nk, "Drag on the image to select a sprite", NK_TEXT_LEFT);
+        }
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        nk_label(Nk, "Name (the file's, .png is added):", NK_TEXT_LEFT);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 110);
+        nk_layout_row_template_end(Nk);
+        nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, CutMode->Name, &CutMode->NameLength,
+                                            (int)sizeof(CutMode->Name) - 1, nk_filter_default);
+        CutMode->Name[CutMode->NameLength] = 0;
+        CutMode->TypingName = ((NameState & NK_EDIT_ACTIVE) != 0);
+        nk_bool Overwrite = (CutMode->Overwrite != 0);
+        if(nk_checkbox_label(Nk, "Overwrite", &Overwrite)) {CutMode->Overwrite = Overwrite;}
+        nk_layout_row_dynamic(Nk, 30, 1);
+        if(nk_button_label(Nk, "Save the selection to bmps/")) {CutMode->SaveBitmapRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        if(CutMode->FrameCount)
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "Animation: %u frames of %d x %d", CutMode->FrameCount, CutMode->Frames[0].W,
+                      CutMode->Frames[0].H);
+        }
+        else
+        {
+            nk_label(Nk, "Animation: no frames", NK_TEXT_LEFT);
+        }
+        nk_layout_row_dynamic(Nk, 30, 2);
+        nk_property_int(Nk, "#frames", 1, &CutMode->SplitCount, CUT_MAX_FRAMES, 1, 0.2f);
+        if(nk_button_label(Nk, "Split selection")) {CutMode->SplitRequested = true;}
+        nk_layout_row_dynamic(Nk, 30, 3);
+        if(nk_button_label(Nk, "Add frame")) {CutMode->AddFrameRequested = true;}
+        if(nk_button_label(Nk, "Remove last")) {CutMode->RemoveFrameRequested = true;}
+        if(nk_button_label(Nk, "Clear")) {CutMode->ClearFramesRequested = true;}
+        nk_layout_row_dynamic(Nk, 26, 1);
+        nk_property_float(Nk, "#preview frames per second", 0.5f, &CutMode->FramesPerSecond, 60.0f, 0.5f, 0.1f);
+        nk_layout_row_dynamic(Nk, 30, 1);
+        if(nk_button_label(Nk, "Save the frames to spritesheets/")) {CutMode->SaveSheetRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 18, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        nk_label(Nk, "Left drag selects, right click clears it.", NK_TEXT_LEFT);
+        nk_label(Nk, "Arrows move it a pixel (Shift: Snap, or 8).", NK_TEXT_LEFT);
+        nk_label(Nk, "Middle drag pans, wheel zooms.", NK_TEXT_LEFT);
+        nk_label(Nk, "Split: select the whole row of frames.", NK_TEXT_LEFT);
+        nk_label(Nk, "Add frame moves the selection on by its width.", NK_TEXT_LEFT);
+        nk_label(Nk, "Then add the files in Edit Bitmaps / Edit SpriteSheets.", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(Nk, 40, 1);
+        if(nk_button_label(Nk, "Exit"))
+            AssetsMode->EditMode = EditMode_None;
+
+        nk_group_end(Nk);
+    }
+}
+
 internal void
 DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 {
@@ -1522,7 +1623,9 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                 if(nk_button_label(Nk, "Edit Maps"))
                     AssetsMode->EditMode = EditMode_Map;
 
-                if(nk_button_label(Nk, "placeholder")) {}
+                if(nk_button_label(Nk, "Cut Sprites"))
+                    AssetsMode->EditMode = EditMode_Cut;
+
                 if(nk_button_label(Nk, "placeholder")) {}
                 if(nk_button_label(Nk, "placeholder")) {}
             }
@@ -1600,6 +1703,10 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
         case EditMode_Map:
             DrawAssetsMapEditMode(AssetsMode, UIState, Nk, CurrentAsset);
+            break;
+
+        case EditMode_Cut:
+            DrawAssetsCutEditMode(AssetsMode, Nk);
             break;
     }
 }

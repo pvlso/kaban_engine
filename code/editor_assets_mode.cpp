@@ -10,6 +10,7 @@
 #include "engine_map_file.cpp"
 #include "engine_kea_builder.cpp"
 #include "editor_tileset_edit.cpp"
+#include "editor_cut_edit.cpp"
 #include "engine_assets_mode_ui.cpp"
 
 inline void
@@ -841,16 +842,16 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *
         } break;
     }
 
-    u32 ModeSizes[KESA_Count] =
+    u32 ModeSizes[] =
         {
             sizeof(bitmap_mode), sizeof(spritesheet_mode), sizeof(tileset_mode),
             sizeof(sound_mode), sizeof(text_mode), sizeof(binary_file_mode),
-            sizeof(sswm_mode), sizeof(map_mode),
+            sizeof(sswm_mode), sizeof(map_mode), sizeof(cut_mode),
         };
 
     u32 LargestModeSize = 0;
     for(u32 ModeIndex = 0;
-        ModeIndex < KESA_Count;
+        ModeIndex < ArrayCount(ModeSizes);
         ++ModeIndex)
     {
         if(ModeSizes[ModeIndex] > LargestModeSize)
@@ -1211,19 +1212,39 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
 
 // NOTE(pvlso): A new set's file: the name kept to letters, digits, '_' and '-'. The tile set files are listed again
 // and the new one picked, which loads it.
-internal void
-CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
+// NOTE(pvlso): Name with only the characters a file name can safely have (letters, digits, _ and -), its length
+internal u32
+CleanFileName(char *Name, char *Dest, u32 DestSize)
 {
-    char Clean[64];
     u32 Length = 0;
-    for(char *C = Name; *C && (Length < 59); ++C)
+    for(char *C = Name; *C && (Length + 1 < DestSize); ++C)
     {
         if(((*C >= 'a') && (*C <= 'z')) || ((*C >= 'A') && (*C <= 'Z')) || IsDigit(*C) || (*C == '_') || (*C == '-'))
         {
-            Clean[Length++] = *C;
+            Dest[Length++] = *C;
         }
     }
-    Clean[Length] = 0;
+    Dest[Length] = 0;
+
+    return(Length);
+}
+
+// NOTE(pvlso): A type's source files listed again after one was written, so its edit mode can pick it
+internal void
+RelistSourceFiles(editor_mode_assets *AssetsMode, kesa_type Type)
+{
+    platform_file_type FileType = StoredToSourceTypeMap[Type];
+    u32 Count = Platform.ListFilesInDirectory(FileType, 0, 0);
+    AssetsMode->SourceFiles[Type] = PushArray(&AssetsMode->UtilityArena, Maximum(1, Count), char *);
+    AssetsMode->SourceFileCounts[Type] = Platform.ListFilesInDirectory(FileType, AssetsMode->SourceFiles[Type],
+                                                                       &AssetsMode->UtilityArena);
+}
+
+internal void
+CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
+{
+    char Clean[60];
+    u32 Length = CleanFileName(Name, Clean, sizeof(Clean));
     char FileName[80];
     FormatString(sizeof(FileName), FileName, "%s.txt", Clean);
     if(!Length)
@@ -1239,11 +1260,7 @@ CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
         char *Text = "; A curated tile set (Kaban engine). Format: engine_tileset_file.h\nsize 32\n";
         Platform.WriteEntireFile(FileName, PlatformFileType_TSBMP, (u8 *)Text, StringLength(Text));
 
-        u32 Count = Platform.ListFilesInDirectory(PlatformFileType_TSBMP, 0, 0);
-        AssetsMode->SourceFiles[KESA_Tileset] = PushArray(&AssetsMode->UtilityArena, Count, char *);
-        AssetsMode->SourceFileCounts[KESA_Tileset] =
-            Platform.ListFilesInDirectory(PlatformFileType_TSBMP, AssetsMode->SourceFiles[KESA_Tileset],
-                                          &AssetsMode->UtilityArena);
+        RelistSourceFiles(AssetsMode, KESA_Tileset);
         for(u32 Index = 0; Index < AssetsMode->SourceFileCounts[KESA_Tileset]; ++Index)
         {
             if(StringsAreEqual(AssetsMode->SourceFiles[KESA_Tileset][Index], FileName)) {AssetsMode->FileIndex = Index;}
@@ -1524,6 +1541,9 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         {
             if(AssetsMode->LastEditMode != AssetsMode->EditMode)
             {
+                // NOTE(pvlso): The cut tool's data isn't a stored asset's, ClearEditModeData would only zero it
+                if(AssetsMode->LastEditMode == EditMode_Cut)
+                    ClearCutMode(TextureOpQueue, &AssetsMode->CutMode);
                 if(AssetsMode->CurrentAsset)
                     ClearEditModeData(EditorState, AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 RemoveAction(AssetsMode, AM_EditStoredAsset);
@@ -1679,6 +1699,12 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 case EditMode_Map:
                 {
                     UpdateAndRenderMapAssetEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
+                } break;
+
+                case EditMode_Cut:
+                {
+                    UpdateAndRenderCutEditMode(AssetsMode, Input, TextureOpQueue, RenderGroup, &Flat, MouseP,
+                                               CanvasRect, UIState->Nk);
                 } break;
             
                 InvalidDefaultCase;

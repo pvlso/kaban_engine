@@ -21,6 +21,7 @@ enum assets_edit_mode
     EditMode_File,
     EditMode_SSWM,
     EditMode_Map,
+    EditMode_Cut, // NOTE(pvlso): not a stored asset's, the cut tool only writes image files
 };
 
 // NOTE(paul): Bitmaps
@@ -94,6 +95,58 @@ struct map_mode
 {
     memory_arena Arena;
     map_file File;
+};
+
+// NOTE(pvlso): The cut tool (editor_cut_edit.cpp): sprites cut out of any image under data/ into PNGs, a rectangle
+// into bmps/ (a static sprite) or frames side by side into spritesheets/ (an animation). It only cuts: the files are
+// added as stored assets through Edit Bitmaps and Edit SpriteSheets, where their alignment is set.
+#define CUT_MAX_FRAMES 64
+
+struct cut_rect
+{
+    s32 X, Y, W, H; // NOTE(pvlso): pixels, from the image's top left, y down
+};
+
+struct cut_mode
+{
+    memory_arena Arena;
+    b32 Started;
+    u32 ImageCount;
+    char **Images;
+    u32 ImageIndex;
+    u32 LastImageIndex;
+    loaded_bitmap Sheet; // NOTE(pvlso): to show it: premultiplied, bottom row first
+    u8 *Pixels;          // NOTE(pvlso): to cut it: as in the file, RGBA, top row first, alpha not premultiplied
+    s32 PixelsWidth, PixelsHeight;
+
+    r32 Zoom; // NOTE(pvlso): screen pixels per image pixel
+    v2 Pan;   // NOTE(pvlso): the image's top left from the view's, in screen pixels, y down
+    b32 Panning;
+    v2 PanFrom;
+    s32 Snap; // NOTE(pvlso): a drag selects whole cells of this many pixels, 0 for single pixels
+
+    b32 Selecting;
+    s32 AnchorX, AnchorY;
+    b32 HasSelection;
+    cut_rect Selection;
+    u32 FrameCount;
+    cut_rect Frames[CUT_MAX_FRAMES];
+    r32 FramesPerSecond; // NOTE(pvlso): only for the preview, a sprite sheet asset has its own
+    s32 SplitCount;      // NOTE(pvlso): how many frames Split cuts the selection into
+
+    char Name[64];
+    s32 NameLength;
+    b32 Overwrite;
+    b32 TypingName; // NOTE(pvlso): the name field has the keyboard, the arrows are the field's
+
+    // NOTE(pvlso): The panel asks, the next update does it
+    b32 TrimRequested;
+    b32 AddFrameRequested;
+    b32 SplitRequested;
+    b32 RemoveFrameRequested;
+    b32 ClearFramesRequested;
+    b32 SaveBitmapRequested;
+    b32 SaveSheetRequested;
 };
 
 // NOTE(paul): Sounds
@@ -242,6 +295,7 @@ struct editor_mode_assets
         binary_file_mode BinaryFileMode;
         sswm_mode SSWMMode;
         map_mode MapMode;
+        cut_mode CutMode;
     };
 };
 
@@ -308,6 +362,7 @@ KESAFromEditMode(u32 EditMode)
         case EditMode_File:        {Result = KESA_File;}        break;
         case EditMode_SSWM:        {Result = KESA_SSWM;}        break;
         case EditMode_Map:         {Result = KESA_Map;}         break;
+        case EditMode_Cut:         {}                           break;
         InvalidDefaultCase;
     }
 
