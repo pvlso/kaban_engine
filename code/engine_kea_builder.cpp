@@ -238,6 +238,98 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     Builder->CurrentAsset = BuilderAsset;
 }
 
+// NOTE(pvlso): A map (engine_map_file.h): its sets become their tile set assets' GUIDs (made of their file names, as
+// the stored tile sets' are), each cell's grid place in its set becomes the tile's index there
+internal void
+AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    KEAAsset->GUID = Asset->GUID;
+    KEAAsset->Type = KEAType_Map;
+    Builder->CurrentAsset = 0;
+
+    map_file Map = ReadMapFile(Asset->SourceFileName, Builder->TempMem);
+    KEAAsset->Map.Width = Map.Width;
+    KEAAsset->Map.Height = Map.Height;
+    KEAAsset->Map.LayerCount = (u16)Map.LayerCount;
+    KEAAsset->Map.SetCount = (u16)Map.SetCount;
+    builder_added_map *Data = &BuilderAsset->Data.Map;
+    Data->SetGUIDs = PushArray(Builder->TempMem, Maximum(1, Map.SetCount), u64);
+    Data->Layers = PushArray(Builder->TempMem, Maximum(1, Map.LayerCount), kea_map_layer);
+    umm CellCount = (umm)Map.Width*Map.Height;
+    Data->Cells = PushArray(Builder->TempMem, Maximum(1, Map.LayerCount*CellCount), kea_map_cell);
+
+    // NOTE(pvlso): Each set's tiles by their place in its grid, in the order the set's builder numbers them
+    tile_flag_names FlagNames = ReadTileFlagNames(Builder->TempMem);
+    s32 *TileAt[MAP_FILE_MAX_SETS] = {};
+    u32 GridWidth[MAP_FILE_MAX_SETS] = {};
+    u32 GridHeight[MAP_FILE_MAX_SETS] = {};
+    for(u32 SetIndex = 0; SetIndex < Map.SetCount; ++SetIndex)
+    {
+        Data->SetGUIDs[SetIndex] = GUIDFromString(Map.Sets[SetIndex]);
+        b32 Stored = false;
+        for(u32 Index = 1; Index < Builder->KESAHeader->AssetCount; ++Index)
+        {
+            if(Builder->KESAAssets[Index].GUID == Data->SetGUIDs[SetIndex]) {Stored = true;}
+        }
+        if(!Stored)
+        {
+            LOG_WARNING("Map %s uses the tile set %s, which isn't in the stored assets: add it, or the game can't draw "
+                        "its tiles", Asset->SourceFileName, Map.Sets[SetIndex]);
+        }
+
+        tileset_file Set = ReadTilesetFile(Map.Sets[SetIndex], &FlagNames, Builder->TempMem);
+        GridWidth[SetIndex] = Set.GridWidth;
+        GridHeight[SetIndex] = Set.GridHeight;
+        TileAt[SetIndex] = PushArray(Builder->TempMem, Maximum(1, Set.GridWidth*Set.GridHeight), s32);
+        for(u32 Index = 0; Index < Set.GridWidth*Set.GridHeight; ++Index) {TileAt[SetIndex][Index] = -1;}
+        for(u32 TileIndex = 0; TileIndex < Set.TileCount; ++TileIndex)
+        {
+            TileAt[SetIndex][Set.Tiles[TileIndex].GridY*Set.GridWidth + Set.Tiles[TileIndex].GridX] = (s32)TileIndex;
+        }
+    }
+
+    u32 Missing = 0;
+    for(u32 LayerIndex = 0; LayerIndex < Map.LayerCount; ++LayerIndex)
+    {
+        map_file_layer *Source = Map.Layers + LayerIndex;
+        kea_map_layer *Layer = Data->Layers + LayerIndex;
+        FormatString(sizeof(Layer->Name), Layer->Name, "%s", Source->Name);
+        Layer->Z = Source->Z;
+        Layer->Flags = Source->Hidden ? KEAMapLayer_Hidden : 0;
+        kea_map_cell *Cells = Data->Cells + LayerIndex*CellCount;
+        for(umm Index = 0; Index < CellCount; ++Index)
+        {
+            map_cell Cell = Source->Cells[Index];
+            if(Cell.Set)
+            {
+                u32 Set = Cell.Set - 1;
+                s32 Tile = ((Cell.X < GridWidth[Set]) && (Cell.Y < GridHeight[Set])) ?
+                    TileAt[Set][Cell.Y*GridWidth[Set] + Cell.X] : -1;
+                if(Tile >= 0)
+                {
+                    Cells[Index].Set = Cell.Set;
+                    Cells[Index].Tile = (u16)Tile;
+                }
+                else
+                {
+                    ++Missing;
+                }
+            }
+        }
+    }
+    if(Missing)
+    {
+        LOG_WARNING("Map %s: %u cells point at places where their set has no tile any more, left empty",
+                    Asset->SourceFileName, Missing);
+    }
+    LOG("Map %s: %u x %u, %u layers, %u tile sets", Asset->SourceFileName, Map.Width, Map.Height, Map.LayerCount,
+        Map.SetCount);
+
+    Builder->CurrentAsset = BuilderAsset;
+}
+
 internal kea_asset *
 AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data,
                u32 SpriteIndex, loaded_bitmap *Sprite)
@@ -546,6 +638,20 @@ BuilderWriteKEA(kea_builder *Builder)
                 Platform.WriteDataToFile(&Out, At, FramesSize, BuilderAsset->Data.Tileset.FrameGUIDs);
                 At += FramesSize;
             }
+            else if(Dest->Type == KEAType_Map)
+            {
+                kea_map *Map = &Dest->Map;
+                umm CellCount = (umm)Map->LayerCount*Map->Width*Map->Height;
+                u32 SetsSize = Map->SetCount*sizeof(u64);
+                u32 LayersSize = Map->LayerCount*sizeof(kea_map_layer);
+                u32 CellsSize = (u32)(CellCount*sizeof(kea_map_cell));
+                Platform.WriteDataToFile(&Out, At, SetsSize, BuilderAsset->Data.Map.SetGUIDs);
+                At += SetsSize;
+                Platform.WriteDataToFile(&Out, At, LayersSize, BuilderAsset->Data.Map.Layers);
+                At += LayersSize;
+                Platform.WriteDataToFile(&Out, At, CellsSize, BuilderAsset->Data.Map.Cells);
+                At += CellsSize;
+            }
             else if(Dest->Type == KEAType_SpriteSheet)
             {
                 u32 SpritesSize = Source->SpriteSheet.SpriteCount*sizeof(u64);
@@ -687,6 +793,10 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
 
             case KESA_File:
                 AddFileAsset(Builder, StoredAsset);
+                break;
+
+            case KESA_Map:
+                AddMapAsset(Builder, StoredAsset);
                 break;
 
             case KESA_SSWM:

@@ -20,6 +20,13 @@ struct loaded_tileset
     bitmap_id *Frames; // NOTE(pvlso): the animated tiles' frames, after the tiles
 };
 
+struct loaded_map
+{
+    u64 *SetGUIDs;
+    kea_map_layer *Layers;
+    kea_map_cell *Cells;
+};
+
 struct loaded_spritesheet
 {
     bitmap_id *SpriteGUIDs;
@@ -52,6 +59,7 @@ enum asset_header_type
     AssetType_SpriteSheet,
     AssetType_Text,
     AssetType_BinaryFile,
+    AssetType_Map,
 };
 
 struct asset_memory_header
@@ -71,6 +79,7 @@ struct asset_memory_header
         loaded_spritesheet SpriteSheet;
         loaded_text Text;
         loaded_file BinaryFile;
+        loaded_map Map;
     };
 };
 

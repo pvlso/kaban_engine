@@ -834,13 +834,18 @@ ClearStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *
             sswm_mode *SSWMMode = &AssetsMode->SSWMMode;
             Platform.DeallocateMemory(SSWMMode->FileData);
         } break;
+
+        case KESA_Map:
+        {
+            Clear(&AssetsMode->MapMode.Arena);
+        } break;
     }
 
     u32 ModeSizes[KESA_Count] =
         {
             sizeof(bitmap_mode), sizeof(spritesheet_mode), sizeof(tileset_mode),
             sizeof(sound_mode), sizeof(text_mode), sizeof(binary_file_mode),
-            sizeof(sswm_mode),
+            sizeof(sswm_mode), sizeof(map_mode),
         };
 
     u32 LargestModeSize = 0;
@@ -964,6 +969,16 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
             StoredFile->FileSize = ReadResult.Size;
         } break;
 
+        case KESA_Map:
+        {
+            map_mode *MapMode = &AssetsMode->MapMode;
+            MapMode->File = ReadMapFile(StoredAsset->SourceFileName, &MapMode->Arena);
+            StoredAsset->Map.Width = MapMode->File.Width;
+            StoredAsset->Map.Height = MapMode->File.Height;
+            StoredAsset->Map.LayerCount = MapMode->File.LayerCount;
+            StoredAsset->Map.SetCount = MapMode->File.SetCount;
+        } break;
+
         InvalidDefaultCase;
     }
 }
@@ -1009,6 +1024,7 @@ LoadNewStoredAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *Te
         case KESA_Sound:
         case KESA_File:
         case KESA_SSWM:
+        case KESA_Map:
         {
             LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
         } break;
@@ -1441,6 +1457,17 @@ UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
 }
 
 internal void
+UpdateAndRenderMapAssetEditMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
+{
+    if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
+    {
+        ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Map);
+        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        AssetsMode->LastFileIndex = AssetsMode->FileIndex;
+    }
+}
+
+internal void
 RemoveStoredAsset(editor_mode_assets *AssetsMode)
 {
     if(AssetsMode->ShowStoredAssetIndex)
@@ -1647,6 +1674,11 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                 case EditMode_SSWM:
                 {
                     UpdateAndRenderSSWMEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
+                } break;
+
+                case EditMode_Map:
+                {
+                    UpdateAndRenderMapAssetEditMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 } break;
             
                 InvalidDefaultCase;

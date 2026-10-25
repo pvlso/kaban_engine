@@ -163,6 +163,7 @@ enum kea_asset_type
     KEAType_BIN,
     KEAType_SSWM,
     KEAType_NormalMap, // NOTE(pvlso): a sprite's or tile's normal map, its GUID is NormalMapGUID(the image's GUID)
+    KEAType_Map,       // NOTE(pvlso): a map made in the map editor (engine_map_file.h)
 
     KEAType_Count,
 };
@@ -287,6 +288,40 @@ struct kea_tileset
     */
 };
 
+// NOTE(pvlso): A map: its tile sets by their asset GUID, its layers, and every layer's cells with the tile's index in
+// its set (the builder looked the grid places up)
+struct kea_map_layer
+{
+    char Name[32];
+    s32 Z;
+    u32 Flags; // NOTE(pvlso): KEAMapLayer_*
+};
+enum kea_map_layer_flag
+{
+    KEAMapLayer_Hidden = (1 << 0),
+};
+
+struct kea_map_cell
+{
+    u16 Set;  // NOTE(pvlso): 0 for an empty cell, else the map's set + 1
+    u16 Tile; // NOTE(pvlso): the tile's index in its set
+};
+
+struct kea_map
+{
+    u32 Width;
+    u32 Height;
+    u16 LayerCount;
+    u16 SetCount;
+
+    /* NOTE(pvlso): Data is:
+
+       u64 SetGUIDs[SetCount];
+       kea_map_layer Layers[LayerCount];
+       kea_map_cell Cells[LayerCount][Height][Width];
+    */
+};
+
 struct kea_spritesheet
 {
     u32 SpriteCount;
@@ -334,6 +369,7 @@ struct kea_asset
         kea_spritesheet SpriteSheet;
         kea_text Text;
         kea_binary_file BinaryFile;
+        kea_map Map;
     };
 };
 
@@ -412,6 +448,7 @@ enum kesa_type
     KESA_Text,
     KESA_File,
     KESA_SSWM,
+    KESA_Map,
 
     KESA_Count,
 };
@@ -463,6 +500,15 @@ struct kesa_sswm_file
     u32 FileSize;
 };
 
+// NOTE(pvlso): The map is its text file (SourceFileName in data/maps); this remembers what it held when it was added
+struct kesa_map
+{
+    u32 Width;
+    u32 Height;
+    u32 LayerCount;
+    u32 SetCount;
+};
+
 struct kesa_tag
 {
     u64 TagGUID;
@@ -488,6 +534,7 @@ struct kesa_asset
         kesa_text Text;
         kesa_binary_file File;
         kesa_sswm_file SSWM;
+        kesa_map Map;
     };
 };
 

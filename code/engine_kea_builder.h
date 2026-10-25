@@ -30,6 +30,13 @@ struct builder_added_tileset
     u64 *FrameGUIDs;
 };
 
+struct builder_added_map
+{
+    u64 *SetGUIDs;
+    kea_map_layer *Layers;
+    kea_map_cell *Cells;
+};
+
 struct builder_added_tile
 {
     loaded_bitmap *TileBitmap;
@@ -44,6 +51,7 @@ union added_asset_additional_data
 {
     builder_added_spritesheet SpriteSheet;
     builder_added_tileset Tileset;
+    builder_added_map Map;
     builder_added_tile Tile; 
     builder_added_sprite Sprite; 
 };

@@ -78,6 +78,31 @@ struct tileset_info
     u32 TileSize; // NOTE(pvlso): in pixels
 };
 
+// NOTE(pvlso): A map made in the map editor (an island, in Spellweaver): Width x Height cells in layers, drawn by Z
+// and, within a Z, in their order. A cell's Set is 0 when empty, else the map's set + 1 (GetMapTileset gives that
+// set's tile set, for GetTileInfo); Tile is the tile's index in its set.
+struct map_info
+{
+    u32 Width;
+    u32 Height;
+    u32 LayerCount;
+    u32 SetCount;
+};
+
+struct map_tile_cell
+{
+    u16 Set;
+    u16 Tile;
+};
+
+struct map_layer_info
+{
+    char Name[32];
+    s32 Z;
+    b32 Hidden;
+    map_tile_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; valid while the game's assets are
+};
+
 struct tile_info
 {
     bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
@@ -210,6 +235,11 @@ struct engine_api
     // NOTE(pvlso): Time in seconds picks an animated tile's frame (any running clock). All zero when there's no
     // such tile.
     tile_info (*GetTileInfo)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time);
+    // NOTE(pvlso): A map at MapIndex (found with GetBestMatchAssets); all zero when it isn't one
+    map_info (*GetMapInfo)(engine_assets *Assets, u32 MapIndex);
+    map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
+    // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
+    u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -362,6 +392,20 @@ inline tile_info
 GetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time = 0.0f)
 {
     tile_info Result = Engine.GetTileInfo(Assets, TilesetIndex, TileIndex, Time);
+    return(Result);
+}
+
+inline map_info GetMapInfo(engine_assets *Assets, u32 MapIndex) {return(Engine.GetMapInfo(Assets, MapIndex));}
+inline map_layer_info
+GetMapLayer(engine_assets *Assets, u32 MapIndex, u32 LayerIndex)
+{
+    map_layer_info Result = Engine.GetMapLayer(Assets, MapIndex, LayerIndex);
+    return(Result);
+}
+inline u32
+GetMapTileset(engine_assets *Assets, u32 MapIndex, u32 SetIndex)
+{
+    u32 Result = Engine.GetMapTileset(Assets, MapIndex, SetIndex);
     return(Result);
 }
 

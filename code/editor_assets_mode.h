@@ -20,6 +20,7 @@ enum assets_edit_mode
     EditMode_Text,
     EditMode_File,
     EditMode_SSWM,
+    EditMode_Map,
 };
 
 // NOTE(paul): Bitmaps
@@ -88,6 +89,13 @@ struct tileset_mode
     struct tileset_snapshot *History[100];
 };
 
+// NOTE(pvlso): Maps (engine_map_file.h): the map read from its file, to show what it holds
+struct map_mode
+{
+    memory_arena Arena;
+    map_file File;
+};
+
 // NOTE(paul): Sounds
 struct sound_mode
 {
@@ -130,7 +138,8 @@ static platform_file_type StoredToSourceTypeMap[KESA_Count] =
     PlatformFileType_None, PlatformFileType_BMP,
     PlatformFileType_SSBMP, PlatformFileType_TSBMP,
     PlatformFileType_WAV, PlatformFileType_TXT,
-    PlatformFileType_BIN, PlatformFileType_KEWM
+    PlatformFileType_BIN, PlatformFileType_KEWM,
+    PlatformFileType_Map
 };
 
 enum assets_mode_action
@@ -232,6 +241,7 @@ struct editor_mode_assets
         text_mode TextMode;
         binary_file_mode BinaryFileMode;
         sswm_mode SSWMMode;
+        map_mode MapMode;
     };
 };
 
@@ -276,6 +286,7 @@ AssetsEditModeFromStoredType(u32 StoredType)
         case KESA_Text:        {Result = EditMode_Text;}        break;
         case KESA_File:        {Result = EditMode_File;}        break;
         case KESA_SSWM:        {Result = EditMode_SSWM;}        break;
+        case KESA_Map:         {Result = EditMode_Map;}         break;
         InvalidDefaultCase;
     }
 
@@ -296,6 +307,7 @@ KESAFromEditMode(u32 EditMode)
         case EditMode_Text:        {Result = KESA_Text;}        break;
         case EditMode_File:        {Result = KESA_File;}        break;
         case EditMode_SSWM:        {Result = KESA_SSWM;}        break;
+        case EditMode_Map:         {Result = KESA_Map;}         break;
         InvalidDefaultCase;
     }
 

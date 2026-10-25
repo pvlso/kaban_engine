@@ -357,6 +357,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     nk_labelf(Nk, NK_TEXT_CENTERED, "Channel Count: %d", SoundMode->Sound.ChannelCount);
                 } break;
 
+                case KESA_Map:
+                {
+                    map_file *File = &AssetsMode->MapMode.File;
+                    nk_layout_row_dynamic(Nk, 30, 1);
+                    struct nk_rect Rect = nk_widget_bounds(Nk);
+                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
+                    nk_labelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredAsset->SourceFileName);
+                    Rect = nk_widget_bounds(Nk);
+                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
+                    nk_labelf(Nk, NK_TEXT_CENTERED, "%d x %d cells, %d layers, %d tile sets", File->Width, File->Height,
+                              File->LayerCount, File->SetCount);
+                } break;
+
                 case KESA_File:
                 {
                     // TODO(paul): Add a feature to listen to the sound saved
@@ -655,6 +668,10 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
 
         case EditMode_SSWM:
             Text = "Pick SSWM Source \\|/";
+            break;
+
+        case EditMode_Map:
+            Text = "Pick Map Source \\|/";
             break;
 
         InvalidDefaultCase;
@@ -1355,6 +1372,49 @@ DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 }
 
+// NOTE(pvlso): A map from data/maps: what it holds, before it's added
+internal void
+DrawAssetsMapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk, kesa_asset *CurrentAsset)
+{
+    map_file *File = &AssetsMode->MapMode.File;
+    DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
+
+    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+    nk_layout_space_push(Nk, {1460, -140, 450, 520});
+    struct nk_rect Rect = nk_widget_bounds(Nk);
+    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(nk_group_begin(Nk, "Map Attributes", 0))
+    {
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_labelf(Nk, NK_TEXT_LEFT, "%s", CurrentAsset->SourceFileName);
+        if(!File->Loaded)
+        {
+            nk_label(Nk, "Can't read the file, see the log", NK_TEXT_LEFT);
+        }
+        else
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d x %d cells", File->Width, File->Height);
+            if(File->ErrorCount)
+            {
+                nk_labelf(Nk, NK_TEXT_LEFT, "%d mistakes in the file, see the log", File->ErrorCount);
+            }
+            nk_label(Nk, "Tile sets (each needs adding as a tile set too):", NK_TEXT_LEFT);
+            for(u32 SetIndex = 0; SetIndex < File->SetCount; ++SetIndex)
+            {
+                nk_labelf(Nk, NK_TEXT_LEFT, "  %d: %s", SetIndex + 1, File->Sets[SetIndex]);
+            }
+            nk_label(Nk, "Layers:", NK_TEXT_LEFT);
+            for(u32 LayerIndex = 0; LayerIndex < File->LayerCount; ++LayerIndex)
+            {
+                map_file_layer *Layer = File->Layers + LayerIndex;
+                nk_labelf(Nk, NK_TEXT_LEFT, "  Z %d  %s%s", Layer->Z, Layer->Name, Layer->Hidden ? "  (hidden)" : "");
+            }
+        }
+        nk_group_end(Nk);
+    }
+    nk_layout_space_end(Nk);
+}
+
 internal void
 DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                        kesa_asset *CurrentAsset)
@@ -1429,7 +1489,9 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                 if(nk_button_label(Nk, "Edit SSWM"))
                     AssetsMode->EditMode = EditMode_SSWM;
 
-                if(nk_button_label(Nk, "placeholder")) {}
+                if(nk_button_label(Nk, "Edit Maps"))
+                    AssetsMode->EditMode = EditMode_Map;
+
                 if(nk_button_label(Nk, "placeholder")) {}
                 if(nk_button_label(Nk, "placeholder")) {}
                 if(nk_button_label(Nk, "placeholder")) {}
@@ -1504,6 +1566,10 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
         case EditMode_SSWM:
             DrawAssetsSSWMEditMode(AssetsMode, UIState, Nk, CurrentAsset);
+            break;
+
+        case EditMode_Map:
+            DrawAssetsMapEditMode(AssetsMode, UIState, Nk, CurrentAsset);
             break;
     }
 }

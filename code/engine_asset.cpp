@@ -339,6 +339,14 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
+        case AssetType_Map:
+        {
+            kea_map *Info = &Asset->KEA.Map;
+            Size.Data = (sizeof(u64)*Info->SetCount + sizeof(kea_map_layer)*Info->LayerCount +
+                         sizeof(kea_map_cell)*Info->LayerCount*Info->Width*Info->Height);
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
         InvalidDefaultCase;
     }
 
@@ -440,6 +448,19 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             BinaryFile->Data = (Asset->Header + 1);
 
             Result.LoadDest = BinaryFile->Data;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_Map:
+        {
+            kea_map *Info = &Asset->KEA.Map;
+            loaded_map *Map = &Asset->Header->Map;
+            Map->SetGUIDs = (u64 *)(Asset->Header + 1);
+            Map->Layers = (kea_map_layer *)(Map->SetGUIDs + Info->SetCount);
+            Map->Cells = (kea_map_cell *)(Map->Layers + Info->LayerCount);
+
+            Result.LoadDest = Map->SetGUIDs;
             Result.FinalizeOp = FinalizeAsset_None;
             Result.FinalState = AssetState_Loaded;
         } break;

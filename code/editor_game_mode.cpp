@@ -176,6 +176,82 @@ GameGetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time
     return(Result);
 }
 
+// NOTE(pvlso): The map at MapIndex, loaded now if it isn't yet; 0 when it isn't a map
+internal loaded_map *
+GameLoadedMap(engine_assets *Assets, u32 MapIndex, kea_map **Info)
+{
+    loaded_map *Result = 0;
+    if(Assets && MapIndex && (MapIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + MapIndex;
+        if(Asset->KEA.Type == KEAType_Map)
+        {
+            asset_memory_header *Header = GetAsset(Assets, MapIndex, 0);
+            if(!Header)
+            {
+                LoadAsset(Assets, AssetType_Map, MapIndex, true);
+                Header = GetAsset(Assets, MapIndex, 0);
+            }
+            Result = Header ? &Header->Map : 0;
+            *Info = &Asset->KEA.Map;
+        }
+    }
+
+    return(Result);
+}
+
+internal map_info
+GameGetMapInfo(engine_assets *Assets, u32 MapIndex)
+{
+    map_info Result = {};
+    kea_map *Info = 0;
+    if(GameLoadedMap(Assets, MapIndex, &Info))
+    {
+        Result.Width = Info->Width;
+        Result.Height = Info->Height;
+        Result.LayerCount = Info->LayerCount;
+        Result.SetCount = Info->SetCount;
+    }
+
+    return(Result);
+}
+
+internal map_layer_info
+GameGetMapLayer(engine_assets *Assets, u32 MapIndex, u32 LayerIndex)
+{
+    map_layer_info Result = {};
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && (LayerIndex < Info->LayerCount))
+    {
+        kea_map_layer *Layer = Map->Layers + LayerIndex;
+        FormatString(sizeof(Result.Name), Result.Name, "%.*s", (int)sizeof(Layer->Name), Layer->Name);
+        Result.Z = Layer->Z;
+        Result.Hidden = (Layer->Flags & KEAMapLayer_Hidden) != 0;
+        Result.Cells = (map_tile_cell *)(Map->Cells + (umm)LayerIndex*Info->Width*Info->Height);
+    }
+
+    return(Result);
+}
+
+internal u32
+GameGetMapTileset(engine_assets *Assets, u32 MapIndex, u32 SetIndex)
+{
+    u32 Result = 0;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && (SetIndex < Info->SetCount))
+    {
+        asset *Set = GetAssetByGUID(Assets, Map->SetGUIDs[SetIndex]);
+        if(Set && (Set->KEA.Type == KEAType_Tileset))
+        {
+            Result = (u32)(Set - Assets->Assets);
+        }
+    }
+
+    return(Result);
+}
+
 internal void
 GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
 {
@@ -238,6 +314,9 @@ GetEngineAPI(void)
     Result.GetTilesetTile = GameGetTilesetTile;
     Result.GetTilesetInfo = GameGetTilesetInfo;
     Result.GetTileInfo = GameGetTileInfo;
+    Result.GetMapInfo = GameGetMapInfo;
+    Result.GetMapLayer = GameGetMapLayer;
+    Result.GetMapTileset = GameGetMapTileset;
 Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);
