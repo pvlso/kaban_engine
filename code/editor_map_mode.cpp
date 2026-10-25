@@ -93,6 +93,145 @@ MapTileAt(map_tileset *Set, s32 X, s32 Y)
     return(Result);
 }
 
+internal map_cell *
+AllocateLayerCells(u32 Width, u32 Height)
+{
+    umm Size = (umm)Width*Height*sizeof(map_cell);
+    map_cell *Result = (map_cell *)Platform.AllocateMemory(Size);
+    ZeroSize(Size, Result);
+
+    return(Result);
+}
+
+internal void
+FreeMapLayers(editor_mode_map *MapMode)
+{
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        Platform.DeallocateMemory(MapMode->Layers[LayerIndex].Cells);
+    }
+    MapMode->LayerCount = 0;
+}
+
+// NOTE(pvlso): A whole map state: its size, layers and every layer's cells one after another
+struct map_snapshot
+{
+    umm Size;
+    u32 Width;
+    u32 Height;
+    u32 LayerCount;
+    s32 CurrentLayer;
+    map_layer Layers[MAP_MAX_LAYERS];
+    map_cell Cells[1];
+};
+
+internal void
+DropOldestMapState(editor_mode_map *MapMode)
+{
+    MapMode->HistoryBytes -= MapMode->History[0]->Size;
+    Platform.DeallocateMemory(MapMode->History[0]);
+    for(u32 Index = 1; Index < MapMode->HistoryCount; ++Index)
+    {
+        MapMode->History[Index - 1] = MapMode->History[Index];
+    }
+    --MapMode->HistoryCount;
+    if(MapMode->HistoryAt) {--MapMode->HistoryAt;}
+}
+
+internal void
+FreeMapHistory(editor_mode_map *MapMode)
+{
+    while(MapMode->HistoryCount) {DropOldestMapState(MapMode);}
+    MapMode->HistoryAt = 0;
+}
+
+internal void
+RecordMapState(editor_mode_map *MapMode)
+{
+    // NOTE(pvlso): A change after undoing drops what could have been redone
+    while(MapMode->HistoryCount > MapMode->HistoryAt + 1)
+    {
+        map_snapshot *Dropped = MapMode->History[--MapMode->HistoryCount];
+        MapMode->HistoryBytes -= Dropped->Size;
+        Platform.DeallocateMemory(Dropped);
+    }
+
+    umm LayerCells = (umm)MapMode->Width*MapMode->Height;
+    umm Size = sizeof(map_snapshot) + Maximum(1, MapMode->LayerCount)*LayerCells*sizeof(map_cell);
+    while(MapMode->HistoryCount &&
+          ((MapMode->HistoryCount == ArrayCount(MapMode->History)) || (MapMode->HistoryBytes + Size > MAP_HISTORY_BYTES)))
+    {
+        DropOldestMapState(MapMode);
+    }
+
+    map_snapshot *Snapshot = (map_snapshot *)Platform.AllocateMemory(Size);
+    Snapshot->Size = Size;
+    Snapshot->Width = MapMode->Width;
+    Snapshot->Height = MapMode->Height;
+    Snapshot->LayerCount = MapMode->LayerCount;
+    Snapshot->CurrentLayer = MapMode->CurrentLayer;
+    Copy(sizeof(Snapshot->Layers), MapMode->Layers, Snapshot->Layers);
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        Copy(LayerCells*sizeof(map_cell), MapMode->Layers[LayerIndex].Cells, Snapshot->Cells + LayerIndex*LayerCells);
+        Snapshot->Layers[LayerIndex].Cells = 0;
+    }
+    MapMode->History[MapMode->HistoryCount] = Snapshot;
+    MapMode->HistoryAt = MapMode->HistoryCount++;
+    MapMode->HistoryBytes += Size;
+}
+
+internal void
+RestoreMapState(editor_mode_map *MapMode, u32 HistoryIndex)
+{
+    map_snapshot *Snapshot = MapMode->History[HistoryIndex];
+    FreeMapLayers(MapMode);
+    MapMode->Width = Snapshot->Width;
+    MapMode->Height = Snapshot->Height;
+    MapMode->LayerCount = Snapshot->LayerCount;
+    MapMode->CurrentLayer = Snapshot->CurrentLayer;
+    Copy(sizeof(Snapshot->Layers), Snapshot->Layers, MapMode->Layers);
+    umm LayerCells = (umm)MapMode->Width*MapMode->Height;
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        map_layer *Layer = MapMode->Layers + LayerIndex;
+        Layer->Cells = AllocateLayerCells(MapMode->Width, MapMode->Height);
+        Copy(LayerCells*sizeof(map_cell), Snapshot->Cells + LayerIndex*LayerCells, Layer->Cells);
+    }
+    MapMode->HistoryAt = HistoryIndex;
+}
+
+// NOTE(pvlso): The map grown or cropped on each side (negative crops), the cells staying where they were on the
+// ground
+internal void
+ResizeMap(editor_mode_map *MapMode, s32 Left, s32 Right, s32 Top, s32 Bottom)
+{
+    s32 Width = ClampCell(1, (s32)MapMode->Width + Left + Right, MAP_MAX_SIDE);
+    s32 Height = ClampCell(1, (s32)MapMode->Height + Top + Bottom, MAP_MAX_SIDE);
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        map_layer *Layer = MapMode->Layers + LayerIndex;
+        map_cell *Cells = AllocateLayerCells(Width, Height);
+        for(s32 Y = 0; Y < (s32)MapMode->Height; ++Y)
+        {
+            for(s32 X = 0; X < (s32)MapMode->Width; ++X)
+            {
+                s32 NewX = X + Left;
+                s32 NewY = Y + Top;
+                if((NewX >= 0) && (NewY >= 0) && (NewX < Width) && (NewY < Height))
+                {
+                    Cells[NewY*Width + NewX] = Layer->Cells[Y*MapMode->Width + X];
+                }
+            }
+        }
+        Platform.DeallocateMemory(Layer->Cells);
+        Layer->Cells = Cells;
+    }
+    MapMode->Width = Width;
+    MapMode->Height = Height;
+    LOG("Map editor: resized to %d x %d", Width, Height);
+}
+
 internal void
 AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z)
 {
@@ -102,8 +241,7 @@ AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z)
         *Layer = {};
         FormatString(sizeof(Layer->Name), Layer->Name, "%s", Name);
         Layer->Z = Z;
-        Layer->Cells = PushArray(&MapMode->MapArena, MapMode->Width*MapMode->Height, map_cell);
-        ZeroSize(MapMode->Width*MapMode->Height*sizeof(map_cell), Layer->Cells);
+        Layer->Cells = AllocateLayerCells(MapMode->Width, MapMode->Height);
         MapMode->CurrentLayer = (s32)MapMode->LayerCount - 1;
     }
     else
@@ -115,13 +253,15 @@ AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z)
 internal void
 NewMap(editor_mode_map *MapMode, u32 Width, u32 Height)
 {
-    Clear(&MapMode->MapArena);
+    FreeMapLayers(MapMode);
+    FreeMapHistory(MapMode);
     MapMode->Width = (u32)ClampCell(1, (s32)Width, MAP_MAX_SIDE);
     MapMode->Height = (u32)ClampCell(1, (s32)Height, MAP_MAX_SIDE);
     MapMode->LayerCount = 0;
     AddMapLayer(MapMode, "Ground", 0);
     MapMode->HasMap = true;
     MapMode->Pan = V2(0, 0);
+    RecordMapState(MapMode);
     LOG("Map editor: new map %u x %u", MapMode->Width, MapMode->Height);
 }
 
@@ -154,6 +294,58 @@ StampBrush(editor_mode_map *MapMode, s32 X, s32 Y)
     }
 }
 
+// NOTE(pvlso): A rectangle of the current layer filled with the brush, a block brush repeated from the rectangle's top
+// left, or cleared
+internal void
+FillMapRect(editor_mode_map *MapMode, s32 X0, s32 Y0, s32 X1, s32 Y1, b32 Erase)
+{
+    map_layer *Layer = MapMode->Layers + MapMode->CurrentLayer;
+    s32 MinX = Maximum(0, Minimum(X0, X1));
+    s32 MaxX = Minimum((s32)MapMode->Width - 1, Maximum(X0, X1));
+    s32 MinY = Maximum(0, Minimum(Y0, Y1));
+    s32 MaxY = Minimum((s32)MapMode->Height - 1, Maximum(Y0, Y1));
+    s32 BrushX = Minimum(MapMode->BrushX0, MapMode->BrushX1);
+    s32 BrushY = Minimum(MapMode->BrushY0, MapMode->BrushY1);
+    s32 W = AbsoluteValue(MapMode->BrushX1 - MapMode->BrushX0) + 1;
+    s32 H = AbsoluteValue(MapMode->BrushY1 - MapMode->BrushY0) + 1;
+    for(s32 Y = MinY; Y <= MaxY; ++Y)
+    {
+        for(s32 X = MinX; X <= MaxX; ++X)
+        {
+            map_cell *Cell = Layer->Cells + Y*MapMode->Width + X;
+            if(Erase)
+            {
+                *Cell = {};
+            }
+            else
+            {
+                s32 TileX = BrushX + (X - Minimum(X0, X1)) % W;
+                s32 TileY = BrushY + (Y - Minimum(Y0, Y1)) % H;
+                if(MapTileAt(MapMode->Sets + MapMode->CurrentSet, TileX, TileY) >= 0)
+                {
+                    Cell->Set = (u16)(MapMode->CurrentSet + 1);
+                    Cell->X = (u16)TileX;
+                    Cell->Y = (u16)TileY;
+                }
+            }
+        }
+    }
+}
+
+// NOTE(pvlso): The eyedropper: the tile under the mouse on the current layer becomes the brush, its set the palette's
+internal void
+PickBrushFromMap(editor_mode_map *MapMode, s32 X, s32 Y)
+{
+    map_cell Cell = MapMode->Layers[MapMode->CurrentLayer].Cells[Y*MapMode->Width + X];
+    if(Cell.Set && (Cell.Set <= MapMode->SetCount))
+    {
+        MapMode->CurrentSet = Cell.Set - 1;
+        MapMode->HasBrush = true;
+        MapMode->BrushX0 = MapMode->BrushX1 = Cell.X;
+        MapMode->BrushY0 = MapMode->BrushY1 = Cell.Y;
+    }
+}
+
 // NOTE(pvlso): The map's layers in drawing order: by Z, those sharing a Z in the list's order
 internal u32
 MapLayerOrder(editor_mode_map *MapMode, u32 *Order)
@@ -175,10 +367,12 @@ MapLayerOrder(editor_mode_map *MapMode, u32 *Order)
     return(Count);
 }
 
-internal void
+// NOTE(pvlso): True when a change was finished this frame (a stroke, a rectangle), for the history
+internal b32
 UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_group *RenderGroup, object_transform *Flat,
                        v2 MouseP, rectangle2 Rect, r32 Wheel)
 {
+    b32 Finished = false;
     b32 Inside = IsInRectangle(Rect, MouseP);
     engine_button_state Left = Input->MouseButtons[PlatformMouseButton_Left];
     engine_button_state Right = Input->MouseButtons[PlatformMouseButton_Right];
@@ -202,18 +396,38 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
     MapMode->HoverY = OnMap ? CellY : -1;
 
     b32 CanPaint = MapMode->HasBrush && (MapMode->CurrentSet >= 0) && MapMode->LayerCount;
-    if(OnMap && CanPaint && WasPressed(Left))
+    b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive;
+    if(OnMap && !Busy && MapMode->LayerCount)
     {
-        MapMode->Painting = true;
-        MapMode->PaintFromX = MapMode->LastStampX = CellX;
-        MapMode->PaintFromY = MapMode->LastStampY = CellY;
-        StampBrush(MapMode, CellX, CellY);
+        if(Input->AltDown && WasPressed(Left))
+        {
+            PickBrushFromMap(MapMode, CellX, CellY);
+        }
+        else if(Input->ShiftDown && ((CanPaint && WasPressed(Left)) || WasPressed(Right)))
+        {
+            MapMode->RectActive = true;
+            MapMode->RectErase = !WasPressed(Left);
+            MapMode->RectX0 = CellX;
+            MapMode->RectY0 = CellY;
+        }
+        else if(CanPaint && WasPressed(Left))
+        {
+            MapMode->Painting = true;
+            MapMode->PaintFromX = MapMode->LastStampX = CellX;
+            MapMode->PaintFromY = MapMode->LastStampY = CellY;
+            StampBrush(MapMode, CellX, CellY);
+        }
+        else if(WasPressed(Right))
+        {
+            MapMode->Erasing = true;
+        }
     }
     if(MapMode->Painting)
     {
         if(!Left.EndedDown)
         {
             MapMode->Painting = false;
+            Finished = true;
         }
         else if(OnMap)
         {
@@ -231,9 +445,25 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
             }
         }
     }
-    if(OnMap && Right.EndedDown && MapMode->LayerCount)
+    if(MapMode->Erasing)
     {
-        MapMode->Layers[MapMode->CurrentLayer].Cells[CellY*MapMode->Width + CellX] = {};
+        if(!Right.EndedDown)
+        {
+            MapMode->Erasing = false;
+            Finished = true;
+        }
+        else if(OnMap)
+        {
+            MapMode->Layers[MapMode->CurrentLayer].Cells[CellY*MapMode->Width + CellX] = {};
+        }
+    }
+    s32 RectX1 = ClampCell(0, CellX, (s32)MapMode->Width - 1);
+    s32 RectY1 = ClampCell(0, CellY, (s32)MapMode->Height - 1);
+    if(MapMode->RectActive && !(MapMode->RectErase ? Right.EndedDown : Left.EndedDown))
+    {
+        FillMapRect(MapMode, MapMode->RectX0, MapMode->RectY0, RectX1, RectY1, MapMode->RectErase);
+        MapMode->RectActive = false;
+        Finished = true;
     }
 
     u32 SavedClip = RenderGroup->CurrentClipRectIndex;
@@ -293,7 +523,16 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
         }
     }
     PushRectOutline(RenderGroup, Flat, RectMinMax(MapMin, MapMax), 7.5f, V4(0.8f, 0.8f, 0.8f, 1), 1.0f);
-    if(OnMap)
+    if(MapMode->RectActive)
+    {
+        v2 Min = View.TopLeft + V2((r32)Minimum(MapMode->RectX0, RectX1)*View.Cell,
+                                   -(r32)(Maximum(MapMode->RectY0, RectY1) + 1)*View.Cell);
+        v2 Max = View.TopLeft + V2((r32)(Maximum(MapMode->RectX0, RectX1) + 1)*View.Cell,
+                                   -(r32)Minimum(MapMode->RectY0, RectY1)*View.Cell);
+        v4 Color = MapMode->RectErase ? V4(1, 0.3f, 0.3f, 1) : V4(1, 0.85f, 0.2f, 1);
+        PushRectOutline(RenderGroup, Flat, RectMinMax(Min, Max), 8.0f, Color, 2.0f);
+    }
+    else if(OnMap)
     {
         s32 W = MapMode->HasBrush ? (AbsoluteValue(MapMode->BrushX1 - MapMode->BrushX0) + 1) : 1;
         s32 H = MapMode->HasBrush ? (AbsoluteValue(MapMode->BrushY1 - MapMode->BrushY0) + 1) : 1;
@@ -302,6 +541,8 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
         PushRectOutline(RenderGroup, Flat, RectMinMax(Min, Max), 8.0f, V4(1, 0.85f, 0.2f, 0.9f), 1.0f);
     }
     RenderGroup->CurrentClipRectIndex = SavedClip;
+
+    return(Finished);
 }
 
 // NOTE(pvlso): The current tile set's grid: a left drag picks the brush (a tile or a block)
@@ -428,13 +669,19 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
                 nk_layout_row_template_end(Nk);
                 nk_label(Nk, "Name", NK_TEXT_LEFT);
                 int NameLength = (int)StringLength(Layer->Name);
-                nk_edit_string(Nk, NK_EDIT_FIELD, Layer->Name, &NameLength, MAP_NAME_LENGTH - 1, nk_filter_default);
+                int OldNameLength = NameLength;
+                nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, Layer->Name, &NameLength, MAP_NAME_LENGTH - 1,
+                                                    nk_filter_default);
                 Layer->Name[NameLength] = 0;
+                MapMode->TypingLayerName = ((NameState & NK_EDIT_ACTIVE) != 0);
+                if(NameLength != OldNameLength) {MapMode->LayerEdited = true;}
 
                 nk_layout_row_dynamic(Nk, 28, 2);
+                s32 OldZ = Layer->Z;
                 nk_property_int(Nk, "#Z", -16, &Layer->Z, 16, 1, 0.2f);
+                if(Layer->Z != OldZ) {MapMode->LayerEdited = true;}
                 nk_bool Hidden = Layer->Hidden;
-                if(nk_checkbox_label(Nk, "Hidden", &Hidden)) {Layer->Hidden = Hidden;}
+                if(nk_checkbox_label(Nk, "Hidden", &Hidden)) {Layer->Hidden = Hidden; MapMode->LayerEdited = true;}
                 nk_layout_row_dynamic(Nk, 28, 3);
                 if(nk_button_label(Nk, "Up")) {MapMode->MoveLayerRequested = -1;}
                 if(nk_button_label(Nk, "Down")) {MapMode->MoveLayerRequested = 1;}
@@ -448,6 +695,17 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
                            nk_filter_default);
             MapMode->NewLayerName[MapMode->NewLayerNameLength] = 0;
             if(nk_button_label(Nk, "Add layer")) {MapMode->AddLayerRequested = true;}
+
+            // NOTE(pvlso): Resizing: cells added on each side, negative crops
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Resize (cells added on each side, negative crops):", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(Nk, 28, 4);
+            nk_property_int(Nk, "#L", -MAP_MAX_SIDE, &MapMode->ResizeLeft, MAP_MAX_SIDE, 1, 0.5f);
+            nk_property_int(Nk, "#R", -MAP_MAX_SIDE, &MapMode->ResizeRight, MAP_MAX_SIDE, 1, 0.5f);
+            nk_property_int(Nk, "#T", -MAP_MAX_SIDE, &MapMode->ResizeTop, MAP_MAX_SIDE, 1, 0.5f);
+            nk_property_int(Nk, "#B", -MAP_MAX_SIDE, &MapMode->ResizeBottom, MAP_MAX_SIDE, 1, 0.5f);
+            nk_layout_row_dynamic(Nk, 28, 1);
+            if(nk_button_label(Nk, "Resize")) {MapMode->ResizeRequested = true;}
         }
 
         // NOTE(pvlso): Tile sets: add one from data/tilesets, pick the one in the palette
@@ -489,7 +747,9 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
         nk_label(Nk, "", NK_TEXT_LEFT);
         nk_label(Nk, "Palette: drag over tiles to pick the brush.", NK_TEXT_LEFT);
         nk_label(Nk, "Map: left drag paints, right drag erases.", NK_TEXT_LEFT);
-        nk_label(Nk, "Middle drag pans, the wheel zooms.", NK_TEXT_LEFT);
+        nk_label(Nk, "Shift+drag fills a rectangle (right: clears it).", NK_TEXT_LEFT);
+        nk_label(Nk, "Alt+click picks the tile under the mouse.", NK_TEXT_LEFT);
+        nk_label(Nk, "Middle drag pans, the wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
 
         nk_group_end(Nk);
     }
@@ -514,7 +774,8 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         {
             ReleaseMapTileset(TextureOpQueue, MapMode->Sets + SetIndex);
         }
-        Clear(&MapMode->MapArena);
+        FreeMapLayers(MapMode);
+        FreeMapHistory(MapMode);
         PlayTitleScreen(EditorState, TranState);
         return(true);
     }
@@ -524,8 +785,10 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         MapMode->NewMapRequested = false;
         NewMap(MapMode, MapMode->NewWidth, MapMode->NewHeight);
     }
+    b32 Changed = false;
     if(MapMode->AddLayerRequested && MapMode->HasMap)
     {
+        Changed = true;
         MapMode->AddLayerRequested = false;
         s32 Z = MapMode->LayerCount ? MapMode->Layers[MapMode->CurrentLayer].Z : 0;
         AddMapLayer(MapMode, MapMode->NewLayerNameLength ? MapMode->NewLayerName : (char *)"Layer", Z);
@@ -535,6 +798,8 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     if(MapMode->RemoveLayerRequested && MapMode->LayerCount)
     {
         MapMode->RemoveLayerRequested = false;
+        Changed = true;
+        Platform.DeallocateMemory(MapMode->Layers[MapMode->CurrentLayer].Cells);
         for(u32 Index = MapMode->CurrentLayer + 1; Index < MapMode->LayerCount; ++Index)
         {
             MapMode->Layers[Index - 1] = MapMode->Layers[Index];
@@ -551,8 +816,16 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
             MapMode->Layers[To] = MapMode->Layers[MapMode->CurrentLayer];
             MapMode->Layers[MapMode->CurrentLayer] = Swap;
             MapMode->CurrentLayer = To;
+            Changed = true;
         }
         MapMode->MoveLayerRequested = 0;
+    }
+    if(MapMode->ResizeRequested && MapMode->HasMap)
+    {
+        MapMode->ResizeRequested = false;
+        ResizeMap(MapMode, MapMode->ResizeLeft, MapMode->ResizeRight, MapMode->ResizeTop, MapMode->ResizeBottom);
+        MapMode->ResizeLeft = MapMode->ResizeRight = MapMode->ResizeTop = MapMode->ResizeBottom = 0;
+        Changed = true;
     }
     if(MapMode->AddSetRequested)
     {
@@ -589,7 +862,34 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     rectangle2 PaletteRect = RectMinMax(V2(340.0f, -530.0f), V2(950.0f, 470.0f));
     if(MapMode->HasMap)
     {
-        UpdateAndRenderMapView(MapMode, Input, RenderGroup, &Flat, MouseP, MapRect, Wheel);
+        Changed |= UpdateAndRenderMapView(MapMode, Input, RenderGroup, &Flat, MouseP, MapRect, Wheel);
+
+        // NOTE(pvlso): A layer's name, Z or hidden flag goes in the history once the mouse lets go of the panel
+        b32 MouseDown = (Input->MouseButtons[PlatformMouseButton_Left].EndedDown ||
+                         Input->MouseButtons[PlatformMouseButton_Right].EndedDown);
+        if(MapMode->LayerEdited && !MouseDown && !MapMode->TypingLayerName)
+        {
+            MapMode->LayerEdited = false;
+            Changed = true;
+        }
+        if(Changed)
+        {
+            RecordMapState(MapMode);
+        }
+
+        b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive;
+        if(!MapMode->TypingLayerName && !Busy)
+        {
+            if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_UNDO) && (MapMode->HistoryAt > 0))
+            {
+                RestoreMapState(MapMode, MapMode->HistoryAt - 1);
+            }
+            else if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_REDO) &&
+                    (MapMode->HistoryAt + 1 < MapMode->HistoryCount))
+            {
+                RestoreMapState(MapMode, MapMode->HistoryAt + 1);
+            }
+        }
     }
     else
     {

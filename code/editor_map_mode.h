@@ -32,7 +32,7 @@ struct map_layer
     char Name[MAP_NAME_LENGTH];
     s32 Z;
     b32 Hidden;
-    map_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top
+    map_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; its own allocation
 };
 
 // NOTE(pvlso): A tile set loaded for painting: read from its file, each tile's first frame cut from its sheets, and its
@@ -53,8 +53,8 @@ struct editor_mode_map
     char ProjectName[PROJECT_NAME_COUNT];
     b32 Exit;
 
-    // NOTE(pvlso): The map; its cells live in MapArena, cleared for a new map
-    memory_arena MapArena;
+    // NOTE(pvlso): The map; each layer's cells are their own allocation (Platform.AllocateMemory), so undo, resizing
+    // and removing layers give memory back
     b32 HasMap;
     u32 Width;
     u32 Height;
@@ -84,6 +84,10 @@ struct editor_mode_map
     b32 ShowGrid;
     b32 DimOtherLayers;
     s32 HoverX, HoverY;             // NOTE(pvlso): the map cell under the mouse, -1 outside
+    b32 Erasing;
+    b32 RectActive;                 // NOTE(pvlso): a Shift drag: fill (left) or clear (right) a rectangle
+    b32 RectErase;
+    s32 RectX0, RectY0;
 
     // NOTE(pvlso): The panel's inputs and requests, done by the next update
     s32 NewWidth;
@@ -98,7 +102,20 @@ struct editor_mode_map
     char **TilesetFiles;
     u32 TilesetFileIndex;
     b32 AddSetRequested;
+    s32 ResizeLeft, ResizeRight, ResizeTop, ResizeBottom; // NOTE(pvlso): cells added (or cropped when negative)
+    b32 ResizeRequested;
+    b32 LayerEdited;     // NOTE(pvlso): the panel changed a layer's name, Z or hidden flag
+    b32 TypingLayerName; // NOTE(pvlso): Ctrl+Z is the field's then
+
+    // NOTE(pvlso): Undo: every state after a change, History[HistoryAt] the current one; the oldest go when they pass
+    // MAP_HISTORY_BYTES
+    u32 HistoryCount;
+    u32 HistoryAt;
+    umm HistoryBytes;
+    struct map_snapshot *History[200];
 };
+
+#define MAP_HISTORY_BYTES Megabytes(256)
 
 internal void PlayMapEditor(editor_state *EditorState, transient_state *TranState, char *ProjectName);
 
