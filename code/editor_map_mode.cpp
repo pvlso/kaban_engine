@@ -6,6 +6,15 @@
    $Notice: $
    ======================================================================== */
 
+internal void
+ListMapFiles(editor_mode_map *MapMode, memory_arena *Arena)
+{
+    MapMode->MapFileCount = Platform.ListFilesInDirectory(PlatformFileType_Map, 0, 0);
+    MapMode->MapFiles = PushArray(Arena, Maximum(1, MapMode->MapFileCount), char *);
+    Platform.ListFilesInDirectory(PlatformFileType_Map, MapMode->MapFiles, Arena);
+    MapMode->MapFileIndex = 0;
+}
+
 // NOTE(pvlso): The map editor: see editor_map_mode.h. The canvas holds the map (middle drag pans, the wheel zooms, a
 // left drag paints with the brush, a right drag erases, on the current layer) and the palette (the current tile set's
 // grid: drag over tiles to pick the brush). The panel on the left makes maps, edits layers and adds tile sets.
@@ -31,6 +40,7 @@ PlayMapEditor(editor_state *EditorState, transient_state *TranState, char *Proje
     MapMode->NewWidth = 64;
     MapMode->NewHeight = 48;
 
+    ListMapFiles(MapMode, &EditorState->ModeArena);
     MapMode->TilesetFileCount = Platform.ListFilesInDirectory(PlatformFileType_TSBMP, 0, 0);
     MapMode->TilesetFiles = PushArray(&EditorState->ModeArena, Maximum(1, MapMode->TilesetFileCount), char *);
     Platform.ListFilesInDirectory(PlatformFileType_TSBMP, MapMode->TilesetFiles, &EditorState->ModeArena);
@@ -230,6 +240,142 @@ ResizeMap(editor_mode_map *MapMode, s32 Left, s32 Right, s32 Top, s32 Bottom)
     MapMode->Width = Width;
     MapMode->Height = Height;
     LOG("Map editor: resized to %d x %d", Width, Height);
+}
+
+// NOTE(pvlso): A map's file name from what was typed: letters, digits, '_' and '-', then .txt. False when nothing's left.
+internal b32
+MapFileNameFrom(char *Typed, char *Dest, u32 DestCount)
+{
+    char Clean[MAP_FILE_SET_NAME_LENGTH];
+    u32 Length = 0;
+    for(char *C = Typed; *C && (Length < MAP_FILE_SET_NAME_LENGTH - 5); ++C)
+    {
+        if(((*C >= 'a') && (*C <= 'z')) || ((*C >= 'A') && (*C <= 'Z')) || IsDigit(*C) || (*C == '_') || (*C == '-'))
+        {
+            Clean[Length++] = *C;
+        }
+    }
+    Clean[Length] = 0;
+    FormatString(DestCount, Dest, "%s.txt", Clean);
+    if(!Length)
+    {
+        LOG_ERROR("A map needs a name");
+    }
+
+    return(Length != 0);
+}
+
+// NOTE(pvlso): The map's set for a tile set file, loading it when the map hasn't got it yet; -1 when it can't
+internal s32
+MapSetFor(platform_texture_op_queue *TextureOpQueue, editor_mode_map *MapMode, char *FileName)
+{
+    s32 Result = -1;
+    for(u32 SetIndex = 0; SetIndex < MapMode->SetCount; ++SetIndex)
+    {
+        if(StringsAreEqual(MapMode->Sets[SetIndex].FileName, FileName)) {Result = (s32)SetIndex;}
+    }
+    if((Result < 0) && (MapMode->SetCount < MAP_MAX_TILESETS))
+    {
+        Result = (s32)MapMode->SetCount++;
+        LoadMapTileset(TextureOpQueue, MapMode->Sets + Result, FileName);
+    }
+    else if(Result < 0)
+    {
+        LOG_ERROR("A map uses at most %d tile sets", MAP_MAX_TILESETS);
+    }
+
+    return(Result);
+}
+
+internal void FreeMapLayers(editor_mode_map *MapMode);
+internal void FreeMapHistory(editor_mode_map *MapMode);
+internal void RecordMapState(editor_mode_map *MapMode);
+internal map_cell *AllocateLayerCells(u32 Width, u32 Height);
+
+// NOTE(pvlso): Opens data/maps/<FileName>: its sets loaded (or found among those already loaded), its layers and cells
+internal void
+OpenMap(platform_texture_op_queue *TextureOpQueue, editor_mode_map *MapMode, char *FileName, memory_arena *TempArena)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(TempArena);
+    map_file File = ReadMapFile(FileName, TempArena);
+    if(File.Loaded)
+    {
+        u16 SetOf[MAP_FILE_MAX_SETS + 1] = {};
+        for(u32 SetIndex = 0; SetIndex < File.SetCount; ++SetIndex)
+        {
+            s32 Set = MapSetFor(TextureOpQueue, MapMode, File.Sets[SetIndex]);
+            SetOf[SetIndex + 1] = (u16)(Set + 1);
+        }
+
+        FreeMapLayers(MapMode);
+        FreeMapHistory(MapMode);
+        MapMode->Width = File.Width;
+        MapMode->Height = File.Height;
+        MapMode->LayerCount = Minimum(File.LayerCount, (u32)MAP_MAX_LAYERS);
+        umm CellCount = (umm)File.Width*File.Height;
+        for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+        {
+            map_file_layer *Source = File.Layers + LayerIndex;
+            map_layer *Layer = MapMode->Layers + LayerIndex;
+            *Layer = {};
+            FormatString(sizeof(Layer->Name), Layer->Name, "%s", Source->Name);
+            Layer->Z = Source->Z;
+            Layer->Hidden = Source->Hidden;
+            Layer->Cells = AllocateLayerCells(File.Width, File.Height);
+            for(umm Index = 0; Index < CellCount; ++Index)
+            {
+                map_cell Cell = Source->Cells[Index];
+                if(Cell.Set && SetOf[Cell.Set])
+                {
+                    Cell.Set = SetOf[Cell.Set];
+                    Layer->Cells[Index] = Cell;
+                }
+            }
+        }
+        MapMode->CurrentLayer = 0;
+        MapMode->HasMap = true;
+        MapMode->Dirty = false;
+        MapMode->Pan = V2(0, 0);
+        FormatString(sizeof(MapMode->FileName), MapMode->FileName, "%s", FileName);
+        RecordMapState(MapMode);
+        LOG("Map editor: opened %s, %u x %u, %u layers%s", FileName, File.Width, File.Height, File.LayerCount,
+            File.ErrorCount ? " (with mistakes, see above)" : "");
+    }
+    EndTemporaryMemory(TempMem);
+}
+
+// NOTE(pvlso): Writes the map to data/maps/<FileName>, with every set the map has loaded, in order
+internal b32
+SaveMap(editor_mode_map *MapMode, char *FileName, memory_arena *TempArena)
+{
+    map_file File = {};
+    File.Width = MapMode->Width;
+    File.Height = MapMode->Height;
+    File.SetCount = MapMode->SetCount;
+    for(u32 SetIndex = 0; SetIndex < MapMode->SetCount; ++SetIndex)
+    {
+        FormatString(MAP_FILE_SET_NAME_LENGTH, File.Sets[SetIndex], "%s", MapMode->Sets[SetIndex].FileName);
+    }
+    File.LayerCount = MapMode->LayerCount;
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        map_layer *Layer = MapMode->Layers + LayerIndex;
+        map_file_layer *Dest = File.Layers + LayerIndex;
+        FormatString(sizeof(Dest->Name), Dest->Name, "%s", Layer->Name);
+        Dest->Z = Layer->Z;
+        Dest->Hidden = Layer->Hidden;
+        Dest->Cells = Layer->Cells;
+    }
+    b32 Result = WriteMapFile(FileName, &File, TempArena);
+    if(Result)
+    {
+        FormatString(sizeof(MapMode->FileName), MapMode->FileName, "%s", FileName);
+        MapMode->Dirty = false;
+        MapMode->ExitArmed = false;
+        LOG("Map editor: saved %s", FileName);
+    }
+
+    return(Result);
 }
 
 internal void
@@ -630,17 +776,59 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
         if(nk_button_label(Nk, "Exit")) {MapMode->Exit = true;}
         nk_labelf(Nk, NK_TEXT_LEFT, "Project: %s", MapMode->ProjectName);
 
-        // NOTE(pvlso): A new map
+        if(MapMode->ExitArmed)
+        {
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Unsaved changes: Exit again to drop them.", NK_TEXT_LEFT);
+        }
+
+        // NOTE(pvlso): The map's file: open one of data/maps, or a name for New and Save as
         nk_layout_row_dynamic(Nk, 24, 1);
-        nk_label(Nk, "New map (in memory until island files come):", NK_TEXT_LEFT);
+        nk_label(Nk, "Maps (data/maps):", NK_TEXT_LEFT);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 100);
+        nk_layout_row_template_end(Nk);
+        const char *MapPreview = MapMode->MapFileCount ? MapMode->MapFiles[MapMode->MapFileIndex] : "<none>";
+        if(nk_combo_begin_label(Nk, MapPreview, nk_vec2(nk_widget_width(Nk), 240)))
+        {
+            nk_layout_row_dynamic(Nk, 20, 1);
+            for(u32 Index = 0; Index < MapMode->MapFileCount; ++Index)
+            {
+                nk_bool Selected = (Index == MapMode->MapFileIndex);
+                if(nk_selectable_label(Nk, MapMode->MapFiles[Index], NK_TEXT_LEFT, &Selected))
+                {
+                    MapMode->MapFileIndex = Index;
+                    nk_combo_close(Nk);
+                }
+            }
+            nk_combo_end(Nk);
+        }
+        if(nk_button_label(Nk, "Open")) {MapMode->OpenRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "Name (for New and Save as):", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(Nk, 28, 1);
+        nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, MapMode->NameInput, &MapMode->NameInputLength,
+                                            MAP_FILE_SET_NAME_LENGTH - 5, nk_filter_default);
+        MapMode->NameInput[MapMode->NameInputLength] = 0;
+        b32 TypingMapName = ((NameState & NK_EDIT_ACTIVE) != 0);
+        MapMode->TypingLayerName = TypingMapName;
         nk_layout_row_dynamic(Nk, 28, 3);
         nk_property_int(Nk, "#W", 1, &MapMode->NewWidth, MAP_MAX_SIDE, 1, 1.0f);
         nk_property_int(Nk, "#H", 1, &MapMode->NewHeight, MAP_MAX_SIDE, 1, 1.0f);
         if(nk_button_label(Nk, "New map")) {MapMode->NewMapRequested = true;}
+        if(MapMode->HasMap)
+        {
+            nk_layout_row_dynamic(Nk, 28, 2);
+            if(nk_button_label(Nk, MapMode->Dirty ? "Save *" : "Save")) {MapMode->SaveRequested = true;}
+            if(nk_button_label(Nk, "Save as")) {MapMode->SaveAsRequested = true;}
+        }
 
         if(MapMode->HasMap)
         {
             nk_layout_row_dynamic(Nk, 24, 1);
+            nk_labelf(Nk, NK_TEXT_LEFT, "%s%s", MapMode->FileName, MapMode->Dirty ? "  (not saved)" : "");
             nk_labelf(Nk, NK_TEXT_LEFT, "Map %u x %u, cell %d,%d", MapMode->Width, MapMode->Height, MapMode->HoverX,
                       MapMode->HoverY);
             nk_layout_row_dynamic(Nk, 24, 2);
@@ -670,10 +858,10 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
                 nk_label(Nk, "Name", NK_TEXT_LEFT);
                 int NameLength = (int)StringLength(Layer->Name);
                 int OldNameLength = NameLength;
-                nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, Layer->Name, &NameLength, MAP_NAME_LENGTH - 1,
-                                                    nk_filter_default);
+                nk_flags LayerNameState = nk_edit_string(Nk, NK_EDIT_FIELD, Layer->Name, &NameLength, MAP_NAME_LENGTH - 1,
+                                                         nk_filter_default);
                 Layer->Name[NameLength] = 0;
-                MapMode->TypingLayerName = ((NameState & NK_EDIT_ACTIVE) != 0);
+                MapMode->TypingLayerName = ((LayerNameState & NK_EDIT_ACTIVE) != 0) || TypingMapName;
                 if(NameLength != OldNameLength) {MapMode->LayerEdited = true;}
 
                 nk_layout_row_dynamic(Nk, 28, 2);
@@ -768,6 +956,11 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     object_transform Flat = DefaultFlatTransform();
     v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
 
+    if(MapMode->Exit && MapMode->Dirty && !MapMode->ExitArmed)
+    {
+        MapMode->Exit = false;
+        MapMode->ExitArmed = true;
+    }
     if(MapMode->Exit)
     {
         for(u32 SetIndex = 0; SetIndex < MapMode->SetCount; ++SetIndex)
@@ -783,7 +976,39 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     if(MapMode->NewMapRequested)
     {
         MapMode->NewMapRequested = false;
-        NewMap(MapMode, MapMode->NewWidth, MapMode->NewHeight);
+        char FileName[MAP_FILE_SET_NAME_LENGTH];
+        if(MapFileNameFrom(MapMode->NameInput, FileName, sizeof(FileName)))
+        {
+            if(Platform.FileExists(FileName, PlatformFileType_Map))
+            {
+                LOG_ERROR("Map %s already exists: Open it, or pick another name", FileName);
+            }
+            else
+            {
+                NewMap(MapMode, MapMode->NewWidth, MapMode->NewHeight);
+                FormatString(sizeof(MapMode->FileName), MapMode->FileName, "%s", FileName);
+                MapMode->Dirty = true;
+            }
+        }
+    }
+    if(MapMode->OpenRequested)
+    {
+        MapMode->OpenRequested = false;
+        if(MapMode->MapFileCount)
+        {
+            OpenMap(TextureOpQueue, MapMode, MapMode->MapFiles[MapMode->MapFileIndex], &TranState->TranArena);
+        }
+    }
+    if((MapMode->SaveRequested || MapMode->SaveAsRequested) && MapMode->HasMap)
+    {
+        char FileName[MAP_FILE_SET_NAME_LENGTH];
+        FormatString(sizeof(FileName), FileName, "%s", MapMode->FileName);
+        b32 HaveName = MapMode->SaveRequested || MapFileNameFrom(MapMode->NameInput, FileName, sizeof(FileName));
+        if(HaveName && SaveMap(MapMode, FileName, &TranState->TranArena))
+        {
+            ListMapFiles(MapMode, &EditorState->ModeArena);
+        }
+        MapMode->SaveRequested = MapMode->SaveAsRequested = false;
     }
     b32 Changed = false;
     if(MapMode->AddLayerRequested && MapMode->HasMap)
@@ -832,21 +1057,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         MapMode->AddSetRequested = false;
         if(MapMode->TilesetFileCount)
         {
-            char *FileName = MapMode->TilesetFiles[MapMode->TilesetFileIndex];
-            s32 Found = -1;
-            for(u32 SetIndex = 0; SetIndex < MapMode->SetCount; ++SetIndex)
-            {
-                if(StringsAreEqual(MapMode->Sets[SetIndex].FileName, FileName)) {Found = (s32)SetIndex;}
-            }
-            if((Found < 0) && (MapMode->SetCount < MAP_MAX_TILESETS))
-            {
-                Found = (s32)MapMode->SetCount++;
-                LoadMapTileset(TextureOpQueue, MapMode->Sets + Found, FileName);
-            }
-            else if(Found < 0)
-            {
-                LOG_ERROR("A map uses at most %d tile sets", MAP_MAX_TILESETS);
-            }
+            s32 Found = MapSetFor(TextureOpQueue, MapMode, MapMode->TilesetFiles[MapMode->TilesetFileIndex]);
             if(Found >= 0)
             {
                 MapMode->CurrentSet = Found;
@@ -875,6 +1086,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         if(Changed)
         {
             RecordMapState(MapMode);
+            MapMode->Dirty = true;
         }
 
         b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive;
@@ -883,11 +1095,13 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
             if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_UNDO) && (MapMode->HistoryAt > 0))
             {
                 RestoreMapState(MapMode, MapMode->HistoryAt - 1);
+                MapMode->Dirty = true;
             }
             else if(nk_input_is_key_pressed(&Nk->input, NK_KEY_TEXT_REDO) &&
                     (MapMode->HistoryAt + 1 < MapMode->HistoryCount))
             {
                 RestoreMapState(MapMode, MapMode->HistoryAt + 1);
+                MapMode->Dirty = true;
             }
         }
     }

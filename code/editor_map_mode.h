@@ -11,21 +11,14 @@
   NOTE(pvlso): The map editor (map editor plan, phase 2), for the project chosen on the title screen. A map is a
   grid of Width x Height cells in layers; each layer has a Z (its level: 0 the ground, 1 a plateau...), layers draw
   by Z, those sharing a Z in the list's order. A cell holds a tile of one of the map's curated tile sets
-  (data/tilesets), by its place in the set's grid, so editing a set doesn't shift a map's tiles. Maps stay in memory
-  until island files come (phase 3).
+  (data/tilesets), by its place in the set's grid, so editing a set doesn't shift a map's tiles. Each map is a text
+  file in data/maps (engine_map_file.h), opened and saved here.
 */
 
 #define MAP_MAX_LAYERS 32
 #define MAP_MAX_TILESETS 16
 #define MAP_MAX_SIDE 1024
 #define MAP_NAME_LENGTH 32
-
-struct map_cell
-{
-    u16 Set; // NOTE(pvlso): 0 for an empty cell, else the map's tile set + 1
-    u16 X;   // NOTE(pvlso): the tile's place in its set's grid
-    u16 Y;
-};
 
 struct map_layer
 {
@@ -56,6 +49,9 @@ struct editor_mode_map
     // NOTE(pvlso): The map; each layer's cells are their own allocation (Platform.AllocateMemory), so undo, resizing
     // and removing layers give memory back
     b32 HasMap;
+    char FileName[MAP_FILE_SET_NAME_LENGTH]; // NOTE(pvlso): in data/maps
+    b32 Dirty;
+    b32 ExitArmed; // NOTE(pvlso): Exit with unsaved changes asks for a second click
     u32 Width;
     u32 Height;
     u32 LayerCount;
@@ -90,6 +86,14 @@ struct editor_mode_map
     s32 RectX0, RectY0;
 
     // NOTE(pvlso): The panel's inputs and requests, done by the next update
+    char NameInput[MAP_FILE_SET_NAME_LENGTH]; // NOTE(pvlso): for New and Save as
+    s32 NameInputLength;
+    u32 MapFileCount;
+    char **MapFiles;
+    u32 MapFileIndex;
+    b32 OpenRequested;
+    b32 SaveRequested;
+    b32 SaveAsRequested;
     s32 NewWidth;
     s32 NewHeight;
     b32 NewMapRequested;

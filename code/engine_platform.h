@@ -300,6 +300,7 @@ typedef enum platform_file_type
     PlatformFileType_JSON,
     PlatformFileType_TTF,
     PlatformFileType_BIN,
+    PlatformFileType_Map, // NOTE(pvlso): a map's text file in maps/ (engine_map_file.h)
 
     // NOTE(pvlso): Relative to the projects directory (next to data/), e.g. "game_name/game_name.cpp"
     PlatformFileType_Project,
