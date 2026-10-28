@@ -347,6 +347,14 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
+        case AssetType_Entity:
+        {
+            kea_entity *Info = &Asset->KEA.Entity;
+            Size.Data = (KEA_ENTITY_DISPLAY_LENGTH + KEA_ENTITY_NAME_LENGTH + sizeof(kea_entity_clip)*Info->ClipCount +
+                         sizeof(kea_entity_block)*Info->BlockCount + sizeof(kea_entity_field)*Info->FieldCount);
+            Size.Total = Size.Data + sizeof(asset_memory_header);
+        } break;
+
         InvalidDefaultCase;
     }
 
@@ -461,6 +469,21 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             Map->Cells = (kea_map_cell *)(Map->Layers + Info->LayerCount);
 
             Result.LoadDest = Map->SetGUIDs;
+            Result.FinalizeOp = FinalizeAsset_None;
+            Result.FinalState = AssetState_Loaded;
+        } break;
+
+        case AssetType_Entity:
+        {
+            kea_entity *Info = &Asset->KEA.Entity;
+            loaded_entity *Entity = &Asset->Header->Entity;
+            Entity->DisplayName = (char *)(Asset->Header + 1);
+            Entity->Category = Entity->DisplayName + KEA_ENTITY_DISPLAY_LENGTH;
+            Entity->Clips = (kea_entity_clip *)(Entity->Category + KEA_ENTITY_NAME_LENGTH);
+            Entity->Blocks = (kea_entity_block *)(Entity->Clips + Info->ClipCount);
+            Entity->Fields = (kea_entity_field *)(Entity->Blocks + Info->BlockCount);
+
+            Result.LoadDest = Entity->DisplayName;
             Result.FinalizeOp = FinalizeAsset_None;
             Result.FinalState = AssetState_Loaded;
         } break;

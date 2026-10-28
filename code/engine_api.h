@@ -103,6 +103,78 @@ struct map_layer_info
     map_tile_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; valid while the game's assets are
 };
 
+// NOTE(pvlso): An entity definition made in the entity editor, packed from the project's data/entities. Each state of a
+// thing is a definition of its own; a game finds one by its name (FindEntity) or by its GUID (FindEntityByGUID: maps,
+// saves and entity fields name definitions by it). The engine core: a display name, a category, clips, a footprint
+// (blocks movement) and a hit area (what spells and interaction hit). Then the project's blocks it uses and their
+// fields, by name; the game gives them their meaning.
+enum entity_field_kind
+{
+    EntityField_Int,
+    EntityField_Number,
+    EntityField_Bool,
+    EntityField_Text,
+    EntityField_Choice, // NOTE(pvlso): one of the field's words: Text holds it, Int its place in the list
+    EntityField_Entity, // NOTE(pvlso): another definition: Entity holds its GUID, 0 for none
+
+    EntityField_Count,
+};
+
+enum entity_collision_shape
+{
+    EntityCollision_None,
+    EntityCollision_Circle,
+    EntityCollision_Box,
+};
+
+struct entity_shape_info
+{
+    entity_collision_shape Shape;
+    v2 Center; // NOTE(pvlso): from the foot, in pixels, y up
+    v2 Size;   // NOTE(pvlso): a box's width and height, a circle's radius in x
+};
+
+struct entity_info
+{
+    u64 GUID;
+    char Name[32]; // NOTE(pvlso): its file's, without .txt
+    char DisplayName[64];
+    char Category[32];
+    u32 ClipCount;  // NOTE(pvlso): the clips it has a look for; the first is its default
+    u32 BlockCount; // NOTE(pvlso): the blocks it uses
+    entity_shape_info Footprint;
+    entity_shape_info HitArea;
+};
+
+struct entity_clip_info
+{
+    char Name[32];
+    bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, standing on its foot (the asset's
+                      // alignment); 0 when it can't be found
+    u32 SpriteSheet;  // NOTE(pvlso): the sprite sheet's asset index for GetSprite, 0 when the look is a bitmap
+    u32 FrameCount;
+    r32 FramesPerSecond;
+    b32 Loop;
+    b32 Finished;     // NOTE(pvlso): a clip played once is past its last frame (which stays showing)
+};
+
+struct entity_block_info
+{
+    char Name[32];
+    u32 FieldCount;
+};
+
+struct entity_field_info
+{
+    char Name[32];
+    entity_field_kind Kind;
+    s32 Int;
+    r32 Number;
+    b32 Bool;
+    u64 Entity;
+    char Text[128];
+};
+
 struct tile_info
 {
     bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
@@ -241,6 +313,16 @@ struct engine_api
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
+    // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
+    // isn't in the KEA
+    u32 (*FindEntity)(engine_assets *Assets, char *Name);
+    u32 (*FindEntityByGUID)(engine_assets *Assets, u64 GUID);
+    // NOTE(pvlso): All zero when EntityIndex isn't an entity, or it has no such clip, block or field. Time in seconds
+    // since the clip started picks a sprite sheet's frame.
+    entity_info (*GetEntityInfo)(engine_assets *Assets, u32 EntityIndex);
+    entity_clip_info (*GetEntityClip)(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time);
+    entity_block_info (*GetEntityBlock)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex);
+    entity_field_info (*GetEntityField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -407,6 +489,75 @@ inline u32
 GetMapTileset(engine_assets *Assets, u32 MapIndex, u32 SetIndex)
 {
     u32 Result = Engine.GetMapTileset(Assets, MapIndex, SetIndex);
+    return(Result);
+}
+
+inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
+inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
+inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}
+inline entity_clip_info
+GetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time = 0.0f)
+{
+    entity_clip_info Result = Engine.GetEntityClip(Assets, EntityIndex, ClipIndex, Time);
+    return(Result);
+}
+inline entity_block_info
+GetEntityBlock(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex)
+{
+    entity_block_info Result = Engine.GetEntityBlock(Assets, EntityIndex, BlockIndex);
+    return(Result);
+}
+inline entity_field_info
+GetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex)
+{
+    entity_field_info Result = Engine.GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex);
+    return(Result);
+}
+
+// NOTE(pvlso): A clip or block of a definition by its name, -1 when it has none of that name
+inline s32
+GetEntityClipIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
+{
+    s32 Result = -1;
+    entity_info Info = GetEntityInfo(Assets, EntityIndex);
+    for(u32 ClipIndex = 0; (Result < 0) && (ClipIndex < Info.ClipCount); ++ClipIndex)
+    {
+        if(StringsAreEqual(GetEntityClip(Assets, EntityIndex, ClipIndex).Name, Name)) {Result = (s32)ClipIndex;}
+    }
+
+    return(Result);
+}
+inline s32
+GetEntityBlockIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
+{
+    s32 Result = -1;
+    entity_info Info = GetEntityInfo(Assets, EntityIndex);
+    for(u32 BlockIndex = 0; (Result < 0) && (BlockIndex < Info.BlockCount); ++BlockIndex)
+    {
+        if(StringsAreEqual(GetEntityBlock(Assets, EntityIndex, BlockIndex).Name, Name)) {Result = (s32)BlockIndex;}
+    }
+
+    return(Result);
+}
+// NOTE(pvlso): A field by its block's and its own name; Found is false (and the rest zero) when there's no such field,
+// as for a definition that doesn't use the block
+inline entity_field_info
+GetEntityFieldByName(engine_assets *Assets, u32 EntityIndex, char *BlockName, char *FieldName, b32 *Found = 0)
+{
+    entity_field_info Result = {};
+    b32 WasFound = false;
+    s32 Block = GetEntityBlockIndex(Assets, EntityIndex, BlockName);
+    if(Block >= 0)
+    {
+        entity_block_info BlockInfo = GetEntityBlock(Assets, EntityIndex, (u32)Block);
+        for(u32 FieldIndex = 0; !WasFound && (FieldIndex < BlockInfo.FieldCount); ++FieldIndex)
+        {
+            entity_field_info Field = GetEntityField(Assets, EntityIndex, (u32)Block, FieldIndex);
+            if(StringsAreEqual(Field.Name, FieldName)) {Result = Field; WasFound = true;}
+        }
+    }
+    if(Found) {*Found = WasFound;}
+
     return(Result);
 }
 

@@ -27,6 +27,15 @@ struct loaded_map
     kea_map_cell *Cells;
 };
 
+struct loaded_entity
+{
+    char *DisplayName;
+    char *Category;
+    kea_entity_clip *Clips;
+    kea_entity_block *Blocks;
+    kea_entity_field *Fields;
+};
+
 struct loaded_spritesheet
 {
     bitmap_id *SpriteGUIDs;
@@ -60,6 +69,7 @@ enum asset_header_type
     AssetType_Text,
     AssetType_BinaryFile,
     AssetType_Map,
+    AssetType_Entity,
 };
 
 struct asset_memory_header
@@ -80,6 +90,7 @@ struct asset_memory_header
         loaded_text Text;
         loaded_file BinaryFile;
         loaded_map Map;
+        loaded_entity Entity;
     };
 };
 

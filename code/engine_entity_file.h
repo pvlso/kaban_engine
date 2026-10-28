@@ -8,94 +8,101 @@
    ======================================================================== */
 
 /*
-  NOTE(pvlso): Entities (map editor plan, phase 5). Everything in a game but its ground tiles is an entity. The engine
-  fixes what every entity has, the project lists its types and what each type has on top.
+  NOTE(pvlso): Entities (map editor plan, phase 5). Everything in a game but its ground tiles is an entity, made from a
+  definition: an entity file. Each state of a thing is a definition of its own (an oak, a burning oak, a burnt oak),
+  reactions in the project's data say which one a hit turns it into. The engine fixes the core every definition has,
+  the project declares blocks of fields on top; a definition ticks the blocks it uses.
 
-  The project's types, data/txts/entity_types.txt:
+  The project's data, data/txts/entity_blocks.txt:
 
     ; a comment
-    type Tree
-    state Normal
-    state Dry
-    state Burnt
-    field GrowStage int 0
-    field Height number 1.5
-    field Burns bool yes
-    field Wood text "Oak"
+    category Tree
+    category Creature
+    clip Idle
+    clip Walk
+    block Reactive
+    field Material choice Wood Plant Stone
+    block Damageable
+    field MaxHealth number 10
+    field OnDeathBecomes entity
+    field Boss bool no
+    field Drops int 2
+    field Line text "Ouch"
 
-  A type, then its states (the first is where an entity starts unless it says otherwise) and its own fields: a name,
-  a kind (int, number, bool, text) and the value an entity of the type starts with. The lines after a type are its.
+  Categories (the editor groups definitions by them), clips (an entity's named animations, the first is its default;
+  none listed means one, Idle), and blocks, each followed by its fields: a name, a kind and the value a definition
+  starts with. A choice lists its words (the first is the start), an entity field names another definition (none to
+  start with).
 
-  An entity is a text file in the project's data/entities, its name the file's:
+  A definition is a text file in the project's data/entities, its name the file's:
 
     ; An entity (Kaban engine). Format: engine_entity_file.h
-    type Tree
-    state Normal
-    flip no
-    collision circle 0 6 5
-    look Normal bitmap oak.png
-    look Burnt spritesheet "oak burning.png"
-    field GrowStage 2
+    guid 9f3a1c227b4e4d10
+    display "Oak"
+    category Tree
+    clip Idle bitmap "oak.png"
+    clip Walk spritesheet "oak sway.png" fps 6 once
+    footprint circle 0 4 6
+    hitarea box 0 40 28 70
+    block Damageable
+    field MaxHealth 20
+    field OnDeathBecomes 2b7e01c4a9f05d33
 
-  What every entity has: its type, the state it starts in, flip, its collision (none, circle x y radius, or box x y
-  width height: the shape's centre from the foot in pixels, y up), a look for each of its type's states (a bitmap, one
-  static sprite, or a sprite sheet, an animation: one of the project's stored assets by its file name, its foot is
-  the asset's alignment), and its type's fields. A field left out keeps the type's value.
+  Its GUID (16 hex digits) is made once when it's created and never changes: the asset file, maps and saves name it
+  by it. A clip is a bitmap (a still) or a sprite sheet (frames, at fps, looping unless once), one of the project's
+  stored assets by its file name, standing on the asset's alignment (the foot). The footprint blocks movement, the hit
+  area is what spells and interaction hit: none, circle x y radius, or box x y width height, the centre from the foot
+  in pixels, y up. Then the blocks it uses with their fields (a field left out keeps the block's value); an entity
+  field holds a definition's GUID, 0 for none.
 */
 
 #define ENTITY_NAME_LENGTH 32
+#define ENTITY_DISPLAY_LENGTH 64
 #define ENTITY_TEXT_LENGTH 128
 #define ENTITY_LOOK_NAME_LENGTH 256 // NOTE(pvlso): a stored asset's SourceFileName
-#define ENTITY_MAX_TYPES 64
-#define ENTITY_MAX_STATES 16
-#define ENTITY_MAX_FIELDS 32
+#define ENTITY_MAX_CATEGORIES 64
+#define ENTITY_MAX_CLIPS 16
+#define ENTITY_MAX_BLOCKS 16
+#define ENTITY_MAX_BLOCK_FIELDS 8
+#define ENTITY_MAX_CHOICES 16
 
-enum entity_field_kind
-{
-    EntityField_Int,
-    EntityField_Number,
-    EntityField_Bool,
-    EntityField_Text,
-
-    EntityField_Count,
-};
+// NOTE(pvlso): entity_field_kind and entity_collision_shape are in engine_api.h, games use them too
 
 struct entity_field_value
 {
-    s32 Int;
+    s32 Int; // NOTE(pvlso): a choice's word, by its place in the field's list
     r32 Number;
     b32 Bool;
+    u64 Entity; // NOTE(pvlso): a definition's GUID, 0 for none
     char Text[ENTITY_TEXT_LENGTH];
 };
 
-struct entity_type_field
+struct entity_field_def
 {
     char Name[ENTITY_NAME_LENGTH];
     entity_field_kind Kind;
     entity_field_value Default;
+    u32 ChoiceCount;
+    char Choices[ENTITY_MAX_CHOICES][ENTITY_NAME_LENGTH];
 };
 
-struct entity_type
+struct entity_block_def
 {
     char Name[ENTITY_NAME_LENGTH];
-    u32 StateCount;
-    char States[ENTITY_MAX_STATES][ENTITY_NAME_LENGTH];
     u32 FieldCount;
-    entity_type_field Fields[ENTITY_MAX_FIELDS];
+    entity_field_def Fields[ENTITY_MAX_BLOCK_FIELDS];
 };
 
-struct entity_types
+// NOTE(pvlso): The project's data/txts/entity_blocks.txt
+struct entity_project
 {
     b32 Loaded;
-    u32 Count;
-    entity_type Types[ENTITY_MAX_TYPES];
-};
-
-enum entity_collision_shape
-{
-    EntityCollision_None,
-    EntityCollision_Circle,
-    EntityCollision_Box,
+    u32 CategoryCount;
+    char Categories[ENTITY_MAX_CATEGORIES][ENTITY_NAME_LENGTH];
+    u32 ClipCount;
+    char Clips[ENTITY_MAX_CLIPS][ENTITY_NAME_LENGTH];
+    u32 BlockCount;
+    entity_block_def Blocks[ENTITY_MAX_BLOCKS];
 };
 
 enum entity_look_kind
@@ -105,29 +112,37 @@ enum entity_look_kind
     EntityLook_SpriteSheet,
 };
 
-struct entity_look
+struct entity_clip
 {
     entity_look_kind Kind;
     char FileName[ENTITY_LOOK_NAME_LENGTH];
+    r32 FramesPerSecond;
+    b32 Loop;
 };
 
-// NOTE(pvlso): An entity as its file has it, its states and fields by their place in its type
+struct entity_shape
+{
+    entity_collision_shape Shape;
+    v2 Center; // NOTE(pvlso): from the foot, pixels, y up
+    v2 Size;   // NOTE(pvlso): a box's width and height, a circle's radius in x
+};
+
+// NOTE(pvlso): A definition as its file has it, its clips, blocks and fields by their place in the project's data
 struct entity_file
 {
     b32 Loaded;
     u32 ErrorCount;
 
-    s32 Type; // NOTE(pvlso): in entity_types, -1 when the file's type isn't one of them
-    char TypeName[ENTITY_NAME_LENGTH];
-    u32 State;
-    b32 Flip;
+    u64 GUID;
+    char DisplayName[ENTITY_DISPLAY_LENGTH];
+    u32 Category; // NOTE(pvlso): 0 for none, else the project's category + 1
 
-    entity_collision_shape Collision;
-    v2 CollisionCenter; // NOTE(pvlso): from the foot, pixels, y up
-    v2 CollisionSize;   // NOTE(pvlso): a box's width and height, a circle's radius in x
+    entity_clip Clips[ENTITY_MAX_CLIPS];
+    entity_shape Footprint;
+    entity_shape HitArea;
 
-    entity_look Looks[ENTITY_MAX_STATES];
-    entity_field_value Fields[ENTITY_MAX_FIELDS];
+    u32 Blocks; // NOTE(pvlso): bit n: it uses the project's block n
+    entity_field_value Fields[ENTITY_MAX_BLOCKS][ENTITY_MAX_BLOCK_FIELDS];
 };
 
 #define ENGINE_ENTITY_FILE_H

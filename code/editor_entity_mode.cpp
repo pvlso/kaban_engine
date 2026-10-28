@@ -8,16 +8,36 @@
 
 // NOTE(pvlso): The entity editor: see editor_entity_mode.h
 
+// NOTE(pvlso): The definitions in data/entities, with their GUIDs (each file read once)
 internal void
 ListEntityFiles(editor_mode_entity *EntityMode)
 {
     EntityMode->EntityFileCount = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
     EntityMode->EntityFiles = PushArray(EntityMode->Arena, Maximum(1, EntityMode->EntityFileCount), char *);
+    EntityMode->EntityGUIDs = PushArray(EntityMode->Arena, Maximum(1, EntityMode->EntityFileCount), u64);
     Platform.ListFilesInDirectory(PlatformFileType_Entity, EntityMode->EntityFiles, EntityMode->Arena);
+    for(u32 Index = 0; Index < EntityMode->EntityFileCount; ++Index)
+    {
+        entity_file Entity = ReadEntityFile(EntityMode->EntityFiles[Index], EntityMode->Project, EntityMode->Arena);
+        EntityMode->EntityGUIDs[Index] = Entity.GUID;
+    }
     EntityMode->EntityFileIndex = 0;
 }
 
-// NOTE(pvlso): The project's stored bitmaps and sprite sheets, what an entity can look like
+// NOTE(pvlso): The file name of the definition with that GUID, 0 when none has it
+internal char *
+EntityFileOfGUID(editor_mode_entity *EntityMode, u64 GUID)
+{
+    char *Result = 0;
+    for(u32 Index = 0; GUID && !Result && (Index < EntityMode->EntityFileCount); ++Index)
+    {
+        if(EntityMode->EntityGUIDs[Index] == GUID) {Result = EntityMode->EntityFiles[Index];}
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): The project's stored bitmaps and sprite sheets, what a clip can look like
 internal void
 ListLookChoices(editor_state *EditorState, editor_mode_entity *EntityMode)
 {
@@ -43,15 +63,15 @@ ListLookChoices(editor_state *EditorState, editor_mode_entity *EntityMode)
         }
 
         entity_look_choice *Choice = EntityMode->LookChoices + ChoiceIndex;
-        FormatString(ENTITY_LOOK_NAME_LENGTH, Choice->Look.FileName, "%s", Asset->SourceFileName);
+        FormatString(ENTITY_LOOK_NAME_LENGTH, Choice->FileName, "%s", Asset->SourceFileName);
         if(Asset->Type == KESA_Bitmap)
         {
-            Choice->Look.Kind = EntityLook_Bitmap;
+            Choice->Kind = EntityLook_Bitmap;
             Choice->Align = Asset->Bitmap.AlignPercentage;
         }
         else
         {
-            Choice->Look.Kind = EntityLook_SpriteSheet;
+            Choice->Kind = EntityLook_SpriteSheet;
             Choice->Align = Asset->SpriteSheet.SpriteAlignPercentage;
             Choice->SpriteCount = Asset->SpriteSheet.SpriteCount;
             Choice->SpriteWidth = Asset->SpriteSheet.SpriteWidth;
@@ -69,13 +89,13 @@ ListLookChoices(editor_state *EditorState, editor_mode_entity *EntityMode)
 }
 
 internal s32
-FindLookChoice(editor_mode_entity *EntityMode, entity_look *Look)
+FindLookChoice(editor_mode_entity *EntityMode, entity_clip *Clip)
 {
     s32 Result = -1;
-    for(u32 ChoiceIndex = 0; ChoiceIndex < EntityMode->LookChoiceCount; ++ChoiceIndex)
+    for(u32 ChoiceIndex = 0; (Result < 0) && (ChoiceIndex < EntityMode->LookChoiceCount); ++ChoiceIndex)
     {
-        entity_look *Choice = &EntityMode->LookChoices[ChoiceIndex].Look;
-        if((Choice->Kind == Look->Kind) && StringsAreEqual(Choice->FileName, Look->FileName)) {Result = (s32)ChoiceIndex;}
+        entity_look_choice *Choice = EntityMode->LookChoices + ChoiceIndex;
+        if((Choice->Kind == Clip->Kind) && StringsAreEqual(Choice->FileName, Clip->FileName)) {Result = (s32)ChoiceIndex;}
     }
 
     return(Result);
@@ -97,7 +117,9 @@ PlayEntityEditor(editor_state *EditorState, transient_state *TranState, char *Pr
     EntityMode->Arena = &EditorState->ModeArena;
     EntityMode->Zoom = 4.0f;
     EntityMode->PreviewChoice = -1;
-    EntityMode->Types = ReadEntityTypes(EntityMode->Arena);
+    EntityMode->ShowFootprint = true;
+    EntityMode->ShowHitArea = true;
+    EntityMode->Project = ReadEntityProject(EntityMode->Arena);
     ListLookChoices(EditorState, EntityMode);
     ListEntityFiles(EntityMode);
 
@@ -109,31 +131,46 @@ ReleaseEntityPreview(platform_texture_op_queue *TextureOpQueue, editor_mode_enti
 {
     DeallocateBitmap(TextureOpQueue, &EntityMode->Preview);
     EntityMode->Preview = {};
-    EntityMode->PreviewLook = {};
+    EntityMode->PreviewClip = {};
     EntityMode->PreviewChoice = -1;
 }
 
-// NOTE(pvlso): The shown state's look loaded, when it isn't the one loaded already
+// NOTE(pvlso): The shown clip's look loaded, when it isn't the one loaded already
 internal void
 UpdateEntityPreview(platform_texture_op_queue *TextureOpQueue, editor_mode_entity *EntityMode)
 {
-    entity_look *Look = EntityMode->Entity.Looks + EntityMode->ShownState;
-    b32 Same = ((Look->Kind == EntityMode->PreviewLook.Kind) &&
-                StringsAreEqual(Look->FileName, EntityMode->PreviewLook.FileName));
+    entity_clip *Clip = EntityMode->Entity.Clips + EntityMode->ShownClip;
+    b32 Same = ((Clip->Kind == EntityMode->PreviewClip.Kind) &&
+                StringsAreEqual(Clip->FileName, EntityMode->PreviewClip.FileName));
     if(!Same)
     {
         ReleaseEntityPreview(TextureOpQueue, EntityMode);
-        EntityMode->PreviewLook = *Look;
-        if(Look->Kind != EntityLook_None)
+        EntityMode->PreviewClip = *Clip;
+        EntityMode->Time = 0.0f;
+        if(Clip->Kind != EntityLook_None)
         {
-            platform_file_type Type = (Look->Kind == EntityLook_Bitmap) ? PlatformFileType_BMP : PlatformFileType_SSBMP;
-            EntityMode->Preview = LoadImageFile(Look->FileName, Type, 0);
+            platform_file_type Type = (Clip->Kind == EntityLook_Bitmap) ? PlatformFileType_BMP : PlatformFileType_SSBMP;
+            EntityMode->Preview = LoadImageFile(Clip->FileName, Type, 0);
             if(EntityMode->Preview.Memory)
             {
                 AllocateBitmap(TextureOpQueue, &EntityMode->Preview);
             }
-            EntityMode->PreviewChoice = FindLookChoice(EntityMode, Look);
+            EntityMode->PreviewChoice = FindLookChoice(EntityMode, Clip);
         }
+    }
+}
+
+internal void
+RenderEntityShape(render_group *RenderGroup, object_transform *Flat, entity_shape *Shape, v2 Foot, r32 Zoom, v4 Color)
+{
+    v2 Center = Foot + Zoom*Shape->Center;
+    if(Shape->Shape == EntityCollision_Circle)
+    {
+        PushCircleOutline(RenderGroup, Flat, V3(Center, 8.0f), Zoom*Shape->Size.x, 32, Color);
+    }
+    else if(Shape->Shape == EntityCollision_Box)
+    {
+        PushRectOutline(RenderGroup, Flat, RectCenterDim(Center, Zoom*Shape->Size), 8.0f, Color, 1.0f);
     }
 }
 
@@ -156,7 +193,7 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
     loaded_bitmap *Preview = &EntityMode->Preview;
     if(Preview->Memory)
     {
-        if(EntityMode->PreviewLook.Kind == EntityLook_Bitmap)
+        if(EntityMode->PreviewClip.Kind == EntityLook_Bitmap)
         {
             Preview->AlignPercentage = (EntityMode->PreviewChoice >= 0) ?
                 EntityMode->LookChoices[EntityMode->PreviewChoice].Align : V2(0.5f, 0.0f);
@@ -167,12 +204,12 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
             // NOTE(pvlso): One frame of the strip, the strip drawn from its bottom left and clipped to the frame
             entity_look_choice *Choice = EntityMode->LookChoices + EntityMode->PreviewChoice;
             u32 Count = Maximum(1, Choice->SpriteCount);
-            u32 Frame = (u32)(EntityMode->Time*8.0f) % Count;
+            u32 Frame = (u32)Maximum(0, FloorReal32ToInt32(EntityMode->Time*EntityMode->PreviewClip.FramesPerSecond));
+            Frame = EntityMode->PreviewClip.Loop ? (Frame % Count) : Minimum(Frame, Count - 1);
             v2 FrameDim = Zoom*V2((r32)Choice->SpriteWidth, (r32)Choice->SpriteHeight);
             v2 FrameMin = Foot - Hadamard(Choice->Align, FrameDim);
             Preview->AlignPercentage = V2(0, 0);
-            u32 FrameClip = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, FrameDim), 0.0f, 0);
-            RenderGroup->CurrentClipRectIndex = FrameClip;
+            RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, FrameDim), 0.0f, 0);
             PushBitmap(RenderGroup, Flat, Preview, Zoom*(r32)Preview->Height,
                        V3(FrameMin - V2((r32)Frame*FrameDim.x, 0.0f), 6.0f));
             RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
@@ -180,15 +217,13 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
     }
 
     entity_file *Entity = &EntityMode->Entity;
-    v4 CollisionColor = V4(0.2f, 1.0f, 0.4f, 1.0f);
-    v2 Center = Foot + Zoom*Entity->CollisionCenter;
-    if(Entity->Collision == EntityCollision_Circle)
+    if(EntityMode->ShowHitArea)
     {
-        PushCircleOutline(RenderGroup, Flat, V3(Center, 8.0f), Zoom*Entity->CollisionSize.x, 32, CollisionColor);
+        RenderEntityShape(RenderGroup, Flat, &Entity->HitArea, Foot, Zoom, V4(0.3f, 0.6f, 1.0f, 1.0f));
     }
-    else if(Entity->Collision == EntityCollision_Box)
+    if(EntityMode->ShowFootprint)
     {
-        PushRectOutline(RenderGroup, Flat, RectCenterDim(Center, Zoom*Entity->CollisionSize), 8.0f, CollisionColor, 1.0f);
+        RenderEntityShape(RenderGroup, Flat, &Entity->Footprint, Foot, Zoom, V4(0.2f, 1.0f, 0.4f, 1.0f));
     }
 
     // NOTE(pvlso): The foot
@@ -201,7 +236,7 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
 internal b32
 EntityFileNameFrom(char *Typed, char *Dest, u32 DestSize)
 {
-    char Clean[48];
+    char Clean[ENTITY_NAME_LENGTH];
     b32 Result = (CleanFileName(Typed, Clean, sizeof(Clean)) != 0);
     FormatString(DestSize, Dest, "%s.txt", Clean);
     if(!Result)
@@ -221,15 +256,145 @@ SetEditedEntity(platform_texture_op_queue *TextureOpQueue, editor_mode_entity *E
     EntityMode->LastEntity = Entity;
     EntityMode->HasEntity = true;
     EntityMode->Dirty = Dirty;
-    EntityMode->ShownState = Entity.State;
+    EntityMode->ShownClip = 0;
     FormatString(sizeof(EntityMode->FileName), EntityMode->FileName, "%s", FileName);
+}
+
+// NOTE(pvlso): A footprint's or hit area's shape and numbers
+internal void
+DrawEntityShapeEditor(nk_context *Nk, char *Label, entity_shape *Shape)
+{
+    nk_layout_row_template_begin(Nk, 28);
+    nk_layout_row_template_push_static(Nk, 80);
+    nk_layout_row_template_push_dynamic(Nk);
+    nk_layout_row_template_end(Nk);
+    nk_label(Nk, Label, NK_TEXT_LEFT);
+    char *ShapeNames[] = {"none", "circle", "box"};
+    if(nk_combo_begin_label(Nk, ShapeNames[Shape->Shape], nk_vec2(nk_widget_width(Nk), 120)))
+    {
+        nk_layout_row_dynamic(Nk, 20, 1);
+        for(u32 Kind = 0; Kind < ArrayCount(ShapeNames); ++Kind)
+        {
+            nk_bool Selected = (Kind == (u32)Shape->Shape);
+            if(nk_selectable_label(Nk, ShapeNames[Kind], NK_TEXT_LEFT, &Selected))
+            {
+                Shape->Shape = (entity_collision_shape)Kind;
+                nk_combo_close(Nk);
+            }
+        }
+        nk_combo_end(Nk);
+    }
+    if(Shape->Shape != EntityCollision_None)
+    {
+        nk_layout_row_dynamic(Nk, 26, 2);
+        nk_property_float(Nk, "#x", -512.0f, &Shape->Center.x, 512.0f, 0.5f, 0.1f);
+        nk_property_float(Nk, "#y", -512.0f, &Shape->Center.y, 512.0f, 0.5f, 0.1f);
+        if(Shape->Shape == EntityCollision_Circle)
+        {
+            nk_property_float(Nk, "#radius", 0.5f, &Shape->Size.x, 512.0f, 0.5f, 0.1f);
+        }
+        else
+        {
+            nk_property_float(Nk, "#width", 0.5f, &Shape->Size.x, 1024.0f, 0.5f, 0.1f);
+            nk_property_float(Nk, "#height", 0.5f, &Shape->Size.y, 1024.0f, 0.5f, 0.1f);
+        }
+    }
+}
+
+internal void
+DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_field_def *Field, entity_field_value *Value)
+{
+    nk_layout_row_template_begin(Nk, 26);
+    nk_layout_row_template_push_static(Nk, 120);
+    nk_layout_row_template_push_dynamic(Nk);
+    nk_layout_row_template_end(Nk);
+    nk_label(Nk, Field->Name, NK_TEXT_LEFT);
+    switch(Field->Kind)
+    {
+        case EntityField_Int:
+        {
+            nk_property_int(Nk, "#", -1000000, &Value->Int, 1000000, 1, 0.2f);
+        } break;
+
+        case EntityField_Number:
+        {
+            nk_property_float(Nk, "#", -1000000.0f, &Value->Number, 1000000.0f, 0.1f, 0.05f);
+        } break;
+
+        case EntityField_Bool:
+        {
+            nk_bool On = (Value->Bool != 0);
+            if(nk_checkbox_label(Nk, "", &On)) {Value->Bool = On;}
+        } break;
+
+        case EntityField_Text:
+        {
+            int Length = (int)StringLength(Value->Text);
+            nk_edit_string(Nk, NK_EDIT_FIELD, Value->Text, &Length, ENTITY_TEXT_LENGTH - 1, nk_filter_default);
+            Value->Text[Length] = 0;
+        } break;
+
+        case EntityField_Choice:
+        {
+            u32 Choice = ((u32)Value->Int < Field->ChoiceCount) ? (u32)Value->Int : 0;
+            if(nk_combo_begin_label(Nk, Field->Choices[Choice], nk_vec2(nk_widget_width(Nk), 300)))
+            {
+                nk_layout_row_dynamic(Nk, 20, 1);
+                for(u32 Index = 0; Index < Field->ChoiceCount; ++Index)
+                {
+                    nk_bool Selected = (Index == Choice);
+                    if(nk_selectable_label(Nk, Field->Choices[Index], NK_TEXT_LEFT, &Selected))
+                    {
+                        Value->Int = (s32)Index;
+                        nk_combo_close(Nk);
+                    }
+                }
+                nk_combo_end(Nk);
+            }
+        } break;
+
+        case EntityField_Entity:
+        {
+            char *Name = EntityFileOfGUID(EntityMode, Value->Entity);
+            char Unknown[32];
+            if(Value->Entity && !Name)
+            {
+                char Hex[17];
+                EntityGUIDToHex(Value->Entity, Hex);
+                FormatString(sizeof(Unknown), Unknown, "? %s", Hex);
+                Name = Unknown;
+            }
+            if(nk_combo_begin_label(Nk, Name ? Name : "(none)", nk_vec2(nk_widget_width(Nk), 300)))
+            {
+                nk_layout_row_dynamic(Nk, 20, 1);
+                nk_bool NoneSelected = (Value->Entity == 0);
+                if(nk_selectable_label(Nk, "(none)", NK_TEXT_LEFT, &NoneSelected))
+                {
+                    Value->Entity = 0;
+                    nk_combo_close(Nk);
+                }
+                for(u32 Index = 0; Index < EntityMode->EntityFileCount; ++Index)
+                {
+                    nk_bool Selected = (EntityMode->EntityGUIDs[Index] == Value->Entity);
+                    if(EntityMode->EntityGUIDs[Index] && nk_selectable_label(Nk, EntityMode->EntityFiles[Index], NK_TEXT_LEFT, &Selected))
+                    {
+                        Value->Entity = EntityMode->EntityGUIDs[Index];
+                        nk_combo_close(Nk);
+                    }
+                }
+                nk_combo_end(Nk);
+            }
+        } break;
+
+        InvalidDefaultCase;
+    }
 }
 
 internal void
 DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
 {
     nk_context *Nk = UIState->Nk;
-    entity_types *Types = EntityMode->Types;
+    entity_project *Project = EntityMode->Project;
 
     nk_layout_space_begin(Nk, NK_STATIC, 1000, INT_MAX);
     nk_layout_space_push(Nk, nk_rect(10, 10, 410, 1000));
@@ -246,9 +411,9 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
             nk_label(Nk, "Unsaved changes: Exit again to drop them.", NK_TEXT_LEFT);
         }
 
-        // NOTE(pvlso): The entity's file: open one of data/entities, or a name and a type for New
+        // NOTE(pvlso): The definition's file: open one of data/entities, or a name for New and Save as
         nk_layout_row_dynamic(Nk, 24, 1);
-        nk_label(Nk, "Entities (data/entities):", NK_TEXT_LEFT);
+        nk_label(Nk, "Definitions (data/entities):", NK_TEXT_LEFT);
         nk_layout_row_template_begin(Nk, 28);
         nk_layout_row_template_push_dynamic(Nk);
         nk_layout_row_template_push_static(Nk, 100);
@@ -272,36 +437,14 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
 
         nk_layout_row_dynamic(Nk, 24, 1);
         nk_label(Nk, "Name (for New and Save as):", NK_TEXT_LEFT);
-        nk_layout_row_dynamic(Nk, 28, 1);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 100);
+        nk_layout_row_template_end(Nk);
         nk_edit_string(Nk, NK_EDIT_FIELD, EntityMode->NameInput, &EntityMode->NameInputLength,
                        (int)sizeof(EntityMode->NameInput) - 1, nk_filter_default);
         EntityMode->NameInput[EntityMode->NameInputLength] = 0;
-        if(Types->Count)
-        {
-            nk_layout_row_template_begin(Nk, 28);
-            nk_layout_row_template_push_dynamic(Nk);
-            nk_layout_row_template_push_static(Nk, 100);
-            nk_layout_row_template_end(Nk);
-            if(nk_combo_begin_label(Nk, Types->Types[EntityMode->NewType].Name, nk_vec2(nk_widget_width(Nk), 300)))
-            {
-                nk_layout_row_dynamic(Nk, 20, 1);
-                for(u32 TypeIndex = 0; TypeIndex < Types->Count; ++TypeIndex)
-                {
-                    nk_bool Selected = (TypeIndex == EntityMode->NewType);
-                    if(nk_selectable_label(Nk, Types->Types[TypeIndex].Name, NK_TEXT_LEFT, &Selected))
-                    {
-                        EntityMode->NewType = TypeIndex;
-                        nk_combo_close(Nk);
-                    }
-                }
-                nk_combo_end(Nk);
-            }
-            if(nk_button_label(Nk, "New")) {EntityMode->NewRequested = true;}
-        }
-        else
-        {
-            nk_label(Nk, "No types: data/txts/entity_types.txt", NK_TEXT_LEFT);
-        }
+        if(nk_button_label(Nk, "New")) {EntityMode->NewRequested = true;}
         nk_layout_row_dynamic(Nk, 28, 3);
         if(EntityMode->HasEntity)
         {
@@ -313,103 +456,73 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
         if(EntityMode->HasEntity)
         {
             entity_file *Entity = &EntityMode->Entity;
-            entity_type *Type = Types->Types + Entity->Type;
-
+            char Hex[17];
+            EntityGUIDToHex(Entity->GUID, Hex);
             nk_layout_row_dynamic(Nk, 24, 1);
             nk_label(Nk, "", NK_TEXT_LEFT);
-            nk_labelf(Nk, NK_TEXT_LEFT, "%s, a %s%s", EntityMode->FileName, Type->Name,
-                      EntityMode->Dirty ? "  (not saved)" : "");
+            nk_labelf(Nk, NK_TEXT_LEFT, "%s%s", EntityMode->FileName, EntityMode->Dirty ? "  (not saved)" : "");
+            nk_labelf(Nk, NK_TEXT_LEFT, "GUID %s", Hex);
 
-            // NOTE(pvlso): What every entity has
+            // NOTE(pvlso): The engine's core
             nk_layout_row_template_begin(Nk, 28);
             nk_layout_row_template_push_static(Nk, 80);
             nk_layout_row_template_push_dynamic(Nk);
             nk_layout_row_template_end(Nk);
-            nk_label(Nk, "Starts in", NK_TEXT_LEFT);
-            if(nk_combo_begin_label(Nk, Type->States[Entity->State], nk_vec2(nk_widget_width(Nk), 300)))
+            nk_label(Nk, "Display", NK_TEXT_LEFT);
+            int DisplayLength = (int)StringLength(Entity->DisplayName);
+            nk_edit_string(Nk, NK_EDIT_FIELD, Entity->DisplayName, &DisplayLength, ENTITY_DISPLAY_LENGTH - 1,
+                           nk_filter_default);
+            Entity->DisplayName[DisplayLength] = 0;
+
+            nk_label(Nk, "Category", NK_TEXT_LEFT);
+            const char *CategoryPreview = (Entity->Category && (Entity->Category <= Project->CategoryCount)) ?
+                Project->Categories[Entity->Category - 1] : "(none)";
+            if(nk_combo_begin_label(Nk, CategoryPreview, nk_vec2(nk_widget_width(Nk), 300)))
             {
                 nk_layout_row_dynamic(Nk, 20, 1);
-                for(u32 StateIndex = 0; StateIndex < Type->StateCount; ++StateIndex)
+                for(u32 Category = 0; Category <= Project->CategoryCount; ++Category)
                 {
-                    nk_bool Selected = (StateIndex == Entity->State);
-                    if(nk_selectable_label(Nk, Type->States[StateIndex], NK_TEXT_LEFT, &Selected))
+                    nk_bool Selected = (Category == Entity->Category);
+                    char *Label = Category ? Project->Categories[Category - 1] : (char *)"(none)";
+                    if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Selected))
                     {
-                        Entity->State = StateIndex;
+                        Entity->Category = Category;
                         nk_combo_close(Nk);
                     }
                 }
                 nk_combo_end(Nk);
             }
 
-            nk_layout_row_dynamic(Nk, 28, 1);
-            nk_bool Flip = (Entity->Flip != 0);
-            if(nk_checkbox_label(Nk, "Flip (drawn mirrored)", &Flip)) {Entity->Flip = Flip;}
-
-            nk_layout_row_template_begin(Nk, 28);
-            nk_layout_row_template_push_static(Nk, 80);
-            nk_layout_row_template_push_dynamic(Nk);
-            nk_layout_row_template_end(Nk);
-            nk_label(Nk, "Collision", NK_TEXT_LEFT);
-            char *ShapeNames[] = {"none", "circle", "box"};
-            if(nk_combo_begin_label(Nk, ShapeNames[Entity->Collision], nk_vec2(nk_widget_width(Nk), 120)))
-            {
-                nk_layout_row_dynamic(Nk, 20, 1);
-                for(u32 Shape = 0; Shape < ArrayCount(ShapeNames); ++Shape)
-                {
-                    nk_bool Selected = (Shape == (u32)Entity->Collision);
-                    if(nk_selectable_label(Nk, ShapeNames[Shape], NK_TEXT_LEFT, &Selected))
-                    {
-                        Entity->Collision = (entity_collision_shape)Shape;
-                        nk_combo_close(Nk);
-                    }
-                }
-                nk_combo_end(Nk);
-            }
-            if(Entity->Collision != EntityCollision_None)
-            {
-                nk_layout_row_dynamic(Nk, 26, 2);
-                nk_property_float(Nk, "#x", -512.0f, &Entity->CollisionCenter.x, 512.0f, 0.5f, 0.1f);
-                nk_property_float(Nk, "#y", -512.0f, &Entity->CollisionCenter.y, 512.0f, 0.5f, 0.1f);
-                if(Entity->Collision == EntityCollision_Circle)
-                {
-                    nk_property_float(Nk, "#radius", 0.5f, &Entity->CollisionSize.x, 512.0f, 0.5f, 0.1f);
-                }
-                else
-                {
-                    nk_property_float(Nk, "#width", 0.5f, &Entity->CollisionSize.x, 1024.0f, 0.5f, 0.1f);
-                    nk_property_float(Nk, "#height", 0.5f, &Entity->CollisionSize.y, 1024.0f, 0.5f, 0.1f);
-                }
-            }
-
-            // NOTE(pvlso): A look per state; the picked state is the one shown
+            // NOTE(pvlso): A look per clip; the picked clip is the one shown
             nk_layout_row_dynamic(Nk, 24, 1);
-            nk_label(Nk, "Looks (click a state to show it):", NK_TEXT_LEFT);
+            nk_label(Nk, "Clips (click one to show it):", NK_TEXT_LEFT);
             if(!EntityMode->LookChoiceCount)
             {
                 nk_label(Nk, "No bitmaps or sprite sheets stored yet", NK_TEXT_LEFT);
             }
-            for(u32 StateIndex = 0; StateIndex < Type->StateCount; ++StateIndex)
+            for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
             {
-                entity_look *Look = Entity->Looks + StateIndex;
+                entity_clip *Clip = Entity->Clips + ClipIndex;
                 nk_layout_row_template_begin(Nk, 26);
                 nk_layout_row_template_push_static(Nk, 90);
                 nk_layout_row_template_push_dynamic(Nk);
                 nk_layout_row_template_end(Nk);
-                nk_bool Shown = (StateIndex == EntityMode->ShownState);
-                if(nk_selectable_label(Nk, Type->States[StateIndex], NK_TEXT_LEFT, &Shown))
+                nk_bool Shown = (ClipIndex == EntityMode->ShownClip);
+                if(nk_selectable_label(Nk, Project->Clips[ClipIndex], NK_TEXT_LEFT, &Shown))
                 {
-                    EntityMode->ShownState = StateIndex;
+                    EntityMode->ShownClip = ClipIndex;
+                    EntityMode->Time = 0.0f;
                 }
-                s32 Choice = (Look->Kind != EntityLook_None) ? FindLookChoice(EntityMode, Look) : -1;
-                const char *LookPreview = (Look->Kind == EntityLook_None) ? "(none)" :
-                    ((Choice >= 0) ? EntityMode->LookLabels[Choice] : Look->FileName);
+                s32 Choice = (Clip->Kind != EntityLook_None) ? FindLookChoice(EntityMode, Clip) : -1;
+                const char *LookPreview = (Clip->Kind == EntityLook_None) ? "(none)" :
+                    ((Choice >= 0) ? EntityMode->LookLabels[Choice] : Clip->FileName);
                 if(nk_combo_begin_label(Nk, LookPreview, nk_vec2(nk_widget_width(Nk), 300)))
                 {
                     nk_layout_row_dynamic(Nk, 20, 1);
-                    nk_bool NoneSelected = (Look->Kind == EntityLook_None);
+                    nk_bool NoneSelected = (Clip->Kind == EntityLook_None);
                     if(nk_selectable_label(Nk, "(none)", NK_TEXT_LEFT, &NoneSelected))
                     {
-                        *Look = {};
+                        *Clip = {};
                         nk_combo_close(Nk);
                     }
                     for(u32 ChoiceIndex = 0; ChoiceIndex < EntityMode->LookChoiceCount; ++ChoiceIndex)
@@ -417,66 +530,71 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                         nk_bool Selected = ((s32)ChoiceIndex == Choice);
                         if(nk_selectable_label(Nk, EntityMode->LookLabels[ChoiceIndex], NK_TEXT_LEFT, &Selected))
                         {
-                            *Look = EntityMode->LookChoices[ChoiceIndex].Look;
-                            EntityMode->ShownState = StateIndex;
+                            entity_look_choice *Picked = EntityMode->LookChoices + ChoiceIndex;
+                            Clip->Kind = Picked->Kind;
+                            FormatString(ENTITY_LOOK_NAME_LENGTH, Clip->FileName, "%s", Picked->FileName);
+                            if(Clip->FramesPerSecond <= 0.0f) {Clip->FramesPerSecond = 8.0f; Clip->Loop = true;}
+                            EntityMode->ShownClip = ClipIndex;
                             nk_combo_close(Nk);
                         }
                     }
                     nk_combo_end(Nk);
                 }
-            }
-
-            // NOTE(pvlso): The type's own fields
-            nk_layout_row_dynamic(Nk, 24, 1);
-            nk_labelf(Nk, NK_TEXT_LEFT, "%s's fields:", Type->Name);
-            if(!Type->FieldCount)
-            {
-                nk_label(Nk, "(none)", NK_TEXT_LEFT);
-            }
-            for(u32 FieldIndex = 0; FieldIndex < Type->FieldCount; ++FieldIndex)
-            {
-                entity_type_field *Field = Type->Fields + FieldIndex;
-                entity_field_value *Value = Entity->Fields + FieldIndex;
-                nk_layout_row_template_begin(Nk, 26);
-                nk_layout_row_template_push_static(Nk, 110);
-                nk_layout_row_template_push_dynamic(Nk);
-                nk_layout_row_template_end(Nk);
-                nk_label(Nk, Field->Name, NK_TEXT_LEFT);
-                switch(Field->Kind)
+                if(Clip->Kind == EntityLook_SpriteSheet)
                 {
-                    case EntityField_Int:
-                    {
-                        nk_property_int(Nk, "#", -1000000, &Value->Int, 1000000, 1, 0.2f);
-                    } break;
+                    nk_layout_row_template_begin(Nk, 26);
+                    nk_layout_row_template_push_static(Nk, 90);
+                    nk_layout_row_template_push_dynamic(Nk);
+                    nk_layout_row_template_push_static(Nk, 70);
+                    nk_layout_row_template_end(Nk);
+                    nk_spacer(Nk);
+                    nk_property_float(Nk, "#fps", 0.5f, &Clip->FramesPerSecond, 60.0f, 0.5f, 0.1f);
+                    nk_bool Loop = (Clip->Loop != 0);
+                    if(nk_checkbox_label(Nk, "loop", &Loop)) {Clip->Loop = Loop; EntityMode->Time = 0.0f;}
+                }
+            }
 
-                    case EntityField_Number:
-                    {
-                        nk_property_float(Nk, "#", -1000000.0f, &Value->Number, 1000000.0f, 0.1f, 0.05f);
-                    } break;
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Footprint blocks movement (green):", NK_TEXT_LEFT);
+            DrawEntityShapeEditor(Nk, "Footprint", &Entity->Footprint);
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Hit area takes spells and interaction (blue):", NK_TEXT_LEFT);
+            DrawEntityShapeEditor(Nk, "Hit area", &Entity->HitArea);
 
-                    case EntityField_Bool:
+            // NOTE(pvlso): The project's blocks: ticked ones are used, their fields below them
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "", NK_TEXT_LEFT);
+            nk_label(Nk, "Blocks (data/txts/entity_blocks.txt):", NK_TEXT_LEFT);
+            if(!Project->BlockCount)
+            {
+                nk_label(Nk, "(none declared)", NK_TEXT_LEFT);
+            }
+            for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
+            {
+                entity_block_def *Block = Project->Blocks + BlockIndex;
+                nk_layout_row_dynamic(Nk, 26, 1);
+                nk_bool Uses = ((Entity->Blocks & (1u << BlockIndex)) != 0);
+                if(nk_checkbox_label(Nk, Block->Name, &Uses))
+                {
+                    Entity->Blocks ^= (1u << BlockIndex);
+                    if(!Uses) {ResetEntityBlock(Entity, Project, BlockIndex);}
+                }
+                if(Uses)
+                {
+                    for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
                     {
-                        nk_bool On = (Value->Bool != 0);
-                        if(nk_checkbox_label(Nk, "", &On)) {Value->Bool = On;}
-                    } break;
-
-                    case EntityField_Text:
-                    {
-                        int Length = (int)StringLength(Value->Text);
-                        nk_edit_string(Nk, NK_EDIT_FIELD, Value->Text, &Length, ENTITY_TEXT_LENGTH - 1, nk_filter_default);
-                        Value->Text[Length] = 0;
-                    } break;
-
-                    InvalidDefaultCase;
+                        DrawEntityFieldEditor(EntityMode, Nk, Block->Fields + FieldIndex,
+                                              &Entity->Fields[BlockIndex][FieldIndex]);
+                    }
                 }
             }
         }
 
         nk_layout_row_dynamic(Nk, 18, 1);
         nk_label(Nk, "", NK_TEXT_LEFT);
-        nk_label(Nk, "Types: data/txts/entity_types.txt. Looks: the", NK_TEXT_LEFT);
-        nk_label(Nk, "bitmaps and sprite sheets in the stored assets.", NK_TEXT_LEFT);
-        nk_label(Nk, "Preview: the wheel zooms, yellow is the foot.", NK_TEXT_LEFT);
+        nk_label(Nk, "Clips: the bitmaps and sprite sheets stored", NK_TEXT_LEFT);
+        nk_label(Nk, "in the assets mode. Preview: the wheel zooms,", NK_TEXT_LEFT);
+        nk_label(Nk, "yellow is the foot.", NK_TEXT_LEFT);
 
         nk_group_end(Nk);
     }
@@ -494,7 +612,6 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
     render_group *RenderGroup = &UIState->RenderGroup;
     object_transform Flat = DefaultFlatTransform();
     v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
-    entity_types *Types = EntityMode->Types;
 
     if(EntityMode->Exit && EntityMode->Dirty && !EntityMode->ExitArmed)
     {
@@ -510,35 +627,21 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
 
     if(EntityMode->ReloadRequested)
     {
-        // NOTE(pvlso): The types file or the stored assets changed: what's being made is kept if its type still is
+        // NOTE(pvlso): The blocks file, the stored assets or data/entities changed. What's being made keeps its values
+        // by place: a block file whose blocks moved should be followed by opening the definition again.
         EntityMode->ReloadRequested = false;
-        EntityMode->Types = Types = ReadEntityTypes(EntityMode->Arena);
+        EntityMode->Project = ReadEntityProject(EntityMode->Arena);
         ListLookChoices(EditorState, EntityMode);
         ListEntityFiles(EntityMode);
-        EntityMode->NewType = 0;
-        EntityMode->PreviewLook = {};
-        if(EntityMode->HasEntity)
-        {
-            s32 TypeIndex = FindEntityType(Types, EntityMode->Entity.TypeName);
-            if((TypeIndex < 0) || (Types->Types[TypeIndex].StateCount <= EntityMode->Entity.State))
-            {
-                LOG_ERROR("Entity %s: its type %s changed, open it again", EntityMode->FileName,
-                          EntityMode->Entity.TypeName);
-                ReleaseEntityPreview(TextureOpQueue, EntityMode);
-                EntityMode->HasEntity = false;
-            }
-            else
-            {
-                EntityMode->Entity.Type = TypeIndex;
-                EntityMode->ShownState = Minimum(EntityMode->ShownState, Types->Types[TypeIndex].StateCount - 1);
-            }
-        }
+        EntityMode->PreviewClip = {};
+        EntityMode->ShownClip = Minimum(EntityMode->ShownClip, EntityMode->Project->ClipCount - 1);
     }
+    entity_project *Project = EntityMode->Project;
     if(EntityMode->NewRequested)
     {
         EntityMode->NewRequested = false;
         char FileName[64];
-        if(EntityFileNameFrom(EntityMode->NameInput, FileName, sizeof(FileName)) && (EntityMode->NewType < Types->Count))
+        if(EntityFileNameFrom(EntityMode->NameInput, FileName, sizeof(FileName)))
         {
             if(Platform.FileExists(FileName, PlatformFileType_Entity))
             {
@@ -546,7 +649,7 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
             }
             else
             {
-                SetEditedEntity(TextureOpQueue, EntityMode, NewEntityOfType(Types, EntityMode->NewType), FileName, true);
+                SetEditedEntity(TextureOpQueue, EntityMode, NewEntityDefinition(Project), FileName, true);
             }
         }
     }
@@ -556,10 +659,16 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
         if(EntityMode->EntityFileCount)
         {
             char *FileName = EntityMode->EntityFiles[EntityMode->EntityFileIndex];
-            entity_file Entity = ReadEntityFile(FileName, Types, &TranState->TranArena);
+            entity_file Entity = ReadEntityFile(FileName, Project, &TranState->TranArena);
             if(Entity.Loaded)
             {
-                SetEditedEntity(TextureOpQueue, EntityMode, Entity, FileName, false);
+                b32 NeedsGUID = (Entity.GUID == 0);
+                if(NeedsGUID)
+                {
+                    Entity.GUID = NewEntityGUID();
+                    LOG_WARNING("Entity %s had no GUID, it has one now: save it", FileName);
+                }
+                SetEditedEntity(TextureOpQueue, EntityMode, Entity, FileName, NeedsGUID);
                 LOG("Opened the entity %s%s", FileName, Entity.ErrorCount ? " (with errors, see above)" : "");
             }
         }
@@ -574,17 +683,29 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
             LOG_ERROR("Entity %s already exists, pick another name", FileName);
             HaveName = false;
         }
-        if(HaveName && WriteEntityFile(FileName, &EntityMode->Entity, Types, &TranState->TranArena))
+        if(HaveName)
         {
-            FormatString(sizeof(EntityMode->FileName), EntityMode->FileName, "%s", FileName);
-            EntityMode->Dirty = false;
-            ListEntityFiles(EntityMode);
-            LOG("Saved the entity %s", FileName);
+            // NOTE(pvlso): Save as makes another definition: it gets a GUID of its own
+            entity_file *Entity = &EntityMode->Entity;
+            u64 OldGUID = Entity->GUID;
+            if(EntityMode->SaveAsRequested) {Entity->GUID = NewEntityGUID();}
+            if(WriteEntityFile(FileName, Entity, Project, &TranState->TranArena))
+            {
+                FormatString(sizeof(EntityMode->FileName), EntityMode->FileName, "%s", FileName);
+                EntityMode->Dirty = false;
+                EntityMode->LastEntity = *Entity;
+                ListEntityFiles(EntityMode);
+                LOG("Saved the entity %s", FileName);
+            }
+            else
+            {
+                Entity->GUID = OldGUID;
+            }
         }
         EntityMode->SaveRequested = EntityMode->SaveAsRequested = false;
     }
 
-    // NOTE(pvlso): The canvas right of the panel: the shown state's look
+    // NOTE(pvlso): The canvas right of the panel: the shown clip's look
     nk_context *Nk = UIState->Nk;
     rectangle2 PreviewRect = RectMinMax(V2(-530.0f, -530.0f), V2(950.0f, 470.0f));
     if(EntityMode->HasEntity)

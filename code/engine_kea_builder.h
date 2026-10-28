@@ -37,6 +37,15 @@ struct builder_added_map
     kea_map_cell *Cells;
 };
 
+struct builder_added_entity
+{
+    char *DisplayName;
+    char *Category;
+    kea_entity_clip *Clips;
+    kea_entity_block *Blocks;
+    kea_entity_field *Fields;
+};
+
 struct builder_added_tile
 {
     loaded_bitmap *TileBitmap;
@@ -52,6 +61,7 @@ union added_asset_additional_data
     builder_added_spritesheet SpriteSheet;
     builder_added_tileset Tileset;
     builder_added_map Map;
+    builder_added_entity Entity;
     builder_added_tile Tile; 
     builder_added_sprite Sprite; 
 };

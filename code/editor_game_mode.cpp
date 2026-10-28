@@ -253,6 +253,173 @@ GameGetMapTileset(engine_assets *Assets, u32 MapIndex, u32 SetIndex)
     return(Result);
 }
 
+// NOTE(pvlso): The entity at EntityIndex, loaded now if it isn't yet; 0 when it isn't an entity
+internal loaded_entity *
+GameLoadedEntity(engine_assets *Assets, u32 EntityIndex, kea_entity **Info)
+{
+    loaded_entity *Result = 0;
+    if(Assets && EntityIndex && (EntityIndex < Assets->AssetCount))
+    {
+        asset *Asset = Assets->Assets + EntityIndex;
+        if(Asset->KEA.Type == KEAType_Entity)
+        {
+            asset_memory_header *Header = GetAsset(Assets, EntityIndex, 0);
+            if(!Header)
+            {
+                LoadAsset(Assets, AssetType_Entity, EntityIndex, true);
+                Header = GetAsset(Assets, EntityIndex, 0);
+            }
+            Result = Header ? &Header->Entity : 0;
+            *Info = &Asset->KEA.Entity;
+        }
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): Every entity's name is in the asset list, no entity is loaded to find one
+internal u32
+GameFindEntity(engine_assets *Assets, char *Name)
+{
+    u32 Result = 0;
+    for(u32 AssetIndex = 1; Assets && Name && !Result && (AssetIndex < Assets->AssetCount); ++AssetIndex)
+    {
+        kea_asset *KEA = &Assets->Assets[AssetIndex].KEA;
+        if((KEA->Type == KEAType_Entity) && StringsAreEqual(Name, KEA->Entity.Name))
+        {
+            Result = AssetIndex;
+        }
+    }
+
+    return(Result);
+}
+
+internal u32
+GameFindEntityByGUID(engine_assets *Assets, u64 GUID)
+{
+    u32 Result = 0;
+    asset *Asset = (Assets && GUID) ? GetAssetByGUID(Assets, GUID) : 0;
+    if(Asset && (Asset->KEA.Type == KEAType_Entity))
+    {
+        Result = (u32)(Asset - Assets->Assets);
+    }
+
+    return(Result);
+}
+
+inline entity_shape_info
+EntityShapeInfo(kea_entity_shape *Shape)
+{
+    entity_shape_info Result;
+    Result.Shape = (entity_collision_shape)Shape->Shape;
+    Result.Center = V2(Shape->Center[0], Shape->Center[1]);
+    Result.Size = V2(Shape->Size[0], Shape->Size[1]);
+
+    return(Result);
+}
+
+internal entity_info
+GameGetEntityInfo(engine_assets *Assets, u32 EntityIndex)
+{
+    entity_info Result = {};
+    kea_entity *Info = 0;
+    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
+    if(Entity)
+    {
+        Result.GUID = Assets->Assets[EntityIndex].KEA.GUID;
+        FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Info->Name);
+        FormatString(sizeof(Result.DisplayName), Result.DisplayName, "%.*s", KEA_ENTITY_DISPLAY_LENGTH,
+                     Entity->DisplayName);
+        FormatString(sizeof(Result.Category), Result.Category, "%.*s", KEA_ENTITY_NAME_LENGTH, Entity->Category);
+        Result.ClipCount = Info->ClipCount;
+        Result.BlockCount = Info->BlockCount;
+        Result.Footprint = EntityShapeInfo(&Info->Footprint);
+        Result.HitArea = EntityShapeInfo(&Info->HitArea);
+    }
+
+    return(Result);
+}
+
+internal entity_clip_info
+GameGetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time)
+{
+    entity_clip_info Result = {};
+    kea_entity *Info = 0;
+    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
+    if(Entity && (ClipIndex < Info->ClipCount))
+    {
+        kea_entity_clip *Clip = Entity->Clips + ClipIndex;
+        FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Clip->Name);
+        Result.FramesPerSecond = Clip->FramesPerSecond;
+        Result.Loop = Clip->Loop;
+        asset *Look = GetAssetByGUID(Assets, Clip->LookGUID);
+        if(Look)
+        {
+            u32 LookIndex = (u32)(Look - Assets->Assets);
+            if(Look->KEA.Type == KEAType_Bitmap)
+            {
+                Result.Bitmap.Value = LookIndex;
+                Result.FrameCount = 1;
+            }
+            else if(Look->KEA.Type == KEAType_SpriteSheet)
+            {
+                Result.SpriteSheet = LookIndex;
+                Result.FrameCount = Look->KEA.SpriteSheet.SpriteCount;
+                u32 Frame = (u32)Maximum(0, FloorReal32ToInt32(Time*Clip->FramesPerSecond));
+                if(Result.FrameCount)
+                {
+                    if(Result.Loop) {Frame %= Result.FrameCount;}
+                    else if(Frame >= Result.FrameCount) {Frame = Result.FrameCount - 1; Result.Finished = true;}
+                    Result.Bitmap = GameGetSprite(Assets, LookIndex, Frame);
+                }
+            }
+        }
+    }
+
+    return(Result);
+}
+
+internal entity_block_info
+GameGetEntityBlock(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex)
+{
+    entity_block_info Result = {};
+    kea_entity *Info = 0;
+    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
+    if(Entity && (BlockIndex < Info->BlockCount))
+    {
+        kea_entity_block *Block = Entity->Blocks + BlockIndex;
+        FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Block->Name);
+        Result.FieldCount = Block->FieldCount;
+    }
+
+    return(Result);
+}
+
+internal entity_field_info
+GameGetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex)
+{
+    entity_field_info Result = {};
+    kea_entity *Info = 0;
+    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
+    if(Entity && (BlockIndex < Info->BlockCount) && (FieldIndex < Entity->Blocks[BlockIndex].FieldCount))
+    {
+        u32 Index = Entity->Blocks[BlockIndex].FirstField + FieldIndex;
+        if(Index < Info->FieldCount)
+        {
+            kea_entity_field *Field = Entity->Fields + Index;
+            FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Field->Name);
+            Result.Kind = (entity_field_kind)Field->Kind;
+            Result.Int = Field->Int;
+            Result.Number = Field->Number;
+            Result.Bool = Field->Bool;
+            Result.Entity = Field->Entity;
+            FormatString(sizeof(Result.Text), Result.Text, "%.*s", KEA_ENTITY_TEXT_LENGTH, Field->Text);
+        }
+    }
+
+    return(Result);
+}
+
 internal void
 GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
 {
@@ -318,6 +485,12 @@ GetEngineAPI(void)
     Result.GetMapInfo = GameGetMapInfo;
     Result.GetMapLayer = GameGetMapLayer;
     Result.GetMapTileset = GameGetMapTileset;
+    Result.FindEntity = GameFindEntity;
+    Result.FindEntityByGUID = GameFindEntityByGUID;
+    Result.GetEntityInfo = GameGetEntityInfo;
+    Result.GetEntityClip = GameGetEntityClip;
+    Result.GetEntityBlock = GameGetEntityBlock;
+    Result.GetEntityField = GameGetEntityField;
 Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);

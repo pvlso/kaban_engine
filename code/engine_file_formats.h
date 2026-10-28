@@ -164,6 +164,7 @@ enum kea_asset_type
     KEAType_SSWM,
     KEAType_NormalMap, // NOTE(pvlso): a sprite's or tile's normal map, its GUID is NormalMapGUID(the image's GUID)
     KEAType_Map,       // NOTE(pvlso): a map made in the map editor (engine_map_file.h)
+    KEAType_Entity,    // NOTE(pvlso): an entity made in the entity editor (engine_entity_file.h)
 
     KEAType_Count,
 };
@@ -323,6 +324,66 @@ struct kea_map
     */
 };
 
+// NOTE(pvlso): An entity definition (engine_entity_file.h), the project's names written out so a game needs no data
+// file: its clips that have a look (by name, the look as its stored asset's GUID), the blocks it uses and their
+// fields. Its asset GUID is the definition's own.
+#define KEA_ENTITY_NAME_LENGTH 32
+#define KEA_ENTITY_DISPLAY_LENGTH 64
+#define KEA_ENTITY_TEXT_LENGTH 128
+
+struct kea_entity_shape
+{
+    u32 Shape; // NOTE(pvlso): entity_collision_shape: none, circle, box
+    r32 Center[2]; // NOTE(pvlso): from the foot, pixels, y up
+    r32 Size[2];   // NOTE(pvlso): a box's width and height, a circle's radius in [0]
+};
+
+struct kea_entity_clip
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u64 LookGUID; // NOTE(pvlso): a bitmap's or sprite sheet's asset
+    r32 FramesPerSecond;
+    u32 Loop;
+};
+
+struct kea_entity_block
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u32 FirstField;
+    u32 FieldCount;
+};
+
+struct kea_entity_field
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u32 Kind; // NOTE(pvlso): entity_field_kind
+    s32 Int;
+    r32 Number;
+    b32 Bool;
+    u64 Entity;
+    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's word
+};
+
+struct kea_entity
+{
+    char Name[KEA_ENTITY_NAME_LENGTH]; // NOTE(pvlso): its file's, without .txt, so it's found without loading it
+    u16 ClipCount;
+    u16 BlockCount;
+    u16 FieldCount;
+    u16 Flags;
+    kea_entity_shape Footprint;
+    kea_entity_shape HitArea;
+
+    /* NOTE(pvlso): Data is:
+
+       char DisplayName[KEA_ENTITY_DISPLAY_LENGTH];
+       char Category[KEA_ENTITY_NAME_LENGTH];
+       kea_entity_clip Clips[ClipCount];
+       kea_entity_block Blocks[BlockCount];
+       kea_entity_field Fields[FieldCount];
+    */
+};
+
 struct kea_spritesheet
 {
     u32 SpriteCount;
@@ -371,6 +432,7 @@ struct kea_asset
         kea_text Text;
         kea_binary_file BinaryFile;
         kea_map Map;
+        kea_entity Entity;
     };
 };
 
