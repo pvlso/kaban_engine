@@ -100,74 +100,502 @@ BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
     return(Builder->CurrentAsset);
 }
 
+// NOTE(pvlso): The normal map of a sprite or tile (Image), from its sheet's _n file
 internal void
-AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, added_asset_additional_data *Data, u32 TileIndex,
-             loaded_bitmap *TileBitmap)
+AddNormalMapAsset(kea_builder *Builder, kesa_asset *Asset, kea_asset *Image, loaded_bitmap *Normals)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    KEAAsset->GUID = NormalMapGUID(Image->GUID);
+    KEAAsset->Type = KEAType_NormalMap;
+    KEAAsset->Bitmap.AlignPercentage[0] = Image->Bitmap.AlignPercentage[0];
+    KEAAsset->Bitmap.AlignPercentage[1] = Image->Bitmap.AlignPercentage[1];
+    BuilderAsset->Data.Sprite.SpriteBitmap = Normals;
+
+    Builder->CurrentAsset = 0;
+}
+
+// NOTE(pvlso): One cell of a curated tile set's sheets, cut into its own bitmap
+internal void
+AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, u64 GUID, loaded_bitmap *TileBitmap)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Tileset);
 
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
-    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
-
-    if(KESAAsset->Tileset.MergedTile)
-    {
-        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%s%d",
-                     Tileset->SourceFileName, Tileset->Tileset.MergeTileFileName, "Tile", TileIndex);
-    }
-    else
-    {
-        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%d",
-                     Tileset->SourceFileName, "Tile", TileIndex);
-    }
-    
-    KEAAsset->GUID = GUIDFromString(Builder->Buffer);
+    KEAAsset->GUID = GUID;
     KEAAsset->Type = KEAType_Tile;
     KEAAsset->Bitmap.AlignPercentage[0] = 0.5f;
     KEAAsset->Bitmap.AlignPercentage[1] = 0.5f;
-    
-    Data->Tileset.TileGUIDs[TileIndex] = KEAAsset->GUID;
     BuilderAsset->Data.Tile.TileBitmap = TileBitmap;
-    
+
     Builder->CurrentAsset = 0;
 }
 
+// NOTE(pvlso): The bitmap GUID of a sheet cell in a set: the same cell used twice in a set (a tile and another's frame)
+// is one bitmap, two sets never share one
+internal u64
+TileCellGUID(kea_builder *Builder, kesa_asset *Asset, tileset_file *File, tileset_file_cell Cell)
+{
+    FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s|%s|%d,%d",
+                 Asset->SourceFileName, File->Sheets[Cell.Sheet], Cell.X, Cell.Y);
+    u64 Result = GUIDFromString(Builder->Buffer);
+
+    return(Result);
+}
+
+// NOTE(pvlso): A curated tile set (engine_tileset_file.cpp): its text file read, every cell it uses cut from its sheets
+// into a tile bitmap, the tiles' records (place in the set's grid, flags, name, frames) as the set's data
 internal void
 AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
-    
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
-    kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
-    
-    KEAAsset->GUID = KESAAsset->GUID;
+    KEAAsset->GUID = Asset->GUID;
     KEAAsset->Type = KEAType_Tileset;
-    KEAAsset->Tileset.TileCount = KESAAsset->Tileset.TileCount;
-
-    BuilderAsset->Data.Tileset.TileGUIDs = PushArray(Builder->TempMem, KEAAsset->Tileset.TileCount, u64);
-    
-
     Builder->CurrentAsset = 0;
 
-    loaded_bitmap TilesetBitmap = LoadBMP(KESAAsset->SourceFileName, PlatformFileType_TSBMP, Builder->TempMem);
-    loaded_bitmap MergeTileBitmap = {};
-    if(KESAAsset->Tileset.MergedTile)
-        MergeTileBitmap = LoadBMP(KESAAsset->Tileset.MergeTileFileName, PlatformFileType_STBMP, Builder->TempMem);
-        
-    builder_loaded_tiles TileBitmaps = {};
-    TileBitmaps.Count = KESAAsset->Tileset.TileCount;
-    TileBitmaps.TileBitmaps = PushArray(Builder->TempMem, KESAAsset->Tileset.TileCount, loaded_bitmap);
-    for(u32 I = 0;
-        I < KESAAsset->Tileset.TileCount;
-        ++I)
+    tile_flag_names FlagNames = ReadTileFlagNames(Builder->TempMem);
+    tileset_file File = ReadTilesetFile(Asset->SourceFileName, &FlagNames, Builder->TempMem);
+
+    loaded_bitmap *Sheets = PushArray(Builder->TempMem, TILESET_MAX_SHEETS, loaded_bitmap);
+    for(u32 SheetIndex = 0; SheetIndex < File.SheetCount; ++SheetIndex)
     {
-        TileBitmaps.TileBitmaps[I] = LoadTileBitmap(&KESAAsset->Tileset, &TilesetBitmap, &MergeTileBitmap, I, Builder->TempMem);
-        AddTileAsset(Builder, Asset, &BuilderAsset->Data, I, TileBitmaps.TileBitmaps + I);
+        Sheets[SheetIndex] = LoadImageFile(File.Sheets[SheetIndex], PlatformFileType_DataRoot, Builder->TempMem);
+        if(!Sheets[SheetIndex].Memory)
+        {
+            LOG_ERROR("Tile set %s: can't read the sheet %s", Asset->SourceFileName, File.Sheets[SheetIndex]);
+        }
     }
+
+    u32 FrameCount = 0;
+    for(u32 TileIndex = 0; TileIndex < File.TileCount; ++TileIndex)
+    {
+        if(File.Tiles[TileIndex].FrameCount > 1) {FrameCount += File.Tiles[TileIndex].FrameCount;}
+    }
+
+    KEAAsset->Tileset.TileCount = File.TileCount;
+    KEAAsset->Tileset.GridWidth = (u16)File.GridWidth;
+    KEAAsset->Tileset.GridHeight = (u16)File.GridHeight;
+    KEAAsset->Tileset.FrameCount = FrameCount;
+    KEAAsset->Tileset.TileSize = File.TileSize;
+    builder_added_tileset *Data = &BuilderAsset->Data.Tileset;
+    Data->Tiles = PushArray(Builder->TempMem, Maximum(1, File.TileCount), kea_tile);
+    Data->FrameGUIDs = PushArray(Builder->TempMem, Maximum(1, FrameCount), u64);
+
+    u32 AddedCount = 0;
+    u64 *Added = PushArray(Builder->TempMem, File.TileCount*TILESET_MAX_TILE_FRAMES + 1, u64);
+    u32 FrameAt = 0;
+    for(u32 TileIndex = 0; TileIndex < File.TileCount; ++TileIndex)
+    {
+        tileset_file_tile *Source = File.Tiles + TileIndex;
+        kea_tile *Tile = Data->Tiles + TileIndex;
+        Tile->Flags = Source->Flags;
+        Tile->Kind = Source->Kind;
+        Tile->GridX = Source->GridX;
+        Tile->GridY = Source->GridY;
+        Tile->FramesPerSecond = Source->FramesPerSecond;
+        FormatString(KEA_TILE_NAME_LENGTH, Tile->Name, "%s", Source->Name);
+        if(Source->FrameCount > 1)
+        {
+            Tile->FirstFrame = FrameAt;
+            Tile->FrameCount = Source->FrameCount;
+        }
+
+        for(u32 FrameIndex = 0; FrameIndex < Source->FrameCount; ++FrameIndex)
+        {
+            tileset_file_cell Cell = Source->Frames[FrameIndex];
+            u64 GUID = TileCellGUID(Builder, Asset, &File, Cell);
+            if(FrameIndex == 0) {Tile->BitmapGUID = GUID;}
+            if(Source->FrameCount > 1) {Data->FrameGUIDs[FrameAt++] = GUID;}
+
+            b32 AlreadyAdded = false;
+            for(u32 Index = 0; Index < AddedCount; ++Index)
+            {
+                if(Added[Index] == GUID) {AlreadyAdded = true;}
+            }
+            if(!AlreadyAdded)
+            {
+                loaded_bitmap *Bitmap = PushStruct(Builder->TempMem, loaded_bitmap);
+                *Bitmap = CutTilesetCell(Sheets + Cell.Sheet, File.TileSize, Cell.X, Cell.Y, Builder->TempMem);
+                if(!Bitmap->Memory)
+                {
+                    LOG_ERROR("Tile set %s: cell %d,%d is outside %s, the tile is left empty", Asset->SourceFileName,
+                              Cell.X, Cell.Y, File.Sheets[Cell.Sheet]);
+                    Bitmap->Width = Bitmap->Height = File.TileSize;
+                    Bitmap->WidthOverHeight = 1.0f;
+                    Bitmap->AlignPercentage = V2(0.5f, 0.5f);
+                    Bitmap->Pitch = File.TileSize*BITMAP_BYTES_PER_PIXEL;
+                    Bitmap->Memory = PushSize(Builder->TempMem, Bitmap->Height*Bitmap->Pitch);
+                }
+                AddTileAsset(Builder, Asset, GUID, Bitmap);
+                Added[AddedCount++] = GUID;
+            }
+        }
+    }
+    LOG("Tile set %s: %u tiles from %u sheets, %u bitmaps%s", Asset->SourceFileName, File.TileCount, File.SheetCount,
+        AddedCount, File.ErrorCount ? " (with mistakes, see above)" : "");
 
     Builder->CurrentAsset = BuilderAsset;
 }
 
+// NOTE(pvlso): A field's value with its name and kind, a choice's word in Text
+internal kea_entity_field
+KEAEntityField(entity_field_def *FieldDef, entity_field_value *Value)
+{
+    kea_entity_field Result = {};
+    Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Name, Result.Name);
+    Result.Kind = FieldDef->Kind;
+    Result.Int = Value->Int;
+    Result.Number = Value->Number;
+    Result.Bool = Value->Bool;
+    Result.Entity = Value->Entity;
+    if(FieldDef->Kind == EntityField_Choice)
+    {
+        u32 Choice = ((u32)Value->Int < FieldDef->ChoiceCount) ? (u32)Value->Int : 0;
+        Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Choices[Choice], Result.Text);
+    }
+    else
+    {
+        Copy(KEA_ENTITY_TEXT_LENGTH, Value->Text, Result.Text);
+    }
+
+    return(Result);
+}
+
+internal b32
+IsKnownEntity(u32 KnownCount, u64 *Known, u64 GUID)
+{
+    b32 Result = false;
+    for(u32 Index = 0; !Result && (Index < KnownCount); ++Index)
+    {
+        Result = (Known[Index] == GUID);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): A map's entities: each override's block and field found in the project's data/txts/entity_blocks.txt
+// and its value read for the field's kind (the game needs no data file); one the project hasn't got is left out
 internal void
+AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info, builder_added_map *Data)
+{
+    entity_project *Project = ReadEntityProject(Builder->TempMem);
+    u32 KnownCount = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
+    char **FileNames = PushArray(Builder->TempMem, Maximum(1, KnownCount), char *);
+    u64 *Known = PushArray(Builder->TempMem, Maximum(1, KnownCount), u64);
+    Platform.ListFilesInDirectory(PlatformFileType_Entity, FileNames, Builder->TempMem);
+    for(u32 FileIndex = 0; FileIndex < KnownCount; ++FileIndex)
+    {
+        Known[FileIndex] = ReadEntityFile(FileNames[FileIndex], Project, Builder->TempMem).GUID;
+    }
+
+    Data->Entities = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount), kea_map_entity);
+    Data->Overrides = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount*MAP_FILE_MAX_ENTITY_OVERRIDES),
+                                kea_map_override);
+    u32 Unknown = 0;
+    for(u32 EntityIndex = 0; EntityIndex < Map->EntityCount; ++EntityIndex)
+    {
+        map_file_entity *Source = Map->Entities + EntityIndex;
+        kea_map_entity *Entity = Data->Entities + Info->EntityCount++;
+        Entity->GUID = Source->GUID;
+        Entity->Definition = Source->Definition;
+        Entity->P[0] = Source->P.x;
+        Entity->P[1] = Source->P.y;
+        Entity->Flags = Source->Flip ? KEAMapEntity_Flip : 0;
+        Entity->FirstOverride = Info->OverrideCount;
+        if(!IsKnownEntity(KnownCount, Known, Source->Definition)) {++Unknown;}
+
+        for(u32 OverrideIndex = 0; OverrideIndex < Source->OverrideCount; ++OverrideIndex)
+        {
+            map_file_override *Override = Source->Overrides + OverrideIndex;
+            s32 Block = FindEntityBlock(Project, Override->Block);
+            s32 Field = (Block >= 0) ? FindEntityBlockField(Project->Blocks + Block, Override->Field) : -1;
+            entity_field_def *FieldDef = (Field >= 0) ? Project->Blocks[Block].Fields + Field : 0;
+            entity_field_value Value = FieldDef ? FieldDef->Default : entity_field_value{};
+            if(FieldDef && ReadEntityFieldValue(FieldDef, Override->Value, &Value))
+            {
+                kea_map_override *Dest = Data->Overrides + Info->OverrideCount++;
+                Copy(KEA_ENTITY_NAME_LENGTH, Project->Blocks[Block].Name, Dest->Block);
+                Dest->Field = KEAEntityField(FieldDef, &Value);
+                ++Entity->OverrideCount;
+            }
+            else
+            {
+                LOG_WARNING("Map %s: an entity overrides %s.%s with %s, which isn't a field of data/txts/%s or a value "
+                            "of it, left out", MapName, Override->Block, Override->Field, Override->Value,
+                            ENTITY_PROJECT_FILE_NAME);
+            }
+        }
+    }
+    if(Unknown)
+    {
+        LOG_WARNING("Map %s: %u entities are of definitions that aren't in data/entities, a game won't find them",
+                    MapName, Unknown);
+    }
+}
+
+// NOTE(pvlso): A map (engine_map_file.h): its sets become their tile set assets' GUIDs (made of their file names, as
+// the stored tile sets' are), each cell's grid place in its set becomes the tile's index there
+internal void
+AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
+{
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    KEAAsset->GUID = Asset->GUID;
+    KEAAsset->Type = KEAType_Map;
+    Builder->CurrentAsset = 0;
+
+    map_file Map = ReadMapFile(Asset->SourceFileName, Builder->TempMem);
+    KEAAsset->Map.Width = Map.Width;
+    KEAAsset->Map.Height = Map.Height;
+    KEAAsset->Map.LayerCount = (u16)Map.LayerCount;
+    KEAAsset->Map.SetCount = (u16)Map.SetCount;
+    builder_added_map *Data = &BuilderAsset->Data.Map;
+    Data->SetGUIDs = PushArray(Builder->TempMem, Maximum(1, Map.SetCount), u64);
+    Data->Layers = PushArray(Builder->TempMem, Maximum(1, Map.LayerCount), kea_map_layer);
+    umm CellCount = (umm)Map.Width*Map.Height;
+    Data->Cells = PushArray(Builder->TempMem, Maximum(1, Map.LayerCount*CellCount), kea_map_cell);
+
+    // NOTE(pvlso): Each set's tiles by their place in its grid, in the order the set's builder numbers them
+    tile_flag_names FlagNames = ReadTileFlagNames(Builder->TempMem);
+    s32 *TileAt[MAP_FILE_MAX_SETS] = {};
+    u32 GridWidth[MAP_FILE_MAX_SETS] = {};
+    u32 GridHeight[MAP_FILE_MAX_SETS] = {};
+    for(u32 SetIndex = 0; SetIndex < Map.SetCount; ++SetIndex)
+    {
+        Data->SetGUIDs[SetIndex] = GUIDFromString(Map.Sets[SetIndex]);
+        b32 Stored = false;
+        for(u32 Index = 1; Index < Builder->KESAHeader->AssetCount; ++Index)
+        {
+            if(Builder->KESAAssets[Index].GUID == Data->SetGUIDs[SetIndex]) {Stored = true;}
+        }
+        if(!Stored)
+        {
+            LOG_WARNING("Map %s uses the tile set %s, which isn't in the stored assets: add it, or the game can't draw "
+                        "its tiles", Asset->SourceFileName, Map.Sets[SetIndex]);
+        }
+
+        tileset_file Set = ReadTilesetFile(Map.Sets[SetIndex], &FlagNames, Builder->TempMem);
+        GridWidth[SetIndex] = Set.GridWidth;
+        GridHeight[SetIndex] = Set.GridHeight;
+        TileAt[SetIndex] = PushArray(Builder->TempMem, Maximum(1, Set.GridWidth*Set.GridHeight), s32);
+        for(u32 Index = 0; Index < Set.GridWidth*Set.GridHeight; ++Index) {TileAt[SetIndex][Index] = -1;}
+        for(u32 TileIndex = 0; TileIndex < Set.TileCount; ++TileIndex)
+        {
+            TileAt[SetIndex][Set.Tiles[TileIndex].GridY*Set.GridWidth + Set.Tiles[TileIndex].GridX] = (s32)TileIndex;
+        }
+    }
+
+    u32 Missing = 0;
+    for(u32 LayerIndex = 0; LayerIndex < Map.LayerCount; ++LayerIndex)
+    {
+        map_file_layer *Source = Map.Layers + LayerIndex;
+        kea_map_layer *Layer = Data->Layers + LayerIndex;
+        FormatString(sizeof(Layer->Name), Layer->Name, "%s", Source->Name);
+        Layer->Z = Source->Z;
+        Layer->Flags = Source->Hidden ? KEAMapLayer_Hidden : 0;
+        kea_map_cell *Cells = Data->Cells + LayerIndex*CellCount;
+        for(umm Index = 0; Index < CellCount; ++Index)
+        {
+            map_cell Cell = Source->Cells[Index];
+            if(Cell.Set)
+            {
+                u32 Set = Cell.Set - 1;
+                s32 Tile = ((Cell.X < GridWidth[Set]) && (Cell.Y < GridHeight[Set])) ?
+                    TileAt[Set][Cell.Y*GridWidth[Set] + Cell.X] : -1;
+                if(Tile >= 0)
+                {
+                    Cells[Index].Set = Cell.Set;
+                    Cells[Index].Tile = (u16)Tile;
+                }
+                else
+                {
+                    ++Missing;
+                }
+            }
+        }
+    }
+    if(Missing)
+    {
+        LOG_WARNING("Map %s: %u cells point at places where their set has no tile any more, left empty",
+                    Asset->SourceFileName, Missing);
+    }
+    AddMapEntities(Builder, Asset->SourceFileName, &Map, &KEAAsset->Map, Data);
+    LOG("Map %s: %u x %u, %u layers, %u tile sets, %u entities", Asset->SourceFileName, Map.Width, Map.Height,
+        Map.LayerCount, Map.SetCount, KEAAsset->Map.EntityCount);
+
+    Builder->CurrentAsset = BuilderAsset;
+}
+
+inline kea_entity_shape
+KEAEntityShape(entity_shape *Shape)
+{
+    kea_entity_shape Result;
+    Result.Shape = Shape->Shape;
+    Result.Center[0] = Shape->Center.x;
+    Result.Center[1] = Shape->Center.y;
+    Result.Size[0] = Shape->Size.x;
+    Result.Size[1] = Shape->Size.y;
+
+    return(Result);
+}
+
+// NOTE(pvlso): One definition (engine_entity_file.h) with the project's names written out, its clips' looks as their
+// stored assets' GUIDs (made of their file names, as the stored bitmaps' and sprite sheets' are). Every definition's
+// GUID is in Known, to check its entity fields against.
+internal void
+AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, entity_project *Project, u32 KnownCount,
+               u64 *Known)
+{
+    static_assert(KEA_ENTITY_NAME_LENGTH == ENTITY_NAME_LENGTH, "entity names are copied as they are");
+    static_assert(KEA_ENTITY_DISPLAY_LENGTH == ENTITY_DISPLAY_LENGTH, "display names are copied as they are");
+    static_assert(KEA_ENTITY_TEXT_LENGTH == ENTITY_TEXT_LENGTH, "entity texts are copied as they are");
+
+    kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+    kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
+    KEAAsset->GUID = Entity->GUID;
+    KEAAsset->Type = KEAType_Entity;
+    Builder->CurrentAsset = 0;
+
+    kea_entity *Info = &KEAAsset->Entity;
+    char *Name = Asset->SourceFileName;
+    u32 NameLength = StringLength(Name) - 4; // NOTE(pvlso): without .txt
+    FormatString(KEA_ENTITY_NAME_LENGTH, Info->Name, "%.*s", (int)NameLength, Name);
+    Info->Footprint = KEAEntityShape(&Entity->Footprint);
+    Info->HitArea = KEAEntityShape(&Entity->HitArea);
+
+    builder_added_entity *Data = &BuilderAsset->Data.Entity;
+    Data->DisplayName = PushArray(Builder->TempMem, KEA_ENTITY_DISPLAY_LENGTH, char);
+    Copy(KEA_ENTITY_DISPLAY_LENGTH, Entity->DisplayName, Data->DisplayName);
+    Data->Category = PushArray(Builder->TempMem, KEA_ENTITY_NAME_LENGTH, char);
+    if(Entity->Category && (Entity->Category <= Project->CategoryCount))
+    {
+        Copy(KEA_ENTITY_NAME_LENGTH, Project->Categories[Entity->Category - 1], Data->Category);
+    }
+
+    // NOTE(pvlso): The clips with a look that's still stored
+    Data->Clips = PushArray(Builder->TempMem, ENTITY_MAX_CLIPS, kea_entity_clip);
+    for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
+    {
+        entity_clip *Clip = Entity->Clips + ClipIndex;
+        if(Clip->Kind == EntityLook_None)
+        {
+            continue;
+        }
+
+        u64 GUID = GUIDFromString(Clip->FileName);
+        kesa_type Wanted = (Clip->Kind == EntityLook_Bitmap) ? KESA_Bitmap : KESA_SpriteSheet;
+        b32 Stored = false;
+        for(u32 Index = 1; Index < Builder->KESAHeader->AssetCount; ++Index)
+        {
+            kesa_asset *StoredAsset = Builder->KESAAssets + Index;
+            if((StoredAsset->GUID == GUID) && (StoredAsset->Type == Wanted)) {Stored = true;}
+        }
+        if(Stored)
+        {
+            kea_entity_clip *Dest = Data->Clips + Info->ClipCount++;
+            Copy(KEA_ENTITY_NAME_LENGTH, Project->Clips[ClipIndex], Dest->Name);
+            Dest->LookGUID = GUID;
+            Dest->FramesPerSecond = Clip->FramesPerSecond;
+            Dest->Loop = Clip->Loop;
+        }
+        else
+        {
+            LOG_WARNING("Entity %s: the clip %s's look, %s, isn't a stored %s any more, the clip is left out", Name,
+                        Project->Clips[ClipIndex], Clip->FileName,
+                        (Clip->Kind == EntityLook_Bitmap) ? "bitmap" : "sprite sheet");
+        }
+    }
+
+    // NOTE(pvlso): The blocks it uses, their fields one after another
+    Data->Blocks = PushArray(Builder->TempMem, ENTITY_MAX_BLOCKS, kea_entity_block);
+    Data->Fields = PushArray(Builder->TempMem, ENTITY_MAX_BLOCKS*ENTITY_MAX_BLOCK_FIELDS, kea_entity_field);
+    for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
+    {
+        if(!(Entity->Blocks & (1u << BlockIndex)))
+        {
+            continue;
+        }
+
+        entity_block_def *BlockDef = Project->Blocks + BlockIndex;
+        kea_entity_block *Block = Data->Blocks + Info->BlockCount++;
+        Copy(KEA_ENTITY_NAME_LENGTH, BlockDef->Name, Block->Name);
+        Block->FirstField = Info->FieldCount;
+        Block->FieldCount = BlockDef->FieldCount;
+        for(u32 FieldIndex = 0; FieldIndex < BlockDef->FieldCount; ++FieldIndex)
+        {
+            entity_field_def *FieldDef = BlockDef->Fields + FieldIndex;
+            entity_field_value *Value = &Entity->Fields[BlockIndex][FieldIndex];
+            Data->Fields[Info->FieldCount++] = KEAEntityField(FieldDef, Value);
+            if((FieldDef->Kind == EntityField_Entity) && Value->Entity)
+            {
+                if(!IsKnownEntity(KnownCount, Known, Value->Entity))
+                {
+                    LOG_WARNING("Entity %s: %s.%s names a definition that isn't in data/entities", Name, BlockDef->Name,
+                                FieldDef->Name);
+                }
+            }
+        }
+    }
+    LOG("Entity %s: %u clips, %u blocks, %u fields", Name, Info->ClipCount, Info->BlockCount, Info->FieldCount);
+
+    Builder->CurrentAsset = BuilderAsset;
+}
+
+// NOTE(pvlso): Every definition in data/entities is packed, they aren't added as stored assets one by one. Each gets a
+// stored asset of its own here, only for its file name. One without a GUID, or with one another has, is left out.
+internal void
+AddEntityAssets(kea_builder *Builder)
+{
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
+    if(Count)
+    {
+        char **FileNames = PushArray(Builder->TempMem, Count, char *);
+        Platform.ListFilesInDirectory(PlatformFileType_Entity, FileNames, Builder->TempMem);
+        entity_project *Project = ReadEntityProject(Builder->TempMem);
+        entity_file *Entities = PushArray(Builder->TempMem, Count, entity_file);
+        u64 *Known = PushArray(Builder->TempMem, Count, u64);
+        for(u32 FileIndex = 0; FileIndex < Count; ++FileIndex)
+        {
+            Entities[FileIndex] = ReadEntityFile(FileNames[FileIndex], Project, Builder->TempMem);
+            Known[FileIndex] = Entities[FileIndex].GUID;
+        }
+        for(u32 FileIndex = 0; FileIndex < Count; ++FileIndex)
+        {
+            entity_file *Entity = Entities + FileIndex;
+            b32 Shared = false;
+            for(u32 Other = 0; Other < FileIndex; ++Other)
+            {
+                if(Known[Other] == Entity->GUID) {Shared = true;}
+            }
+            if(!Entity->Loaded)
+            {
+                continue;
+            }
+            else if(!Entity->GUID)
+            {
+                LOG_ERROR("Entity %s has no GUID (open and save it in the entity editor), it isn't packed",
+                          FileNames[FileIndex]);
+            }
+            else if(Shared)
+            {
+                LOG_ERROR("Entity %s has the GUID of another definition (a copied file?), it isn't packed: open it "
+                          "and Save as a new one", FileNames[FileIndex]);
+            }
+            else
+            {
+                kesa_asset *Asset = PushStruct(Builder->TempMem, kesa_asset);
+                FormatString(sizeof(Asset->SourceFileName), Asset->SourceFileName, "%s", FileNames[FileIndex]);
+                Asset->GUID = Entity->GUID;
+                AddEntityAsset(Builder, Asset, Entity, Project, Count, Known);
+            }
+        }
+    }
+    Builder->CurrentAsset = 0;
+}
+
+internal kea_asset *
 AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data,
                u32 SpriteIndex, loaded_bitmap *Sprite)
 {
@@ -186,8 +614,10 @@ AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additi
     
     Data->SpriteSheet.SpriteGUIDs[SpriteIndex] = KEAAsset->GUID;
     BuilderAsset->Data.Sprite.SpriteBitmap = Sprite;
-    
+
     Builder->CurrentAsset = 0;
+
+    return(KEAAsset);
 }
 
 internal void
@@ -207,11 +637,25 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     Builder->CurrentAsset = 0;
 
     builder_loaded_sprites Sprites = LoadSprites(KESAAsset, Builder->TempMem);
+
+    // NOTE(pvlso): The sheet's normal map, when the art has one
+    char NormalsFileName[256];
+    NormalMapFileName(KESAAsset->SourceFileName, NormalsFileName, sizeof(NormalsFileName));
+    builder_loaded_sprites Normals = {};
+    if(Platform.FileExists(NormalsFileName, PlatformFileType_SSBMP))
+    {
+        Normals = LoadSprites(KESAAsset, Builder->TempMem, NormalsFileName, true);
+    }
+
     for(u32 I = 0;
         I < KESAAsset->SpriteSheet.SpriteCount;
         ++I)
     {
-        AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
+        kea_asset *Sprite = AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
+        if(I < Normals.Count)
+        {
+            AddNormalMapAsset(Builder, Asset, Sprite, Normals.Sprites + I);
+        }
     }
 
     Builder->CurrentAsset = BuilderAsset;
@@ -451,11 +895,51 @@ BuilderWriteKEA(kea_builder *Builder)
             }
             else if(Dest->Type == KEAType_Tileset)
             {
-                u32 TilesSize = Source->Tileset.TileCount*sizeof(u64);
-                Platform.WriteDataToFile(&Out, At, TilesSize, BuilderAsset->Data.Tileset.TileGUIDs);
+                u32 TilesSize = Dest->Tileset.TileCount*sizeof(kea_tile);
+                Platform.WriteDataToFile(&Out, At, TilesSize, BuilderAsset->Data.Tileset.Tiles);
                 At += TilesSize;
-                
-                Dest->Tileset.TileCount = Source->Tileset.TileCount;
+
+                u32 FramesSize = Dest->Tileset.FrameCount*sizeof(u64);
+                Platform.WriteDataToFile(&Out, At, FramesSize, BuilderAsset->Data.Tileset.FrameGUIDs);
+                At += FramesSize;
+            }
+            else if(Dest->Type == KEAType_Map)
+            {
+                kea_map *Map = &Dest->Map;
+                umm CellCount = (umm)Map->LayerCount*Map->Width*Map->Height;
+                u32 SetsSize = Map->SetCount*sizeof(u64);
+                u32 EntitiesSize = Map->EntityCount*sizeof(kea_map_entity);
+                u32 OverridesSize = Map->OverrideCount*sizeof(kea_map_override);
+                u32 LayersSize = Map->LayerCount*sizeof(kea_map_layer);
+                u32 CellsSize = (u32)(CellCount*sizeof(kea_map_cell));
+                Platform.WriteDataToFile(&Out, At, SetsSize, BuilderAsset->Data.Map.SetGUIDs);
+                At += SetsSize;
+                Platform.WriteDataToFile(&Out, At, EntitiesSize, BuilderAsset->Data.Map.Entities);
+                At += EntitiesSize;
+                Platform.WriteDataToFile(&Out, At, OverridesSize, BuilderAsset->Data.Map.Overrides);
+                At += OverridesSize;
+                Platform.WriteDataToFile(&Out, At, LayersSize, BuilderAsset->Data.Map.Layers);
+                At += LayersSize;
+                Platform.WriteDataToFile(&Out, At, CellsSize, BuilderAsset->Data.Map.Cells);
+                At += CellsSize;
+            }
+            else if(Dest->Type == KEAType_Entity)
+            {
+                kea_entity *Entity = &Dest->Entity;
+                builder_added_entity *Data = &BuilderAsset->Data.Entity;
+                u32 ClipsSize = Entity->ClipCount*sizeof(kea_entity_clip);
+                u32 BlocksSize = Entity->BlockCount*sizeof(kea_entity_block);
+                u32 FieldsSize = Entity->FieldCount*sizeof(kea_entity_field);
+                Platform.WriteDataToFile(&Out, At, KEA_ENTITY_DISPLAY_LENGTH, Data->DisplayName);
+                At += KEA_ENTITY_DISPLAY_LENGTH;
+                Platform.WriteDataToFile(&Out, At, KEA_ENTITY_NAME_LENGTH, Data->Category);
+                At += KEA_ENTITY_NAME_LENGTH;
+                Platform.WriteDataToFile(&Out, At, ClipsSize, Data->Clips);
+                At += ClipsSize;
+                Platform.WriteDataToFile(&Out, At, BlocksSize, Data->Blocks);
+                At += BlocksSize;
+                Platform.WriteDataToFile(&Out, At, FieldsSize, Data->Fields);
+                At += FieldsSize;
             }
             else if(Dest->Type == KEAType_SpriteSheet)
             {
@@ -490,14 +974,14 @@ BuilderWriteKEA(kea_builder *Builder)
                 {
                     Bitmap = *BuilderAsset->Data.Tile.TileBitmap;
                 }
-                else if(Dest->Type == KEAType_Sprite)
+                else if((Dest->Type == KEAType_Sprite) || (Dest->Type == KEAType_NormalMap))
                 {
                     Bitmap = *BuilderAsset->Data.Sprite.SpriteBitmap;
                 }
                 else
                 {
                     Assert(Source->Type == AssetType_Bitmap);
-                    Bitmap = LoadBMP(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
+                    Bitmap = LoadImageFile(Source->SourceFileName, PlatformFileType_BMP, Builder->TempMem);
                 }
 
                 Dest->Bitmap.Dim[0] = Bitmap.Width;
@@ -600,6 +1084,10 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
                 AddFileAsset(Builder, StoredAsset);
                 break;
 
+            case KESA_Map:
+                AddMapAsset(Builder, StoredAsset);
+                break;
+
             case KESA_SSWM:
                 LOG_ERROR("%s: SSWM assets can't be built yet", StoredAsset->SourceFileName);
                 Assert(!"Not implemented");
@@ -611,6 +1099,7 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
         AddStoredAssetTags(Builder, StoredAsset);
         Builder->CurrentAsset = 0;
     }
+    AddEntityAssets(Builder);
 
     kea_builder_added_asset_list *CurrentAsset = Builder->BuilderAssets;
     u32 SortedCount = 0;

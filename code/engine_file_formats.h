@@ -162,6 +162,9 @@ enum kea_asset_type
     KEAType_TXT,
     KEAType_BIN,
     KEAType_SSWM,
+    KEAType_NormalMap, // NOTE(pvlso): a sprite's or tile's normal map, its GUID is NormalMapGUID(the image's GUID)
+    KEAType_Map,       // NOTE(pvlso): a map made in the map editor (engine_map_file.h)
+    KEAType_Entity,    // NOTE(pvlso): an entity made in the entity editor (engine_entity_file.h)
 
     KEAType_Count,
 };
@@ -255,14 +258,157 @@ struct kea_sound
     */
 };
 
+// NOTE(pvlso): A curated tile set (data/tilesets/<name>.txt): tiles gathered from any sheets, laid out in the set's
+// own grid, each with the project's flags (data/txts/tile_flags.txt), a name and maybe animation frames
+#define KEA_TILE_NAME_LENGTH 32
+
+struct kea_tile
+{
+    u64 BitmapGUID; // NOTE(pvlso): the tile, the first frame when it's animated
+    u32 Flags;
+    u32 Kind;       // NOTE(pvlso): 0 for none, else the n-th name in the project's tile_kinds.txt, from 1
+    u16 GridX;
+    u16 GridY;
+    u32 FirstFrame; // NOTE(pvlso): into the set's FrameGUIDs
+    u32 FrameCount; // NOTE(pvlso): 0 when it isn't animated
+    r32 FramesPerSecond;
+    char Name[KEA_TILE_NAME_LENGTH];
+};
+
 struct kea_tileset
 {
     u32 TileCount;
+    u16 GridWidth;
+    u16 GridHeight;
+    u32 FrameCount;
+    u32 TileSize;
 
-    /* NOTE(paul): Data is:
+    /* NOTE(pvlso): Data is:
 
        kea_tile Tiles[TileCount];
+       u64 FrameGUIDs[FrameCount];
     */
+};
+
+// NOTE(pvlso): A map: its tile sets by their asset GUID, its layers, and every layer's cells with the tile's index in
+// its set (the builder looked the grid places up)
+struct kea_map_layer
+{
+    char Name[32];
+    s32 Z;
+    u32 Flags; // NOTE(pvlso): KEAMapLayer_*
+};
+enum kea_map_layer_flag
+{
+    KEAMapLayer_Hidden = (1 << 0),
+};
+
+struct kea_map_cell
+{
+    u16 Set;  // NOTE(pvlso): 0 for an empty cell, else the map's set + 1
+    u16 Tile; // NOTE(pvlso): the tile's index in its set
+};
+
+// NOTE(pvlso): An entity placed on the map: its own GUID, its definition's, its foot in cells from the map's top left
+// (y down), and its overrides, Overrides[FirstOverride] on
+struct kea_map_entity
+{
+    u64 GUID;
+    u64 Definition;
+    r32 P[2];
+    u32 Flags; // NOTE(pvlso): KEAMapEntity_*
+    u32 FirstOverride;
+    u32 OverrideCount;
+};
+enum kea_map_entity_flag
+{
+    KEAMapEntity_Flip = (1 << 0),
+};
+
+struct kea_map
+{
+    u32 Width;
+    u32 Height;
+    u16 LayerCount;
+    u16 SetCount;
+    u32 EntityCount;
+    u32 OverrideCount;
+
+    /* NOTE(pvlso): Data is:
+
+       u64 SetGUIDs[SetCount];
+       kea_map_entity Entities[EntityCount];
+       kea_map_override Overrides[OverrideCount];
+       kea_map_layer Layers[LayerCount];
+       kea_map_cell Cells[LayerCount][Height][Width];
+    */
+};
+
+// NOTE(pvlso): An entity definition (engine_entity_file.h), the project's names written out so a game needs no data
+// file: its clips that have a look (by name, the look as its stored asset's GUID), the blocks it uses and their
+// fields. Its asset GUID is the definition's own.
+#define KEA_ENTITY_NAME_LENGTH 32
+#define KEA_ENTITY_DISPLAY_LENGTH 64
+#define KEA_ENTITY_TEXT_LENGTH 128
+
+struct kea_entity_shape
+{
+    u32 Shape; // NOTE(pvlso): entity_collision_shape: none, circle, box
+    r32 Center[2]; // NOTE(pvlso): from the foot, pixels, y up
+    r32 Size[2];   // NOTE(pvlso): a box's width and height, a circle's radius in [0]
+};
+
+struct kea_entity_clip
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u64 LookGUID; // NOTE(pvlso): a bitmap's or sprite sheet's asset
+    r32 FramesPerSecond;
+    u32 Loop;
+};
+
+struct kea_entity_block
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u32 FirstField;
+    u32 FieldCount;
+};
+
+struct kea_entity_field
+{
+    char Name[KEA_ENTITY_NAME_LENGTH];
+    u32 Kind; // NOTE(pvlso): entity_field_kind
+    s32 Int;
+    r32 Number;
+    b32 Bool;
+    u64 Entity;
+    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's word
+};
+
+struct kea_entity
+{
+    char Name[KEA_ENTITY_NAME_LENGTH]; // NOTE(pvlso): its file's, without .txt, so it's found without loading it
+    u16 ClipCount;
+    u16 BlockCount;
+    u16 FieldCount;
+    u16 Flags;
+    kea_entity_shape Footprint;
+    kea_entity_shape HitArea;
+
+    /* NOTE(pvlso): Data is:
+
+       char DisplayName[KEA_ENTITY_DISPLAY_LENGTH];
+       char Category[KEA_ENTITY_NAME_LENGTH];
+       kea_entity_clip Clips[ClipCount];
+       kea_entity_block Blocks[BlockCount];
+       kea_entity_field Fields[FieldCount];
+    */
+};
+
+// NOTE(pvlso): A map's entity starting with another value for one field of its definition's blocks
+struct kea_map_override
+{
+    char Block[KEA_ENTITY_NAME_LENGTH];
+    kea_entity_field Field;
 };
 
 struct kea_spritesheet
@@ -312,6 +458,8 @@ struct kea_asset
         kea_spritesheet SpriteSheet;
         kea_text Text;
         kea_binary_file BinaryFile;
+        kea_map Map;
+        kea_entity Entity;
     };
 };
 
@@ -390,6 +538,7 @@ enum kesa_type
     KESA_Text,
     KESA_File,
     KESA_SSWM,
+    KESA_Map,
 
     KESA_Count,
 };
@@ -407,19 +556,18 @@ struct kesa_spritesheet
     v2 SpriteAlignPercentage;
 };
 
+// NOTE(pvlso): The set itself is its text file (SourceFileName in data/tilesets), this only remembers what it held
+// when it was added or last saved. Kept at the size the old tile set had, so stored assets written before still read.
 struct kesa_tileset
 {
-    char MergeTileFileName[256];
-
-    b32 MergedTile;
     u32 TileCount;
+    u32 GridWidth;
+    u32 GridHeight;
+    u32 TileSize;
 
-    u32 TileWidth;
-    u32 TileHeight;
-
-    u8 TileOffsetsX[512];
-    u8 TileOffsetsY[512];
+    u8 Unused[1280];
 };
+static_assert(sizeof(kesa_tileset) == 1296, "kesa_asset's size would change, and older stored assets stop reading");
 
 struct kesa_sound
 {
@@ -442,6 +590,15 @@ struct kesa_sswm_file
     u32 FileSize;
 };
 
+// NOTE(pvlso): The map is its text file (SourceFileName in data/maps); this remembers what it held when it was added
+struct kesa_map
+{
+    u32 Width;
+    u32 Height;
+    u32 LayerCount;
+    u32 SetCount;
+};
+
 struct kesa_tag
 {
     u64 TagGUID;
@@ -450,8 +607,7 @@ struct kesa_tag
 
 struct kesa_asset
 {
-    // NOTE(pvlso): made of SourceFileName, for
-    // Tileset made of SourceFileName + MergeTileFileName
+    // NOTE(pvlso): made of SourceFileName
     u64 GUID; 
 
     kesa_type Type;
@@ -468,6 +624,7 @@ struct kesa_asset
         kesa_text Text;
         kesa_binary_file File;
         kesa_sswm_file SSWM;
+        kesa_map Map;
     };
 };
 

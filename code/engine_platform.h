@@ -37,8 +37,51 @@ extern "C" {
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): RENDERING
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): The pixel world's image (BeginPixelWorld), Width 0 when there is none this frame
+// NOTE(pvlso): The values a game shader gets as its uniforms Time and Params
+typedef struct render_shader_params
+{
+    r32 Time;
+    v4 Params[4];
+} render_shader_params;
+
+// NOTE(pvlso): A game's shader (SetPixelWorldShader): the body of a fragment shader, from a text asset, not
+// 0 terminated. Source is 0 for none.
+typedef struct render_shader
+{
+    char *Source;
+    u32 SourceLength;
+    render_shader_params Params;
+} render_shader;
+
+// NOTE(pvlso): A light in the pixel world (PushLight), in its image's pixels
+#define RENDER_MAX_LIGHTS 64
+typedef struct render_light
+{
+    v2 P;
+    r32 Height;
+    r32 Radius;
+    v3 Color;
+} render_light;
+
+typedef struct render_pixel_world
+{
+    u32 Width;
+    u32 Height;
+    u32 Scale; // NOTE(pvlso): screen pixels per image pixel
+    v2 Scroll; // NOTE(pvlso): image pixels (0 to 1) the image is moved left and down on screen (SetPixelWorldScroll)
+    render_shader Shader; // NOTE(pvlso): draws the image on screen, the plain copy without one
+
+    // NOTE(pvlso): SetPixelWorldLighting turns it on: the world is lit by Ambient plus its lights
+    b32 Lit;
+    v3 Ambient;
+    u32 LightCount;
+    render_light Lights[RENDER_MAX_LIGHTS];
+} render_pixel_world;
+
 typedef struct editor_render_commands
 {
+    // NOTE(pvlso): The resolution the commands are in (the monitor's), stretched over the window
     u32 Width;
     u32 Height;
     
@@ -57,6 +100,12 @@ typedef struct editor_render_commands
 
     struct render_entry_cliprect *FirstRect;
     struct render_entry_cliprect *LastRect;
+
+    // NOTE(pvlso): The pixels the commands really end up on this frame (the window's draw region)
+    u32 ScreenWidth;
+    u32 ScreenHeight;
+
+    render_pixel_world PixelWorld;
 } editor_render_commands;
 
 #define RenderCommandStruct(MaxPushBufferSize, PushBuffer, Width, Height) \
@@ -97,7 +146,7 @@ typedef struct engine_controller_input
     
     union
     {
-        engine_button_state Buttons[19];
+        engine_button_state Buttons[20];
         struct
         {
             engine_button_state MoveUp;
@@ -116,6 +165,7 @@ typedef struct engine_controller_input
             engine_button_state ForthMode;
             engine_button_state Fill;
             
+            engine_button_state LeftShoulder;
             engine_button_state RightShoulder;
 
             engine_button_state Back;
@@ -244,13 +294,14 @@ typedef enum platform_file_type
 
     PlatformFileType_BMP,
     PlatformFileType_SSBMP, // Sprite Sheet
-    PlatformFileType_TSBMP, // Tile Set
-    PlatformFileType_STBMP, // Solid Tile
+    PlatformFileType_TSBMP, // Tile Set: a curated set's text file in tilesets/
     PlatformFileType_WAV,
     PlatformFileType_TXT,
     PlatformFileType_JSON,
     PlatformFileType_TTF,
     PlatformFileType_BIN,
+    PlatformFileType_Map, // NOTE(pvlso): a map's text file in maps/ (engine_map_file.h)
+    PlatformFileType_Entity, // NOTE(pvlso): an entity's text file in entities/ (engine_entity_file.h)
 
     // NOTE(pvlso): Relative to the projects directory (next to data/), e.g. "game_name/game_name.cpp"
     PlatformFileType_Project,
@@ -312,6 +363,11 @@ typedef PLATFORM_FILE_ERROR(platform_file_error);
 #define PLATFORM_LIST_FILES_IN_DIRECTORY(name) u32 name(platform_file_type Type, char **Dest, memory_arena *Arena)
 typedef PLATFORM_LIST_FILES_IN_DIRECTORY(platform_list_files_in_directory);
 
+// NOTE(pvlso): Every image (.png, .bmp, not the _n normal maps) anywhere under the current data/, as paths for
+// PlatformFileType_DataRoot ("data/game_assets/.../MainLev.png"). Dest and Arena can be 0 to only count.
+#define PLATFORM_LIST_IMAGES_UNDER_DATA(name) u32 name(char **Dest, memory_arena *Arena)
+typedef PLATFORM_LIST_IMAGES_UNDER_DATA(platform_list_images_under_data);
+
 // NOTE(pvlso): Names of the directories in projects/ that hold a project, which is
 // game_name/game_name.cpp. Dest and Arena can be 0 to only count, otherwise at most DestCount are stored.
 #define PLATFORM_LIST_PROJECTS(name) u32 name(char **Dest, u32 DestCount, memory_arena *Arena)
@@ -341,6 +397,10 @@ typedef PLATFORM_READ_ENTIRE_FILE(platform_read_entire_file);
 
 #define PLATFORM_WRITE_ENTIRE_FILE(name) u32 name(char *FileName, platform_file_type Type, u8 *Data, u32 Size)
 typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
+
+// NOTE(pvlso): Whether the file can be opened, without logging when it can't
+#define PLATFORM_FILE_EXISTS(name) b32 name(char *FileName, platform_file_type Type)
+typedef PLATFORM_FILE_EXISTS(platform_file_exists);
 
 #define PlatformNoFileErrors(Handle) ((Handle)->NoErrors)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -454,6 +514,7 @@ typedef struct platform_api
     platform_file_error *FileError;
 
     platform_list_files_in_directory *ListFilesInDirectory;
+    platform_list_images_under_data *ListImagesUnderData;
     platform_list_projects *ListProjects;
     platform_set_data_project *SetDataProject;
     platform_make_directory *MakeDirectory;
@@ -463,6 +524,7 @@ typedef struct platform_api
     platform_free_file_memory *FreeFileMemory;
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;
+    platform_file_exists *FileExists;
 
     platform_seek_file *FileSeek;
     platform_file_tell *FileTell;

@@ -5,80 +5,107 @@
    $Creator: BabyKaban $
    $Notice:  $
    ======================================================================== */
-#if 0
+// NOTE(pvlso): PNGs are read with stb_image, its allocations go through the platform
 #define STBI_NO_STDIO
 #define STBI_ONLY_PNG
-#define STBI_ONLY_BMP
+#define STBI_MALLOC(Size) Platform.AllocateMemory(Size)
+#define STBI_REALLOC_SIZED(Memory, OldSize, NewSize) Platform.ReallocateMemory(Memory, (u32)(OldSize), (u32)(NewSize))
+#define STBI_FREE(Memory) Platform.DeallocateMemory(Memory)
+#define STBI_ASSERT(Expression) do {Assert(Expression);} while(0)
 #define STB_IMAGE_IMPLEMENTATION
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+#elif defined(_MSC_VER)
+#pragma warning(push, 0)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra"
+#endif
 #include "stb_image.h"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
-inline loaded_bitmap
-STBLoadImage(char *FileName, platform_file_type Type, memory_arena *Arena)
+// NOTE(pvlso): Premultiplied alpha, in the bitmaps' u32 layout (A R G B from the top byte)
+inline u32
+PremultipliedTexel(v4 Texel)
+{
+    Texel = SRGB255ToLinear1(Texel);
+    Texel.rgb *= Texel.a;
+    Texel = Linear1ToSRGB255(Texel);
+
+    u32 Result = (((u32)(Texel.a + 0.5f) << 24) |
+                  ((u32)(Texel.r + 0.5f) << 16) |
+                  ((u32)(Texel.g + 0.5f) << 8) |
+                  ((u32)(Texel.b + 0.5f) << 0));
+    return(Result);
+}
+
+// NOTE(pvlso): Bottom row first, like a BMP. The pixels go on Arena, or Platform.AllocateMemory without one. A normal
+// map's pixels are directions, not colours: they're kept as they are.
+internal loaded_bitmap
+ParsePNG(char *FileName, read_file_result File, memory_arena *Arena, b32 NormalMap)
 {
     loaded_bitmap Result = {};
 
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena, 0);    
-    if(ReadResult.Size != 0)
+    s32 Width = 0;
+    s32 Height = 0;
+    s32 Components = 0;
+    u8 *Pixels = stbi_load_from_memory((u8 *)File.Contents, (int)File.Size, &Width, &Height, &Components, 4);
+    if(Pixels)
     {
-        s32 Comp = 0;
-        stbi_set_flip_vertically_on_load(1);
-        u8 *Pixels = stbi_load_from_memory((u8 *)ReadResult.Contents, ReadResult.Size,
-                                           &Result.Width, &Result.Height,
-                                           &Comp, BITMAP_BYTES_PER_PIXEL);
-
-        Result.WidthOverHeight = (r32)Result.Width / (r32)Result.Height;
+        Result.Width = Width;
+        Result.Height = Height;
+        Result.WidthOverHeight = (r32)Width / (r32)Height;
         Result.AlignPercentage = V2(0.5f, 0.5f);
+        Result.Pitch = Width*BITMAP_BYTES_PER_PIXEL;
 
-//        Assert(Comp == BITMAP_BYTES_PER_PIXEL);
-        Result.Pitch = Result.Width*BITMAP_BYTES_PER_PIXEL;
+        umm Size = (umm)Result.Pitch*(umm)Height;
+        Result.Memory = (Arena ? PushSize(Arena, Size) : Platform.AllocateMemory(Size));
 
-        u32 *Dest = 0;
-        if(Arena)
-            Dest = PushArray(Arena, Result.Width*Result.Height, u32);
-        else
-            Dest = (u32 *)Platform.AllocateMemory(Result.Width*Result.Height*sizeof(u32));
-        Result.Memory = Dest;
-
-        u32 PixelCount = Result.Width*Result.Height;
-        for(u32 I = 0;
-            I < PixelCount;
-            ++I)
+        u32 *Dest = (u32 *)Result.Memory;
+        for(s32 Y = 0;
+            Y < Height;
+            ++Y)
         {
-            u8 r8 = Pixels[4*I + 0];
-            u8 b8 = Pixels[4*I + 1];
-            u8 g8 = Pixels[4*I + 2];
-            u8 a8 = Pixels[4*I + 3];
-
-            v4 Texel = V4(r8, b8, g8, a8);
-
-            Texel = SRGB255ToLinear1(Texel);
-            Texel.rgb *= Texel.a;
-            Texel = Linear1ToSRGB255(Texel);
-
-            u32 A = (u32)(Texel.a + 0.5f);
-            u32 R = (u32)(Texel.r + 0.5f);
-            u32 G = (u32)(Texel.g + 0.5f);
-            u32 B = (u32)(Texel.b + 0.5f);
-
-            Dest[I] = ((A << 24) | (R << 16) | (G << 8) | (B << 0));
+            u8 *Source = Pixels + 4*Width*(Height - 1 - Y);
+            for(s32 X = 0;
+                X < Width;
+                ++X)
+            {
+                if(NormalMap)
+                {
+                    *Dest++ = (((u32)Source[3] << 24) | ((u32)Source[0] << 16) | ((u32)Source[1] << 8) | (u32)Source[2]);
+                }
+                else
+                {
+                    *Dest++ = PremultipliedTexel(V4(Source[0], Source[1], Source[2], Source[3]));
+                }
+                Source += 4;
+            }
         }
-
-        if(!Arena)
-            Platform.FreeFileMemory(ReadResult.Contents);
 
         stbi_image_free(Pixels);
     }
-    
+    else
+    {
+        LOG_ERROR("%s isn't a PNG stb_image can read (%s)", FileName, stbi_failure_reason());
+    }
+
     return(Result);
 }
-#endif
 
 internal loaded_bitmap
-LoadBMP(char *FileName, platform_file_type Type, memory_arena *Arena)
+ParseBMP(read_file_result ReadResult)
 {
     loaded_bitmap Result = {};
-    
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena, 0);    
+
     if(ReadResult.Size != 0)
     {
         bitmap_header *Header = (bitmap_header *)ReadResult.Contents;
@@ -139,21 +166,40 @@ LoadBMP(char *FileName, platform_file_type Type, memory_arena *Arena)
                         (real32)((C & AlphaMask) >> AlphaShiftDown)
                     };
 
-                Texel = SRGB255ToLinear1(Texel);
-
-                Texel.rgb *= Texel.a;
-                Texel = Linear1ToSRGB255(Texel);
-                
-                *SourceDest++ = (((uint32)(Texel.a + 0.5f) << 24) |
-                                 ((uint32)(Texel.r + 0.5f) << 16) |
-                                 ((uint32)(Texel.g + 0.5f) << 8) |
-                                 ((uint32)(Texel.b + 0.5f) << 0));
+                *SourceDest++ = PremultipliedTexel(Texel);
             }
         }
     }
 
     Result.Pitch = Result.Width*BITMAP_BYTES_PER_PIXEL;
-    
+
+    return(Result);
+}
+
+// NOTE(pvlso): A .bmp or a .png of a data directory (told apart by their first bytes), bottom row first and
+// premultiplied. Without an Arena the memory comes from the platform, Platform.FreeFileMemory frees a PNG's
+// (a BMP's pixels are inside its file's memory). Normal maps are PNGs.
+internal loaded_bitmap
+LoadImageFile(char *FileName, platform_file_type Type, memory_arena *Arena, b32 NormalMap = false)
+{
+    loaded_bitmap Result = {};
+
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, Type, Arena, 0);
+    u8 *Bytes = (u8 *)ReadResult.Contents;
+    if((ReadResult.Size >= 8) &&
+       (Bytes[0] == 0x89) && (Bytes[1] == 'P') && (Bytes[2] == 'N') && (Bytes[3] == 'G'))
+    {
+        Result = ParsePNG(FileName, ReadResult, Arena, NormalMap);
+        if(!Arena)
+        {
+            Platform.FreeFileMemory(ReadResult.Contents);
+        }
+    }
+    else
+    {
+        Result = ParseBMP(ReadResult);
+    }
+
     return(Result);
 }
 
@@ -327,13 +373,46 @@ LoadWAV(char *FileName, u32 SectionFirstSampleIndex, u32 SectionSampleCount, voi
     return(Result);
 }
 
+// NOTE(pvlso): "oak.png" -> "oak_n.png", the normal map the art scripts write next to an image
+internal void
+NormalMapFileName(char *FileName, char *Dest, u32 DestCount)
+{
+    char *Dot = 0;
+    for(char *At = FileName; *At; ++At)
+    {
+        if(*At == '.') {Dot = At;}
+    }
+
+    if(Dot)
+    {
+        FormatString(DestCount, Dest, "%.*s_n%s", (int)(Dot - FileName), FileName, Dot);
+    }
+    else
+    {
+        FormatString(DestCount, Dest, "%s_n", FileName);
+    }
+}
+
+// NOTE(pvlso): The sheet's sprites, or with FileName (and NormalMap) the same cut of another image, its normal map
 internal builder_loaded_sprites
-LoadSprites(kesa_asset *KESAAsset, memory_arena *Arena)
+LoadSprites(kesa_asset *KESAAsset, memory_arena *Arena, char *FileName = 0, b32 NormalMap = false)
 {
     builder_loaded_sprites Result = {};
-    loaded_bitmap SpriteSheetBitmap = LoadBMP(KESAAsset->SourceFileName, PlatformFileType_SSBMP, Arena);
+    if(!FileName)
+    {
+        FileName = KESAAsset->SourceFileName;
+    }
+    loaded_bitmap SpriteSheetBitmap = LoadImageFile(FileName, PlatformFileType_SSBMP, Arena, NormalMap);
 
-    if(SpriteSheetBitmap.Memory)
+    kesa_spritesheet *Sheet = &KESAAsset->SpriteSheet;
+    if(SpriteSheetBitmap.Memory &&
+       ((SpriteSheetBitmap.Width < (s32)(Sheet->SpriteCount*Sheet->SpriteWidth)) ||
+        (SpriteSheetBitmap.Height < (s32)Sheet->SpriteHeight)))
+    {
+        LOG_ERROR("%s is smaller than %u sprites of %ux%u", FileName, Sheet->SpriteCount, Sheet->SpriteWidth,
+                  Sheet->SpriteHeight);
+    }
+    else if(SpriteSheetBitmap.Memory)
     {
         Result.Count = KESAAsset->SpriteSheet.SpriteCount;
         Result.Sprites = PushArray(Arena, KESAAsset->SpriteSheet.SpriteCount, loaded_bitmap);
@@ -378,87 +457,9 @@ internal loaded_text
 LoadText(char *FileName, memory_arena *Arena)
 {
     loaded_text Result = {};
-    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, 0);    
+    read_file_result ReadResult = Platform.ReadEntireFile(FileName, PlatformFileType_TXT, Arena, true);
     Result.String = (char *)ReadResult.Contents;
 
     return(Result);
 }
 
-internal loaded_bitmap
-LoadTileBitmap(kesa_tileset *Tileset, loaded_bitmap *TilesetBitmap,
-               loaded_bitmap *MergeTileBitmap, u32 TileIndex, memory_arena *TempArena)
-{
-    loaded_bitmap Tile = {};
-    Tile.Width = Tileset->TileWidth;
-    Tile.Height = Tileset->TileHeight;
-    Tile.WidthOverHeight = (r32)Tile.Width/(r32)Tile.Height;
-    Tile.AlignPercentage = V2(0.5f, 0.5f);
-    Tile.Pitch = Tile.Width*BITMAP_BYTES_PER_PIXEL;
-    u32 MemorySize = Tile.Height*Tile.Pitch;
-    Tile.Memory = PushSize(TempArena, MemorySize);
-
-    u8 *DestRow = (u8 *)Tile.Memory;
-
-    u32 MainSurfaceIndexX = Tileset->TileOffsetsX[TileIndex]*Tile.Width;
-    u32 MainSurfaceIndexY = Tileset->TileOffsetsY[TileIndex]*Tile.Height;
-    u8 *MainSurfaceSource = (u8 *)TilesetBitmap->Memory + (MainSurfaceIndexY*TilesetBitmap->Pitch +
-                                                                   MainSurfaceIndexX*BITMAP_BYTES_PER_PIXEL);
-    if(Tileset->MergedTile)
-    {
-        loaded_bitmap *MergeTile = MergeTileBitmap;
-        u8 *MergeSurfaceSource = (u8 *)MergeTile->Memory;
-        for(s32 Y = 0;
-            Y < Tile.Height;
-            ++Y)
-        {
-            u32 *MergeSource = (u32 *)MergeSurfaceSource;
-            u32 *MainSource = (u32 *)MainSurfaceSource;
-            u32 *Dest = (u32 *)DestRow;
-            for(s32 X = 0;
-                X < Tile.Width;
-                ++X)
-            {
-                if(*MainSource)
-                {
-                    *Dest = *MainSource;
-                }
-                else
-                {
-                    *Dest = *MergeSource;
-                }
-
-                ++MainSource;
-                ++MergeSource;
-                ++Dest;
-            }
-
-            MainSurfaceSource += TilesetBitmap->Pitch;
-            MergeSurfaceSource += MergeTile->Pitch;
-            DestRow += Tile.Pitch;
-        }
-    }
-    else
-    {
-        for(s32 Y = 0;
-            Y < Tile.Height;
-            ++Y)
-        {
-            u32 *MainSource = (u32 *)MainSurfaceSource;
-            u32 *Dest = (u32 *)DestRow;
-            for(s32 X = 0;
-                X < Tile.Width;
-                ++X)
-            {
-                *Dest = *MainSource;
-
-                ++MainSource;
-                ++Dest;
-            }
-
-            MainSurfaceSource += TilesetBitmap->Pitch;
-            DestRow += Tile.Pitch;
-        }
-    }
-
-    return(Tile);
-}

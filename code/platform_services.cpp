@@ -18,17 +18,19 @@ global_variable platform_code GlobalLoadedCodeSentinel;
 global_variable char *GlobalDataDirs[PlatformFileType_Count] =
 {
     "",             "keas",         "kesas",      "kewms",      "kets",
-    "bmps",         "spritesheets", "tilesets",   "solidtiles", "wavs",
-    "txts",         "jsons",        "ttfs",       "bins",       "",
-    ""
+    "bmps",         "spritesheets", "tilesets",   "wavs",
+    "txts",         "jsons",        "ttfs",       "bins",       "maps",
+    "entities",
+    "",             ""
 };
 
 global_variable char *GlobalFileExtentionsForType[PlatformFileType_Count] =
 {
     ".*",    ".kea",  ".kesa", ".kewm", ".ket",
-    ".bmp",  ".bmp",  ".bmp",  ".bmp",  ".wav",
-    ".txt",  ".json", ".ttf",  ".bin",  ".*",
-    ".*"
+    ".bmp",  ".bmp",  ".txt",  ".wav",
+    ".txt",  ".json", ".ttf",  ".bin",  ".txt",
+    ".txt",
+    ".*",    ".*"
 };
 
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -186,6 +188,25 @@ PlatformInitPaths(void)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): FILE API
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): The image directories (bmps, spritesheets) take .png files too. A name ending in _n is the normal map
+// of the image without it, it isn't listed on its own. Texts can be .glsl (game shaders). Tile sets are text files.
+internal b32
+IsFileOfType(char *FileName, platform_file_type Type)
+{
+    b32 Result = StringEndsWithNoCase(FileName, GlobalFileExtentionsForType[Type]);
+    if((Type >= PlatformFileType_BMP) && (Type <= PlatformFileType_SSBMP))
+    {
+        Result = ((Result || StringEndsWithNoCase(FileName, ".png")) &&
+                  !StringEndsWithNoCase(FileName, "_n.bmp") && !StringEndsWithNoCase(FileName, "_n.png"));
+    }
+    else if(Type == PlatformFileType_TXT)
+    {
+        Result = (Result || StringEndsWithNoCase(FileName, ".glsl"));
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Collects the names (not paths) of all files of a type in its data directory.
 // Dest and Arena can be 0 to only count.
 internal u32
@@ -201,8 +222,7 @@ PlatformCollectFilesOfType(platform_file_type Type, char **Dest, memory_arena *A
     {
         while(char *FileName = OSNextFileInDirectory(&Directory))
         {
-            if((Type != PlatformFileType_None) &&
-               !StringEndsWithNoCase(FileName, GlobalFileExtentionsForType[Type]))
+            if((Type != PlatformFileType_None) && !IsFileOfType(FileName, Type))
             {
                 continue;
             }
@@ -378,6 +398,56 @@ internal PLATFORM_LIST_FILES_IN_DIRECTORY(PlatformListFilesInDirectory)
 {
     u32 FileCount = PlatformCollectFilesOfType(Type, Dest, Arena, U32Maximum);
     return(FileCount);
+}
+
+// NOTE(pvlso): Path is where to look, Relative the same place as the caller names it. A directory listing gives files
+// and directories from one iteration, so each directory is opened twice: once for its images, once to go deeper.
+internal void
+PlatformCollectImagesUnder(char *Path, char *Relative, char **Dest, memory_arena *Arena, u32 *Count, u32 Depth)
+{
+    os_directory Directory;
+    if(OSOpenDirectory(&Directory, Path))
+    {
+        while(char *FileName = OSNextFileInDirectory(&Directory))
+        {
+            if((StringEndsWithNoCase(FileName, ".png") || StringEndsWithNoCase(FileName, ".bmp")) &&
+               !StringEndsWithNoCase(FileName, "_n.png") && !StringEndsWithNoCase(FileName, "_n.bmp"))
+            {
+                if(Dest && Arena)
+                {
+                    char Name[PLATFORM_PATH_COUNT];
+                    snprintf(Name, sizeof(Name), "%s/%s", Relative, FileName);
+                    Dest[*Count] = PushString(Arena, Name);
+                }
+                ++*Count;
+            }
+        }
+    }
+    OSCloseDirectory(&Directory);
+
+    if((Depth < 12) && OSOpenDirectory(&Directory, Path))
+    {
+        while(char *DirectoryName = OSNextDirectoryInDirectory(&Directory))
+        {
+            char SubPath[PLATFORM_PATH_COUNT];
+            char SubRelative[PLATFORM_PATH_COUNT];
+            snprintf(SubPath, sizeof(SubPath), "%s/%s", Path, DirectoryName);
+            snprintf(SubRelative, sizeof(SubRelative), "%s/%s", Relative, DirectoryName);
+            PlatformCollectImagesUnder(SubPath, SubRelative, Dest, Arena, Count, Depth + 1);
+        }
+    }
+    OSCloseDirectory(&Directory);
+}
+
+internal PLATFORM_LIST_IMAGES_UNDER_DATA(PlatformListImagesUnderData)
+{
+    u32 Count = 0;
+    char Path[PLATFORM_PATH_COUNT];
+    int Length = (int)StringLength(GlobalPaths.DATAPath);
+    snprintf(Path, sizeof(Path), "%.*s", Length ? (Length - 1) : 0, GlobalPaths.DATAPath);
+    PlatformCollectImagesUnder(Path, "data", Dest, Arena, &Count, 0);
+
+    return(Count);
 }
 
 internal PLATFORM_LIST_PROJECTS(PlatformListProjects)
@@ -623,6 +693,18 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
         }
     }
 
+    PlatformCloseOSFile(File);
+
+    return(Result);
+}
+
+internal PLATFORM_FILE_EXISTS(PlatformFileExists)
+{
+    char Path[PLATFORM_PATH_COUNT];
+    PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
+
+    b32 Result = false;
+    os_file *File = PlatformOpenOSFile(Path, PlatformFileOp_Read, &Result);
     PlatformCloseOSFile(File);
 
     return(Result);
@@ -990,6 +1072,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.WriteDataToFile = PlatformWriteDataToFile;
     Memory->PlatformAPI.FileError = PlatformFileError;
     Memory->PlatformAPI.ListFilesInDirectory = PlatformListFilesInDirectory;
+    Memory->PlatformAPI.ListImagesUnderData = PlatformListImagesUnderData;
     Memory->PlatformAPI.ListProjects = PlatformListProjects;
     Memory->PlatformAPI.SetDataProject = PlatformSetDataProject;
     Memory->PlatformAPI.MakeDirectory = PlatformMakeDirectory;
@@ -999,6 +1082,7 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
 
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;
+    Memory->PlatformAPI.FileExists = PlatformFileExists;
     Memory->PlatformAPI.FreeFileMemory = PlatformFreeFileMemory;
     Memory->PlatformAPI.FileSeek = PlatformSeekFile;
     Memory->PlatformAPI.FileTell = PlatformFileTell;

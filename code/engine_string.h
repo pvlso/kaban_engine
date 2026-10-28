@@ -421,6 +421,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgListInit
 
                 char *TempPrefix = "";
                 b32 IsFloat = false;
+                b32 IsString = false; // NOTE(pvlso): a string's precision is its most chars, already cut to in 's'
                 switch(*At)
                 {
                     case 'd':
@@ -511,6 +512,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgListInit
                     {
                         char *String = va_arg(ArgList, char *);
 
+                        IsString = true;
                         Temp = String;
                         if(PrecisionSpecified)
                         {
@@ -556,7 +558,7 @@ FormatStringList(umm DestSize, char *DestInit, char *Format, va_list ArgListInit
                 if(TempDest.At - Temp)
                 {
                     smm UsePrecision = Precision;
-                    if(IsFloat || !PrecisionSpecified)
+                    if(IsFloat || IsString || !PrecisionSpecified)
                     {
                         UsePrecision = (TempDest.At - Temp);
                     }

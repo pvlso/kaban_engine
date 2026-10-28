@@ -46,26 +46,41 @@ GetRenderEntityBasisP(camera_transform CameraTransform, object_transform *Object
 }
 
 #define PushRenderElement(Group, type, SortKey) (type *)PushRenderElement_(Group, sizeof(type), RenderGroupEntryType_##type, SortKey)
+// NOTE(pvlso): For entries with a transform: upright ones in the pixel world go to its upright pass
+#define PushTransformedElement(Group, ObjectTransform, type, SortKey) \
+    (type *)PushRenderElement_(Group, sizeof(type), RenderGroupEntryType_##type, SortKey, ObjectTransform)
 inline void *
-PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Type, r32 SortKey)
+PushRenderElement_(render_group *Group, uint32 Size, render_group_entry_type Type, r32 SortKey,
+                   object_transform *ObjectTransform = 0)
 {
     editor_render_commands *Commands = Group->Commands;
     
     void *Result = 0;
 
-    Size += sizeof(render_group_entry_header);
-    
+    // NOTE(pvlso): Entries hold v4s, which are __m128 and so 16 byte aligned: the compiler may store
+    // them with aligned SSE moves. Padding goes before the header so the entry right after it starts on
+    // a 16 byte address (the clip rects in the same buffer leave it anywhere).
+    umm DataAt = (umm)(Commands->PushBufferBase + Commands->PushBufferSize + sizeof(render_group_entry_header));
+    u32 Padding = (u32)(Align16(DataAt) - DataAt);
+    Size += Padding + sizeof(render_group_entry_header);
+
     if((Commands->PushBufferSize + Size) < (Commands->SortEntryAt - sizeof(sort_entry)))
     {
-        render_group_entry_header *Header = (render_group_entry_header *)(Commands->PushBufferBase + Commands->PushBufferSize);
+        u32 HeaderAt = Commands->PushBufferSize + Padding;
+        render_group_entry_header *Header = (render_group_entry_header *)(Commands->PushBufferBase + HeaderAt);
         Header->Type = (u16)Type;
-        Header->ClipRectIndex = SafeTruncateToU16(Group->CurrentClipRectIndex);
+        u32 ClipRectIndex = Group->CurrentClipRectIndex;
+        if(Group->InPixelWorld && ObjectTransform && ObjectTransform->Upright)
+        {
+            ClipRectIndex = Group->UprightClipRectIndex;
+        }
+        Header->ClipRectIndex = SafeTruncateToU16(ClipRectIndex);
         Result = (uint8 *)Header + sizeof(*Header);
 
         Commands->SortEntryAt -= sizeof(sort_entry);
         sort_entry *Entry = (sort_entry *)(Commands->PushBufferBase + Commands->SortEntryAt);
         Entry->SortKey = SortKey;
-        Entry->Index = Commands->PushBufferSize;
+        Entry->Index = HeaderAt;
 
         Commands->PushBufferSize += Size;
         ++Commands->PushBufferElementCount;
@@ -111,22 +126,53 @@ StoreColor(object_transform *Transform, v4 Source)
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            loaded_bitmap *Bitmap, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1),
-           f32 CAlign = 1.0f, f32 Angle = 0.0f)
+           f32 CAlign = 1.0f, f32 Angle = 0.0f, loaded_bitmap *NormalMap = 0)
 {
     used_bitmap_dim Dim = GetBitmapDim(Group, ObjectTransform, Bitmap, Height, Offset, CAlign);
     if(Dim.Basis.Valid)
     {
         v2 Size = Dim.Basis.Scale*Dim.Size;
         rectangle2 ScreenArea = RectMinDim(Dim.Basis.P, Size);
-        render_entry_bitmap *Entry = PushRenderElement(Group, render_entry_bitmap, Dim.Basis.SortKey);
+        render_entry_bitmap *Entry = PushTransformedElement(Group, ObjectTransform, render_entry_bitmap, Dim.Basis.SortKey);
         if(Entry)
         {
             Entry->Bitmap = Bitmap;
+            Entry->NormalMap = NormalMap;
             Entry->P = Dim.Basis.P;
             Entry->Color = Color;
             Entry->Size = Size;
 
+            // NOTE(pvlso): Every texel, edges included. Textures are nearest filtered and clamped, nothing bleeds in
+            // from the edges; the one texel in that came from Handmade Hero (bilinear filtering, bitmaps with an
+            // apron) only cut the edge pixels off and stretched the rest.
+            Entry->MinUV = V2(0.0f, 0.0f);
+            Entry->MaxUV = V2(1.0f, 1.0f);
+
             Entry->RotateAngle = Angle;
+        }
+    }
+}
+
+// NOTE(pvlso): The part of Bitmap between MinUV and MaxUV (0 to 1 from its bottom left: a sprite sheet's frame)
+// stretched over Rect; MinUV.x past MaxUV.x mirrors it left to right
+inline void
+PushBitmapPart(render_group *Group, object_transform *ObjectTransform, loaded_bitmap *Bitmap, rectangle2 Rect, r32 Z,
+               v2 MinUV, v2 MaxUV, v4 Color = V4(1, 1, 1, 1))
+{
+    entity_basis_p_result Basis = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, V3(Rect.Min, Z));
+    if(Basis.Valid)
+    {
+        render_entry_bitmap *Entry = PushTransformedElement(Group, ObjectTransform, render_entry_bitmap, Basis.SortKey);
+        if(Entry)
+        {
+            Entry->Bitmap = Bitmap;
+            Entry->NormalMap = 0;
+            Entry->P = Basis.P;
+            Entry->Color = Color;
+            Entry->Size = Basis.Scale*GetDim(Rect);
+            Entry->MinUV = MinUV;
+            Entry->MaxUV = MaxUV;
+            Entry->RotateAngle = 0.0f;
         }
     }
 }
@@ -134,7 +180,7 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f,
-           f32 Angle = 0.0f)
+           f32 Angle = 0.0f, bitmap_id NormalMap = {})
 {
     
     loaded_bitmap *Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
@@ -146,7 +192,17 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     
     if(Bitmap)
     {
-        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign, Angle);
+        // NOTE(pvlso): Drawn flat until its normal map is in
+        loaded_bitmap *NormalBitmap = 0;
+        if(NormalMap.Value)
+        {
+            NormalBitmap = GetBitmap(Group->Assets, NormalMap, Group->GenerationID);
+            if(!NormalBitmap)
+            {
+                LoadAsset(Group->Assets, AssetType_Bitmap, NormalMap.Value, false);
+            }
+        }
+        PushBitmap(Group, ObjectTransform, Bitmap, Height, Offset, Color, CAlign, Angle, NormalBitmap);
     }
     else
     {
@@ -166,7 +222,7 @@ PushLine(render_group *Group, object_transform *ObjectTransform, v3 Point0, v3 P
     if(Basis0.Valid && Basis1.Valid)
     {
         rectangle2 ScreenArea = RectMinMax(Basis0.P, Basis1.P);
-        render_entry_line *Line = PushRenderElement(Group, render_entry_line, Basis0.SortKey);
+        render_entry_line *Line = PushTransformedElement(Group, ObjectTransform, render_entry_line, Basis0.SortKey);
         if(Line)
         {
             Line->P0 = Basis0.P;
@@ -187,7 +243,7 @@ PushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B,
     entity_basis_p_result Basis2 = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, P2);
     if(Basis0.Valid && Basis1.Valid)
     {
-        render_entry_triangle *Triangle = PushRenderElement(Group, render_entry_triangle, Basis0.SortKey);
+        render_entry_triangle *Triangle = PushTransformedElement(Group, ObjectTransform, render_entry_triangle, Basis0.SortKey);
         if(Triangle)
         {
             Triangle->A = Basis0.P;
@@ -212,7 +268,7 @@ PushRect(render_group *Group, object_transform *ObjectTransform, v3 Offset, v2 D
     if(Basis.Valid)
     {
         v2 ScaledDim = Basis.Scale*Dim;
-        render_entry_rectangle *Rect = PushRenderElement(Group, render_entry_rectangle, Basis.SortKey);
+        render_entry_rectangle *Rect = PushTransformedElement(Group, ObjectTransform, render_entry_rectangle, Basis.SortKey);
         if(Rect)
         {
             Rect->P = Basis.P;
@@ -229,7 +285,7 @@ PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Cen
     if(Basis.Valid)
     {
         f32 ScaledRadius = Basis.Scale*Radius;
-        render_entry_circle_outline *Circle = PushRenderElement(Group, render_entry_circle_outline, Basis.SortKey);
+        render_entry_circle_outline *Circle = PushTransformedElement(Group, ObjectTransform, render_entry_circle_outline, Basis.SortKey);
         if(Circle)
         {
             Circle->Center = Basis.P;
@@ -302,7 +358,8 @@ PushClipRect(render_group *Group, u32 X, u32 Y, u32 W, u32 H, u32 RenderTargetIn
         Rect->Rect.Max.y = Y + H;
 
         Rect->RenderTargetIndex = RenderTargetIndex;
-        if(Group->Commands->MaxRenderTargetIndex < RenderTargetIndex)
+        if((RenderTargetIndex < RENDER_TARGET_PIXEL_WORLD_UPRIGHT) &&
+           (Group->Commands->MaxRenderTargetIndex < RenderTargetIndex))
         {
             Group->Commands->MaxRenderTargetIndex = RenderTargetIndex;
         }
@@ -519,6 +576,97 @@ BeginRenderGroup(engine_assets *Assets, editor_render_commands *Commands, u32 Ge
     Result.CurrentClipRectIndex = PushClipRect(&Result, 0, 0, PixelWidth, PixelHeight, 0);
     
     return(Result);
+}
+
+// NOTE(pvlso): Everything pushed until EndPixelWorld goes into a small image of whole pixels, at least MinWidth x
+// MinHeight, that is drawn under everything else scaled up by the biggest whole number that fits the screen. The
+// image grows past the minimum to fill screens of other shapes (always an even size, so its centre is on a pixel)
+// and has one more pixel on each side for SetPixelWorldScroll. The group's screen area becomes the image, so set
+// the camera (Orthographic) after this.
+internal pixel_world
+BeginPixelWorld(render_group *Group, s32 MinWidth, s32 MinHeight)
+{
+    pixel_world Result = {};
+
+    editor_render_commands *Commands = Group->Commands;
+    s32 ScreenWidth = Commands->ScreenWidth ? Commands->ScreenWidth : Commands->Width;
+    s32 ScreenHeight = Commands->ScreenHeight ? Commands->ScreenHeight : Commands->Height;
+    MinWidth = Maximum(MinWidth, 1);
+    MinHeight = Maximum(MinHeight, 1);
+
+    Result.Scale = Maximum(1, Minimum(ScreenWidth / MinWidth, ScreenHeight / MinHeight));
+    Result.Width = (ScreenWidth + Result.Scale - 1) / Result.Scale;
+    Result.Height = (ScreenHeight + Result.Scale - 1) / Result.Scale;
+    Result.Width += (Result.Width & 1) + 2;
+    Result.Height += (Result.Height & 1) + 2;
+    Result.RenderPixelsPerPixel = (r32)Result.Scale*((r32)Commands->Width / (r32)ScreenWidth);
+
+    Commands->PixelWorld.Width = Result.Width;
+    Commands->PixelWorld.Height = Result.Height;
+    Commands->PixelWorld.Scale = Result.Scale;
+
+    Assert(!Group->InPixelWorld);
+    Group->InPixelWorld = true;
+    Group->ScreenScreenArea = Group->ScreenArea;
+    Group->ScreenMonitorHalfDimInMeters = Group->MonitorHalfDimInMeters;
+    Group->ScreenCameraTransform = Group->CameraTransform;
+    Group->ScreenClipRectIndex = Group->CurrentClipRectIndex;
+
+    Group->ScreenArea = RectMinDim(V2(0, 0), V2((r32)Result.Width, (r32)Result.Height));
+    Group->CurrentClipRectIndex = PushClipRect(Group, 0, 0, Result.Width, Result.Height, RENDER_TARGET_PIXEL_WORLD);
+    Group->UprightClipRectIndex = PushClipRect(Group, 0, 0, Result.Width, Result.Height, RENDER_TARGET_PIXEL_WORLD_UPRIGHT);
+
+    return(Result);
+}
+
+// NOTE(pvlso): Smooth scrolling. Draw the world with the camera on whole image pixels (rounded down) and pass what
+// was rounded off, in image pixels: the image is moved by that many screen pixels, so the world scrolls a screen
+// pixel at a time while it stays on whole pixels inside the image.
+internal void
+SetPixelWorldScroll(render_group *Group, v2 Scroll)
+{
+    Group->Commands->PixelWorld.Scroll = V2(Clamp01(Scroll.x), Clamp01(Scroll.y));
+}
+
+// NOTE(pvlso): Lights the pixel world: Ambient everywhere, plus the lights pushed this frame
+internal void
+SetPixelWorldLighting(render_group *Group, v3 Ambient)
+{
+    render_pixel_world *PixelWorld = &Group->Commands->PixelWorld;
+    PixelWorld->Lit = true;
+    PixelWorld->Ambient = Ambient;
+}
+
+// NOTE(pvlso): P.z is the light's height over the ground. Only in the pixel world, up to RENDER_MAX_LIGHTS a frame
+// (more are dropped).
+internal void
+PushLight(render_group *Group, object_transform *ObjectTransform, v3 P, r32 Radius, v3 Color)
+{
+    render_pixel_world *PixelWorld = &Group->Commands->PixelWorld;
+    if(Group->InPixelWorld && (PixelWorld->LightCount < ArrayCount(PixelWorld->Lights)))
+    {
+        entity_basis_p_result Basis = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, V3(P.xy, 0.0f));
+        if(Basis.Valid)
+        {
+            render_light *Light = PixelWorld->Lights + PixelWorld->LightCount++;
+            Light->P = Basis.P;
+            Light->Height = Basis.Scale*P.z;
+            Light->Radius = Basis.Scale*Radius;
+            Light->Color = Color;
+        }
+    }
+}
+
+// NOTE(pvlso): Back to the screen, with the camera the group had before BeginPixelWorld
+internal void
+EndPixelWorld(render_group *Group)
+{
+    Assert(Group->InPixelWorld);
+    Group->InPixelWorld = false;
+    Group->ScreenArea = Group->ScreenScreenArea;
+    Group->MonitorHalfDimInMeters = Group->ScreenMonitorHalfDimInMeters;
+    Group->CameraTransform = Group->ScreenCameraTransform;
+    Group->CurrentClipRectIndex = Group->ScreenClipRectIndex;
 }
 
 inline void

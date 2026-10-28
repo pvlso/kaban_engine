@@ -26,7 +26,26 @@ struct builder_added_spritesheet
 
 struct builder_added_tileset
 {
-    u64 *TileGUIDs;
+    kea_tile *Tiles;
+    u64 *FrameGUIDs;
+};
+
+struct builder_added_map
+{
+    u64 *SetGUIDs;
+    kea_map_entity *Entities;
+    kea_map_override *Overrides;
+    kea_map_layer *Layers;
+    kea_map_cell *Cells;
+};
+
+struct builder_added_entity
+{
+    char *DisplayName;
+    char *Category;
+    kea_entity_clip *Clips;
+    kea_entity_block *Blocks;
+    kea_entity_field *Fields;
 };
 
 struct builder_added_tile
@@ -43,6 +62,8 @@ union added_asset_additional_data
 {
     builder_added_spritesheet SpriteSheet;
     builder_added_tileset Tileset;
+    builder_added_map Map;
+    builder_added_entity Entity;
     builder_added_tile Tile; 
     builder_added_sprite Sprite; 
 };

@@ -16,7 +16,26 @@ struct loaded_sound
 
 struct loaded_tileset
 {
-    bitmap_id *TileGUIDs;
+    kea_tile *Tiles;
+    bitmap_id *Frames; // NOTE(pvlso): the animated tiles' frames, after the tiles
+};
+
+struct loaded_map
+{
+    u64 *SetGUIDs;
+    kea_map_entity *Entities;
+    kea_map_override *Overrides;
+    kea_map_layer *Layers;
+    kea_map_cell *Cells;
+};
+
+struct loaded_entity
+{
+    char *DisplayName;
+    char *Category;
+    kea_entity_clip *Clips;
+    kea_entity_block *Blocks;
+    kea_entity_field *Fields;
 };
 
 struct loaded_spritesheet
@@ -51,6 +70,8 @@ enum asset_header_type
     AssetType_SpriteSheet,
     AssetType_Text,
     AssetType_BinaryFile,
+    AssetType_Map,
+    AssetType_Entity,
 };
 
 struct asset_memory_header
@@ -70,6 +91,8 @@ struct asset_memory_header
         loaded_spritesheet SpriteSheet;
         loaded_text Text;
         loaded_file BinaryFile;
+        loaded_map Map;
+        loaded_entity Entity;
     };
 };
 
@@ -146,6 +169,14 @@ struct engine_assets
 };
 
 // NOTE(pvlso): asset_tag_vector and asset_best_match_result live in engine_api.h, games use them too
+
+// NOTE(pvlso): A normal map (KEAType_NormalMap) is found from the GUID of its image, so the image needs no room for it
+inline u64
+NormalMapGUID(u64 ImageGUID)
+{
+    u64 Result = HashU64(ImageGUID ^ 0x6E6F726D616C6D70ULL);
+    return(Result);
+}
 
 inline void
 BeginAssetLock(engine_assets *Assets)

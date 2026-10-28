@@ -348,6 +348,18 @@ Copy(umm Size, void *SourceInit, void *DestInit)
     return(DestInit);
 }
 
+#define StructuresAreEqual(A, B) MemoryIsEqual(sizeof(A), &(A), &(B))
+inline b32
+MemoryIsEqual(umm Size, void *AInit, void *BInit)
+{
+    u8 *A = (u8 *)AInit;
+    u8 *B = (u8 *)BInit;
+    b32 Result = true;
+    while(Result && Size--) {Result = (*A++ == *B++);}
+
+    return(Result);
+}
+
 inline void
 StringCopy(char *Source, char *Dest)
 {

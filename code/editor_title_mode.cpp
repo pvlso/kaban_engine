@@ -274,14 +274,32 @@ UpdateAndRenderTitleScreen(editor_state *EditorState, transient_state *TranState
                 return(Result);
             }
 
+            if(!HasProject) nk_widget_disable_begin(Nk);
+            b32 MapPressed = nk_button_label(Nk, "Map Editor");
+            if(!HasProject) nk_widget_disable_end(Nk);
+            if(MapPressed && HasProject)
+            {
+                PlayMapEditor(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
+                Result = true;
+                return(Result);
+            }
+
+            if(!HasProject) nk_widget_disable_begin(Nk);
+            b32 EntityPressed = nk_button_label(Nk, "Entity Editor");
+            if(!HasProject) nk_widget_disable_end(Nk);
+            if(EntityPressed && HasProject)
+            {
+                PlayEntityEditor(EditorState, TranState, TitleScreen->ProjectNames[TitleScreen->SelectedProject]);
+                Result = true;
+                return(Result);
+            }
+
             if(nk_button_label(Nk, "Simulate"))
             {
 //                PlaySimulation(EditorState, TranState);
                 Result = true;
                 return(Result);
             }
-            if(nk_button_label(Nk, "PlaceHolder")) {}
-            if(nk_button_label(Nk, "PlaceHolder")) {}
             if(nk_button_label(Nk, "PlaceHolder")) {}
             if(nk_button_label(Nk, "PlaceHolder")) {}
             if(nk_button_label(Nk, "PlaceHolder")) {}

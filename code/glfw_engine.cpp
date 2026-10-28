@@ -244,7 +244,8 @@ GLFWNkKeyCallback(nk_platform *NkGLFW, int key, int action)
         case GLFW_KEY_V:         NkGLFW->key_events[NK_KEY_PASTE] = a; break;
         case GLFW_KEY_X:         NkGLFW->key_events[NK_KEY_CUT] = a; break;
         case GLFW_KEY_Z:         NkGLFW->key_events[NK_KEY_TEXT_UNDO] = a; break;
-        case GLFW_KEY_R:         NkGLFW->key_events[NK_KEY_TEXT_REDO] = a; break;
+        case GLFW_KEY_R:
+        case GLFW_KEY_Y:         NkGLFW->key_events[NK_KEY_TEXT_REDO] = a; break;
         case GLFW_KEY_B:         NkGLFW->key_events[NK_KEY_TEXT_LINE_START] = a; break;
         case GLFW_KEY_E:         NkGLFW->key_events[NK_KEY_TEXT_LINE_END] = a; break;
         case GLFW_KEY_A:         NkGLFW->key_events[NK_KEY_TEXT_SELECT_ALL] = a; break;
@@ -435,6 +436,9 @@ GLFWNkShutdown(nk_platform *NkGLFW)
     nk_font_atlas_clear(&NkGLFW->atlas);
     nk_free(&NkGLFW->ctx);
     glDeleteTextures(1, &dev->font_tex);
+    // NOTE(pvlso): The vertex array isn't deleted, it belongs to a context that may not be current
+    glDeleteBuffers(1, &dev->vbo);
+    glDeleteBuffers(1, &dev->ebo);
     nk_buffer_free(&dev->cmds);
     memset(NkGLFW, 0, sizeof(*NkGLFW));
 }
@@ -643,6 +647,7 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_A:      GLFWProcessKeyboardMessage(&KeyboardController->MoveLeft, IsDown); break;
             case GLFW_KEY_S:      GLFWProcessKeyboardMessage(&KeyboardController->MoveDown, IsDown); break;
             case GLFW_KEY_D:      GLFWProcessKeyboardMessage(&KeyboardController->MoveRight, IsDown); break;
+            case GLFW_KEY_Q:      GLFWProcessKeyboardMessage(&KeyboardController->LeftShoulder, IsDown); break;
             case GLFW_KEY_E:      GLFWProcessKeyboardMessage(&KeyboardController->RightShoulder, IsDown); break;
             case GLFW_KEY_F:      GLFWProcessKeyboardMessage(&KeyboardController->Fill, IsDown); break;
             case GLFW_KEY_U:      GLFWProcessKeyboardMessage(&KeyboardController->Undo, IsDown); break;
@@ -717,10 +722,15 @@ GLFWInitOpenGL(void)
     glewExperimental = GL_TRUE;
     if(glewInit() == GLEW_OK)
     {
+        // NOTE(pvlso): glewInit asks for the extension string the old way, which a core
+        // context answers with GL_INVALID_ENUM. Clear it so it isn't reported later.
+        while(glGetError() != GL_NO_ERROR) {}
+
         OpenGLSupportsSRGBFramebuffer = (GLEW_ARB_framebuffer_sRGB || GLEW_EXT_framebuffer_sRGB);
 
         opengl_info Info = OpenGLInit(true, OpenGLSupportsSRGBFramebuffer);
-        LOG("OpenGL %s, %s (%s)", Info.Version, Info.Renderer, Info.Vendor);
+        LOG("OpenGL %s, %s (%s), GLSL %s", Info.Version, Info.Renderer, Info.Vendor, Info.ShadingLanguageVersion);
+        OpenGLCreateObjects();
 
         glfwSwapInterval(1);
 
@@ -781,10 +791,11 @@ main(int ArgCount, char **Args)
     }
 #endif
 
-    // NOTE(pvlso): The renderer and nuklear backend use fixed function GL, so ask for
-    // a 3.0 context without a profile, which gives a compatibility context.
+    // NOTE(pvlso): The renderer and the nuklear backend draw with shaders (engine_opengl.cpp)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 #if EDITOR_INTERNAL
@@ -890,7 +901,7 @@ main(int ArgCount, char **Args)
     u32 PushBufferSize = Megabytes(64);
     void *PushBuffer = OSAllocateMemory(PushBufferSize);
 
-    u32 TextureOpCount = 1024;
+    u32 TextureOpCount = 2048;
     platform_texture_op_queue *TextureOpQueue = &EngineMemory.TextureOpQueue;
     TextureOpQueue->FirstFree = (texture_op *)OSAllocateMemory(sizeof(texture_op)*TextureOpCount);
 
@@ -956,6 +967,8 @@ main(int ArgCount, char **Args)
         glfwGetFramebufferSize(Window, &DimensionWidth, &DimensionHeight);
         rectangle2i DrawRegion = AspectRatioFit(RenderCommands.Width, RenderCommands.Height,
                                                 DimensionWidth, DimensionHeight);
+        RenderCommands.ScreenWidth = GetWidth(DrawRegion);
+        RenderCommands.ScreenHeight = GetHeight(DrawRegion);
 
 #if EDITOR_INTERNAL
         s32 DebugDimensionWidth = 0, DebugDimensionHeight = 0;

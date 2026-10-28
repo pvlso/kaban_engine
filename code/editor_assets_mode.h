@@ -7,6 +7,10 @@
    $Notice: $
    ======================================================================== */
 
+#include "engine_tileset_file.h"
+#include "engine_entity_file.h"
+#include "engine_map_file.h"
+
 enum assets_edit_mode
 {
     EditMode_None,
@@ -17,6 +21,8 @@ enum assets_edit_mode
     EditMode_Text,
     EditMode_File,
     EditMode_SSWM,
+    EditMode_Map,
+    EditMode_Cut, // NOTE(pvlso): not a stored asset's, the cut tool only writes image files
 };
 
 // NOTE(paul): Bitmaps
@@ -35,17 +41,113 @@ struct spritesheet_mode
     loaded_bitmap Sprites[256];
 };
 
-// NOTE(paul): Tilesets
+// NOTE(pvlso): Curated tile sets (engine_tileset_file.h): the set read from its text file and its tiles cut from
+// their sheets, shown in the set's own grid. Everything but the textures lives in Arena, cleared with the view.
 struct tileset_mode
 {
-    b32 CutTileset;
-    b32 CutWithMergeTileset;
-    b32 ShowTiles;
-    u32 CurrentTileIndex;
+    memory_arena Arena;
+    b32 Loaded;
+    tile_flag_names FlagNames;
+    tileset_file File;
+    s32 HoverTile; // NOTE(pvlso): -1 when the mouse isn't on a tile
 
-    loaded_bitmap MergeTileBitmap;
-    loaded_bitmap TilesetBitmap;
-    loaded_bitmap Tiles[512];
+    loaded_bitmap Tiles[TILESET_MAX_TILES]; // NOTE(pvlso): each tile's first frame
+
+    // NOTE(pvlso): Editing (editor_tileset_edit.cpp). The sheet open on the left, any image under data/; what's
+    // selected on it in cells; the set's grid on the right; the tile picked for the panel.
+    b32 Editing;
+    b32 Dirty;
+    u32 ImageCount;
+    char **Images;
+    u32 ImageIndex;
+    u32 LastImageIndex;
+    loaded_bitmap Sheets[TILESET_MAX_SHEETS]; // NOTE(pvlso): the set's sheets, in Arena, to cut tiles from
+    b32 TypingName; // NOTE(pvlso): the panel's name field has the keyboard, Ctrl+Z is the field's
+    char OpenSheet[TILESET_SHEET_PATH_LENGTH];
+    loaded_bitmap SheetBitmap;
+    r32 SheetZoom;  // NOTE(pvlso): screen pixels per cell
+    v2 SheetPan;    // NOTE(pvlso): the sheet's top left from the view's, in screen pixels, y down
+    r32 SetZoom;
+    v2 SetPan;
+    b32 Panning;
+    v2 PanFrom;
+    b32 Selecting;
+    b32 HasSelection;
+    s32 SelectionX0, SelectionY0, SelectionX1, SelectionY1;
+    s32 SelectedTile; // NOTE(pvlso): -1 for none
+
+    // NOTE(pvlso): The panel asks, the next update does it
+    b32 SaveRequested;
+    b32 FramesRequested;
+    b32 RemoveRequested;
+    b32 TileChanged; // NOTE(pvlso): the panel edited the selected tile's name, flags or speed
+    b32 CreateRequested;
+    char NewSetName[64];
+    s32 NewSetNameLength;
+
+    // NOTE(pvlso): Undo: every state after a change, History[HistoryAt] is the current one
+    u32 HistoryCount;
+    u32 HistoryAt;
+    struct tileset_snapshot *History[100];
+};
+
+// NOTE(pvlso): Maps (engine_map_file.h): the map read from its file, to show what it holds
+struct map_mode
+{
+    memory_arena Arena;
+    map_file File;
+};
+
+// NOTE(pvlso): The cut tool (editor_cut_edit.cpp): sprites cut out of any image under data/ into PNGs, a rectangle
+// into bmps/ (a static sprite) or frames side by side into spritesheets/ (an animation). It only cuts: the files are
+// added as stored assets through Edit Bitmaps and Edit SpriteSheets, where their alignment is set.
+#define CUT_MAX_FRAMES 64
+
+struct cut_rect
+{
+    s32 X, Y, W, H; // NOTE(pvlso): pixels, from the image's top left, y down
+};
+
+struct cut_mode
+{
+    memory_arena Arena;
+    b32 Started;
+    u32 ImageCount;
+    char **Images;
+    u32 ImageIndex;
+    u32 LastImageIndex;
+    loaded_bitmap Sheet; // NOTE(pvlso): to show it: premultiplied, bottom row first
+    u8 *Pixels;          // NOTE(pvlso): to cut it: as in the file, RGBA, top row first, alpha not premultiplied
+    s32 PixelsWidth, PixelsHeight;
+
+    r32 Zoom; // NOTE(pvlso): screen pixels per image pixel
+    v2 Pan;   // NOTE(pvlso): the image's top left from the view's, in screen pixels, y down
+    b32 Panning;
+    v2 PanFrom;
+    s32 Snap; // NOTE(pvlso): a drag selects whole cells of this many pixels, 0 for single pixels
+
+    b32 Selecting;
+    s32 AnchorX, AnchorY;
+    b32 HasSelection;
+    cut_rect Selection;
+    u32 FrameCount;
+    cut_rect Frames[CUT_MAX_FRAMES];
+    r32 FramesPerSecond; // NOTE(pvlso): only for the preview, a sprite sheet asset has its own
+    s32 SplitCount;      // NOTE(pvlso): how many frames Split cuts the selection into
+
+    char Name[64];
+    s32 NameLength;
+    b32 Overwrite;
+    b32 TypingName; // NOTE(pvlso): the name field has the keyboard, the arrows are the field's
+
+    // NOTE(pvlso): The panel asks, the next update does it
+    b32 TrimRequested;
+    b32 AddFrameRequested;
+    b32 SplitRequested;
+    b32 RemoveFrameRequested;
+    b32 ClearFramesRequested;
+    b32 SaveBitmapRequested;
+    b32 SaveSheetRequested;
 };
 
 // NOTE(paul): Sounds
@@ -90,7 +192,8 @@ static platform_file_type StoredToSourceTypeMap[KESA_Count] =
     PlatformFileType_None, PlatformFileType_BMP,
     PlatformFileType_SSBMP, PlatformFileType_TSBMP,
     PlatformFileType_WAV, PlatformFileType_TXT,
-    PlatformFileType_BIN, PlatformFileType_KEWM
+    PlatformFileType_BIN, PlatformFileType_KEWM,
+    PlatformFileType_Map
 };
 
 enum assets_mode_action
@@ -175,8 +278,6 @@ struct editor_mode_assets
     
     u32 SourceFileCounts[KESA_Count];
     char **SourceFiles[KESA_Count];
-    u32 SolidTileFileCount;
-    char **SolidTileFiles;
 
     b32 CreatingNewTag;
     b32 EditingTag;
@@ -194,6 +295,8 @@ struct editor_mode_assets
         text_mode TextMode;
         binary_file_mode BinaryFileMode;
         sswm_mode SSWMMode;
+        map_mode MapMode;
+        cut_mode CutMode;
     };
 };
 
@@ -238,6 +341,7 @@ AssetsEditModeFromStoredType(u32 StoredType)
         case KESA_Text:        {Result = EditMode_Text;}        break;
         case KESA_File:        {Result = EditMode_File;}        break;
         case KESA_SSWM:        {Result = EditMode_SSWM;}        break;
+        case KESA_Map:         {Result = EditMode_Map;}         break;
         InvalidDefaultCase;
     }
 
@@ -258,6 +362,8 @@ KESAFromEditMode(u32 EditMode)
         case EditMode_Text:        {Result = KESA_Text;}        break;
         case EditMode_File:        {Result = KESA_File;}        break;
         case EditMode_SSWM:        {Result = KESA_SSWM;}        break;
+        case EditMode_Map:         {Result = KESA_Map;}         break;
+        case EditMode_Cut:         {}                           break;
         InvalidDefaultCase;
     }
 

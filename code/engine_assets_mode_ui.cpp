@@ -267,16 +267,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                 case KESA_Tileset:
                 {
                     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-                    kesa_tileset *StoredTileset = &StoredAsset->Tileset;
+                    tileset_file *File = &TilesetMode->File;
 
                     nk_layout_row_dynamic(Nk, 30, 1);
                     struct nk_rect Rect = nk_widget_bounds(Nk);
                     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     nk_labelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredAsset->SourceFileName);
 
-                    u32 TileIndex = (FloorReal32ToInt32(AssetsMode->Time) %
-                                     StoredTileset->TileCount);
-                    loaded_bitmap *TileBitmap = TilesetMode->Tiles + TileIndex;
+                    // NOTE(pvlso): Its tiles one after another, a second each
+                    loaded_bitmap *TileBitmap = 0;
+                    if(TilesetMode->Loaded && File->TileCount)
+                    {
+                        TileBitmap = TilesetMode->Tiles + (FloorReal32ToInt32(AssetsMode->Time) % File->TileCount);
+                    }
                     nk_layout_row_static(Nk, 530, 530, 1);
                     Rect = nk_widget_bounds(Nk);
                     nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
@@ -284,12 +287,12 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     if(nk_group_begin(Nk, "Image Stats", NK_WINDOW_NO_SCROLLBAR))
                     {
                         nk_layout_row_static(Nk, 520, 520, 1);
-                        if(TileBitmap->TextureHandle)
+                        if(TileBitmap && TileBitmap->TextureHandle)
                         {
                             struct nk_image Img = nk_image_ptr(TileBitmap->TextureHandle);
                             nk_image(Nk, Img);
                         }
-                        
+
                         nk_group_end(Nk);
                     }
 
@@ -298,24 +301,16 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                         nk_layout_space_push(Nk, nk_rect(528, -528, 530, 374));
                         if(nk_group_begin(Nk, "Tileset Stats", NK_WINDOW_NO_SCROLLBAR))
                         {
-                            nk_layout_row_dynamic(Nk, 30, 2);
-                            Rect = nk_widget_bounds(Nk);
-                            nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Width: %d pixels", StoredTileset->TileWidth);
-
-                            Rect = nk_widget_bounds(Nk);
-                            nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Height: %d pixels", StoredTileset->TileHeight);
-
                             nk_layout_row_dynamic(Nk, 30, 1);
                             Rect = nk_widget_bounds(Nk);
                             nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Count: %d", StoredTileset->TileCount);
+                            nk_labelf(Nk, NK_TEXT_CENTERED, "Tiles: %d, from %d sheets", File->TileCount, File->SheetCount);
 
                             Rect = nk_widget_bounds(Nk);
                             nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
-                            nk_labelf(Nk, NK_TEXT_CENTERED, "Merge Tile Source: %s", StoredTileset->MergeTileFileName);
-                            
+                            nk_labelf(Nk, NK_TEXT_CENTERED, "Grid: %d x %d, tiles of %d pixels", File->GridWidth,
+                                      File->GridHeight, File->TileSize);
+
                             nk_group_end(Nk);
                         }
                     }
@@ -360,6 +355,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     Rect = nk_widget_bounds(Nk);
                     nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
                     nk_labelf(Nk, NK_TEXT_CENTERED, "Channel Count: %d", SoundMode->Sound.ChannelCount);
+                } break;
+
+                case KESA_Map:
+                {
+                    map_file *File = &AssetsMode->MapMode.File;
+                    nk_layout_row_dynamic(Nk, 30, 1);
+                    struct nk_rect Rect = nk_widget_bounds(Nk);
+                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
+                    nk_labelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredAsset->SourceFileName);
+                    Rect = nk_widget_bounds(Nk);
+                    nk_fill_rect(&Nk->current->buffer, Rect, 4.0f, ColorTable[2]);
+                    nk_labelf(Nk, NK_TEXT_CENTERED, "%d x %d cells, %d layers, %d tile sets", File->Width, File->Height,
+                              File->LayerCount, File->SetCount);
                 } break;
 
                 case KESA_File:
@@ -662,6 +670,10 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
             Text = "Pick SSWM Source \\|/";
             break;
 
+        case EditMode_Map:
+            Text = "Pick Map Source \\|/";
+            break;
+
         InvalidDefaultCase;
     }
 
@@ -679,17 +691,6 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         nk_label(Nk, Text, NK_TEXT_CENTERED);
 
         SearchBox(AssetsMode, Nk, FileStrings, FileCount, &AssetsMode->FileIndex);
-
-        if(AssetsMode->EditMode == EditMode_Tileset)
-        {
-            nk_layout_row_static(Nk, 30, 440, 1);
-            struct nk_rect Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_label(Nk, "Choose Merge Tile", NK_TEXT_CENTERED);
-
-            SearchBox(AssetsMode, Nk, AssetsMode->SolidTileFiles, AssetsMode->SolidTileFileCount,
-                      &AssetsMode->SubFileIndex);
-        }
 
         nk_layout_row_static(Nk, 30, 440, 1);
         Rect = nk_widget_bounds(Nk);
@@ -1111,142 +1112,154 @@ DrawAssetsSpriteSheetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState,
     }
 }
 
+// NOTE(pvlso): The tile set editor's panel (editor_tileset_edit.cpp): a new set, the sheet to take tiles from, Save,
+// and the picked tile's name, flags, frames and speed. It only asks; the next update does it.
 internal void
 DrawAssetsTilesetEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                           kesa_asset *CurrentAsset)
 {
     tileset_mode *TilesetMode = &AssetsMode->TilesetMode;
-    kesa_tileset *StoredTileset = &CurrentAsset->Tileset;
-    loaded_bitmap *TilesetBitmap = &TilesetMode->TilesetBitmap;
+    tileset_file *File = &TilesetMode->File;
 
     DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
 
-    if(TilesetBitmap->Memory)
+    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+    nk_layout_space_push(Nk, {1460, -140, 450, 760});
+    struct nk_rect Rect = nk_widget_bounds(Nk);
+    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    TilesetMode->TypingName = false;
+    if(nk_group_begin(Nk, "Tileset Attributes", 0))
     {
-        nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
-        nk_layout_space_push(Nk, {1460, -140, 450, 420});
-        struct nk_rect Rect = nk_widget_bounds(Nk);
-        nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-        if(nk_group_begin(Nk, "Tileset Attributes", NK_WINDOW_NO_SCROLLBAR))
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "New tile set:", NK_TEXT_LEFT);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 80);
+        nk_layout_row_template_end(Nk);
+        nk_flags NewNameState = nk_edit_string(Nk, NK_EDIT_FIELD, TilesetMode->NewSetName, &TilesetMode->NewSetNameLength,
+                                               (int)sizeof(TilesetMode->NewSetName) - 1, nk_filter_default);
+        TilesetMode->NewSetName[TilesetMode->NewSetNameLength] = 0;
+        if(NewNameState & NK_EDIT_ACTIVE) {TilesetMode->TypingName = true;}
+        if(nk_button_label(Nk, "Create")) {TilesetMode->CreateRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_labelf(Nk, NK_TEXT_LEFT, "%s%s", CurrentAsset->SourceFileName, TilesetMode->Dirty ? "  (not saved)" : "");
+        if(!TilesetMode->Loaded)
         {
-            nk_layout_row_dynamic(Nk, 30, 1);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "%s attribs: ",
-                      AssetsMode->SourceFiles[KESA_Tileset][AssetsMode->FileIndex]);
-            nk_layout_row_dynamic(Nk, 30, 2);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "Width: %d pixels", TilesetBitmap->Width);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "Height: %d pixels", TilesetBitmap->Height);
-
-            nk_layout_row_dynamic(Nk, 30, 1);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_label(Nk, "Tileset: ", NK_TEXT_CENTERED);
-
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "%s", CurrentAsset->SourceFileName);
-
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Count: %d", StoredTileset->TileCount);
-
-            nk_layout_row_dynamic(Nk, 30, 2);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_label(Nk, "Tile Width: ", NK_TEXT_CENTERED);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_label(Nk, "Tile Height: ", NK_TEXT_CENTERED);
-
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredTileset->TileWidth);
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "%d pixels", StoredTileset->TileHeight);
-
-            nk_layout_row_dynamic(Nk, 30, 1);
-            nk_property_int(Nk, "Adjust Width: ", 0, (int *)&StoredTileset->TileWidth,
-                            TilesetBitmap->Width, 1, 0.1f);
-            nk_property_int(Nk, "Adjust Height: ", 0, (int *)&StoredTileset->TileHeight,
-                            TilesetBitmap->Height, 1, 0.1f);
-
-
-            nk_layout_row_dynamic(Nk, 30, 2);
-            if(nk_button_label(Nk, "Cut With Merge"))
-                TilesetMode->CutWithMergeTileset = true;
-
-            if(nk_button_label(Nk, "Cut"))
-                TilesetMode->CutTileset = true;
-
-            nk_layout_row_dynamic(Nk, 30, 1);
-            b32 IsMerged = StoredTileset->MergedTile;
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[1]);
-            nk_label(Nk, IsMerged ? "Tileset is Merged" : "Tileset is not Merged",
-                     NK_TEXT_CENTERED);
-
-            if(nk_button_label(Nk, TilesetMode->ShowTiles ? "Show Bitmap" : "Show Tiles"))
-                TilesetMode->ShowTiles = !TilesetMode->ShowTiles;
-
-            nk_group_end(Nk);
+            nk_label(Nk, "Can't read the file, see the log", NK_TEXT_LEFT);
         }
-        nk_layout_space_end(Nk);
-
-        nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
-        if(TilesetMode->ShowTiles)
+        else
         {
-            nk_layout_space_push(Nk, {480, -396, 40, 40});
-            if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_LEFT) &&
-               (TilesetMode->CurrentTileIndex != 0))
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d tiles, grid %d x %d, %d sheets", File->TileCount, File->GridWidth,
+                      File->GridHeight, File->SheetCount);
+            nk_layout_row_dynamic(Nk, 30, 1);
+            if(nk_button_label(Nk, TilesetMode->Dirty ? "Save *" : "Save")) {TilesetMode->SaveRequested = true;}
+
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "Sheet (any image under data/):", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(Nk, 30, 1);
+            SearchBox(AssetsMode, Nk, TilesetMode->Images, TilesetMode->ImageCount, &TilesetMode->ImageIndex);
+
+            nk_layout_row_dynamic(Nk, 18, 1);
+            nk_label(Nk, "Drag on the sheet to select, click the grid to place.", NK_TEXT_LEFT);
+            nk_label(Nk, "Right click: remove (grid), clear selection (sheet).", NK_TEXT_LEFT);
+            nk_label(Nk, "Click a tile to pick it, Shift+click to move it.", NK_TEXT_LEFT);
+            nk_label(Nk, "Middle drag pans, wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
+
+            nk_layout_row_dynamic(Nk, 24, 1);
+            nk_label(Nk, "", NK_TEXT_LEFT);
+            if((TilesetMode->SelectedTile >= 0) && ((u32)TilesetMode->SelectedTile < File->TileCount))
             {
-                TilesetMode->CurrentTileIndex -= 1;
+                tileset_file_tile *Tile = File->Tiles + TilesetMode->SelectedTile;
+                nk_labelf(Nk, NK_TEXT_LEFT, "Tile %d at %d,%d, from sheet %d cell %d,%d", TilesetMode->SelectedTile,
+                          Tile->GridX, Tile->GridY, Tile->Frames[0].Sheet, Tile->Frames[0].X, Tile->Frames[0].Y);
+
+                nk_layout_row_template_begin(Nk, 28);
+                nk_layout_row_template_push_static(Nk, 50);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_end(Nk);
+                nk_label(Nk, "Name", NK_TEXT_LEFT);
+                int NameLength = (int)StringLength(Tile->Name);
+                int OldLength = NameLength;
+                char OldName[KEA_TILE_NAME_LENGTH];
+                Copy(sizeof(OldName), Tile->Name, OldName);
+                nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, Tile->Name, &NameLength,
+                                                    KEA_TILE_NAME_LENGTH - 1, nk_filter_default);
+                Tile->Name[NameLength] = 0;
+                if(NameState & NK_EDIT_ACTIVE) {TilesetMode->TypingName = true;}
+                if((NameLength != OldLength) || !StringsAreEqual(OldName, Tile->Name)) {TilesetMode->TileChanged = true;}
+
+                // NOTE(pvlso): Its kind, one of tile_kinds.txt
+                nk_layout_row_template_begin(Nk, 28);
+                nk_layout_row_template_push_static(Nk, 50);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_end(Nk);
+                nk_label(Nk, "Kind", NK_TEXT_LEFT);
+                tile_flag_names *Names = &TilesetMode->FlagNames;
+                const char *KindPreview = (Tile->Kind && (Tile->Kind <= Names->KindCount)) ?
+                    Names->KindNames[Tile->Kind - 1] : "(none)";
+                if(nk_combo_begin_label(Nk, KindPreview, nk_vec2(nk_widget_width(Nk), 240)))
+                {
+                    nk_layout_row_dynamic(Nk, 20, 1);
+                    for(u32 KindIndex = 0; KindIndex <= Names->KindCount; ++KindIndex)
+                    {
+                        nk_bool Selected = (Tile->Kind == KindIndex);
+                        char *Label = KindIndex ? Names->KindNames[KindIndex - 1] : (char *)"(none)";
+                        if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Selected))
+                        {
+                            if(Tile->Kind != KindIndex) {Tile->Kind = KindIndex; TilesetMode->TileChanged = true;}
+                            nk_combo_close(Nk);
+                        }
+                    }
+                    nk_combo_end(Nk);
+                }
+                if(!Names->KindCount)
+                {
+                    nk_layout_row_dynamic(Nk, 24, 1);
+                    nk_label(Nk, "No kinds: data/txts/tile_kinds.txt", NK_TEXT_LEFT);
+                }
+
+                nk_layout_row_dynamic(Nk, 24, 2);
+                for(u32 FlagIndex = 0; FlagIndex < TilesetMode->FlagNames.Count; ++FlagIndex)
+                {
+                    nk_bool On = ((Tile->Flags & (1u << FlagIndex)) != 0);
+                    if(nk_checkbox_label(Nk, TilesetMode->FlagNames.Names[FlagIndex], &On))
+                    {
+                        Tile->Flags ^= (1u << FlagIndex);
+                        TilesetMode->TileChanged = true;
+                    }
+                }
+                if(!TilesetMode->FlagNames.Count)
+                {
+                    nk_layout_row_dynamic(Nk, 24, 1);
+                    nk_label(Nk, "No flags: data/txts/tile_flags.txt", NK_TEXT_LEFT);
+                }
+
+                nk_layout_row_dynamic(Nk, 24, 1);
+                if(Tile->FrameCount > 1)
+                {
+                    nk_labelf(Nk, NK_TEXT_LEFT, "Animated: %d frames", Tile->FrameCount);
+                    r32 OldSpeed = Tile->FramesPerSecond;
+                    nk_property_float(Nk, "#frames per second", 0.5f, &Tile->FramesPerSecond, 60.0f, 0.5f, 0.1f);
+                    if(Tile->FramesPerSecond != OldSpeed) {TilesetMode->TileChanged = true;}
+                }
+                else
+                {
+                    nk_label(Nk, "Not animated", NK_TEXT_LEFT);
+                }
+                nk_layout_row_dynamic(Nk, 30, 2);
+                if(nk_button_label(Nk, "Frames from selection")) {TilesetMode->FramesRequested = true;}
+                if(nk_button_label(Nk, "Remove tile")) {TilesetMode->RemoveRequested = true;}
             }
-
-            nk_layout_space_push(Nk, {525, -396, 860, 40});
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "Tile Index: %d",
-                      TilesetMode->CurrentTileIndex);
-
-            nk_layout_space_push(Nk, {1390, -396, 40, 40});
-            if(nk_button_symbol(Nk, NK_SYMBOL_TRIANGLE_RIGHT) &&
-               (TilesetMode->CurrentTileIndex < (StoredTileset->TileCount - 1)))
+            else
             {
-                TilesetMode->CurrentTileIndex += 1;
+                nk_label(Nk, "Click a tile in the grid to pick it", NK_TEXT_LEFT);
             }
         }
-        nk_layout_space_end(Nk);
 
-        if(TilesetMode->MergeTileBitmap.Memory)
-        {
-            nk_layout_space_begin(Nk, NK_STATIC, 40, 3);
-            nk_layout_space_push(Nk, {0, 20, 460, 30});
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            nk_labelf(Nk, NK_TEXT_CENTERED, "Merge Tile: %s",
-                      AssetsMode->SolidTileFiles[AssetsMode->SubFileIndex]);
-
-            nk_layout_space_push(Nk, {0, 55, 460, 460});
-            Rect = nk_widget_bounds(Nk);
-            nk_fill_rect(&Nk->current->buffer, Rect, 5.0f, ColorTable[14]);
-            nk_stroke_rect(&Nk->current->buffer, Rect, 5.0f, 3.0f, ColorTable[2]);
-
-            nk_layout_space_push(Nk, {5, 60, 450, 450});
-            if(TilesetMode->MergeTileBitmap.TextureHandle)
-            {
-                struct nk_image Img =
-                    nk_image_ptr(TilesetMode->MergeTileBitmap.TextureHandle);
-                nk_image(Nk, Img);
-            }
-            nk_layout_space_end(Nk);
-        }
+        nk_group_end(Nk);
     }
+    nk_layout_space_end(Nk);
 }
 
 internal void
@@ -1389,6 +1402,49 @@ DrawAssetsFileEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
     }
 }
 
+// NOTE(pvlso): A map from data/maps: what it holds, before it's added
+internal void
+DrawAssetsMapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk, kesa_asset *CurrentAsset)
+{
+    map_file *File = &AssetsMode->MapMode.File;
+    DrawStandardEditLayout(AssetsMode, UIState, Nk, CurrentAsset);
+
+    nk_layout_space_begin(Nk, NK_STATIC, 20, 1);
+    nk_layout_space_push(Nk, {1460, -140, 450, 520});
+    struct nk_rect Rect = nk_widget_bounds(Nk);
+    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(nk_group_begin(Nk, "Map Attributes", 0))
+    {
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_labelf(Nk, NK_TEXT_LEFT, "%s", CurrentAsset->SourceFileName);
+        if(!File->Loaded)
+        {
+            nk_label(Nk, "Can't read the file, see the log", NK_TEXT_LEFT);
+        }
+        else
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d x %d cells", File->Width, File->Height);
+            if(File->ErrorCount)
+            {
+                nk_labelf(Nk, NK_TEXT_LEFT, "%d mistakes in the file, see the log", File->ErrorCount);
+            }
+            nk_label(Nk, "Tile sets (each needs adding as a tile set too):", NK_TEXT_LEFT);
+            for(u32 SetIndex = 0; SetIndex < File->SetCount; ++SetIndex)
+            {
+                nk_labelf(Nk, NK_TEXT_LEFT, "  %d: %s", SetIndex + 1, File->Sets[SetIndex]);
+            }
+            nk_label(Nk, "Layers:", NK_TEXT_LEFT);
+            for(u32 LayerIndex = 0; LayerIndex < File->LayerCount; ++LayerIndex)
+            {
+                map_file_layer *Layer = File->Layers + LayerIndex;
+                nk_labelf(Nk, NK_TEXT_LEFT, "  Z %d  %s%s", Layer->Z, Layer->Name, Layer->Hidden ? "  (hidden)" : "");
+            }
+        }
+        nk_group_end(Nk);
+    }
+    nk_layout_space_end(Nk);
+}
+
 internal void
 DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_context *Nk,
                        kesa_asset *CurrentAsset)
@@ -1418,6 +1474,107 @@ DrawAssetsSSWMEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
             nk_labelf(Nk, NK_TEXT_CENTERED, "File Size: %d", StoredFile->FileSize);
         }
         
+        nk_group_end(Nk);
+    }
+}
+
+// NOTE(pvlso): The cut tool's panel (editor_cut_edit.cpp), on the left: it has no stored asset, so no tags
+internal void
+DrawAssetsCutEditMode(editor_mode_assets *AssetsMode, nk_context *Nk)
+{
+    cut_mode *CutMode = &AssetsMode->CutMode;
+
+    nk_layout_row_static(Nk, 760, 450, 1);
+    struct nk_rect Rect = nk_widget_bounds(Nk);
+    nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
+    if(nk_group_begin(Nk, "Cut Sprites", NK_WINDOW_TITLE))
+    {
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "Image (any PNG under data/):", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(Nk, 30, 1);
+        SearchBox(AssetsMode, Nk, CutMode->Images, CutMode->ImageCount, &CutMode->ImageIndex);
+        nk_layout_row_dynamic(Nk, 24, 1);
+        if(CutMode->Pixels)
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "%d x %d pixels", CutMode->PixelsWidth, CutMode->PixelsHeight);
+        }
+        else
+        {
+            nk_label(Nk, "No image open, see the log", NK_TEXT_LEFT);
+        }
+        nk_property_int(Nk, "#Snap to cells of (0 = pixels)", 0, &CutMode->Snap, 512, 1, 0.2f);
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        if(CutMode->HasSelection)
+        {
+            nk_label(Nk, "Selection (pixels from the top left):", NK_TEXT_LEFT);
+            nk_layout_row_dynamic(Nk, 26, 2);
+            nk_property_int(Nk, "#X", 0, &CutMode->Selection.X, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#Y", 0, &CutMode->Selection.Y, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#W", 1, &CutMode->Selection.W, 1 << 16, 1, 0.2f);
+            nk_property_int(Nk, "#H", 1, &CutMode->Selection.H, 1 << 16, 1, 0.2f);
+            nk_layout_row_dynamic(Nk, 30, 2);
+            if(nk_button_label(Nk, "Trim to the sprite")) {CutMode->TrimRequested = true;}
+            if(nk_button_label(Nk, "Clear selection")) {CutMode->HasSelection = false;}
+        }
+        else
+        {
+            nk_label(Nk, "Drag on the image to select a sprite", NK_TEXT_LEFT);
+        }
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        nk_label(Nk, "Name (the file's, .png is added):", NK_TEXT_LEFT);
+        nk_layout_row_template_begin(Nk, 28);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 110);
+        nk_layout_row_template_end(Nk);
+        nk_flags NameState = nk_edit_string(Nk, NK_EDIT_FIELD, CutMode->Name, &CutMode->NameLength,
+                                            (int)sizeof(CutMode->Name) - 1, nk_filter_default);
+        CutMode->Name[CutMode->NameLength] = 0;
+        CutMode->TypingName = ((NameState & NK_EDIT_ACTIVE) != 0);
+        nk_bool Overwrite = (CutMode->Overwrite != 0);
+        if(nk_checkbox_label(Nk, "Overwrite", &Overwrite)) {CutMode->Overwrite = Overwrite;}
+        nk_layout_row_dynamic(Nk, 30, 1);
+        if(nk_button_label(Nk, "Save the selection to bmps/")) {CutMode->SaveBitmapRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 24, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        if(CutMode->FrameCount)
+        {
+            nk_labelf(Nk, NK_TEXT_LEFT, "Animation: %u frames of %d x %d", CutMode->FrameCount, CutMode->Frames[0].W,
+                      CutMode->Frames[0].H);
+        }
+        else
+        {
+            nk_label(Nk, "Animation: no frames", NK_TEXT_LEFT);
+        }
+        nk_layout_row_dynamic(Nk, 30, 2);
+        nk_property_int(Nk, "#frames", 1, &CutMode->SplitCount, CUT_MAX_FRAMES, 1, 0.2f);
+        if(nk_button_label(Nk, "Split selection")) {CutMode->SplitRequested = true;}
+        nk_layout_row_dynamic(Nk, 30, 3);
+        if(nk_button_label(Nk, "Add frame")) {CutMode->AddFrameRequested = true;}
+        if(nk_button_label(Nk, "Remove last")) {CutMode->RemoveFrameRequested = true;}
+        if(nk_button_label(Nk, "Clear")) {CutMode->ClearFramesRequested = true;}
+        nk_layout_row_dynamic(Nk, 26, 1);
+        nk_property_float(Nk, "#preview frames per second", 0.5f, &CutMode->FramesPerSecond, 60.0f, 0.5f, 0.1f);
+        nk_layout_row_dynamic(Nk, 30, 1);
+        if(nk_button_label(Nk, "Save the frames to spritesheets/")) {CutMode->SaveSheetRequested = true;}
+
+        nk_layout_row_dynamic(Nk, 18, 1);
+        nk_label(Nk, "", NK_TEXT_LEFT);
+        nk_label(Nk, "Left drag selects, right click clears it.", NK_TEXT_LEFT);
+        nk_label(Nk, "Arrows move it a pixel (Shift: Snap, or 8).", NK_TEXT_LEFT);
+        nk_label(Nk, "Middle drag pans, wheel zooms.", NK_TEXT_LEFT);
+        nk_label(Nk, "Split: select the whole row of frames.", NK_TEXT_LEFT);
+        nk_label(Nk, "Add frame moves the selection on by its width.", NK_TEXT_LEFT);
+        nk_label(Nk, "Then add the files in Edit Bitmaps / Edit SpriteSheets.", NK_TEXT_LEFT);
+
+        nk_layout_row_dynamic(Nk, 40, 1);
+        if(nk_button_label(Nk, "Exit"))
+            AssetsMode->EditMode = EditMode_None;
+
         nk_group_end(Nk);
     }
 }
@@ -1463,8 +1620,12 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                 if(nk_button_label(Nk, "Edit SSWM"))
                     AssetsMode->EditMode = EditMode_SSWM;
 
-                if(nk_button_label(Nk, "placeholder")) {}
-                if(nk_button_label(Nk, "placeholder")) {}
+                if(nk_button_label(Nk, "Edit Maps"))
+                    AssetsMode->EditMode = EditMode_Map;
+
+                if(nk_button_label(Nk, "Cut Sprites"))
+                    AssetsMode->EditMode = EditMode_Cut;
+
                 if(nk_button_label(Nk, "placeholder")) {}
                 if(nk_button_label(Nk, "placeholder")) {}
             }
@@ -1538,6 +1699,14 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
         case EditMode_SSWM:
             DrawAssetsSSWMEditMode(AssetsMode, UIState, Nk, CurrentAsset);
+            break;
+
+        case EditMode_Map:
+            DrawAssetsMapEditMode(AssetsMode, UIState, Nk, CurrentAsset);
+            break;
+
+        case EditMode_Cut:
+            DrawAssetsCutEditMode(AssetsMode, Nk);
             break;
     }
 }
