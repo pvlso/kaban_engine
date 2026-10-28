@@ -87,6 +87,7 @@ struct map_info
     u32 Height;
     u32 LayerCount;
     u32 SetCount;
+    u32 EntityCount; // NOTE(pvlso): the entities placed on it, GetMapEntity
 };
 
 struct map_tile_cell
@@ -173,6 +174,25 @@ struct entity_field_info
     b32 Bool;
     u64 Entity;
     char Text[128];
+};
+
+// NOTE(pvlso): An entity placed on a map in the map editor: its own GUID (kept across the map's saves, for a save to
+// name it by), its definition, where its foot stands and whether it's mirrored. Its overrides start it with other
+// values than its definition's for a few fields (GetMapEntityField gives a field either way).
+struct map_entity_info
+{
+    u64 GUID;
+    u64 Definition;    // NOTE(pvlso): the definition's GUID
+    u32 Entity;        // NOTE(pvlso): the definition's asset index (FindEntityByGUID), 0 when it isn't in the KEA
+    v2 P;              // NOTE(pvlso): the foot, in cells from the map's top left, y down (like the rows)
+    b32 Flip;          // NOTE(pvlso): mirrored left to right
+    u32 OverrideCount;
+};
+
+struct map_entity_override
+{
+    char Block[32];
+    entity_field_info Field;
 };
 
 struct tile_info
@@ -313,6 +333,9 @@ struct engine_api
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
+    // NOTE(pvlso): All zero when there's no such entity or override
+    map_entity_info (*GetMapEntity)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex);
+    map_entity_override (*GetMapEntityOverride)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
@@ -492,6 +515,19 @@ GetMapTileset(engine_assets *Assets, u32 MapIndex, u32 SetIndex)
     return(Result);
 }
 
+inline map_entity_info
+GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
+{
+    map_entity_info Result = Engine.GetMapEntity(Assets, MapIndex, EntityIndex);
+    return(Result);
+}
+inline map_entity_override
+GetMapEntityOverride(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex)
+{
+    map_entity_override Result = Engine.GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
+    return(Result);
+}
+
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
 inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}
@@ -555,6 +591,33 @@ GetEntityFieldByName(engine_assets *Assets, u32 EntityIndex, char *BlockName, ch
             entity_field_info Field = GetEntityField(Assets, EntityIndex, (u32)Block, FieldIndex);
             if(StringsAreEqual(Field.Name, FieldName)) {Result = Field; WasFound = true;}
         }
+    }
+    if(Found) {*Found = WasFound;}
+
+    return(Result);
+}
+
+// NOTE(pvlso): A field of an entity placed on a map: its override when it has one, else its definition's value. Found
+// is false when neither has it.
+inline entity_field_info
+GetMapEntityField(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, char *BlockName, char *FieldName,
+                  b32 *Found = 0)
+{
+    entity_field_info Result = {};
+    b32 WasFound = false;
+    map_entity_info Entity = GetMapEntity(Assets, MapIndex, EntityIndex);
+    for(u32 OverrideIndex = 0; !WasFound && (OverrideIndex < Entity.OverrideCount); ++OverrideIndex)
+    {
+        map_entity_override Override = GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
+        if(StringsAreEqual(Override.Block, BlockName) && StringsAreEqual(Override.Field.Name, FieldName))
+        {
+            Result = Override.Field;
+            WasFound = true;
+        }
+    }
+    if(!WasFound && Entity.Entity)
+    {
+        Result = GetEntityFieldByName(Assets, Entity.Entity, BlockName, FieldName, &WasFound);
     }
     if(Found) {*Found = WasFound;}
 

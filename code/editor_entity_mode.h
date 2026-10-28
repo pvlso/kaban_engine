@@ -26,6 +26,14 @@ struct entity_look_choice
     u32 SpriteHeight;
 };
 
+// NOTE(pvlso): The definitions in data/entities and their GUIDs, to open one or to pick one for an entity field
+struct entity_file_list
+{
+    u32 Count;
+    char **Files;
+    u64 *GUIDs;
+};
+
 struct editor_mode_entity
 {
     char ProjectName[PROJECT_NAME_COUNT];
@@ -38,10 +46,7 @@ struct editor_mode_entity
     entity_look_choice *LookChoices;
     char **LookLabels;
 
-    // NOTE(pvlso): The definitions in data/entities and their GUIDs, to open one or to pick one for an entity field
-    u32 EntityFileCount;
-    char **EntityFiles;
-    u64 *EntityGUIDs;
+    entity_file_list Files;
     u32 EntityFileIndex;
 
     // NOTE(pvlso): The definition being made, and how it was when last checked, to tell when the panel changed it

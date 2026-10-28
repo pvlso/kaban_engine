@@ -7,8 +7,8 @@
    ======================================================================== */
 
 #include "engine_tileset_file.cpp"
-#include "engine_map_file.cpp"
 #include "engine_entity_file.cpp"
+#include "engine_map_file.cpp"
 #include "engine_kea_builder.cpp"
 #include "editor_tileset_edit.cpp"
 #include "editor_cut_edit.cpp"

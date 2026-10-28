@@ -23,6 +23,8 @@ struct loaded_tileset
 struct loaded_map
 {
     u64 *SetGUIDs;
+    kea_map_entity *Entities;
+    kea_map_override *Overrides;
     kea_map_layer *Layers;
     kea_map_cell *Cells;
 };

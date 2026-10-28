@@ -8,30 +8,31 @@
 
 // NOTE(pvlso): The entity editor: see editor_entity_mode.h
 
-// NOTE(pvlso): The definitions in data/entities, with their GUIDs (each file read once)
-internal void
-ListEntityFiles(editor_mode_entity *EntityMode)
+// NOTE(pvlso): The definitions in data/entities, with their GUIDs (each file read once), on Arena
+internal entity_file_list
+ListEntityFiles(entity_project *Project, memory_arena *Arena)
 {
-    EntityMode->EntityFileCount = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
-    EntityMode->EntityFiles = PushArray(EntityMode->Arena, Maximum(1, EntityMode->EntityFileCount), char *);
-    EntityMode->EntityGUIDs = PushArray(EntityMode->Arena, Maximum(1, EntityMode->EntityFileCount), u64);
-    Platform.ListFilesInDirectory(PlatformFileType_Entity, EntityMode->EntityFiles, EntityMode->Arena);
-    for(u32 Index = 0; Index < EntityMode->EntityFileCount; ++Index)
+    entity_file_list Result = {};
+    Result.Count = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
+    Result.Files = PushArray(Arena, Maximum(1, Result.Count), char *);
+    Result.GUIDs = PushArray(Arena, Maximum(1, Result.Count), u64);
+    Platform.ListFilesInDirectory(PlatformFileType_Entity, Result.Files, Arena);
+    for(u32 Index = 0; Index < Result.Count; ++Index)
     {
-        entity_file Entity = ReadEntityFile(EntityMode->EntityFiles[Index], EntityMode->Project, EntityMode->Arena);
-        EntityMode->EntityGUIDs[Index] = Entity.GUID;
+        Result.GUIDs[Index] = ReadEntityFile(Result.Files[Index], Project, Arena).GUID;
     }
-    EntityMode->EntityFileIndex = 0;
+
+    return(Result);
 }
 
 // NOTE(pvlso): The file name of the definition with that GUID, 0 when none has it
 internal char *
-EntityFileOfGUID(editor_mode_entity *EntityMode, u64 GUID)
+EntityFileOfGUID(entity_file_list *List, u64 GUID)
 {
     char *Result = 0;
-    for(u32 Index = 0; GUID && !Result && (Index < EntityMode->EntityFileCount); ++Index)
+    for(u32 Index = 0; GUID && !Result && (Index < List->Count); ++Index)
     {
-        if(EntityMode->EntityGUIDs[Index] == GUID) {Result = EntityMode->EntityFiles[Index];}
+        if(List->GUIDs[Index] == GUID) {Result = List->Files[Index];}
     }
 
     return(Result);
@@ -121,7 +122,7 @@ PlayEntityEditor(editor_state *EditorState, transient_state *TranState, char *Pr
     EntityMode->ShowHitArea = true;
     EntityMode->Project = ReadEntityProject(EntityMode->Arena);
     ListLookChoices(EditorState, EntityMode);
-    ListEntityFiles(EntityMode);
+    EntityMode->Files = ListEntityFiles(EntityMode->Project, EntityMode->Arena);
 
     EditorState->EntityMode = EntityMode;
 }
@@ -301,9 +302,11 @@ DrawEntityShapeEditor(nk_context *Nk, char *Label, entity_shape *Shape)
     }
 }
 
-internal void
-DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_field_def *Field, entity_field_value *Value)
+// NOTE(pvlso): A field's name and its value's widget; an entity field picks among Files. True while a text is typed in.
+internal b32
+DrawEntityFieldEditor(entity_file_list *Files, nk_context *Nk, entity_field_def *Field, entity_field_value *Value)
 {
+    b32 Typing = false;
     nk_layout_row_template_begin(Nk, 26);
     nk_layout_row_template_push_static(Nk, 120);
     nk_layout_row_template_push_dynamic(Nk);
@@ -330,8 +333,10 @@ DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_fie
         case EntityField_Text:
         {
             int Length = (int)StringLength(Value->Text);
-            nk_edit_string(Nk, NK_EDIT_FIELD, Value->Text, &Length, ENTITY_TEXT_LENGTH - 1, nk_filter_default);
+            nk_flags State = nk_edit_string(Nk, NK_EDIT_FIELD, Value->Text, &Length, ENTITY_TEXT_LENGTH - 1,
+                                            nk_filter_default);
             Value->Text[Length] = 0;
+            Typing = ((State & NK_EDIT_ACTIVE) != 0);
         } break;
 
         case EntityField_Choice:
@@ -355,7 +360,7 @@ DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_fie
 
         case EntityField_Entity:
         {
-            char *Name = EntityFileOfGUID(EntityMode, Value->Entity);
+            char *Name = EntityFileOfGUID(Files, Value->Entity);
             char Unknown[32];
             if(Value->Entity && !Name)
             {
@@ -373,12 +378,12 @@ DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_fie
                     Value->Entity = 0;
                     nk_combo_close(Nk);
                 }
-                for(u32 Index = 0; Index < EntityMode->EntityFileCount; ++Index)
+                for(u32 Index = 0; Index < Files->Count; ++Index)
                 {
-                    nk_bool Selected = (EntityMode->EntityGUIDs[Index] == Value->Entity);
-                    if(EntityMode->EntityGUIDs[Index] && nk_selectable_label(Nk, EntityMode->EntityFiles[Index], NK_TEXT_LEFT, &Selected))
+                    nk_bool Selected = (Files->GUIDs[Index] == Value->Entity);
+                    if(Files->GUIDs[Index] && nk_selectable_label(Nk, Files->Files[Index], NK_TEXT_LEFT, &Selected))
                     {
-                        Value->Entity = EntityMode->EntityGUIDs[Index];
+                        Value->Entity = Files->GUIDs[Index];
                         nk_combo_close(Nk);
                     }
                 }
@@ -388,6 +393,8 @@ DrawEntityFieldEditor(editor_mode_entity *EntityMode, nk_context *Nk, entity_fie
 
         InvalidDefaultCase;
     }
+
+    return(Typing);
 }
 
 internal void
@@ -418,14 +425,14 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
         nk_layout_row_template_push_dynamic(Nk);
         nk_layout_row_template_push_static(Nk, 100);
         nk_layout_row_template_end(Nk);
-        const char *FilePreview = EntityMode->EntityFileCount ? EntityMode->EntityFiles[EntityMode->EntityFileIndex] : "<none>";
+        const char *FilePreview = EntityMode->Files.Count ? EntityMode->Files.Files[EntityMode->EntityFileIndex] : "<none>";
         if(nk_combo_begin_label(Nk, FilePreview, nk_vec2(nk_widget_width(Nk), 300)))
         {
             nk_layout_row_dynamic(Nk, 20, 1);
-            for(u32 Index = 0; Index < EntityMode->EntityFileCount; ++Index)
+            for(u32 Index = 0; Index < EntityMode->Files.Count; ++Index)
             {
                 nk_bool Selected = (Index == EntityMode->EntityFileIndex);
-                if(nk_selectable_label(Nk, EntityMode->EntityFiles[Index], NK_TEXT_LEFT, &Selected))
+                if(nk_selectable_label(Nk, EntityMode->Files.Files[Index], NK_TEXT_LEFT, &Selected))
                 {
                     EntityMode->EntityFileIndex = Index;
                     nk_combo_close(Nk);
@@ -583,7 +590,7 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                 {
                     for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
                     {
-                        DrawEntityFieldEditor(EntityMode, Nk, Block->Fields + FieldIndex,
+                        DrawEntityFieldEditor(&EntityMode->Files, Nk, Block->Fields + FieldIndex,
                                               &Entity->Fields[BlockIndex][FieldIndex]);
                     }
                 }
@@ -632,7 +639,8 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
         EntityMode->ReloadRequested = false;
         EntityMode->Project = ReadEntityProject(EntityMode->Arena);
         ListLookChoices(EditorState, EntityMode);
-        ListEntityFiles(EntityMode);
+        EntityMode->Files = ListEntityFiles(EntityMode->Project, EntityMode->Arena);
+        EntityMode->EntityFileIndex = 0;
         EntityMode->PreviewClip = {};
         EntityMode->ShownClip = Minimum(EntityMode->ShownClip, EntityMode->Project->ClipCount - 1);
     }
@@ -656,9 +664,9 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
     if(EntityMode->OpenRequested)
     {
         EntityMode->OpenRequested = false;
-        if(EntityMode->EntityFileCount)
+        if(EntityMode->Files.Count)
         {
-            char *FileName = EntityMode->EntityFiles[EntityMode->EntityFileIndex];
+            char *FileName = EntityMode->Files.Files[EntityMode->EntityFileIndex];
             entity_file Entity = ReadEntityFile(FileName, Project, &TranState->TranArena);
             if(Entity.Loaded)
             {
@@ -694,7 +702,8 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
                 FormatString(sizeof(EntityMode->FileName), EntityMode->FileName, "%s", FileName);
                 EntityMode->Dirty = false;
                 EntityMode->LastEntity = *Entity;
-                ListEntityFiles(EntityMode);
+                EntityMode->Files = ListEntityFiles(EntityMode->Project, EntityMode->Arena);
+                EntityMode->EntityFileIndex = 0;
                 LOG("Saved the entity %s", FileName);
             }
             else

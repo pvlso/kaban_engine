@@ -82,8 +82,8 @@ struct task_with_memory
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
-#include "editor_map_mode.h"
 #include "editor_entity_mode.h"
+#include "editor_map_mode.h"
 #include "editor_game_mode.h"
 
 //#include "engine_navigation_mesh.h"

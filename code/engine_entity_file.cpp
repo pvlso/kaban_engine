@@ -498,6 +498,39 @@ CopyWithoutQuotes(char *Source, char *Dest, u32 DestSize)
     Dest[Length] = 0;
 }
 
+// NOTE(pvlso): A field's value as a file writes it (a text in quotes), for ReadEntityFieldValue to read back
+internal umm
+FormatEntityFieldValue(char *Dest, umm DestSize, entity_field_def *Field, entity_field_value *Value)
+{
+    umm Result = 0;
+    switch(Field->Kind)
+    {
+        case EntityField_Int:    {Result = FormatString(DestSize, Dest, "%d", Value->Int);}                break;
+        case EntityField_Number: {Result = FormatString(DestSize, Dest, "%.3f", Value->Number);}           break;
+        case EntityField_Bool:   {Result = FormatString(DestSize, Dest, "%s", Value->Bool ? "yes" : "no");} break;
+        case EntityField_Text:
+        {
+            char Clean[ENTITY_TEXT_LENGTH];
+            CopyWithoutQuotes(Value->Text, Clean, sizeof(Clean));
+            Result = FormatString(DestSize, Dest, "\"%s\"", Clean);
+        } break;
+        case EntityField_Choice:
+        {
+            u32 Choice = ((u32)Value->Int < Field->ChoiceCount) ? (u32)Value->Int : 0;
+            Result = FormatString(DestSize, Dest, "%s", Field->Choices[Choice]);
+        } break;
+        case EntityField_Entity:
+        {
+            char Hex[17];
+            EntityGUIDToHex(Value->Entity, Hex);
+            Result = FormatString(DestSize, Dest, "%s", Hex);
+        } break;
+        InvalidDefaultCase;
+    }
+
+    return(Result);
+}
+
 internal umm
 WriteEntityShape(char *Dest, umm DestSize, char *Key, entity_shape *Shape)
 {
@@ -576,29 +609,9 @@ WriteEntityFile(char *FileName, entity_file *Entity, entity_project *Project, me
         for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
         {
             entity_field_def *Field = Block->Fields + FieldIndex;
-            entity_field_value *Value = &Entity->Fields[BlockIndex][FieldIndex];
-            switch(Field->Kind)
-            {
-                case EntityField_Int:    {ENTITY_OUT("field %s %d\n", Field->Name, Value->Int);}                  break;
-                case EntityField_Number: {ENTITY_OUT("field %s %.3f\n", Field->Name, Value->Number);}             break;
-                case EntityField_Bool:   {ENTITY_OUT("field %s %s\n", Field->Name, Value->Bool ? "yes" : "no");}  break;
-                case EntityField_Text:
-                {
-                    CopyWithoutQuotes(Value->Text, Clean, sizeof(Clean));
-                    ENTITY_OUT("field %s \"%s\"\n", Field->Name, Clean);
-                } break;
-                case EntityField_Choice:
-                {
-                    u32 Choice = ((u32)Value->Int < Field->ChoiceCount) ? (u32)Value->Int : 0;
-                    ENTITY_OUT("field %s %s\n", Field->Name, Field->Choices[Choice]);
-                } break;
-                case EntityField_Entity:
-                {
-                    EntityGUIDToHex(Value->Entity, Hex);
-                    ENTITY_OUT("field %s %s\n", Field->Name, Hex);
-                } break;
-                InvalidDefaultCase;
-            }
+            ENTITY_OUT("field %s ", Field->Name);
+            At += FormatEntityFieldValue(Text + At, Capacity - At, Field, &Entity->Fields[BlockIndex][FieldIndex]);
+            ENTITY_OUT("\n");
         }
     }
 #undef ENTITY_OUT

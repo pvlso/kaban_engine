@@ -239,6 +239,102 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     Builder->CurrentAsset = BuilderAsset;
 }
 
+// NOTE(pvlso): A field's value with its name and kind, a choice's word in Text
+internal kea_entity_field
+KEAEntityField(entity_field_def *FieldDef, entity_field_value *Value)
+{
+    kea_entity_field Result = {};
+    Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Name, Result.Name);
+    Result.Kind = FieldDef->Kind;
+    Result.Int = Value->Int;
+    Result.Number = Value->Number;
+    Result.Bool = Value->Bool;
+    Result.Entity = Value->Entity;
+    if(FieldDef->Kind == EntityField_Choice)
+    {
+        u32 Choice = ((u32)Value->Int < FieldDef->ChoiceCount) ? (u32)Value->Int : 0;
+        Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Choices[Choice], Result.Text);
+    }
+    else
+    {
+        Copy(KEA_ENTITY_TEXT_LENGTH, Value->Text, Result.Text);
+    }
+
+    return(Result);
+}
+
+internal b32
+IsKnownEntity(u32 KnownCount, u64 *Known, u64 GUID)
+{
+    b32 Result = false;
+    for(u32 Index = 0; !Result && (Index < KnownCount); ++Index)
+    {
+        Result = (Known[Index] == GUID);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): A map's entities: each override's block and field found in the project's data/txts/entity_blocks.txt
+// and its value read for the field's kind (the game needs no data file); one the project hasn't got is left out
+internal void
+AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info, builder_added_map *Data)
+{
+    entity_project *Project = ReadEntityProject(Builder->TempMem);
+    u32 KnownCount = Platform.ListFilesInDirectory(PlatformFileType_Entity, 0, 0);
+    char **FileNames = PushArray(Builder->TempMem, Maximum(1, KnownCount), char *);
+    u64 *Known = PushArray(Builder->TempMem, Maximum(1, KnownCount), u64);
+    Platform.ListFilesInDirectory(PlatformFileType_Entity, FileNames, Builder->TempMem);
+    for(u32 FileIndex = 0; FileIndex < KnownCount; ++FileIndex)
+    {
+        Known[FileIndex] = ReadEntityFile(FileNames[FileIndex], Project, Builder->TempMem).GUID;
+    }
+
+    Data->Entities = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount), kea_map_entity);
+    Data->Overrides = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount*MAP_FILE_MAX_ENTITY_OVERRIDES),
+                                kea_map_override);
+    u32 Unknown = 0;
+    for(u32 EntityIndex = 0; EntityIndex < Map->EntityCount; ++EntityIndex)
+    {
+        map_file_entity *Source = Map->Entities + EntityIndex;
+        kea_map_entity *Entity = Data->Entities + Info->EntityCount++;
+        Entity->GUID = Source->GUID;
+        Entity->Definition = Source->Definition;
+        Entity->P[0] = Source->P.x;
+        Entity->P[1] = Source->P.y;
+        Entity->Flags = Source->Flip ? KEAMapEntity_Flip : 0;
+        Entity->FirstOverride = Info->OverrideCount;
+        if(!IsKnownEntity(KnownCount, Known, Source->Definition)) {++Unknown;}
+
+        for(u32 OverrideIndex = 0; OverrideIndex < Source->OverrideCount; ++OverrideIndex)
+        {
+            map_file_override *Override = Source->Overrides + OverrideIndex;
+            s32 Block = FindEntityBlock(Project, Override->Block);
+            s32 Field = (Block >= 0) ? FindEntityBlockField(Project->Blocks + Block, Override->Field) : -1;
+            entity_field_def *FieldDef = (Field >= 0) ? Project->Blocks[Block].Fields + Field : 0;
+            entity_field_value Value = FieldDef ? FieldDef->Default : entity_field_value{};
+            if(FieldDef && ReadEntityFieldValue(FieldDef, Override->Value, &Value))
+            {
+                kea_map_override *Dest = Data->Overrides + Info->OverrideCount++;
+                Copy(KEA_ENTITY_NAME_LENGTH, Project->Blocks[Block].Name, Dest->Block);
+                Dest->Field = KEAEntityField(FieldDef, &Value);
+                ++Entity->OverrideCount;
+            }
+            else
+            {
+                LOG_WARNING("Map %s: an entity overrides %s.%s with %s, which isn't a field of data/txts/%s or a value "
+                            "of it, left out", MapName, Override->Block, Override->Field, Override->Value,
+                            ENTITY_PROJECT_FILE_NAME);
+            }
+        }
+    }
+    if(Unknown)
+    {
+        LOG_WARNING("Map %s: %u entities are of definitions that aren't in data/entities, a game won't find them",
+                    MapName, Unknown);
+    }
+}
+
 // NOTE(pvlso): A map (engine_map_file.h): its sets become their tile set assets' GUIDs (made of their file names, as
 // the stored tile sets' are), each cell's grid place in its set becomes the tile's index there
 internal void
@@ -325,8 +421,9 @@ AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
         LOG_WARNING("Map %s: %u cells point at places where their set has no tile any more, left empty",
                     Asset->SourceFileName, Missing);
     }
-    LOG("Map %s: %u x %u, %u layers, %u tile sets", Asset->SourceFileName, Map.Width, Map.Height, Map.LayerCount,
-        Map.SetCount);
+    AddMapEntities(Builder, Asset->SourceFileName, &Map, &KEAAsset->Map, Data);
+    LOG("Map %s: %u x %u, %u layers, %u tile sets, %u entities", Asset->SourceFileName, Map.Width, Map.Height,
+        Map.LayerCount, Map.SetCount, KEAAsset->Map.EntityCount);
 
     Builder->CurrentAsset = BuilderAsset;
 }
@@ -430,31 +527,10 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         {
             entity_field_def *FieldDef = BlockDef->Fields + FieldIndex;
             entity_field_value *Value = &Entity->Fields[BlockIndex][FieldIndex];
-            kea_entity_field *Field = Data->Fields + Info->FieldCount++;
-            Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Name, Field->Name);
-            Field->Kind = FieldDef->Kind;
-            Field->Int = Value->Int;
-            Field->Number = Value->Number;
-            Field->Bool = Value->Bool;
-            Field->Entity = Value->Entity;
-            if(FieldDef->Kind == EntityField_Choice)
-            {
-                u32 Choice = ((u32)Value->Int < FieldDef->ChoiceCount) ? (u32)Value->Int : 0;
-                Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Choices[Choice], Field->Text);
-            }
-            else
-            {
-                Copy(KEA_ENTITY_TEXT_LENGTH, Value->Text, Field->Text);
-            }
-
+            Data->Fields[Info->FieldCount++] = KEAEntityField(FieldDef, Value);
             if((FieldDef->Kind == EntityField_Entity) && Value->Entity)
             {
-                b32 Found = false;
-                for(u32 Index = 0; Index < KnownCount; ++Index)
-                {
-                    if(Known[Index] == Value->Entity) {Found = true;}
-                }
-                if(!Found)
+                if(!IsKnownEntity(KnownCount, Known, Value->Entity))
                 {
                     LOG_WARNING("Entity %s: %s.%s names a definition that isn't in data/entities", Name, BlockDef->Name,
                                 FieldDef->Name);
@@ -832,10 +908,16 @@ BuilderWriteKEA(kea_builder *Builder)
                 kea_map *Map = &Dest->Map;
                 umm CellCount = (umm)Map->LayerCount*Map->Width*Map->Height;
                 u32 SetsSize = Map->SetCount*sizeof(u64);
+                u32 EntitiesSize = Map->EntityCount*sizeof(kea_map_entity);
+                u32 OverridesSize = Map->OverrideCount*sizeof(kea_map_override);
                 u32 LayersSize = Map->LayerCount*sizeof(kea_map_layer);
                 u32 CellsSize = (u32)(CellCount*sizeof(kea_map_cell));
                 Platform.WriteDataToFile(&Out, At, SetsSize, BuilderAsset->Data.Map.SetGUIDs);
                 At += SetsSize;
+                Platform.WriteDataToFile(&Out, At, EntitiesSize, BuilderAsset->Data.Map.Entities);
+                At += EntitiesSize;
+                Platform.WriteDataToFile(&Out, At, OverridesSize, BuilderAsset->Data.Map.Overrides);
+                At += OverridesSize;
                 Platform.WriteDataToFile(&Out, At, LayersSize, BuilderAsset->Data.Map.Layers);
                 At += LayersSize;
                 Platform.WriteDataToFile(&Out, At, CellsSize, BuilderAsset->Data.Map.Cells);

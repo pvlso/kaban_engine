@@ -309,16 +309,36 @@ struct kea_map_cell
     u16 Tile; // NOTE(pvlso): the tile's index in its set
 };
 
+// NOTE(pvlso): An entity placed on the map: its own GUID, its definition's, its foot in cells from the map's top left
+// (y down), and its overrides, Overrides[FirstOverride] on
+struct kea_map_entity
+{
+    u64 GUID;
+    u64 Definition;
+    r32 P[2];
+    u32 Flags; // NOTE(pvlso): KEAMapEntity_*
+    u32 FirstOverride;
+    u32 OverrideCount;
+};
+enum kea_map_entity_flag
+{
+    KEAMapEntity_Flip = (1 << 0),
+};
+
 struct kea_map
 {
     u32 Width;
     u32 Height;
     u16 LayerCount;
     u16 SetCount;
+    u32 EntityCount;
+    u32 OverrideCount;
 
     /* NOTE(pvlso): Data is:
 
        u64 SetGUIDs[SetCount];
+       kea_map_entity Entities[EntityCount];
+       kea_map_override Overrides[OverrideCount];
        kea_map_layer Layers[LayerCount];
        kea_map_cell Cells[LayerCount][Height][Width];
     */
@@ -382,6 +402,13 @@ struct kea_entity
        kea_entity_block Blocks[BlockCount];
        kea_entity_field Fields[FieldCount];
     */
+};
+
+// NOTE(pvlso): A map's entity starting with another value for one field of its definition's blocks
+struct kea_map_override
+{
+    char Block[KEA_ENTITY_NAME_LENGTH];
+    kea_entity_field Field;
 };
 
 struct kea_spritesheet

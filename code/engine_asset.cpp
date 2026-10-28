@@ -342,7 +342,8 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
         case AssetType_Map:
         {
             kea_map *Info = &Asset->KEA.Map;
-            Size.Data = (sizeof(u64)*Info->SetCount + sizeof(kea_map_layer)*Info->LayerCount +
+            Size.Data = (sizeof(u64)*Info->SetCount + sizeof(kea_map_entity)*Info->EntityCount +
+                         sizeof(kea_map_override)*Info->OverrideCount + sizeof(kea_map_layer)*Info->LayerCount +
                          sizeof(kea_map_cell)*Info->LayerCount*Info->Width*Info->Height);
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
@@ -465,7 +466,9 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             kea_map *Info = &Asset->KEA.Map;
             loaded_map *Map = &Asset->Header->Map;
             Map->SetGUIDs = (u64 *)(Asset->Header + 1);
-            Map->Layers = (kea_map_layer *)(Map->SetGUIDs + Info->SetCount);
+            Map->Entities = (kea_map_entity *)(Map->SetGUIDs + Info->SetCount);
+            Map->Overrides = (kea_map_override *)(Map->Entities + Info->EntityCount);
+            Map->Layers = (kea_map_layer *)(Map->Overrides + Info->OverrideCount);
             Map->Cells = (kea_map_cell *)(Map->Layers + Info->LayerCount);
 
             Result.LoadDest = Map->SetGUIDs;

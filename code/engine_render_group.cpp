@@ -153,6 +153,30 @@ PushBitmap(render_group *Group, object_transform *ObjectTransform,
     }
 }
 
+// NOTE(pvlso): The part of Bitmap between MinUV and MaxUV (0 to 1 from its bottom left: a sprite sheet's frame)
+// stretched over Rect; MinUV.x past MaxUV.x mirrors it left to right
+inline void
+PushBitmapPart(render_group *Group, object_transform *ObjectTransform, loaded_bitmap *Bitmap, rectangle2 Rect, r32 Z,
+               v2 MinUV, v2 MaxUV, v4 Color = V4(1, 1, 1, 1))
+{
+    entity_basis_p_result Basis = GetRenderEntityBasisP(Group->CameraTransform, ObjectTransform, V3(Rect.Min, Z));
+    if(Basis.Valid)
+    {
+        render_entry_bitmap *Entry = PushTransformedElement(Group, ObjectTransform, render_entry_bitmap, Basis.SortKey);
+        if(Entry)
+        {
+            Entry->Bitmap = Bitmap;
+            Entry->NormalMap = 0;
+            Entry->P = Basis.P;
+            Entry->Color = Color;
+            Entry->Size = Basis.Scale*GetDim(Rect);
+            Entry->MinUV = MinUV;
+            Entry->MaxUV = MaxUV;
+            Entry->RotateAngle = 0.0f;
+        }
+    }
+}
+
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f,

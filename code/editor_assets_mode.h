@@ -8,8 +8,8 @@
    ======================================================================== */
 
 #include "engine_tileset_file.h"
-#include "engine_map_file.h"
 #include "engine_entity_file.h"
+#include "engine_map_file.h"
 
 enum assets_edit_mode
 {

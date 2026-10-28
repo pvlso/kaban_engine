@@ -66,8 +66,24 @@ ReadMapFile(char *FileName, memory_arena *Arena)
 
     char *At = (char *)File.Contents;
     char *FileEnd = At + StringLength(At); // NOTE(pvlso): a text file's Size counts its closing zero
+
+    // NOTE(pvlso): Room for as many entities as there are lines starting with "entity"
+    u32 MaxEntities = 1;
+    for(char *LineAt = At; LineAt < FileEnd;)
+    {
+        char *Word = SkipMapSpaces(LineAt, FileEnd);
+        char *Entity = "entity";
+        u32 Matched = 0;
+        while((Word + Matched < FileEnd) && Entity[Matched] && (Word[Matched] == Entity[Matched])) {++Matched;}
+        if(!Entity[Matched]) {++MaxEntities;}
+        while((LineAt < FileEnd) && (*LineAt != '\n')) {++LineAt;}
+        if(LineAt < FileEnd) {++LineAt;}
+    }
+    Result.Entities = PushArray(Arena, MaxEntities, map_file_entity);
+
     u32 LineNumber = 0;
     map_file_layer *Layer = 0;
+    map_file_entity *Entity = 0;
     u32 Row = 0;
     char Word[256];
     while(At < FileEnd)
@@ -180,9 +196,64 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             }
             ++Row;
         }
+        else if(StringsAreEqual(Word, "entity"))
+        {
+            map_file_entity Read = {};
+            char Numbers[2][32];
+            char Definition[32];
+            Line = ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+            b32 Valid = EntityGUIDFromHex(Word, &Read.GUID);
+            Line = ReadMapWord(Line, LineEnd, Definition, sizeof(Definition));
+            Valid = Valid && EntityGUIDFromHex(Definition, &Read.Definition);
+            Line = ReadMapWord(Line, LineEnd, Numbers[0], sizeof(Numbers[0]));
+            Line = ReadMapWord(Line, LineEnd, Numbers[1], sizeof(Numbers[1]));
+            Valid = Valid && IsTilesetNumber(Numbers[0]) && IsTilesetNumber(Numbers[1]);
+            ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+            Read.Flip = StringsAreEqual(Word, "flip");
+            Entity = 0;
+            if(Valid)
+            {
+                Read.P = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
+                Entity = Result.Entities + Result.EntityCount++;
+                *Entity = Read;
+            }
+            else
+            {
+                LOG_ERROR("Map %s, line %d: an entity is its GUID, its definition's GUID, x and y", FileName, LineNumber);
+                ++Result.ErrorCount;
+            }
+        }
+        else if(StringsAreEqual(Word, "override"))
+        {
+            map_file_override Read = {};
+            Line = ReadMapWord(Line, LineEnd, Read.Block, sizeof(Read.Block));
+            Line = ReadMapWord(Line, LineEnd, Read.Field, sizeof(Read.Field));
+            ReadMapWord(Line, LineEnd, Read.Value, sizeof(Read.Value));
+            if(!Entity)
+            {
+                LOG_ERROR("Map %s, line %d: an override goes under its entity", FileName, LineNumber);
+                ++Result.ErrorCount;
+            }
+            else if(!Read.Field[0])
+            {
+                LOG_ERROR("Map %s, line %d: an override is a block, a field and a value", FileName, LineNumber);
+                ++Result.ErrorCount;
+            }
+            else if(Entity->OverrideCount >= MAP_FILE_MAX_ENTITY_OVERRIDES)
+            {
+                LOG_ERROR("Map %s, line %d: more than %d overrides on an entity", FileName, LineNumber,
+                          MAP_FILE_MAX_ENTITY_OVERRIDES);
+                ++Result.ErrorCount;
+            }
+            else
+            {
+                Entity->Overrides[Entity->OverrideCount++] = Read;
+            }
+        }
         else
         {
-            LOG_ERROR("Map %s, line %d: a line is size, set, layer or row, not %s", FileName, LineNumber, Word);
+            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row, entity or override, not %s", FileName,
+                      LineNumber, Word);
             ++Result.ErrorCount;
         }
     }
@@ -195,7 +266,8 @@ internal b32
 WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
-    umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128);
+    umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128) +
+        (umm)Map->EntityCount*(96 + MAP_FILE_MAX_ENTITY_OVERRIDES*(2*ENTITY_NAME_LENGTH + ENTITY_TEXT_LENGTH + 16));
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define MAP_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -226,6 +298,24 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
                 else {MAP_OUT(" .");}
             }
             MAP_OUT("\n");
+        }
+    }
+    if(Map->EntityCount)
+    {
+        MAP_OUT("\n");
+    }
+    for(u32 EntityIndex = 0; EntityIndex < Map->EntityCount; ++EntityIndex)
+    {
+        map_file_entity *Entity = Map->Entities + EntityIndex;
+        char GUID[17];
+        char Definition[17];
+        EntityGUIDToHex(Entity->GUID, GUID);
+        EntityGUIDToHex(Entity->Definition, Definition);
+        MAP_OUT("entity %s %s %.3f %.3f%s\n", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
+        for(u32 OverrideIndex = 0; OverrideIndex < Entity->OverrideCount; ++OverrideIndex)
+        {
+            map_file_override *Override = Entity->Overrides + OverrideIndex;
+            MAP_OUT("override %s %s %s\n", Override->Block, Override->Field, Override->Value);
         }
     }
 #undef MAP_OUT
