@@ -407,6 +407,7 @@ EntityFieldInfo(kea_entity_field *Field)
     Result.Bool = Field->Bool;
     Result.Entity = Field->Entity;
     FormatString(sizeof(Result.Text), Result.Text, "%.*s", KEA_ENTITY_TEXT_LENGTH, Field->Text);
+    Result.RowCount = (Result.Kind == EntityField_List) ? Field->RowCount : 0;
 
     return(Result);
 }
@@ -424,6 +425,60 @@ GameGetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 F
         {
             Result = EntityFieldInfo(Entity->Fields + Index);
         }
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): A list field's row, 0 when there's none
+internal kea_entity_row *
+GameEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
+              loaded_entity **Loaded, kea_entity **Info)
+{
+    kea_entity_row *Result = 0;
+    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, Info);
+    if(Entity && (BlockIndex < (*Info)->BlockCount) && (FieldIndex < Entity->Blocks[BlockIndex].FieldCount))
+    {
+        u32 Index = Entity->Blocks[BlockIndex].FirstField + FieldIndex;
+        kea_entity_field *Field = (Index < (*Info)->FieldCount) ? Entity->Fields + Index : 0;
+        if(Field && (Field->Kind == EntityField_List) && (RowIndex < Field->RowCount) &&
+           (Field->FirstRow + RowIndex < (*Info)->RowCount))
+        {
+            Result = Entity->Rows + Field->FirstRow + RowIndex;
+            *Loaded = Entity;
+        }
+    }
+
+    return(Result);
+}
+
+internal entity_row_info
+GameGetEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex)
+{
+    entity_row_info Result = {};
+    loaded_entity *Entity = 0;
+    kea_entity *Info = 0;
+    kea_entity_row *Row = GameEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, &Entity, &Info);
+    if(Row)
+    {
+        Result.FieldCount = Row->FieldCount;
+        Result.FromMaterial = ((Row->Flags & KEAEntityRow_FromMaterial) != 0);
+    }
+
+    return(Result);
+}
+
+internal entity_field_info
+GameGetEntityRowField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
+                      u32 RowFieldIndex)
+{
+    entity_field_info Result = {};
+    loaded_entity *Entity = 0;
+    kea_entity *Info = 0;
+    kea_entity_row *Row = GameEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, &Entity, &Info);
+    if(Row && (RowFieldIndex < Row->FieldCount) && (Row->FirstField + RowFieldIndex < Info->RowFieldCount))
+    {
+        Result = EntityFieldInfo(Entity->RowFields + Row->FirstField + RowFieldIndex);
     }
 
     return(Result);
@@ -542,6 +597,8 @@ GetEngineAPI(void)
     Result.GetEntityClip = GameGetEntityClip;
     Result.GetEntityBlock = GameGetEntityBlock;
     Result.GetEntityField = GameGetEntityField;
+    Result.GetEntityRow = GameGetEntityRow;
+    Result.GetEntityRowField = GameGetEntityRowField;
 Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);

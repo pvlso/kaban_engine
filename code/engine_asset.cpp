@@ -352,7 +352,8 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
         {
             kea_entity *Info = &Asset->KEA.Entity;
             Size.Data = (KEA_ENTITY_DISPLAY_LENGTH + KEA_ENTITY_NAME_LENGTH + sizeof(kea_entity_clip)*Info->ClipCount +
-                         sizeof(kea_entity_block)*Info->BlockCount + sizeof(kea_entity_field)*Info->FieldCount);
+                         sizeof(kea_entity_block)*Info->BlockCount + sizeof(kea_entity_field)*Info->FieldCount +
+                         sizeof(kea_entity_row)*Info->RowCount + sizeof(kea_entity_field)*Info->RowFieldCount);
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
@@ -485,6 +486,8 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             Entity->Clips = (kea_entity_clip *)(Entity->Category + KEA_ENTITY_NAME_LENGTH);
             Entity->Blocks = (kea_entity_block *)(Entity->Clips + Info->ClipCount);
             Entity->Fields = (kea_entity_field *)(Entity->Blocks + Info->BlockCount);
+            Entity->Rows = (kea_entity_row *)(Entity->Fields + Info->FieldCount);
+            Entity->RowFields = (kea_entity_field *)(Entity->Rows + Info->RowCount);
 
             Result.LoadDest = Entity->DisplayName;
             Result.FinalizeOp = FinalizeAsset_None;

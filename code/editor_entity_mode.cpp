@@ -302,9 +302,11 @@ DrawEntityShapeEditor(nk_context *Nk, char *Label, entity_shape *Shape)
     }
 }
 
-// NOTE(pvlso): A field's name and its value's widget; an entity field picks among Files. True while a text is typed in.
+// NOTE(pvlso): A field's name and its value's widget; an entity field picks among Files, a material among the
+// project's. A list's rows are DrawEntityListEditor's. True while a text is typed in.
 internal b32
-DrawEntityFieldEditor(entity_file_list *Files, nk_context *Nk, entity_field_def *Field, entity_field_value *Value)
+DrawEntityFieldEditor(entity_project *Project, entity_file_list *Files, nk_context *Nk, entity_field_def *Field,
+                      entity_field_value *Value)
 {
     b32 Typing = false;
     nk_layout_row_template_begin(Nk, 26);
@@ -391,7 +393,147 @@ DrawEntityFieldEditor(entity_file_list *Files, nk_context *Nk, entity_field_def 
             }
         } break;
 
+        case EntityField_Material:
+        {
+            u32 Material = ((Value->Int > 0) && ((u32)Value->Int <= Project->MaterialCount)) ? (u32)Value->Int : 0;
+            char *Preview = Material ? Project->Materials[Material - 1].Name : (char *)"(none)";
+            if(nk_combo_begin_label(Nk, Preview, nk_vec2(nk_widget_width(Nk), 300)))
+            {
+                nk_layout_row_dynamic(Nk, 20, 1);
+                for(u32 Index = 0; Index <= Project->MaterialCount; ++Index)
+                {
+                    nk_bool Selected = (Index == Material);
+                    char *Label = Index ? Project->Materials[Index - 1].Name : (char *)"(none)";
+                    if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Selected))
+                    {
+                        Value->Int = (s32)Index;
+                        nk_combo_close(Nk);
+                    }
+                }
+                nk_combo_end(Nk);
+            }
+        } break;
+
+        case EntityField_List:
+        {
+            nk_label(Nk, "(rows below)", NK_TEXT_LEFT);
+        } break;
+
         InvalidDefaultCase;
+    }
+
+    return(Typing);
+}
+
+// NOTE(pvlso): A row's values in one line, an entity field by its file's name
+internal void
+FormatEntityRow(entity_project *Project, entity_file_list *Files, entity_block_def *RowKind, entity_row *Row,
+                char *Dest, umm DestSize)
+{
+    umm At = 0;
+    Dest[0] = 0;
+    for(u32 FieldIndex = 0; (FieldIndex < RowKind->FieldCount) && (At + 1 < DestSize); ++FieldIndex)
+    {
+        entity_field_def *Field = RowKind->Fields + FieldIndex;
+        entity_field_value *Value = Row->Values + FieldIndex;
+        char Text[ENTITY_TEXT_LENGTH + 8];
+        char *Name = (Field->Kind == EntityField_Entity) ? EntityFileOfGUID(Files, Value->Entity) : 0;
+        if(Name) {FormatString(sizeof(Text), Text, "%s", Name);}
+        else if((Field->Kind == EntityField_Entity) && !Value->Entity) {FormatString(sizeof(Text), Text, "-");}
+        else {FormatEntityFieldValue(Text, sizeof(Text), Project, Field, Value);}
+        At += FormatString(DestSize - At, Dest + At, "%s%s %s", FieldIndex ? ", " : "", Field->Name, Text);
+    }
+}
+
+// NOTE(pvlso): A list field's own rows, each with its fields and buttons to move and remove it, a button to add one;
+// then the rows the block's material brings, to read only. True while a text is typed in.
+internal b32
+DrawEntityListEditor(editor_mode_entity *EntityMode, nk_context *Nk, u32 Block, u32 Field)
+{
+    b32 Typing = false;
+    entity_project *Project = EntityMode->Project;
+    entity_file *Entity = &EntityMode->Entity;
+    entity_field_def *List = Project->Blocks[Block].Fields + Field;
+    entity_block_def *RowKind = EntityRowKindOf(Project, Block, Field);
+    nk_layout_row_dynamic(Nk, 22, 1);
+    nk_labelf(Nk, NK_TEXT_LEFT, "%s (rows of %s):", List->Name, RowKind->Name);
+
+    // NOTE(pvlso): The buttons' requests, done once the rows are drawn
+    s32 Remove = -1;
+    s32 SwapA = -1;
+    s32 SwapB = -1;
+    s32 Previous = -1;
+    u32 Number = 0;
+    for(u32 RowIndex = 0; RowIndex < Entity->RowCount; ++RowIndex)
+    {
+        entity_row *Row = Entity->Rows + RowIndex;
+        if((Row->Block != Block) || (Row->Field != Field))
+        {
+            continue;
+        }
+
+        nk_layout_row_template_begin(Nk, 24);
+        nk_layout_row_template_push_dynamic(Nk);
+        nk_layout_row_template_push_static(Nk, 50);
+        nk_layout_row_template_push_static(Nk, 50);
+        nk_layout_row_template_push_static(Nk, 60);
+        nk_layout_row_template_end(Nk);
+        nk_labelf(Nk, NK_TEXT_LEFT, "  row %u", ++Number);
+        if(nk_button_label(Nk, "up") && (Previous >= 0)) {SwapA = Previous; SwapB = (s32)RowIndex;}
+        if(nk_button_label(Nk, "down"))
+        {
+            for(u32 Next = RowIndex + 1; (SwapA < 0) && (Next < Entity->RowCount); ++Next)
+            {
+                if((Entity->Rows[Next].Block == Block) && (Entity->Rows[Next].Field == Field))
+                {
+                    SwapA = (s32)RowIndex;
+                    SwapB = (s32)Next;
+                }
+            }
+        }
+        if(nk_button_label(Nk, "remove")) {Remove = (s32)RowIndex;}
+        for(u32 RowField = 0; RowField < RowKind->FieldCount; ++RowField)
+        {
+            Typing |= DrawEntityFieldEditor(Project, &EntityMode->Files, Nk, RowKind->Fields + RowField,
+                                            Row->Values + RowField);
+        }
+        Previous = (s32)RowIndex;
+    }
+    nk_layout_row_dynamic(Nk, 24, 2);
+    if(nk_button_label(Nk, "Add a row")) {AddEntityRow(Entity, Project, Block, Field);}
+    nk_label(Nk, "", NK_TEXT_LEFT);
+    if(Remove >= 0)
+    {
+        RemoveEntityRow(Entity, (u32)Remove);
+    }
+    else if(SwapA >= 0)
+    {
+        entity_row Swap = Entity->Rows[SwapA];
+        Entity->Rows[SwapA] = Entity->Rows[SwapB];
+        Entity->Rows[SwapB] = Swap;
+    }
+
+    entity_material *Material = EntityBlockMaterial(Entity, Project, Block);
+    if(Material)
+    {
+        nk_layout_row_dynamic(Nk, 20, 1);
+        u32 Shown = 0;
+        for(u32 RowIndex = 0; RowIndex < Material->RowCount; ++RowIndex)
+        {
+            entity_row *Row = Material->Rows + RowIndex;
+            if(IsMaterialRowFor(Project, Row, Block, Field))
+            {
+                if(!Shown++)
+                {
+                    nk_labelf(Nk, NK_TEXT_LEFT, "  then %s's, from data/txts/%s:", Material->Name,
+                              ENTITY_MATERIALS_FILE_NAME);
+                }
+                char Text[512];
+                FormatEntityRow(Project, &EntityMode->Files, RowKind, Row, Text, sizeof(Text));
+                nk_labelf(Nk, NK_TEXT_LEFT, "    %s", Text);
+            }
+        }
+        if(!Shown) {nk_labelf(Nk, NK_TEXT_LEFT, "  (%s brings no rows for it)", Material->Name);}
     }
 
     return(Typing);
@@ -590,8 +732,15 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                 {
                     for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
                     {
-                        DrawEntityFieldEditor(&EntityMode->Files, Nk, Block->Fields + FieldIndex,
-                                              &Entity->Fields[BlockIndex][FieldIndex]);
+                        if(Block->Fields[FieldIndex].Kind == EntityField_List)
+                        {
+                            DrawEntityListEditor(EntityMode, Nk, BlockIndex, FieldIndex);
+                        }
+                        else
+                        {
+                            DrawEntityFieldEditor(Project, &EntityMode->Files, Nk, Block->Fields + FieldIndex,
+                                                  &Entity->Fields[BlockIndex][FieldIndex]);
+                        }
                     }
                 }
             }

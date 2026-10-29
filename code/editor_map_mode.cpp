@@ -481,7 +481,8 @@ SetMapEntitiesFromFile(editor_mode_map *MapMode, map_file *File)
             {
                 Dest->Value = Project->Blocks[Block].Fields[Field].Default;
             }
-            if((Field >= 0) && ReadEntityFieldValue(Project->Blocks[Block].Fields + Field, Override->Value, &Dest->Value))
+            if((Field >= 0) && ReadEntityFieldValue(Project, Project->Blocks[Block].Fields + Field, Override->Value,
+                                                    &Dest->Value))
             {
                 Dest->Block = (u16)Block;
                 Dest->Field = (u16)Field;
@@ -522,7 +523,8 @@ MapEntitiesToFile(editor_mode_map *MapMode, map_file *File, memory_arena *Arena)
                 map_file_override *Out = Dest->Overrides + Dest->OverrideCount++;
                 FormatString(sizeof(Out->Block), Out->Block, "%s", Block->Name);
                 FormatString(sizeof(Out->Field), Out->Field, "%s", Block->Fields[Override->Field].Name);
-                FormatEntityFieldValue(Out->Value, sizeof(Out->Value), Block->Fields + Override->Field, &Override->Value);
+                FormatEntityFieldValue(Out->Value, sizeof(Out->Value), Project, Block->Fields + Override->Field,
+                                       &Override->Value);
             }
         }
     }
@@ -1298,7 +1300,26 @@ DrawMapEntityField(editor_mode_map *MapMode, nk_context *Nk, map_placement *Enti
     entity_field_def *FieldDef = MapMode->EntityProject->Blocks[Block].Fields + Field;
     map_placement_override *Override = FindMapEntityOverride(Entity, Block, Field);
     nk_layout_row_dynamic(Nk, 22, 1);
-    if(Override)
+    if((FieldDef->Kind == EntityField_List) || (FieldDef->Kind == EntityField_Material))
+    {
+        // NOTE(pvlso): Not for a placement to change: a material brings its rows when the KEA is built
+        if(FieldDef->Kind == EntityField_List)
+        {
+            u32 Rows = 0;
+            for(u32 RowIndex = 0; RowIndex < Def->File.RowCount; ++RowIndex)
+            {
+                if((Def->File.Rows[RowIndex].Block == Block) && (Def->File.Rows[RowIndex].Field == Field)) {++Rows;}
+            }
+            nk_labelf(Nk, NK_TEXT_LEFT, "  %s: %u rows of its own", FieldDef->Name, Rows);
+        }
+        else
+        {
+            char Text[ENTITY_NAME_LENGTH];
+            FormatEntityFieldValue(Text, sizeof(Text), MapMode->EntityProject, FieldDef, &Def->File.Fields[Block][Field]);
+            nk_labelf(Nk, NK_TEXT_LEFT, "  %s: %s", FieldDef->Name, Text);
+        }
+    }
+    else if(Override)
     {
         char Label[64];
         FormatString(sizeof(Label), Label, "%s (overridden)", FieldDef->Name);
@@ -1315,7 +1336,7 @@ DrawMapEntityField(editor_mode_map *MapMode, nk_context *Nk, map_placement *Enti
         }
         if(Override)
         {
-            Typing = DrawEntityFieldEditor(&MapMode->EntityFiles, Nk, FieldDef, &Override->Value);
+            Typing = DrawEntityFieldEditor(MapMode->EntityProject, &MapMode->EntityFiles, Nk, FieldDef, &Override->Value);
         }
     }
     else
@@ -1324,7 +1345,7 @@ DrawMapEntityField(editor_mode_map *MapMode, nk_context *Nk, map_placement *Enti
         char Text[ENTITY_TEXT_LENGTH + 8];
         char *Name = (FieldDef->Kind == EntityField_Entity) ? EntityFileOfGUID(&MapMode->EntityFiles, Value->Entity) : 0;
         if(Name) {FormatString(sizeof(Text), Text, "%s", Name);}
-        else {FormatEntityFieldValue(Text, sizeof(Text), FieldDef, Value);}
+        else {FormatEntityFieldValue(Text, sizeof(Text), MapMode->EntityProject, FieldDef, Value);}
         char Label[ENTITY_TEXT_LENGTH + 64];
         FormatString(sizeof(Label), Label, "%s: %s", FieldDef->Name, Text);
         nk_bool On = false;

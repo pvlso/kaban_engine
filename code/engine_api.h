@@ -117,6 +117,9 @@ enum entity_field_kind
     EntityField_Text,
     EntityField_Choice, // NOTE(pvlso): one of the field's words: Text holds it, Int its place in the list
     EntityField_Entity, // NOTE(pvlso): another definition: Entity holds its GUID, 0 for none
+    EntityField_List,   // NOTE(pvlso): rows of fields (GetEntityRow): RowCount of them, the definition's own first, then
+                        // its material's
+    EntityField_Material, // NOTE(pvlso): one of the project's materials: Text holds its name, empty for none
 
     EntityField_Count,
 };
@@ -174,6 +177,14 @@ struct entity_field_info
     b32 Bool;
     u64 Entity;
     char Text[128];
+    u32 RowCount; // NOTE(pvlso): a list's
+};
+
+// NOTE(pvlso): A row of a list field; its fields are the row's columns (GetEntityRowField)
+struct entity_row_info
+{
+    u32 FieldCount;
+    b32 FromMaterial; // NOTE(pvlso): one of the material's default rows, not the definition's own
 };
 
 // NOTE(pvlso): An entity placed on a map in the map editor: its own GUID (kept across the map's saves, for a save to
@@ -346,6 +357,10 @@ struct engine_api
     entity_clip_info (*GetEntityClip)(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time);
     entity_block_info (*GetEntityBlock)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex);
     entity_field_info (*GetEntityField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex);
+    // NOTE(pvlso): A list field's row and the row's fields; all zero when the field isn't a list or has no such row
+    entity_row_info (*GetEntityRow)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex);
+    entity_field_info (*GetEntityRowField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex,
+                                           u32 RowIndex, u32 RowFieldIndex);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -549,6 +564,20 @@ GetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 Field
     entity_field_info Result = Engine.GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex);
     return(Result);
 }
+inline entity_row_info
+GetEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex)
+{
+    entity_row_info Result = Engine.GetEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex);
+    return(Result);
+}
+inline entity_field_info
+GetEntityRowField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
+                  u32 RowFieldIndex)
+{
+    entity_field_info Result = Engine.GetEntityRowField(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex,
+                                                        RowFieldIndex);
+    return(Result);
+}
 
 // NOTE(pvlso): A clip or block of a definition by its name, -1 when it has none of that name
 inline s32
@@ -591,6 +620,36 @@ GetEntityFieldByName(engine_assets *Assets, u32 EntityIndex, char *BlockName, ch
             entity_field_info Field = GetEntityField(Assets, EntityIndex, (u32)Block, FieldIndex);
             if(StringsAreEqual(Field.Name, FieldName)) {Result = Field; WasFound = true;}
         }
+    }
+    if(Found) {*Found = WasFound;}
+
+    return(Result);
+}
+// NOTE(pvlso): A field of a block by its name, -1 when the block has none of that name
+inline s32
+GetEntityFieldIndex(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, char *Name)
+{
+    s32 Result = -1;
+    entity_block_info Block = GetEntityBlock(Assets, EntityIndex, BlockIndex);
+    for(u32 FieldIndex = 0; (Result < 0) && (FieldIndex < Block.FieldCount); ++FieldIndex)
+    {
+        if(StringsAreEqual(GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex).Name, Name)) {Result = (s32)FieldIndex;}
+    }
+
+    return(Result);
+}
+// NOTE(pvlso): A field of a list's row by its name; Found is false (and the rest zero) when the row has none
+inline entity_field_info
+GetEntityRowFieldByName(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
+                        char *Name, b32 *Found = 0)
+{
+    entity_field_info Result = {};
+    b32 WasFound = false;
+    entity_row_info Row = GetEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex);
+    for(u32 RowFieldIndex = 0; !WasFound && (RowFieldIndex < Row.FieldCount); ++RowFieldIndex)
+    {
+        entity_field_info Field = GetEntityRowField(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, RowFieldIndex);
+        if(StringsAreEqual(Field.Name, Name)) {Result = Field; WasFound = true;}
     }
     if(Found) {*Found = WasFound;}
 

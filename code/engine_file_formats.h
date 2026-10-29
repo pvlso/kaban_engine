@@ -346,7 +346,7 @@ struct kea_map
 
 // NOTE(pvlso): An entity definition (engine_entity_file.h), the project's names written out so a game needs no data
 // file: its clips that have a look (by name, the look as its stored asset's GUID), the blocks it uses and their
-// fields. Its asset GUID is the definition's own.
+// fields, its lists' rows (its own, then its material's) and their fields. Its asset GUID is the definition's own.
 #define KEA_ENTITY_NAME_LENGTH 32
 #define KEA_ENTITY_DISPLAY_LENGTH 64
 #define KEA_ENTITY_TEXT_LENGTH 128
@@ -381,7 +381,20 @@ struct kea_entity_field
     r32 Number;
     b32 Bool;
     u64 Entity;
-    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's word
+    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's or material's word
+    u32 FirstRow; // NOTE(pvlso): a list's rows, in the entity's Rows
+    u32 RowCount;
+};
+
+struct kea_entity_row
+{
+    u32 FirstField; // NOTE(pvlso): in the entity's RowFields
+    u16 FieldCount;
+    u16 Flags; // NOTE(pvlso): KEAEntityRow_*
+};
+enum kea_entity_row_flag
+{
+    KEAEntityRow_FromMaterial = (1 << 0),
 };
 
 struct kea_entity
@@ -391,6 +404,8 @@ struct kea_entity
     u16 BlockCount;
     u16 FieldCount;
     u16 Flags;
+    u16 RowCount;
+    u16 RowFieldCount;
     kea_entity_shape Footprint;
     kea_entity_shape HitArea;
 
@@ -401,6 +416,8 @@ struct kea_entity
        kea_entity_clip Clips[ClipCount];
        kea_entity_block Blocks[BlockCount];
        kea_entity_field Fields[FieldCount];
+       kea_entity_row Rows[RowCount];
+       kea_entity_field RowFields[RowFieldCount];
     */
 };
 

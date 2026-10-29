@@ -46,6 +46,8 @@ struct builder_added_entity
     kea_entity_clip *Clips;
     kea_entity_block *Blocks;
     kea_entity_field *Fields;
+    kea_entity_row *Rows;
+    kea_entity_field *RowFields;
 };
 
 struct builder_added_tile
