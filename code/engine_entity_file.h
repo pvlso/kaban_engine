@@ -87,7 +87,7 @@
 #define ENTITY_MAX_CLIPS 16
 #define ENTITY_MAX_BLOCKS 16
 #define ENTITY_MAX_BLOCK_FIELDS 8
-#define ENTITY_MAX_CHOICES 16
+#define ENTITY_MAX_CHOICES 32
 #define ENTITY_MAX_ROW_KINDS 8
 #define ENTITY_MAX_ROWS 32         // NOTE(pvlso): a definition's own, in all its lists
 #define ENTITY_MAX_MATERIALS 32

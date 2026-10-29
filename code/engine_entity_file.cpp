@@ -387,6 +387,11 @@ ENTITY_LINE_CALLBACK(ReadEntityProjectLine)
                     {
                         FormatString(ENTITY_NAME_LENGTH, Field->Choices[Field->ChoiceCount++], "%s", Tokens->Tokens[Index]);
                     }
+                    else if(Index == 3 + ENTITY_MAX_CHOICES)
+                    {
+                        LOG_ERROR("%s, line %d: the choice %s has more than %d words, %s and the rest are left out",
+                                  FileName, LineNumber, Name, ENTITY_MAX_CHOICES, Tokens->Tokens[Index]);
+                    }
                 }
                 if(!Field->ChoiceCount)
                 {

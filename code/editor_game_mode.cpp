@@ -375,6 +375,12 @@ GameGetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Tim
                 }
             }
         }
+        u64 Frame = Result.Bitmap.Value;
+        if(Frame && (Frame < Assets->AssetCount) &&
+           ((Assets->Assets[Frame].KEA.Type == KEAType_Bitmap) || (Assets->Assets[Frame].KEA.Type == KEAType_Sprite)))
+        {
+            Result.Dim = V2((r32)Assets->Assets[Frame].KEA.Bitmap.Dim[0], (r32)Assets->Assets[Frame].KEA.Bitmap.Dim[1]);
+        }
     }
 
     return(Result);

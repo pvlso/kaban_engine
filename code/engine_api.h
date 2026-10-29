@@ -160,6 +160,7 @@ struct entity_clip_info
     r32 FramesPerSecond;
     b32 Loop;
     b32 Finished;     // NOTE(pvlso): a clip played once is past its last frame (which stays showing)
+    v2 Dim;           // NOTE(pvlso): the frame's size in pixels
 };
 
 struct entity_block_info
