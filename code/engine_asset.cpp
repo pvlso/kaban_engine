@@ -343,7 +343,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
         {
             kea_map *Info = &Asset->KEA.Map;
             Size.Data = (sizeof(u64)*Info->SetCount + sizeof(kea_map_entity)*Info->EntityCount +
-                         sizeof(kea_map_override)*Info->OverrideCount + sizeof(kea_map_layer)*Info->LayerCount +
+                         sizeof(kea_map_layer)*Info->LayerCount +
                          sizeof(kea_map_cell)*Info->LayerCount*Info->Width*Info->Height);
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
@@ -351,9 +351,7 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
         case AssetType_Entity:
         {
             kea_entity *Info = &Asset->KEA.Entity;
-            Size.Data = (KEA_ENTITY_DISPLAY_LENGTH + KEA_ENTITY_NAME_LENGTH + sizeof(kea_entity_clip)*Info->ClipCount +
-                         sizeof(kea_entity_block)*Info->BlockCount + sizeof(kea_entity_field)*Info->FieldCount +
-                         sizeof(kea_entity_row)*Info->RowCount + sizeof(kea_entity_field)*Info->RowFieldCount);
+            Size.Data = (KEA_ENTITY_DISPLAY_LENGTH + KEA_ENTITY_NAME_LENGTH + sizeof(kea_entity_clip)*Info->ClipCount);
             Size.Total = Size.Data + sizeof(asset_memory_header);
         } break;
 
@@ -468,8 +466,7 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             loaded_map *Map = &Asset->Header->Map;
             Map->SetGUIDs = (u64 *)(Asset->Header + 1);
             Map->Entities = (kea_map_entity *)(Map->SetGUIDs + Info->SetCount);
-            Map->Overrides = (kea_map_override *)(Map->Entities + Info->EntityCount);
-            Map->Layers = (kea_map_layer *)(Map->Overrides + Info->OverrideCount);
+            Map->Layers = (kea_map_layer *)(Map->Entities + Info->EntityCount);
             Map->Cells = (kea_map_cell *)(Map->Layers + Info->LayerCount);
 
             Result.LoadDest = Map->SetGUIDs;
@@ -482,12 +479,8 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             kea_entity *Info = &Asset->KEA.Entity;
             loaded_entity *Entity = &Asset->Header->Entity;
             Entity->DisplayName = (char *)(Asset->Header + 1);
-            Entity->Category = Entity->DisplayName + KEA_ENTITY_DISPLAY_LENGTH;
-            Entity->Clips = (kea_entity_clip *)(Entity->Category + KEA_ENTITY_NAME_LENGTH);
-            Entity->Blocks = (kea_entity_block *)(Entity->Clips + Info->ClipCount);
-            Entity->Fields = (kea_entity_field *)(Entity->Blocks + Info->BlockCount);
-            Entity->Rows = (kea_entity_row *)(Entity->Fields + Info->FieldCount);
-            Entity->RowFields = (kea_entity_field *)(Entity->Rows + Info->RowCount);
+            Entity->Type = Entity->DisplayName + KEA_ENTITY_DISPLAY_LENGTH;
+            Entity->Clips = (kea_entity_clip *)(Entity->Type + KEA_ENTITY_NAME_LENGTH);
 
             Result.LoadDest = Entity->DisplayName;
             Result.FinalizeOp = FinalizeAsset_None;

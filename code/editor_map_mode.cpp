@@ -343,7 +343,7 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
         *Def = {};
         Def->FileName = MapMode->EntityFiles.Files[DefIndex];
         Def->File = ReadEntityFile(Def->FileName, Project, Arena);
-        if(Def->File.Category > Project->CategoryCount) {Def->File.Category = 0;}
+        if(Def->File.Type > Project->TypeCount) {Def->File.Type = 0;}
         Def->Align = V2(0.5f, 0.0f);
         Def->FrameCount = 1;
         entity_clip *Clip = 0;
@@ -375,12 +375,12 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
     }
     if(Stored) {Platform.DeallocateMemory(Stored);}
 
-    // NOTE(pvlso): By category, keeping the files' order within one
+    // NOTE(pvlso): By type, keeping the files' order within one
     for(u32 Index = 1; Index < MapMode->EntityDefCount; ++Index)
     {
         map_entity_def Node = MapMode->EntityDefs[Index];
         s32 At = (s32)Index - 1;
-        while((At >= 0) && (MapMode->EntityDefs[At].File.Category > Node.File.Category))
+        while((At >= 0) && (MapMode->EntityDefs[At].File.Type > Node.File.Type))
         {
             MapMode->EntityDefs[At + 1] = MapMode->EntityDefs[At];
             --At;
@@ -432,26 +432,10 @@ RemoveMapEntity(editor_mode_map *MapMode, s32 Index)
     }
 }
 
-// NOTE(pvlso): The placement's override of a field, 0 when it hasn't one
-internal map_placement_override *
-FindMapEntityOverride(map_placement *Entity, u32 Block, u32 Field)
-{
-    map_placement_override *Result = 0;
-    for(u32 Index = 0; !Result && (Index < Entity->OverrideCount); ++Index)
-    {
-        map_placement_override *Override = Entity->Overrides + Index;
-        if((Override->Block == Block) && (Override->Field == Field)) {Result = Override;}
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): A map file's entities into placements, their overrides found in the project's blocks; one the project
-// hasn't got (or with a value that isn't one of the field's) is dropped, and goes when the map is saved
+// NOTE(pvlso): A map file's entities into placements
 internal void
 SetMapEntitiesFromFile(editor_mode_map *MapMode, map_file *File)
 {
-    entity_project *Project = MapMode->EntityProject;
     MapMode->EntityCount = 0;
     MapMode->SelectedEntity = -1;
     ReserveMapEntities(MapMode, File->EntityCount);
@@ -471,30 +455,6 @@ SetMapEntitiesFromFile(editor_mode_map *MapMode, map_file *File)
             LOG_WARNING("Map editor: an entity at %.1f,%.1f is of a definition not in data/entities (%s), kept as it is",
                         Source->P.x, Source->P.y, Hex);
         }
-        for(u32 OverrideIndex = 0; OverrideIndex < Source->OverrideCount; ++OverrideIndex)
-        {
-            map_file_override *Override = Source->Overrides + OverrideIndex;
-            s32 Block = FindEntityBlock(Project, Override->Block);
-            s32 Field = (Block >= 0) ? FindEntityBlockField(Project->Blocks + Block, Override->Field) : -1;
-            map_placement_override *Dest = Entity->Overrides + Entity->OverrideCount;
-            if(Field >= 0)
-            {
-                Dest->Value = Project->Blocks[Block].Fields[Field].Default;
-            }
-            if((Field >= 0) && ReadEntityFieldValue(Project, Project->Blocks[Block].Fields + Field, Override->Value,
-                                                    &Dest->Value))
-            {
-                Dest->Block = (u16)Block;
-                Dest->Field = (u16)Field;
-                ++Entity->OverrideCount;
-            }
-            else
-            {
-                LOG_WARNING("Map editor: an entity overrides %s.%s with %s, which isn't a field of data/txts/%s or a "
-                            "value of it: dropped", Override->Block, Override->Field, Override->Value,
-                            ENTITY_PROJECT_FILE_NAME);
-            }
-        }
     }
 }
 
@@ -502,7 +462,6 @@ SetMapEntitiesFromFile(editor_mode_map *MapMode, map_file *File)
 internal void
 MapEntitiesToFile(editor_mode_map *MapMode, map_file *File, memory_arena *Arena)
 {
-    entity_project *Project = MapMode->EntityProject;
     File->EntityCount = MapMode->EntityCount;
     File->Entities = PushArray(Arena, Maximum(1, MapMode->EntityCount), map_file_entity);
     for(u32 EntityIndex = 0; EntityIndex < MapMode->EntityCount; ++EntityIndex)
@@ -514,19 +473,6 @@ MapEntitiesToFile(editor_mode_map *MapMode, map_file *File, memory_arena *Arena)
         Dest->Definition = Entity->Definition;
         Dest->P = Entity->P;
         Dest->Flip = Entity->Flip;
-        for(u32 OverrideIndex = 0; OverrideIndex < Entity->OverrideCount; ++OverrideIndex)
-        {
-            map_placement_override *Override = Entity->Overrides + OverrideIndex;
-            if((Override->Block < Project->BlockCount) && (Override->Field < Project->Blocks[Override->Block].FieldCount))
-            {
-                entity_block_def *Block = Project->Blocks + Override->Block;
-                map_file_override *Out = Dest->Overrides + Dest->OverrideCount++;
-                FormatString(sizeof(Out->Block), Out->Block, "%s", Block->Name);
-                FormatString(sizeof(Out->Field), Out->Field, "%s", Block->Fields[Override->Field].Name);
-                FormatEntityFieldValue(Out->Value, sizeof(Out->Value), Project, Block->Fields + Override->Field,
-                                       &Override->Value);
-            }
-        }
     }
 }
 
@@ -1290,103 +1236,23 @@ UpdateAndRenderPalette(editor_mode_map *MapMode, engine_input *Input, render_gro
     RenderGroup->CurrentClipRectIndex = SavedClip;
 }
 
-// NOTE(pvlso): One field of the selected placement: ticked, it's overridden and edited here; unticked, it shows the
-// definition's value. True while a text is typed in.
-internal b32
-DrawMapEntityField(editor_mode_map *MapMode, nk_context *Nk, map_placement *Entity, map_entity_def *Def, u32 Block,
-                   u32 Field)
-{
-    b32 Typing = false;
-    entity_field_def *FieldDef = MapMode->EntityProject->Blocks[Block].Fields + Field;
-    map_placement_override *Override = FindMapEntityOverride(Entity, Block, Field);
-    nk_layout_row_dynamic(Nk, 22, 1);
-    if((FieldDef->Kind == EntityField_List) || (FieldDef->Kind == EntityField_Material))
-    {
-        // NOTE(pvlso): Not for a placement to change: a material brings its rows when the KEA is built
-        if(FieldDef->Kind == EntityField_List)
-        {
-            u32 Rows = 0;
-            for(u32 RowIndex = 0; RowIndex < Def->File.RowCount; ++RowIndex)
-            {
-                if((Def->File.Rows[RowIndex].Block == Block) && (Def->File.Rows[RowIndex].Field == Field)) {++Rows;}
-            }
-            nk_labelf(Nk, NK_TEXT_LEFT, "  %s: %u rows of its own", FieldDef->Name, Rows);
-        }
-        else
-        {
-            char Text[ENTITY_NAME_LENGTH];
-            FormatEntityFieldValue(Text, sizeof(Text), MapMode->EntityProject, FieldDef, &Def->File.Fields[Block][Field]);
-            nk_labelf(Nk, NK_TEXT_LEFT, "  %s: %s", FieldDef->Name, Text);
-        }
-    }
-    else if(Override)
-    {
-        char Label[64];
-        FormatString(sizeof(Label), Label, "%s (overridden)", FieldDef->Name);
-        nk_bool On = true;
-        if(nk_checkbox_label(Nk, Label, &On) && !On)
-        {
-            u32 Index = (u32)(Override - Entity->Overrides);
-            for(u32 At = Index + 1; At < Entity->OverrideCount; ++At)
-            {
-                Entity->Overrides[At - 1] = Entity->Overrides[At];
-            }
-            --Entity->OverrideCount;
-            Override = 0;
-        }
-        if(Override)
-        {
-            Typing = DrawEntityFieldEditor(MapMode->EntityProject, &MapMode->EntityFiles, Nk, FieldDef, &Override->Value);
-        }
-    }
-    else
-    {
-        entity_field_value *Value = &Def->File.Fields[Block][Field];
-        char Text[ENTITY_TEXT_LENGTH + 8];
-        char *Name = (FieldDef->Kind == EntityField_Entity) ? EntityFileOfGUID(&MapMode->EntityFiles, Value->Entity) : 0;
-        if(Name) {FormatString(sizeof(Text), Text, "%s", Name);}
-        else {FormatEntityFieldValue(Text, sizeof(Text), MapMode->EntityProject, FieldDef, Value);}
-        char Label[ENTITY_TEXT_LENGTH + 64];
-        FormatString(sizeof(Label), Label, "%s: %s", FieldDef->Name, Text);
-        nk_bool On = false;
-        if(nk_checkbox_label(Nk, Label, &On) && On)
-        {
-            if(Entity->OverrideCount < MAP_FILE_MAX_ENTITY_OVERRIDES)
-            {
-                map_placement_override *New = Entity->Overrides + Entity->OverrideCount++;
-                New->Block = (u16)Block;
-                New->Field = (u16)Field;
-                New->Value = *Value;
-            }
-            else
-            {
-                LOG_WARNING("An entity on a map overrides at most %d fields", MAP_FILE_MAX_ENTITY_OVERRIDES);
-            }
-        }
-    }
-
-    return(Typing);
-}
-
-// NOTE(pvlso): The Entities tool's part of the panel: the definitions to place, the selected placement. True while a
-// text is typed in.
-internal b32
+// NOTE(pvlso): The Entities tool's part of the panel: the definitions to place, the selected placement
+internal void
 DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
 {
-    b32 Typing = false;
     entity_project *Project = MapMode->EntityProject;
     nk_layout_row_dynamic(Nk, 24, 1);
     nk_label(Nk, "", NK_TEXT_LEFT);
     nk_labelf(Nk, NK_TEXT_LEFT, "Entities (data/entities), %u placed:", MapMode->EntityCount);
     nk_layout_row_dynamic(Nk, 20, 1);
-    u32 Category = (u32)-1;
+    u32 Type = (u32)-1;
     for(u32 DefIndex = 0; DefIndex < MapMode->EntityDefCount; ++DefIndex)
     {
         map_entity_def *Def = MapMode->EntityDefs + DefIndex;
-        if(Def->File.Category != Category)
+        if(Def->File.Type != Type)
         {
-            Category = Def->File.Category;
-            nk_label(Nk, Category ? Project->Categories[Category - 1] : "(no category)", NK_TEXT_LEFT);
+            Type = Def->File.Type;
+            nk_label(Nk, Type ? Project->Types[Type - 1] : "(no type)", NK_TEXT_LEFT);
         }
         char Label[128];
         FormatString(sizeof(Label), Label, "    %s  %s", Def->FileName, Def->File.DisplayName);
@@ -1414,24 +1280,6 @@ DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
         nk_bool Flip = (Entity->Flip != 0);
         if(nk_checkbox_label(Nk, "Flip", &Flip)) {Entity->Flip = Flip;}
         if(nk_button_label(Nk, "Remove")) {MapMode->RemoveEntityRequested = true;}
-        if(Def)
-        {
-            nk_layout_row_dynamic(Nk, 24, 1);
-            nk_labelf(Nk, NK_TEXT_LEFT, "Overrides (%u of at most %d), tick a field:", Entity->OverrideCount,
-                      MAP_FILE_MAX_ENTITY_OVERRIDES);
-            for(u32 Block = 0; Block < Project->BlockCount; ++Block)
-            {
-                if(Def->File.Blocks & (1u << Block))
-                {
-                    nk_layout_row_dynamic(Nk, 22, 1);
-                    nk_label(Nk, Project->Blocks[Block].Name, NK_TEXT_LEFT);
-                    for(u32 Field = 0; Field < Project->Blocks[Block].FieldCount; ++Field)
-                    {
-                        Typing |= DrawMapEntityField(MapMode, Nk, Entity, Def, Block, Field);
-                    }
-                }
-            }
-        }
     }
 
     nk_layout_row_dynamic(Nk, 18, 1);
@@ -1442,8 +1290,6 @@ DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
     nk_label(Nk, "Right click removes one, Del the selected one.", NK_TEXT_LEFT);
     nk_label(Nk, "Alt+click picks the definition of the one under it.", NK_TEXT_LEFT);
     nk_label(Nk, "Middle drag pans, the wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
-
-    return(Typing);
 }
 
 internal void
@@ -1598,7 +1444,7 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
 
         if(MapMode->Tool == MapTool_Entities)
         {
-            MapMode->TypingLayerName |= DrawMapEntityPanel(MapMode, Nk);
+            DrawMapEntityPanel(MapMode, Nk);
         }
         else
         {

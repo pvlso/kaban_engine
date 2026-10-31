@@ -239,40 +239,6 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     Builder->CurrentAsset = BuilderAsset;
 }
 
-// NOTE(pvlso): A field's value with its name and kind, a choice's or material's word in Text
-internal kea_entity_field
-KEAEntityField(entity_project *Project, entity_field_def *FieldDef, entity_field_value *Value)
-{
-    kea_entity_field Result = {};
-    Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Name, Result.Name);
-    Result.Kind = FieldDef->Kind;
-    Result.Int = Value->Int;
-    Result.Number = Value->Number;
-    Result.Bool = Value->Bool;
-    Result.Entity = Value->Entity;
-    if(FieldDef->Kind == EntityField_Choice)
-    {
-        u32 Choice = ((u32)Value->Int < FieldDef->ChoiceCount) ? (u32)Value->Int : 0;
-        Copy(KEA_ENTITY_NAME_LENGTH, FieldDef->Choices[Choice], Result.Text);
-    }
-    else if(FieldDef->Kind == EntityField_Material)
-    {
-        if((Value->Int > 0) && ((u32)Value->Int <= Project->MaterialCount))
-        {
-            Copy(KEA_ENTITY_NAME_LENGTH, Project->Materials[Value->Int - 1].Name, Result.Text);
-        }
-    }
-    else if(FieldDef->Kind == EntityField_List)
-    {
-    }
-    else
-    {
-        Copy(KEA_ENTITY_TEXT_LENGTH, Value->Text, Result.Text);
-    }
-
-    return(Result);
-}
-
 internal b32
 IsKnownEntity(u32 KnownCount, u64 *Known, u64 GUID)
 {
@@ -285,8 +251,7 @@ IsKnownEntity(u32 KnownCount, u64 *Known, u64 GUID)
     return(Result);
 }
 
-// NOTE(pvlso): A map's entities: each override's block and field found in the project's data/txts/entity_blocks.txt
-// and its value read for the field's kind (the game needs no data file); one the project hasn't got is left out
+// NOTE(pvlso): A map's entities, each checked against the definitions in data/entities
 internal void
 AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info, builder_added_map *Data)
 {
@@ -301,8 +266,6 @@ AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info
     }
 
     Data->Entities = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount), kea_map_entity);
-    Data->Overrides = PushArray(Builder->TempMem, Maximum(1, Map->EntityCount*MAP_FILE_MAX_ENTITY_OVERRIDES),
-                                kea_map_override);
     u32 Unknown = 0;
     for(u32 EntityIndex = 0; EntityIndex < Map->EntityCount; ++EntityIndex)
     {
@@ -313,30 +276,7 @@ AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info
         Entity->P[0] = Source->P.x;
         Entity->P[1] = Source->P.y;
         Entity->Flags = Source->Flip ? KEAMapEntity_Flip : 0;
-        Entity->FirstOverride = Info->OverrideCount;
         if(!IsKnownEntity(KnownCount, Known, Source->Definition)) {++Unknown;}
-
-        for(u32 OverrideIndex = 0; OverrideIndex < Source->OverrideCount; ++OverrideIndex)
-        {
-            map_file_override *Override = Source->Overrides + OverrideIndex;
-            s32 Block = FindEntityBlock(Project, Override->Block);
-            s32 Field = (Block >= 0) ? FindEntityBlockField(Project->Blocks + Block, Override->Field) : -1;
-            entity_field_def *FieldDef = (Field >= 0) ? Project->Blocks[Block].Fields + Field : 0;
-            entity_field_value Value = FieldDef ? FieldDef->Default : entity_field_value{};
-            if(FieldDef && ReadEntityFieldValue(Project, FieldDef, Override->Value, &Value))
-            {
-                kea_map_override *Dest = Data->Overrides + Info->OverrideCount++;
-                Copy(KEA_ENTITY_NAME_LENGTH, Project->Blocks[Block].Name, Dest->Block);
-                Dest->Field = KEAEntityField(Project, FieldDef, &Value);
-                ++Entity->OverrideCount;
-            }
-            else
-            {
-                LOG_WARNING("Map %s: an entity overrides %s.%s with %s, which isn't a field of data/txts/%s or a value "
-                            "of it, left out", MapName, Override->Block, Override->Field, Override->Value,
-                            ENTITY_PROJECT_FILE_NAME);
-            }
-        }
     }
     if(Unknown)
     {
@@ -452,15 +392,12 @@ KEAEntityShape(entity_shape *Shape)
 }
 
 // NOTE(pvlso): One definition (engine_entity_file.h) with the project's names written out, its clips' looks as their
-// stored assets' GUIDs (made of their file names, as the stored bitmaps' and sprite sheets' are). Every definition's
-// GUID is in Known, to check its entity fields against.
+// stored assets' GUIDs (made of their file names, as the stored bitmaps' and sprite sheets' are)
 internal void
-AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, entity_project *Project, u32 KnownCount,
-               u64 *Known)
+AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, entity_project *Project)
 {
     static_assert(KEA_ENTITY_NAME_LENGTH == ENTITY_NAME_LENGTH, "entity names are copied as they are");
     static_assert(KEA_ENTITY_DISPLAY_LENGTH == ENTITY_DISPLAY_LENGTH, "display names are copied as they are");
-    static_assert(KEA_ENTITY_TEXT_LENGTH == ENTITY_TEXT_LENGTH, "entity texts are copied as they are");
 
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
@@ -478,10 +415,14 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
     builder_added_entity *Data = &BuilderAsset->Data.Entity;
     Data->DisplayName = PushArray(Builder->TempMem, KEA_ENTITY_DISPLAY_LENGTH, char);
     Copy(KEA_ENTITY_DISPLAY_LENGTH, Entity->DisplayName, Data->DisplayName);
-    Data->Category = PushArray(Builder->TempMem, KEA_ENTITY_NAME_LENGTH, char);
-    if(Entity->Category && (Entity->Category <= Project->CategoryCount))
+    Data->Type = PushArray(Builder->TempMem, KEA_ENTITY_NAME_LENGTH, char);
+    if(Entity->Type && (Entity->Type <= Project->TypeCount))
     {
-        Copy(KEA_ENTITY_NAME_LENGTH, Project->Categories[Entity->Category - 1], Data->Category);
+        Copy(KEA_ENTITY_NAME_LENGTH, Project->Types[Entity->Type - 1], Data->Type);
+    }
+    else
+    {
+        LOG_WARNING("Entity %s has no type, a game won't know what it is", Name);
     }
 
     // NOTE(pvlso): The clips with a look that's still stored
@@ -518,74 +459,7 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         }
     }
 
-    // NOTE(pvlso): The blocks it uses, their fields one after another
-    Data->Blocks = PushArray(Builder->TempMem, ENTITY_MAX_BLOCKS, kea_entity_block);
-    Data->Fields = PushArray(Builder->TempMem, ENTITY_MAX_BLOCKS*ENTITY_MAX_BLOCK_FIELDS, kea_entity_field);
-    u32 MaxRows = ENTITY_MAX_ROWS + ENTITY_MAX_BLOCKS*ENTITY_MAX_MATERIAL_ROWS;
-    Data->Rows = PushArray(Builder->TempMem, MaxRows, kea_entity_row);
-    Data->RowFields = PushArray(Builder->TempMem, MaxRows*ENTITY_MAX_BLOCK_FIELDS, kea_entity_field);
-    for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
-    {
-        if(!(Entity->Blocks & (1u << BlockIndex)))
-        {
-            continue;
-        }
-
-        entity_block_def *BlockDef = Project->Blocks + BlockIndex;
-        entity_material *Material = EntityBlockMaterial(Entity, Project, BlockIndex);
-        kea_entity_block *Block = Data->Blocks + Info->BlockCount++;
-        Copy(KEA_ENTITY_NAME_LENGTH, BlockDef->Name, Block->Name);
-        Block->FirstField = Info->FieldCount;
-        Block->FieldCount = BlockDef->FieldCount;
-        for(u32 FieldIndex = 0; FieldIndex < BlockDef->FieldCount; ++FieldIndex)
-        {
-            entity_field_def *FieldDef = BlockDef->Fields + FieldIndex;
-            entity_field_value *Value = &Entity->Fields[BlockIndex][FieldIndex];
-            kea_entity_field *Field = Data->Fields + Info->FieldCount++;
-            *Field = KEAEntityField(Project, FieldDef, Value);
-            if((FieldDef->Kind == EntityField_Entity) && Value->Entity)
-            {
-                if(!IsKnownEntity(KnownCount, Known, Value->Entity))
-                {
-                    LOG_WARNING("Entity %s: %s.%s names a definition that isn't in data/entities", Name, BlockDef->Name,
-                                FieldDef->Name);
-                }
-            }
-
-            if(FieldDef->Kind == EntityField_List)
-            {
-                // NOTE(pvlso): Its own rows, then the ones its material has for a list of this name
-                entity_block_def *RowKind = EntityRowKindOf(Project, BlockIndex, FieldIndex);
-                Field->FirstRow = Info->RowCount;
-                u32 OwnCount = Entity->RowCount;
-                u32 MaterialCount = Material ? Material->RowCount : 0;
-                for(u32 RowIndex = 0; RowIndex < OwnCount + MaterialCount; ++RowIndex)
-                {
-                    b32 FromMaterial = (RowIndex >= OwnCount);
-                    entity_row *Source = FromMaterial ? Material->Rows + (RowIndex - OwnCount) : Entity->Rows + RowIndex;
-                    b32 Belongs = FromMaterial ? IsMaterialRowFor(Project, Source, BlockIndex, FieldIndex) :
-                        ((Source->Block == BlockIndex) && (Source->Field == FieldIndex));
-                    if(!Belongs)
-                    {
-                        continue;
-                    }
-
-                    kea_entity_row *Row = Data->Rows + Info->RowCount++;
-                    Row->FirstField = Info->RowFieldCount;
-                    Row->FieldCount = (u16)RowKind->FieldCount;
-                    Row->Flags = FromMaterial ? KEAEntityRow_FromMaterial : 0;
-                    for(u32 RowField = 0; RowField < RowKind->FieldCount; ++RowField)
-                    {
-                        Data->RowFields[Info->RowFieldCount++] = KEAEntityField(Project, RowKind->Fields + RowField,
-                                                                                Source->Values + RowField);
-                    }
-                    ++Field->RowCount;
-                }
-            }
-        }
-    }
-    LOG("Entity %s: %u clips, %u blocks, %u fields, %u rows", Name, Info->ClipCount, Info->BlockCount, Info->FieldCount,
-        Info->RowCount);
+    LOG("Entity %s: %s, %u clips", Name, Data->Type, Info->ClipCount);
 
     Builder->CurrentAsset = BuilderAsset;
 }
@@ -635,7 +509,7 @@ AddEntityAssets(kea_builder *Builder)
                 kesa_asset *Asset = PushStruct(Builder->TempMem, kesa_asset);
                 FormatString(sizeof(Asset->SourceFileName), Asset->SourceFileName, "%s", FileNames[FileIndex]);
                 Asset->GUID = Entity->GUID;
-                AddEntityAsset(Builder, Asset, Entity, Project, Count, Known);
+                AddEntityAsset(Builder, Asset, Entity, Project);
             }
         }
     }
@@ -956,15 +830,12 @@ BuilderWriteKEA(kea_builder *Builder)
                 umm CellCount = (umm)Map->LayerCount*Map->Width*Map->Height;
                 u32 SetsSize = Map->SetCount*sizeof(u64);
                 u32 EntitiesSize = Map->EntityCount*sizeof(kea_map_entity);
-                u32 OverridesSize = Map->OverrideCount*sizeof(kea_map_override);
                 u32 LayersSize = Map->LayerCount*sizeof(kea_map_layer);
                 u32 CellsSize = (u32)(CellCount*sizeof(kea_map_cell));
                 Platform.WriteDataToFile(&Out, At, SetsSize, BuilderAsset->Data.Map.SetGUIDs);
                 At += SetsSize;
                 Platform.WriteDataToFile(&Out, At, EntitiesSize, BuilderAsset->Data.Map.Entities);
                 At += EntitiesSize;
-                Platform.WriteDataToFile(&Out, At, OverridesSize, BuilderAsset->Data.Map.Overrides);
-                At += OverridesSize;
                 Platform.WriteDataToFile(&Out, At, LayersSize, BuilderAsset->Data.Map.Layers);
                 At += LayersSize;
                 Platform.WriteDataToFile(&Out, At, CellsSize, BuilderAsset->Data.Map.Cells);
@@ -975,24 +846,12 @@ BuilderWriteKEA(kea_builder *Builder)
                 kea_entity *Entity = &Dest->Entity;
                 builder_added_entity *Data = &BuilderAsset->Data.Entity;
                 u32 ClipsSize = Entity->ClipCount*sizeof(kea_entity_clip);
-                u32 BlocksSize = Entity->BlockCount*sizeof(kea_entity_block);
-                u32 FieldsSize = Entity->FieldCount*sizeof(kea_entity_field);
-                u32 RowsSize = Entity->RowCount*sizeof(kea_entity_row);
-                u32 RowFieldsSize = Entity->RowFieldCount*sizeof(kea_entity_field);
                 Platform.WriteDataToFile(&Out, At, KEA_ENTITY_DISPLAY_LENGTH, Data->DisplayName);
                 At += KEA_ENTITY_DISPLAY_LENGTH;
-                Platform.WriteDataToFile(&Out, At, KEA_ENTITY_NAME_LENGTH, Data->Category);
+                Platform.WriteDataToFile(&Out, At, KEA_ENTITY_NAME_LENGTH, Data->Type);
                 At += KEA_ENTITY_NAME_LENGTH;
                 Platform.WriteDataToFile(&Out, At, ClipsSize, Data->Clips);
                 At += ClipsSize;
-                Platform.WriteDataToFile(&Out, At, BlocksSize, Data->Blocks);
-                At += BlocksSize;
-                Platform.WriteDataToFile(&Out, At, FieldsSize, Data->Fields);
-                At += FieldsSize;
-                Platform.WriteDataToFile(&Out, At, RowsSize, Data->Rows);
-                At += RowsSize;
-                Platform.WriteDataToFile(&Out, At, RowFieldsSize, Data->RowFields);
-                At += RowFieldsSize;
             }
             else if(Dest->Type == KEAType_SpriteSheet)
             {

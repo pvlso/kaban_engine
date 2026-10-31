@@ -83,7 +83,7 @@ ReadMapFile(char *FileName, memory_arena *Arena)
 
     u32 LineNumber = 0;
     map_file_layer *Layer = 0;
-    map_file_entity *Entity = 0;
+    u32 Overrides = 0;
     u32 Row = 0;
     char Word[256];
     while(At < FileEnd)
@@ -210,12 +210,10 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             Valid = Valid && IsTilesetNumber(Numbers[0]) && IsTilesetNumber(Numbers[1]);
             ReadMapWord(Line, LineEnd, Word, sizeof(Word));
             Read.Flip = StringsAreEqual(Word, "flip");
-            Entity = 0;
             if(Valid)
             {
                 Read.P = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
-                Entity = Result.Entities + Result.EntityCount++;
-                *Entity = Read;
+                Result.Entities[Result.EntityCount++] = Read;
             }
             else
             {
@@ -225,37 +223,20 @@ ReadMapFile(char *FileName, memory_arena *Arena)
         }
         else if(StringsAreEqual(Word, "override"))
         {
-            map_file_override Read = {};
-            Line = ReadMapWord(Line, LineEnd, Read.Block, sizeof(Read.Block));
-            Line = ReadMapWord(Line, LineEnd, Read.Field, sizeof(Read.Field));
-            ReadMapWord(Line, LineEnd, Read.Value, sizeof(Read.Value));
-            if(!Entity)
-            {
-                LOG_ERROR("Map %s, line %d: an override goes under its entity", FileName, LineNumber);
-                ++Result.ErrorCount;
-            }
-            else if(!Read.Field[0])
-            {
-                LOG_ERROR("Map %s, line %d: an override is a block, a field and a value", FileName, LineNumber);
-                ++Result.ErrorCount;
-            }
-            else if(Entity->OverrideCount >= MAP_FILE_MAX_ENTITY_OVERRIDES)
-            {
-                LOG_ERROR("Map %s, line %d: more than %d overrides on an entity", FileName, LineNumber,
-                          MAP_FILE_MAX_ENTITY_OVERRIDES);
-                ++Result.ErrorCount;
-            }
-            else
-            {
-                Entity->Overrides[Entity->OverrideCount++] = Read;
-            }
+            // NOTE(pvlso): Maps from before definitions lost their blocks (2026-10-31); saving the map drops them
+            ++Overrides;
         }
         else
         {
-            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row, entity or override, not %s", FileName,
+            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row or entity, not %s", FileName,
                       LineNumber, Word);
             ++Result.ErrorCount;
         }
+    }
+    if(Overrides)
+    {
+        LOG_WARNING("Map %s: %u override lines left out, placements don't override their definitions any more",
+                    FileName, Overrides);
     }
 
     return(Result);
@@ -267,7 +248,7 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
     umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128) +
-        (umm)Map->EntityCount*(96 + MAP_FILE_MAX_ENTITY_OVERRIDES*(2*ENTITY_NAME_LENGTH + ENTITY_TEXT_LENGTH + 16));
+        (umm)Map->EntityCount*96;
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define MAP_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -312,11 +293,6 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
         EntityGUIDToHex(Entity->GUID, GUID);
         EntityGUIDToHex(Entity->Definition, Definition);
         MAP_OUT("entity %s %s %.3f %.3f%s\n", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
-        for(u32 OverrideIndex = 0; OverrideIndex < Entity->OverrideCount; ++OverrideIndex)
-        {
-            map_file_override *Override = Entity->Overrides + OverrideIndex;
-            MAP_OUT("override %s %s %s\n", Override->Block, Override->Field, Override->Value);
-        }
     }
 #undef MAP_OUT
 

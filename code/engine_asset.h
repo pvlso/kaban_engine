@@ -24,7 +24,6 @@ struct loaded_map
 {
     u64 *SetGUIDs;
     kea_map_entity *Entities;
-    kea_map_override *Overrides;
     kea_map_layer *Layers;
     kea_map_cell *Cells;
 };
@@ -32,12 +31,8 @@ struct loaded_map
 struct loaded_entity
 {
     char *DisplayName;
-    char *Category;
+    char *Type;
     kea_entity_clip *Clips;
-    kea_entity_block *Blocks;
-    kea_entity_field *Fields;
-    kea_entity_row *Rows;
-    kea_entity_field *RowFields;
 };
 
 struct loaded_spritesheet

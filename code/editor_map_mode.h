@@ -45,14 +45,6 @@ struct map_tileset
     s32 *TileAt; // NOTE(pvlso): GridWidth*GridHeight, the tile index there or -1
 };
 
-// NOTE(pvlso): An override by its place in the project's blocks
-struct map_placement_override
-{
-    u16 Block;
-    u16 Field;
-    entity_field_value Value;
-};
-
 // NOTE(pvlso): An entity placed on the map
 struct map_placement
 {
@@ -60,8 +52,6 @@ struct map_placement
     u64 Definition;
     v2 P; // NOTE(pvlso): the foot, in cells from the map's top left, y down
     b32 Flip;
-    u32 OverrideCount;
-    map_placement_override Overrides[MAP_FILE_MAX_ENTITY_OVERRIDES];
 };
 
 // NOTE(pvlso): A definition to place, with the look of its first clip that has one (a sprite sheet shows its first

@@ -104,26 +104,11 @@ struct map_layer_info
     map_tile_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; valid while the game's assets are
 };
 
-// NOTE(pvlso): An entity definition made in the entity editor, packed from the project's data/entities. Each state of a
-// thing is a definition of its own; a game finds one by its name (FindEntity) or by its GUID (FindEntityByGUID: maps,
-// saves and entity fields name definitions by it). The engine core: a display name, a category, clips, a footprint
-// (blocks movement) and a hit area (what spells and interaction hit). Then the project's blocks it uses and their
-// fields, by name; the game gives them their meaning.
-enum entity_field_kind
-{
-    EntityField_Int,
-    EntityField_Number,
-    EntityField_Bool,
-    EntityField_Text,
-    EntityField_Choice, // NOTE(pvlso): one of the field's words: Text holds it, Int its place in the list
-    EntityField_Entity, // NOTE(pvlso): another definition: Entity holds its GUID, 0 for none
-    EntityField_List,   // NOTE(pvlso): rows of fields (GetEntityRow): RowCount of them, the definition's own first, then
-                        // its material's
-    EntityField_Material, // NOTE(pvlso): one of the project's materials: Text holds its name, empty for none
-
-    EntityField_Count,
-};
-
+// NOTE(pvlso): An entity definition made in the entity editor, packed from the project's data/entities; a game finds
+// one by its name (FindEntity) or by its GUID (FindEntityByGUID: maps and saves name definitions by it). It's only
+// what any game needs to show and place a thing: a display name, its type (one of the project's
+// data/txts/entity_types.txt), clips, a footprint (blocks movement) and a hit area (what spells and interaction hit).
+// What it does is the game's.
 enum entity_collision_shape
 {
     EntityCollision_None,
@@ -143,9 +128,8 @@ struct entity_info
     u64 GUID;
     char Name[32]; // NOTE(pvlso): its file's, without .txt
     char DisplayName[64];
-    char Category[32];
+    char Type[32];  // NOTE(pvlso): empty when it has none
     u32 ClipCount;  // NOTE(pvlso): the clips it has a look for; the first is its default
-    u32 BlockCount; // NOTE(pvlso): the blocks it uses
     entity_shape_info Footprint;
     entity_shape_info HitArea;
 };
@@ -163,34 +147,8 @@ struct entity_clip_info
     v2 Dim;           // NOTE(pvlso): the frame's size in pixels
 };
 
-struct entity_block_info
-{
-    char Name[32];
-    u32 FieldCount;
-};
-
-struct entity_field_info
-{
-    char Name[32];
-    entity_field_kind Kind;
-    s32 Int;
-    r32 Number;
-    b32 Bool;
-    u64 Entity;
-    char Text[128];
-    u32 RowCount; // NOTE(pvlso): a list's
-};
-
-// NOTE(pvlso): A row of a list field; its fields are the row's columns (GetEntityRowField)
-struct entity_row_info
-{
-    u32 FieldCount;
-    b32 FromMaterial; // NOTE(pvlso): one of the material's default rows, not the definition's own
-};
-
 // NOTE(pvlso): An entity placed on a map in the map editor: its own GUID (kept across the map's saves, for a save to
-// name it by), its definition, where its foot stands and whether it's mirrored. Its overrides start it with other
-// values than its definition's for a few fields (GetMapEntityField gives a field either way).
+// name it by), its definition, where its foot stands and whether it's mirrored
 struct map_entity_info
 {
     u64 GUID;
@@ -198,13 +156,6 @@ struct map_entity_info
     u32 Entity;        // NOTE(pvlso): the definition's asset index (FindEntityByGUID), 0 when it isn't in the KEA
     v2 P;              // NOTE(pvlso): the foot, in cells from the map's top left, y down (like the rows)
     b32 Flip;          // NOTE(pvlso): mirrored left to right
-    u32 OverrideCount;
-};
-
-struct map_entity_override
-{
-    char Block[32];
-    entity_field_info Field;
 };
 
 struct tile_info
@@ -345,23 +296,16 @@ struct engine_api
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
-    // NOTE(pvlso): All zero when there's no such entity or override
+    // NOTE(pvlso): All zero when there's no such entity
     map_entity_info (*GetMapEntity)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex);
-    map_entity_override (*GetMapEntityOverride)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
     u32 (*FindEntityByGUID)(engine_assets *Assets, u64 GUID);
-    // NOTE(pvlso): All zero when EntityIndex isn't an entity, or it has no such clip, block or field. Time in seconds
-    // since the clip started picks a sprite sheet's frame.
+    // NOTE(pvlso): All zero when EntityIndex isn't an entity, or it has no such clip. Time in seconds since the clip
+    // started picks a sprite sheet's frame.
     entity_info (*GetEntityInfo)(engine_assets *Assets, u32 EntityIndex);
     entity_clip_info (*GetEntityClip)(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time);
-    entity_block_info (*GetEntityBlock)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex);
-    entity_field_info (*GetEntityField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex);
-    // NOTE(pvlso): A list field's row and the row's fields; all zero when the field isn't a list or has no such row
-    entity_row_info (*GetEntityRow)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex);
-    entity_field_info (*GetEntityRowField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex,
-                                           u32 RowIndex, u32 RowFieldIndex);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -537,12 +481,6 @@ GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
     map_entity_info Result = Engine.GetMapEntity(Assets, MapIndex, EntityIndex);
     return(Result);
 }
-inline map_entity_override
-GetMapEntityOverride(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex)
-{
-    map_entity_override Result = Engine.GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
-    return(Result);
-}
 
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
@@ -553,34 +491,7 @@ GetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time = 
     entity_clip_info Result = Engine.GetEntityClip(Assets, EntityIndex, ClipIndex, Time);
     return(Result);
 }
-inline entity_block_info
-GetEntityBlock(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex)
-{
-    entity_block_info Result = Engine.GetEntityBlock(Assets, EntityIndex, BlockIndex);
-    return(Result);
-}
-inline entity_field_info
-GetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex)
-{
-    entity_field_info Result = Engine.GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex);
-    return(Result);
-}
-inline entity_row_info
-GetEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex)
-{
-    entity_row_info Result = Engine.GetEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex);
-    return(Result);
-}
-inline entity_field_info
-GetEntityRowField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
-                  u32 RowFieldIndex)
-{
-    entity_field_info Result = Engine.GetEntityRowField(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex,
-                                                        RowFieldIndex);
-    return(Result);
-}
-
-// NOTE(pvlso): A clip or block of a definition by its name, -1 when it has none of that name
+// NOTE(pvlso): A clip of a definition by its name, -1 when it has none of that name
 inline s32
 GetEntityClipIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
 {
@@ -593,97 +504,6 @@ GetEntityClipIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
 
     return(Result);
 }
-inline s32
-GetEntityBlockIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
-{
-    s32 Result = -1;
-    entity_info Info = GetEntityInfo(Assets, EntityIndex);
-    for(u32 BlockIndex = 0; (Result < 0) && (BlockIndex < Info.BlockCount); ++BlockIndex)
-    {
-        if(StringsAreEqual(GetEntityBlock(Assets, EntityIndex, BlockIndex).Name, Name)) {Result = (s32)BlockIndex;}
-    }
-
-    return(Result);
-}
-// NOTE(pvlso): A field by its block's and its own name; Found is false (and the rest zero) when there's no such field,
-// as for a definition that doesn't use the block
-inline entity_field_info
-GetEntityFieldByName(engine_assets *Assets, u32 EntityIndex, char *BlockName, char *FieldName, b32 *Found = 0)
-{
-    entity_field_info Result = {};
-    b32 WasFound = false;
-    s32 Block = GetEntityBlockIndex(Assets, EntityIndex, BlockName);
-    if(Block >= 0)
-    {
-        entity_block_info BlockInfo = GetEntityBlock(Assets, EntityIndex, (u32)Block);
-        for(u32 FieldIndex = 0; !WasFound && (FieldIndex < BlockInfo.FieldCount); ++FieldIndex)
-        {
-            entity_field_info Field = GetEntityField(Assets, EntityIndex, (u32)Block, FieldIndex);
-            if(StringsAreEqual(Field.Name, FieldName)) {Result = Field; WasFound = true;}
-        }
-    }
-    if(Found) {*Found = WasFound;}
-
-    return(Result);
-}
-// NOTE(pvlso): A field of a block by its name, -1 when the block has none of that name
-inline s32
-GetEntityFieldIndex(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, char *Name)
-{
-    s32 Result = -1;
-    entity_block_info Block = GetEntityBlock(Assets, EntityIndex, BlockIndex);
-    for(u32 FieldIndex = 0; (Result < 0) && (FieldIndex < Block.FieldCount); ++FieldIndex)
-    {
-        if(StringsAreEqual(GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex).Name, Name)) {Result = (s32)FieldIndex;}
-    }
-
-    return(Result);
-}
-// NOTE(pvlso): A field of a list's row by its name; Found is false (and the rest zero) when the row has none
-inline entity_field_info
-GetEntityRowFieldByName(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
-                        char *Name, b32 *Found = 0)
-{
-    entity_field_info Result = {};
-    b32 WasFound = false;
-    entity_row_info Row = GetEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex);
-    for(u32 RowFieldIndex = 0; !WasFound && (RowFieldIndex < Row.FieldCount); ++RowFieldIndex)
-    {
-        entity_field_info Field = GetEntityRowField(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, RowFieldIndex);
-        if(StringsAreEqual(Field.Name, Name)) {Result = Field; WasFound = true;}
-    }
-    if(Found) {*Found = WasFound;}
-
-    return(Result);
-}
-
-// NOTE(pvlso): A field of an entity placed on a map: its override when it has one, else its definition's value. Found
-// is false when neither has it.
-inline entity_field_info
-GetMapEntityField(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, char *BlockName, char *FieldName,
-                  b32 *Found = 0)
-{
-    entity_field_info Result = {};
-    b32 WasFound = false;
-    map_entity_info Entity = GetMapEntity(Assets, MapIndex, EntityIndex);
-    for(u32 OverrideIndex = 0; !WasFound && (OverrideIndex < Entity.OverrideCount); ++OverrideIndex)
-    {
-        map_entity_override Override = GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
-        if(StringsAreEqual(Override.Block, BlockName) && StringsAreEqual(Override.Field.Name, FieldName))
-        {
-            Result = Override.Field;
-            WasFound = true;
-        }
-    }
-    if(!WasFound && Entity.Entity)
-    {
-        Result = GetEntityFieldByName(Assets, Entity.Entity, BlockName, FieldName, &WasFound);
-    }
-    if(Found) {*Found = WasFound;}
-
-    return(Result);
-}
-
 inline engine_font *GetFont(char *FileName) {return(Engine.GetFont(FileName));}
 
 inline void

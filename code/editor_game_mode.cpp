@@ -331,9 +331,8 @@ GameGetEntityInfo(engine_assets *Assets, u32 EntityIndex)
         FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Info->Name);
         FormatString(sizeof(Result.DisplayName), Result.DisplayName, "%.*s", KEA_ENTITY_DISPLAY_LENGTH,
                      Entity->DisplayName);
-        FormatString(sizeof(Result.Category), Result.Category, "%.*s", KEA_ENTITY_NAME_LENGTH, Entity->Category);
+        FormatString(sizeof(Result.Type), Result.Type, "%.*s", KEA_ENTITY_NAME_LENGTH, Entity->Type);
         Result.ClipCount = Info->ClipCount;
-        Result.BlockCount = Info->BlockCount;
         Result.Footprint = EntityShapeInfo(&Info->Footprint);
         Result.HitArea = EntityShapeInfo(&Info->HitArea);
     }
@@ -386,110 +385,6 @@ GameGetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Tim
     return(Result);
 }
 
-internal entity_block_info
-GameGetEntityBlock(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex)
-{
-    entity_block_info Result = {};
-    kea_entity *Info = 0;
-    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
-    if(Entity && (BlockIndex < Info->BlockCount))
-    {
-        kea_entity_block *Block = Entity->Blocks + BlockIndex;
-        FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Block->Name);
-        Result.FieldCount = Block->FieldCount;
-    }
-
-    return(Result);
-}
-
-inline entity_field_info
-EntityFieldInfo(kea_entity_field *Field)
-{
-    entity_field_info Result = {};
-    FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Field->Name);
-    Result.Kind = (entity_field_kind)Field->Kind;
-    Result.Int = Field->Int;
-    Result.Number = Field->Number;
-    Result.Bool = Field->Bool;
-    Result.Entity = Field->Entity;
-    FormatString(sizeof(Result.Text), Result.Text, "%.*s", KEA_ENTITY_TEXT_LENGTH, Field->Text);
-    Result.RowCount = (Result.Kind == EntityField_List) ? Field->RowCount : 0;
-
-    return(Result);
-}
-
-internal entity_field_info
-GameGetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex)
-{
-    entity_field_info Result = {};
-    kea_entity *Info = 0;
-    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, &Info);
-    if(Entity && (BlockIndex < Info->BlockCount) && (FieldIndex < Entity->Blocks[BlockIndex].FieldCount))
-    {
-        u32 Index = Entity->Blocks[BlockIndex].FirstField + FieldIndex;
-        if(Index < Info->FieldCount)
-        {
-            Result = EntityFieldInfo(Entity->Fields + Index);
-        }
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): A list field's row, 0 when there's none
-internal kea_entity_row *
-GameEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
-              loaded_entity **Loaded, kea_entity **Info)
-{
-    kea_entity_row *Result = 0;
-    loaded_entity *Entity = GameLoadedEntity(Assets, EntityIndex, Info);
-    if(Entity && (BlockIndex < (*Info)->BlockCount) && (FieldIndex < Entity->Blocks[BlockIndex].FieldCount))
-    {
-        u32 Index = Entity->Blocks[BlockIndex].FirstField + FieldIndex;
-        kea_entity_field *Field = (Index < (*Info)->FieldCount) ? Entity->Fields + Index : 0;
-        if(Field && (Field->Kind == EntityField_List) && (RowIndex < Field->RowCount) &&
-           (Field->FirstRow + RowIndex < (*Info)->RowCount))
-        {
-            Result = Entity->Rows + Field->FirstRow + RowIndex;
-            *Loaded = Entity;
-        }
-    }
-
-    return(Result);
-}
-
-internal entity_row_info
-GameGetEntityRow(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex)
-{
-    entity_row_info Result = {};
-    loaded_entity *Entity = 0;
-    kea_entity *Info = 0;
-    kea_entity_row *Row = GameEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, &Entity, &Info);
-    if(Row)
-    {
-        Result.FieldCount = Row->FieldCount;
-        Result.FromMaterial = ((Row->Flags & KEAEntityRow_FromMaterial) != 0);
-    }
-
-    return(Result);
-}
-
-internal entity_field_info
-GameGetEntityRowField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex, u32 RowIndex,
-                      u32 RowFieldIndex)
-{
-    entity_field_info Result = {};
-    loaded_entity *Entity = 0;
-    kea_entity *Info = 0;
-    kea_entity_row *Row = GameEntityRow(Assets, EntityIndex, BlockIndex, FieldIndex, RowIndex, &Entity, &Info);
-    if(Row && (RowFieldIndex < Row->FieldCount) && (Row->FirstField + RowFieldIndex < Info->RowFieldCount))
-    {
-        Result = EntityFieldInfo(Entity->RowFields + Row->FirstField + RowFieldIndex);
-    }
-
-    return(Result);
-}
-
 internal map_entity_info
 GameGetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
 {
@@ -504,27 +399,6 @@ GameGetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
         Result.Entity = GameFindEntityByGUID(Assets, Entity->Definition);
         Result.P = V2(Entity->P[0], Entity->P[1]);
         Result.Flip = (Entity->Flags & KEAMapEntity_Flip) != 0;
-        Result.OverrideCount = Entity->OverrideCount;
-    }
-
-    return(Result);
-}
-
-internal map_entity_override
-GameGetMapEntityOverride(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex)
-{
-    map_entity_override Result = {};
-    kea_map *Info = 0;
-    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
-    if(Map && (EntityIndex < Info->EntityCount) && (OverrideIndex < Map->Entities[EntityIndex].OverrideCount))
-    {
-        u32 Index = Map->Entities[EntityIndex].FirstOverride + OverrideIndex;
-        if(Index < Info->OverrideCount)
-        {
-            kea_map_override *Override = Map->Overrides + Index;
-            FormatString(sizeof(Result.Block), Result.Block, "%.*s", KEA_ENTITY_NAME_LENGTH, Override->Block);
-            Result.Field = EntityFieldInfo(&Override->Field);
-        }
     }
 
     return(Result);
@@ -596,15 +470,10 @@ GetEngineAPI(void)
     Result.GetMapLayer = GameGetMapLayer;
     Result.GetMapTileset = GameGetMapTileset;
     Result.GetMapEntity = GameGetMapEntity;
-    Result.GetMapEntityOverride = GameGetMapEntityOverride;
     Result.FindEntity = GameFindEntity;
     Result.FindEntityByGUID = GameFindEntityByGUID;
     Result.GetEntityInfo = GameGetEntityInfo;
     Result.GetEntityClip = GameGetEntityClip;
-    Result.GetEntityBlock = GameGetEntityBlock;
-    Result.GetEntityField = GameGetEntityField;
-    Result.GetEntityRow = GameGetEntityRow;
-    Result.GetEntityRowField = GameGetEntityRowField;
 Result.GetNormalMap = GameGetNormalMap;
 
     return(Result);

@@ -310,15 +310,13 @@ struct kea_map_cell
 };
 
 // NOTE(pvlso): An entity placed on the map: its own GUID, its definition's, its foot in cells from the map's top left
-// (y down), and its overrides, Overrides[FirstOverride] on
+// (y down)
 struct kea_map_entity
 {
     u64 GUID;
     u64 Definition;
     r32 P[2];
     u32 Flags; // NOTE(pvlso): KEAMapEntity_*
-    u32 FirstOverride;
-    u32 OverrideCount;
 };
 enum kea_map_entity_flag
 {
@@ -332,24 +330,21 @@ struct kea_map
     u16 LayerCount;
     u16 SetCount;
     u32 EntityCount;
-    u32 OverrideCount;
 
     /* NOTE(pvlso): Data is:
 
        u64 SetGUIDs[SetCount];
        kea_map_entity Entities[EntityCount];
-       kea_map_override Overrides[OverrideCount];
        kea_map_layer Layers[LayerCount];
        kea_map_cell Cells[LayerCount][Height][Width];
     */
 };
 
 // NOTE(pvlso): An entity definition (engine_entity_file.h), the project's names written out so a game needs no data
-// file: its clips that have a look (by name, the look as its stored asset's GUID), the blocks it uses and their
-// fields, its lists' rows (its own, then its material's) and their fields. Its asset GUID is the definition's own.
+// file: its type and its clips that have a look (by name, the look as its stored asset's GUID). Its asset GUID is the
+// definition's own.
 #define KEA_ENTITY_NAME_LENGTH 32
 #define KEA_ENTITY_DISPLAY_LENGTH 64
-#define KEA_ENTITY_TEXT_LENGTH 128
 
 struct kea_entity_shape
 {
@@ -366,66 +361,20 @@ struct kea_entity_clip
     u32 Loop;
 };
 
-struct kea_entity_block
-{
-    char Name[KEA_ENTITY_NAME_LENGTH];
-    u32 FirstField;
-    u32 FieldCount;
-};
-
-struct kea_entity_field
-{
-    char Name[KEA_ENTITY_NAME_LENGTH];
-    u32 Kind; // NOTE(pvlso): entity_field_kind
-    s32 Int;
-    r32 Number;
-    b32 Bool;
-    u64 Entity;
-    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's or material's word
-    u32 FirstRow; // NOTE(pvlso): a list's rows, in the entity's Rows
-    u32 RowCount;
-};
-
-struct kea_entity_row
-{
-    u32 FirstField; // NOTE(pvlso): in the entity's RowFields
-    u16 FieldCount;
-    u16 Flags; // NOTE(pvlso): KEAEntityRow_*
-};
-enum kea_entity_row_flag
-{
-    KEAEntityRow_FromMaterial = (1 << 0),
-};
-
 struct kea_entity
 {
     char Name[KEA_ENTITY_NAME_LENGTH]; // NOTE(pvlso): its file's, without .txt, so it's found without loading it
     u16 ClipCount;
-    u16 BlockCount;
-    u16 FieldCount;
     u16 Flags;
-    u16 RowCount;
-    u16 RowFieldCount;
     kea_entity_shape Footprint;
     kea_entity_shape HitArea;
 
     /* NOTE(pvlso): Data is:
 
        char DisplayName[KEA_ENTITY_DISPLAY_LENGTH];
-       char Category[KEA_ENTITY_NAME_LENGTH];
+       char Type[KEA_ENTITY_NAME_LENGTH];
        kea_entity_clip Clips[ClipCount];
-       kea_entity_block Blocks[BlockCount];
-       kea_entity_field Fields[FieldCount];
-       kea_entity_row Rows[RowCount];
-       kea_entity_field RowFields[RowFieldCount];
     */
-};
-
-// NOTE(pvlso): A map's entity starting with another value for one field of its definition's blocks
-struct kea_map_override
-{
-    char Block[KEA_ENTITY_NAME_LENGTH];
-    kea_entity_field Field;
 };
 
 struct kea_spritesheet

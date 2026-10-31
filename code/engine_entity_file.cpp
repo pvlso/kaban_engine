@@ -6,14 +6,10 @@
    $Notice: $
    ======================================================================== */
 
-// NOTE(pvlso): The project's entity blocks and entity definitions, the text formats: see engine_entity_file.h. Lines
+// NOTE(pvlso): The project's entity types and entity definitions, the text formats: see engine_entity_file.h. Lines
 // are read with the tile sets' tokenizer (engine_tileset_file.cpp).
 
-#define ENTITY_PROJECT_FILE_NAME "entity_blocks.txt"
-#define ENTITY_MATERIALS_FILE_NAME "entity_materials.txt"
-
-global_variable char *EntityFieldKindNames[EntityField_Count] = {"int", "number", "bool", "text", "choice", "entity",
-                                                                 "list", "material"};
+#define ENTITY_PROJECT_FILE_NAME "entity_types.txt"
 
 // NOTE(pvlso): A new definition's GUID: the CPU's clock mixed (splitmix64), never 0
 internal u64
@@ -73,125 +69,6 @@ FindNameIn(char (*Names)[ENTITY_NAME_LENGTH], u32 Count, char *Name)
     return(Result);
 }
 
-internal s32
-FindEntityBlock(entity_project *Project, char *Name)
-{
-    s32 Result = -1;
-    for(u32 BlockIndex = 0; (Result < 0) && (BlockIndex < Project->BlockCount); ++BlockIndex)
-    {
-        if(StringsAreEqual(Project->Blocks[BlockIndex].Name, Name)) {Result = (s32)BlockIndex;}
-    }
-
-    return(Result);
-}
-
-internal s32
-FindEntityRowKind(entity_project *Project, char *Name)
-{
-    s32 Result = -1;
-    for(u32 RowIndex = 0; (Result < 0) && (RowIndex < Project->RowKindCount); ++RowIndex)
-    {
-        if(StringsAreEqual(Project->RowKinds[RowIndex].Name, Name)) {Result = (s32)RowIndex;}
-    }
-
-    return(Result);
-}
-
-internal s32
-FindEntityMaterial(entity_project *Project, char *Name)
-{
-    s32 Result = -1;
-    for(u32 MaterialIndex = 0; (Result < 0) && (MaterialIndex < Project->MaterialCount); ++MaterialIndex)
-    {
-        if(StringsAreEqual(Project->Materials[MaterialIndex].Name, Name)) {Result = (s32)MaterialIndex;}
-    }
-
-    return(Result);
-}
-
-internal s32
-FindEntityBlockField(entity_block_def *Block, char *Name)
-{
-    s32 Result = -1;
-    for(u32 FieldIndex = 0; (Result < 0) && (FieldIndex < Block->FieldCount); ++FieldIndex)
-    {
-        if(StringsAreEqual(Block->Fields[FieldIndex].Name, Name)) {Result = (s32)FieldIndex;}
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): False when Token isn't a value of that field; a list has no value of one word
-internal b32
-ReadEntityFieldValue(entity_project *Project, entity_field_def *Field, char *Token, entity_field_value *Value)
-{
-    b32 Result = true;
-    switch(Field->Kind)
-    {
-        case EntityField_Int:
-        {
-            Result = IsTilesetNumber(Token);
-            if(Result) {Value->Int = RoundReal32ToInt32(R32FromTilesetToken(Token));}
-        } break;
-
-        case EntityField_Number:
-        {
-            Result = IsTilesetNumber(Token);
-            if(Result) {Value->Number = R32FromTilesetToken(Token);}
-        } break;
-
-        case EntityField_Bool:
-        {
-            if(StringsAreEqual(Token, "yes") || StringsAreEqual(Token, "true") || StringsAreEqual(Token, "1"))
-            {
-                Value->Bool = true;
-            }
-            else if(StringsAreEqual(Token, "no") || StringsAreEqual(Token, "false") || StringsAreEqual(Token, "0"))
-            {
-                Value->Bool = false;
-            }
-            else
-            {
-                Result = false;
-            }
-        } break;
-
-        case EntityField_Text:
-        {
-            FormatString(ENTITY_TEXT_LENGTH, Value->Text, "%s", Token);
-        } break;
-
-        case EntityField_Choice:
-        {
-            s32 Choice = FindNameIn(Field->Choices, Field->ChoiceCount, Token);
-            Result = (Choice >= 0);
-            if(Result) {Value->Int = Choice;}
-        } break;
-
-        case EntityField_Entity:
-        {
-            Result = EntityGUIDFromHex(Token, &Value->Entity);
-        } break;
-
-        case EntityField_List:
-        {
-            Result = false;
-        } break;
-
-        case EntityField_Material:
-        {
-            b32 None = StringsAreEqual(Token, "none");
-            s32 Material = None ? -1 : FindEntityMaterial(Project, Token);
-            Result = None || (Material >= 0);
-            if(Result) {Value->Int = Material + 1;}
-        } break;
-
-        InvalidDefaultCase;
-    }
-
-    return(Result);
-}
-
 // NOTE(pvlso): none, circle x y radius, box x y width height from Tokens[First]
 internal b32
 ReadEntityShape(tileset_line_tokens *Tokens, u32 First, entity_shape *Shape)
@@ -213,28 +90,6 @@ ReadEntityShape(tileset_line_tokens *Tokens, u32 First, entity_shape *Shape)
             Shape->Size.x = R32FromTilesetToken(Tokens->Tokens[First + 3]);
             if(Numbers == 4) {Shape->Size.y = R32FromTilesetToken(Tokens->Tokens[First + 4]);}
         }
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): A row of RowKind from pairs of a field's name and its value at Tokens[First]; fields left out keep the
-// row's start values. False when a pair can't be read (the pairs before it are kept).
-internal b32
-ReadEntityRowValues(entity_project *Project, entity_block_def *RowKind, tileset_line_tokens *Tokens, u32 First,
-                    entity_row *Row)
-{
-    for(u32 FieldIndex = 0; FieldIndex < ENTITY_MAX_BLOCK_FIELDS; ++FieldIndex)
-    {
-        Row->Values[FieldIndex] = (FieldIndex < RowKind->FieldCount) ? RowKind->Fields[FieldIndex].Default :
-            entity_field_value{};
-    }
-    b32 Result = !((Tokens->Count - First) & 1);
-    for(u32 Index = First; Result && (Index + 1 < Tokens->Count); Index += 2)
-    {
-        s32 Field = FindEntityBlockField(RowKind, Tokens->Tokens[Index]);
-        Result = (Field >= 0) && ReadEntityFieldValue(Project, RowKind->Fields + Field, Tokens->Tokens[Index + 1],
-                                                      Row->Values + Field);
     }
 
     return(Result);
@@ -271,29 +126,25 @@ ReadEntityLines(char *FileName, platform_file_type Type, memory_arena *Arena, en
     return(Result);
 }
 
-struct entity_project_reader
-{
-    entity_project *Project;
-    entity_block_def *Block;
-    b32 InRow; // NOTE(pvlso): Block is a row's
-};
-
 internal
 ENTITY_LINE_CALLBACK(ReadEntityProjectLine)
 {
-    entity_project_reader *Reader = (entity_project_reader *)Context;
-    entity_project *Project = Reader->Project;
+    entity_project *Project = (entity_project *)Context;
     char *Key = Tokens->Tokens[0];
     char *Name = (Tokens->Count >= 2) ? Tokens->Tokens[1] : (char *)"";
-    if(StringsAreEqual(Key, "category") && Name[0])
+    if(StringsAreEqual(Key, "type") && Name[0])
     {
-        if(Project->CategoryCount < ENTITY_MAX_CATEGORIES)
+        if(FindNameIn(Project->Types, Project->TypeCount, Name) >= 0)
         {
-            FormatString(ENTITY_NAME_LENGTH, Project->Categories[Project->CategoryCount++], "%s", Name);
+            LOG_ERROR("%s, line %d: the type %s again", FileName, LineNumber, Name);
+        }
+        else if(Project->TypeCount < ENTITY_MAX_TYPES)
+        {
+            FormatString(ENTITY_NAME_LENGTH, Project->Types[Project->TypeCount++], "%s", Name);
         }
         else
         {
-            LOG_ERROR("%s, line %d: more than %d categories", FileName, LineNumber, ENTITY_MAX_CATEGORIES);
+            LOG_ERROR("%s, line %d: more than %d types", FileName, LineNumber, ENTITY_MAX_TYPES);
         }
     }
     else if(StringsAreEqual(Key, "clip") && Name[0])
@@ -307,115 +158,6 @@ ENTITY_LINE_CALLBACK(ReadEntityProjectLine)
             LOG_ERROR("%s, line %d: more than %d clips", FileName, LineNumber, ENTITY_MAX_CLIPS);
         }
     }
-    else if(StringsAreEqual(Key, "row") && Name[0])
-    {
-        Reader->Block = 0;
-        Reader->InRow = true;
-        if(FindEntityRowKind(Project, Name) >= 0)
-        {
-            LOG_ERROR("%s, line %d: the row %s again", FileName, LineNumber, Name);
-        }
-        else if(Project->RowKindCount < ENTITY_MAX_ROW_KINDS)
-        {
-            Reader->Block = Project->RowKinds + Project->RowKindCount++;
-            FormatString(ENTITY_NAME_LENGTH, Reader->Block->Name, "%s", Name);
-        }
-        else
-        {
-            LOG_ERROR("%s, line %d: more than %d rows", FileName, LineNumber, ENTITY_MAX_ROW_KINDS);
-        }
-    }
-    else if(StringsAreEqual(Key, "block") && Name[0])
-    {
-        Reader->Block = 0;
-        Reader->InRow = false;
-        if(FindEntityBlock(Project, Name) >= 0)
-        {
-            LOG_ERROR("%s, line %d: the block %s again", FileName, LineNumber, Name);
-        }
-        else if(Project->BlockCount < ENTITY_MAX_BLOCKS)
-        {
-            Reader->Block = Project->Blocks + Project->BlockCount++;
-            FormatString(ENTITY_NAME_LENGTH, Reader->Block->Name, "%s", Name);
-        }
-        else
-        {
-            LOG_ERROR("%s, line %d: more than %d blocks", FileName, LineNumber, ENTITY_MAX_BLOCKS);
-        }
-    }
-    else if(StringsAreEqual(Key, "field") && (Tokens->Count >= 3))
-    {
-        entity_block_def *Block = Reader->Block;
-        s32 Kind = -1;
-        for(u32 KindIndex = 0; KindIndex < EntityField_Count; ++KindIndex)
-        {
-            if(StringsAreEqual(Tokens->Tokens[2], EntityFieldKindNames[KindIndex])) {Kind = (s32)KindIndex;}
-        }
-        if(!Block)
-        {
-            LOG_ERROR("%s, line %d: the field %s isn't under a block", FileName, LineNumber, Name);
-        }
-        else if(Kind < 0)
-        {
-            LOG_ERROR("%s, line %d: %s isn't a field kind (int, number, bool, text, choice, entity, list, material)",
-                      FileName, LineNumber, Tokens->Tokens[2]);
-        }
-        else if((Kind == EntityField_List) && Reader->InRow)
-        {
-            LOG_ERROR("%s, line %d: a row can't hold the list %s", FileName, LineNumber, Name);
-        }
-        else if((Kind == EntityField_List) &&
-                ((Tokens->Count < 4) || (FindEntityRowKind(Project, Tokens->Tokens[3]) < 0)))
-        {
-            LOG_ERROR("%s, line %d: the list %s needs a row declared above it", FileName, LineNumber, Name);
-        }
-        else if(Block->FieldCount >= ENTITY_MAX_BLOCK_FIELDS)
-        {
-            LOG_ERROR("%s, line %d: %s has more than %d fields", FileName, LineNumber, Block->Name,
-                      ENTITY_MAX_BLOCK_FIELDS);
-        }
-        else
-        {
-            entity_field_def *Field = Block->Fields + Block->FieldCount++;
-            FormatString(ENTITY_NAME_LENGTH, Field->Name, "%s", Name);
-            Field->Kind = (entity_field_kind)Kind;
-            if(Field->Kind == EntityField_Choice)
-            {
-                for(u32 Index = 3; Index < Tokens->Count; ++Index)
-                {
-                    if(Field->ChoiceCount < ENTITY_MAX_CHOICES)
-                    {
-                        FormatString(ENTITY_NAME_LENGTH, Field->Choices[Field->ChoiceCount++], "%s", Tokens->Tokens[Index]);
-                    }
-                    else if(Index == 3 + ENTITY_MAX_CHOICES)
-                    {
-                        LOG_ERROR("%s, line %d: the choice %s has more than %d words, %s and the rest are left out",
-                                  FileName, LineNumber, Name, ENTITY_MAX_CHOICES, Tokens->Tokens[Index]);
-                    }
-                }
-                if(!Field->ChoiceCount)
-                {
-                    LOG_ERROR("%s, line %d: the choice %s lists no words", FileName, LineNumber, Name);
-                    FormatString(ENTITY_NAME_LENGTH, Field->Choices[Field->ChoiceCount++], "None");
-                }
-            }
-            else if(Field->Kind == EntityField_List)
-            {
-                Field->Row = (u32)FindEntityRowKind(Project, Tokens->Tokens[3]);
-            }
-            else if(Field->Kind == EntityField_Material)
-            {
-                // NOTE(pvlso): The materials are read after this file, the start value is found then
-                if(Tokens->Count >= 4) {FormatString(ENTITY_TEXT_LENGTH, Field->Default.Text, "%s", Tokens->Tokens[3]);}
-            }
-            else if((Field->Kind != EntityField_Entity) && (Tokens->Count >= 4) &&
-                    !ReadEntityFieldValue(Project, Field, Tokens->Tokens[3], &Field->Default))
-            {
-                LOG_ERROR("%s, line %d: %s isn't a %s value", FileName, LineNumber, Tokens->Tokens[3],
-                          EntityFieldKindNames[Kind]);
-            }
-        }
-    }
     else
     {
         LOG_ERROR("%s, line %d: can't read %s", FileName, LineNumber, Key);
@@ -424,252 +166,37 @@ ENTITY_LINE_CALLBACK(ReadEntityProjectLine)
     return(true);
 }
 
-// NOTE(pvlso): The first list field of that name in the project's blocks; false when none has it
-internal b32
-FindEntityListField(entity_project *Project, char *Name, u32 *Block, u32 *Field)
-{
-    b32 Result = false;
-    for(u32 BlockIndex = 0; !Result && (BlockIndex < Project->BlockCount); ++BlockIndex)
-    {
-        entity_block_def *BlockDef = Project->Blocks + BlockIndex;
-        for(u32 FieldIndex = 0; !Result && (FieldIndex < BlockDef->FieldCount); ++FieldIndex)
-        {
-            if((BlockDef->Fields[FieldIndex].Kind == EntityField_List) &&
-               StringsAreEqual(BlockDef->Fields[FieldIndex].Name, Name))
-            {
-                *Block = BlockIndex;
-                *Field = FieldIndex;
-                Result = true;
-            }
-        }
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): A list field's row kind
-inline entity_block_def *
-EntityRowKindOf(entity_project *Project, u32 Block, u32 Field)
-{
-    entity_block_def *Result = Project->RowKinds + Project->Blocks[Block].Fields[Field].Row;
-    return(Result);
-}
-
-struct entity_material_reader
-{
-    entity_project *Project;
-    entity_material *Material; // NOTE(pvlso): the one the rows are for, 0 after a material that couldn't be read
-};
-
-internal
-ENTITY_LINE_CALLBACK(ReadEntityMaterialLine)
-{
-    entity_material_reader *Reader = (entity_material_reader *)Context;
-    entity_project *Project = Reader->Project;
-    char *Key = Tokens->Tokens[0];
-    if(StringsAreEqual(Key, "material") && (Tokens->Count >= 2))
-    {
-        Reader->Material = 0;
-        if(StringsAreEqual(Tokens->Tokens[1], "none") || (FindEntityMaterial(Project, Tokens->Tokens[1]) >= 0))
-        {
-            LOG_ERROR("%s, line %d: %s can't be a material's name (again)", FileName, LineNumber, Tokens->Tokens[1]);
-        }
-        else if(Project->MaterialCount < ENTITY_MAX_MATERIALS)
-        {
-            Reader->Material = Project->Materials + Project->MaterialCount++;
-            FormatString(ENTITY_NAME_LENGTH, Reader->Material->Name, "%s", Tokens->Tokens[1]);
-        }
-        else
-        {
-            LOG_ERROR("%s, line %d: more than %d materials", FileName, LineNumber, ENTITY_MAX_MATERIALS);
-        }
-    }
-    else if(StringsAreEqual(Key, "row") && (Tokens->Count >= 2))
-    {
-        entity_material *Material = Reader->Material;
-        u32 Block = 0;
-        u32 Field = 0;
-        if(!Material)
-        {
-            LOG_ERROR("%s, line %d: the row isn't under a material, left out", FileName, LineNumber);
-        }
-        else if(!FindEntityListField(Project, Tokens->Tokens[1], &Block, &Field))
-        {
-            LOG_ERROR("%s, line %d: no block of data/txts/%s has the list %s", FileName, LineNumber,
-                      ENTITY_PROJECT_FILE_NAME, Tokens->Tokens[1]);
-        }
-        else if(Material->RowCount >= ENTITY_MAX_MATERIAL_ROWS)
-        {
-            LOG_ERROR("%s, line %d: %s has more than %d rows", FileName, LineNumber, Material->Name,
-                      ENTITY_MAX_MATERIAL_ROWS);
-        }
-        else
-        {
-            entity_row *Row = Material->Rows + Material->RowCount++;
-            Row->Block = Block;
-            Row->Field = Field;
-            if(!ReadEntityRowValues(Project, EntityRowKindOf(Project, Block, Field), Tokens, 2, Row))
-            {
-                LOG_ERROR("%s, line %d: can't read all of the row (not a field of the row, or not its value?)",
-                          FileName, LineNumber);
-            }
-        }
-    }
-    else
-    {
-        LOG_ERROR("%s, line %d: can't read %s", FileName, LineNumber, Key);
-    }
-
-    return(true);
-}
-
-// NOTE(pvlso): The project's data/txts/entity_blocks.txt and entity_materials.txt, on Arena. Without the first the
-// project has one clip, Idle, no categories and no blocks; without the second, no materials.
+// NOTE(pvlso): The project's data/txts/entity_types.txt, on Arena. Without it the project has one clip, Idle, and no
+// types.
 internal entity_project *
 ReadEntityProject(memory_arena *Arena)
 {
     entity_project *Result = PushStruct(Arena, entity_project);
     if(Platform.FileExists(ENTITY_PROJECT_FILE_NAME, PlatformFileType_TXT))
     {
-        entity_project_reader Reader = {Result, 0};
-        ReadEntityLines(ENTITY_PROJECT_FILE_NAME, PlatformFileType_TXT, Arena, ReadEntityProjectLine, &Reader);
+        ReadEntityLines(ENTITY_PROJECT_FILE_NAME, PlatformFileType_TXT, Arena, ReadEntityProjectLine, Result);
     }
     else
     {
-        LOG_WARNING("No data/txts/%s, the project's entities have no categories or blocks", ENTITY_PROJECT_FILE_NAME);
+        LOG_WARNING("No data/txts/%s, the project's entities have no types", ENTITY_PROJECT_FILE_NAME);
     }
     if(!Result->ClipCount)
     {
         FormatString(ENTITY_NAME_LENGTH, Result->Clips[Result->ClipCount++], "Idle");
     }
-    if(Platform.FileExists(ENTITY_MATERIALS_FILE_NAME, PlatformFileType_TXT))
-    {
-        entity_material_reader Reader = {Result, 0};
-        ReadEntityLines(ENTITY_MATERIALS_FILE_NAME, PlatformFileType_TXT, Arena, ReadEntityMaterialLine, &Reader);
-    }
-
-    // NOTE(pvlso): The material fields' start values, now that the materials are known, in blocks and rows
-    for(u32 BlockIndex = 0; BlockIndex < Result->BlockCount + Result->RowKindCount; ++BlockIndex)
-    {
-        entity_block_def *Block = (BlockIndex < Result->BlockCount) ? Result->Blocks + BlockIndex :
-            Result->RowKinds + BlockIndex - Result->BlockCount;
-        for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
-        {
-            entity_field_def *Field = Block->Fields + FieldIndex;
-            if(Field->Kind == EntityField_Material)
-            {
-                char Start[ENTITY_TEXT_LENGTH];
-                FormatString(sizeof(Start), Start, "%s", Field->Default.Text);
-                Field->Default = {};
-                if(Start[0] && !ReadEntityFieldValue(Result, Field, Start, &Field->Default))
-                {
-                    LOG_ERROR("%s: %s.%s starts as %s, which isn't in data/txts/%s", ENTITY_PROJECT_FILE_NAME,
-                              Block->Name, Field->Name, Start, ENTITY_MATERIALS_FILE_NAME);
-                }
-            }
-        }
-    }
     Result->Loaded = true;
-    LOG("Read %s: %u categories, %u clips, %u blocks, %u rows; %u materials", ENTITY_PROJECT_FILE_NAME,
-        Result->CategoryCount, Result->ClipCount, Result->BlockCount, Result->RowKindCount, Result->MaterialCount);
-
-    return(Result);
-}
-
-internal void
-RemoveEntityRow(entity_file *Entity, u32 RowIndex)
-{
-    for(u32 At = RowIndex + 1; At < Entity->RowCount; ++At)
-    {
-        Entity->Rows[At - 1] = Entity->Rows[At];
-    }
-    --Entity->RowCount;
-    Entity->Rows[Entity->RowCount] = {};
-}
-
-// NOTE(pvlso): A block's fields at their starting values, its lists without rows
-internal void
-ResetEntityBlock(entity_file *Entity, entity_project *Project, u32 BlockIndex)
-{
-    entity_block_def *Block = Project->Blocks + BlockIndex;
-    for(u32 FieldIndex = 0; FieldIndex < ENTITY_MAX_BLOCK_FIELDS; ++FieldIndex)
-    {
-        Entity->Fields[BlockIndex][FieldIndex] = (FieldIndex < Block->FieldCount) ?
-            Block->Fields[FieldIndex].Default : entity_field_value{};
-    }
-    for(u32 RowIndex = Entity->RowCount; RowIndex > 0; --RowIndex)
-    {
-        if(Entity->Rows[RowIndex - 1].Block == BlockIndex) {RemoveEntityRow(Entity, RowIndex - 1);}
-    }
-}
-
-// NOTE(pvlso): A new row at the end of a list, at the row's start values; false when the definition has no room
-internal b32
-AddEntityRow(entity_file *Entity, entity_project *Project, u32 Block, u32 Field)
-{
-    b32 Result = (Entity->RowCount < ENTITY_MAX_ROWS);
-    if(Result)
-    {
-        entity_block_def *RowKind = EntityRowKindOf(Project, Block, Field);
-        entity_row *Row = Entity->Rows + Entity->RowCount++;
-        *Row = {};
-        Row->Block = Block;
-        Row->Field = Field;
-        for(u32 FieldIndex = 0; FieldIndex < RowKind->FieldCount; ++FieldIndex)
-        {
-            Row->Values[FieldIndex] = RowKind->Fields[FieldIndex].Default;
-        }
-    }
-    else
-    {
-        LOG_ERROR("A definition has at most %d rows in all its lists", ENTITY_MAX_ROWS);
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): The material a definition's block picks (its first material field), 0 for none
-internal entity_material *
-EntityBlockMaterial(entity_file *Entity, entity_project *Project, u32 BlockIndex)
-{
-    entity_material *Result = 0;
-    entity_block_def *Block = Project->Blocks + BlockIndex;
-    for(u32 FieldIndex = 0; !Result && (FieldIndex < Block->FieldCount); ++FieldIndex)
-    {
-        s32 Material = Entity->Fields[BlockIndex][FieldIndex].Int;
-        if((Block->Fields[FieldIndex].Kind == EntityField_Material) && (Material > 0) &&
-           ((u32)Material <= Project->MaterialCount))
-        {
-            Result = Project->Materials + Material - 1;
-        }
-    }
-
-    return(Result);
-}
-
-// NOTE(pvlso): Whether a material's row goes to the block's list field Field: the list has the row's list's name
-internal b32
-IsMaterialRowFor(entity_project *Project, entity_row *Row, u32 Block, u32 Field)
-{
-    entity_field_def *List = Project->Blocks[Block].Fields + Field;
-    entity_field_def *RowList = Project->Blocks[Row->Block].Fields + Row->Field;
-    b32 Result = ((List->Kind == EntityField_List) && (List->Row == RowList->Row) &&
-                  StringsAreEqual(List->Name, RowList->Name));
+    LOG("Read %s: %u types, %u clips", ENTITY_PROJECT_FILE_NAME, Result->TypeCount, Result->ClipCount);
 
     return(Result);
 }
 
 // NOTE(pvlso): A new definition: a GUID of its own, nothing else
 internal entity_file
-NewEntityDefinition(entity_project *Project)
+NewEntityDefinition(void)
 {
     entity_file Result = {};
     Result.Loaded = true;
     Result.GUID = NewEntityGUID();
-    for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
-    {
-        ResetEntityBlock(&Result, Project, BlockIndex);
-    }
 
     return(Result);
 }
@@ -678,7 +205,6 @@ struct entity_file_reader
 {
     entity_file *Entity;
     entity_project *Project;
-    s32 Block;
 };
 
 internal
@@ -700,11 +226,11 @@ ENTITY_LINE_CALLBACK(ReadEntityFileLine)
     {
         FormatString(ENTITY_DISPLAY_LENGTH, Entity->DisplayName, "%s", Tokens->Tokens[1]);
     }
-    else if(StringsAreEqual(Key, "category"))
+    else if(StringsAreEqual(Key, "type"))
     {
-        s32 Category = FindNameIn(Project->Categories, Project->CategoryCount, Tokens->Tokens[1]);
-        Valid = (Category >= 0);
-        if(Valid) {Entity->Category = (u32)Category + 1;}
+        s32 Type = FindNameIn(Project->Types, Project->TypeCount, Tokens->Tokens[1]);
+        Valid = (Type >= 0);
+        if(Valid) {Entity->Type = (u32)Type + 1;}
     }
     else if(StringsAreEqual(Key, "clip"))
     {
@@ -740,31 +266,6 @@ ENTITY_LINE_CALLBACK(ReadEntityFileLine)
     {
         Valid = ReadEntityShape(Tokens, 1, &Entity->HitArea);
     }
-    else if(StringsAreEqual(Key, "block"))
-    {
-        Reader->Block = FindEntityBlock(Project, Tokens->Tokens[1]);
-        Valid = (Reader->Block >= 0);
-        if(Valid) {Entity->Blocks |= (1u << Reader->Block);}
-    }
-    else if(StringsAreEqual(Key, "field") && (Tokens->Count >= 3) && (Reader->Block >= 0))
-    {
-        entity_block_def *Block = Project->Blocks + Reader->Block;
-        s32 Field = FindEntityBlockField(Block, Tokens->Tokens[1]);
-        Valid = (Field >= 0) && ReadEntityFieldValue(Project, Block->Fields + Field, Tokens->Tokens[2],
-                                                     &Entity->Fields[Reader->Block][Field]);
-    }
-    else if(StringsAreEqual(Key, "row") && (Reader->Block >= 0))
-    {
-        entity_block_def *Block = Project->Blocks + Reader->Block;
-        s32 Field = FindEntityBlockField(Block, Tokens->Tokens[1]);
-        Valid = (Field >= 0) && (Block->Fields[Field].Kind == EntityField_List) &&
-            AddEntityRow(Entity, Project, (u32)Reader->Block, (u32)Field);
-        if(Valid)
-        {
-            Valid = ReadEntityRowValues(Project, EntityRowKindOf(Project, (u32)Reader->Block, (u32)Field), Tokens, 2,
-                                        Entity->Rows + Entity->RowCount - 1);
-        }
-    }
     else
     {
         Valid = false;
@@ -784,12 +285,7 @@ internal entity_file
 ReadEntityFile(char *FileName, entity_project *Project, memory_arena *Arena)
 {
     entity_file Result = {};
-    for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
-    {
-        ResetEntityBlock(&Result, Project, BlockIndex);
-    }
-
-    entity_file_reader Reader = {&Result, Project, -1};
+    entity_file_reader Reader = {&Result, Project};
     Result.Loaded = ReadEntityLines(FileName, PlatformFileType_Entity, Arena, ReadEntityFileLine, &Reader);
     if(!Result.Loaded)
     {
@@ -809,50 +305,6 @@ CopyWithoutQuotes(char *Source, char *Dest, u32 DestSize)
         if(*C != '"') {Dest[Length++] = *C;}
     }
     Dest[Length] = 0;
-}
-
-// NOTE(pvlso): A field's value as a file writes it (a text in quotes), for ReadEntityFieldValue to read back; a list
-// writes nothing (its rows have lines of their own)
-internal umm
-FormatEntityFieldValue(char *Dest, umm DestSize, entity_project *Project, entity_field_def *Field,
-                       entity_field_value *Value)
-{
-    umm Result = 0;
-    switch(Field->Kind)
-    {
-        case EntityField_Int:    {Result = FormatString(DestSize, Dest, "%d", Value->Int);}                break;
-        case EntityField_Number: {Result = FormatString(DestSize, Dest, "%.3f", Value->Number);}           break;
-        case EntityField_Bool:   {Result = FormatString(DestSize, Dest, "%s", Value->Bool ? "yes" : "no");} break;
-        case EntityField_Text:
-        {
-            char Clean[ENTITY_TEXT_LENGTH];
-            CopyWithoutQuotes(Value->Text, Clean, sizeof(Clean));
-            Result = FormatString(DestSize, Dest, "\"%s\"", Clean);
-        } break;
-        case EntityField_Choice:
-        {
-            u32 Choice = ((u32)Value->Int < Field->ChoiceCount) ? (u32)Value->Int : 0;
-            Result = FormatString(DestSize, Dest, "%s", Field->Choices[Choice]);
-        } break;
-        case EntityField_Entity:
-        {
-            char Hex[17];
-            EntityGUIDToHex(Value->Entity, Hex);
-            Result = FormatString(DestSize, Dest, "%s", Hex);
-        } break;
-        case EntityField_List:
-        {
-            if(DestSize) {Dest[0] = 0;}
-        } break;
-        case EntityField_Material:
-        {
-            b32 Known = (Value->Int > 0) && ((u32)Value->Int <= Project->MaterialCount);
-            Result = FormatString(DestSize, Dest, "%s", Known ? Project->Materials[Value->Int - 1].Name : "none");
-        } break;
-        InvalidDefaultCase;
-    }
-
-    return(Result);
 }
 
 internal umm
@@ -888,9 +340,7 @@ internal b32
 WriteEntityFile(char *FileName, entity_file *Entity, entity_project *Project, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
-    umm Capacity = 4096 + (umm)ENTITY_MAX_CLIPS*(ENTITY_LOOK_NAME_LENGTH + 96) +
-        (umm)ENTITY_MAX_BLOCKS*(64 + ENTITY_MAX_BLOCK_FIELDS*(ENTITY_TEXT_LENGTH + 64)) +
-        (umm)ENTITY_MAX_ROWS*(64 + ENTITY_MAX_BLOCK_FIELDS*(ENTITY_TEXT_LENGTH + 64));
+    umm Capacity = 4096 + (umm)ENTITY_MAX_CLIPS*(ENTITY_LOOK_NAME_LENGTH + 96);
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define ENTITY_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -901,9 +351,9 @@ WriteEntityFile(char *FileName, entity_file *Entity, entity_project *Project, me
     ENTITY_OUT("guid %s\n", Hex);
     CopyWithoutQuotes(Entity->DisplayName, Clean, sizeof(Clean));
     ENTITY_OUT("display \"%s\"\n", Clean);
-    if(Entity->Category && (Entity->Category <= Project->CategoryCount))
+    if(Entity->Type && (Entity->Type <= Project->TypeCount))
     {
-        ENTITY_OUT("category %s\n", Project->Categories[Entity->Category - 1]);
+        ENTITY_OUT("type %s\n", Project->Types[Entity->Type - 1]);
     }
     for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
     {
@@ -922,55 +372,6 @@ WriteEntityFile(char *FileName, entity_file *Entity, entity_project *Project, me
     }
     At += WriteEntityShape(Text + At, Capacity - At, "footprint", &Entity->Footprint);
     At += WriteEntityShape(Text + At, Capacity - At, "hitarea", &Entity->HitArea);
-    for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
-    {
-        if(!(Entity->Blocks & (1u << BlockIndex)))
-        {
-            continue;
-        }
-
-        entity_block_def *Block = Project->Blocks + BlockIndex;
-        ENTITY_OUT("block %s\n", Block->Name);
-        for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
-        {
-            entity_field_def *Field = Block->Fields + FieldIndex;
-            if(Field->Kind != EntityField_List)
-            {
-                ENTITY_OUT("field %s ", Field->Name);
-                At += FormatEntityFieldValue(Text + At, Capacity - At, Project, Field,
-                                             &Entity->Fields[BlockIndex][FieldIndex]);
-                ENTITY_OUT("\n");
-            }
-        }
-
-        // NOTE(pvlso): Its lists' rows, list by list
-        for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
-        {
-            if(Block->Fields[FieldIndex].Kind != EntityField_List)
-            {
-                continue;
-            }
-
-            entity_block_def *RowKind = EntityRowKindOf(Project, BlockIndex, FieldIndex);
-            for(u32 RowIndex = 0; RowIndex < Entity->RowCount; ++RowIndex)
-            {
-                entity_row *Row = Entity->Rows + RowIndex;
-                if((Row->Block != BlockIndex) || (Row->Field != FieldIndex))
-                {
-                    continue;
-                }
-
-                ENTITY_OUT("row %s", Block->Fields[FieldIndex].Name);
-                for(u32 RowField = 0; RowField < RowKind->FieldCount; ++RowField)
-                {
-                    ENTITY_OUT(" %s ", RowKind->Fields[RowField].Name);
-                    At += FormatEntityFieldValue(Text + At, Capacity - At, Project, RowKind->Fields + RowField,
-                                                 Row->Values + RowField);
-                }
-                ENTITY_OUT("\n");
-            }
-        }
-    }
 #undef ENTITY_OUT
 
     b32 Result = (Platform.WriteEntireFile(FileName, PlatformFileType_Entity, (u8 *)Text, (u32)At) != 0);
