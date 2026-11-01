@@ -79,6 +79,7 @@ struct task_with_memory
 #include "engine_json_parser.h"
 #include "engine_ui.h"
 #include "engine_hash.h"
+#include "engine_clipper.h"
 
 #include "editor_title_mode.h"
 #include "editor_assets_mode.h"
