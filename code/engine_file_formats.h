@@ -295,7 +295,8 @@ struct kea_tileset
 struct kea_map_layer
 {
     char Name[32];
-    s32 Z;
+    s32 Z;     // NOTE(pvlso): its order within its level
+    s32 Level; // NOTE(pvlso): 0 the ground (engine_map_file.h)
     u32 Flags; // NOTE(pvlso): KEAMapLayer_*
 };
 enum kea_map_layer_flag
@@ -310,13 +311,14 @@ struct kea_map_cell
 };
 
 // NOTE(pvlso): An entity placed on the map: its own GUID, its definition's, its foot in cells from the map's top left
-// (y down)
+// (y down), its level
 struct kea_map_entity
 {
     u64 GUID;
     u64 Definition;
     r32 P[2];
     u32 Flags; // NOTE(pvlso): KEAMapEntity_*
+    s32 Level;
 };
 enum kea_map_entity_flag
 {

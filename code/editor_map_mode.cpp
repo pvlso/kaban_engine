@@ -424,6 +424,7 @@ AddMapEntity(editor_mode_map *MapMode, u64 Definition, v2 P)
     Entity->GUID = NewEntityGUID();
     Entity->Definition = Definition;
     Entity->P = P;
+    Entity->Level = MapMode->CurrentLevel;
 
     return((s32)MapMode->EntityCount++);
 }
@@ -459,6 +460,7 @@ SetMapEntitiesFromFile(editor_mode_map *MapMode, map_file *File)
         Entity->Definition = Source->Definition;
         Entity->P = Source->P;
         Entity->Flip = Source->Flip;
+        Entity->Level = Source->Level;
         if(FindMapEntityDef(MapMode, Source->Definition) < 0)
         {
             char Hex[17];
@@ -484,6 +486,7 @@ MapEntitiesToFile(editor_mode_map *MapMode, map_file *File, memory_arena *Arena)
         Dest->Definition = Entity->Definition;
         Dest->P = Entity->P;
         Dest->Flip = Entity->Flip;
+        Dest->Level = Entity->Level;
     }
 }
 
@@ -520,6 +523,7 @@ OpenMap(platform_texture_op_queue *TextureOpQueue, editor_mode_map *MapMode, cha
             *Layer = {};
             FormatString(sizeof(Layer->Name), Layer->Name, "%s", Source->Name);
             Layer->Z = Source->Z;
+            Layer->Level = Source->Level;
             Layer->Hidden = Source->Hidden;
             Layer->Cells = AllocateLayerCells(File.Width, File.Height);
             for(umm Index = 0; Index < CellCount; ++Index)
@@ -534,6 +538,7 @@ OpenMap(platform_texture_op_queue *TextureOpQueue, editor_mode_map *MapMode, cha
         }
         SetMapEntitiesFromFile(MapMode, &File);
         MapMode->CurrentLayer = 0;
+        MapMode->CurrentLevel = MapMode->LayerCount ? MapMode->Layers[0].Level : 0;
         MapMode->HasMap = true;
         MapMode->Dirty = false;
         MapMode->Pan = V2(0, 0);
@@ -564,6 +569,7 @@ SaveMap(editor_mode_map *MapMode, char *FileName, memory_arena *TempArena)
         map_file_layer *Dest = File.Layers + LayerIndex;
         FormatString(sizeof(Dest->Name), Dest->Name, "%s", Layer->Name);
         Dest->Z = Layer->Z;
+        Dest->Level = Layer->Level;
         Dest->Hidden = Layer->Hidden;
         Dest->Cells = Layer->Cells;
     }
@@ -583,7 +589,7 @@ SaveMap(editor_mode_map *MapMode, char *FileName, memory_arena *TempArena)
 }
 
 internal void
-AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z)
+AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z, s32 Level)
 {
     if(MapMode->LayerCount < MAP_MAX_LAYERS)
     {
@@ -591,8 +597,10 @@ AddMapLayer(editor_mode_map *MapMode, char *Name, s32 Z)
         *Layer = {};
         FormatString(sizeof(Layer->Name), Layer->Name, "%s", Name);
         Layer->Z = Z;
+        Layer->Level = Level;
         Layer->Cells = AllocateLayerCells(MapMode->Width, MapMode->Height);
         MapMode->CurrentLayer = (s32)MapMode->LayerCount - 1;
+        MapMode->CurrentLevel = Level;
     }
     else
     {
@@ -610,7 +618,7 @@ NewMap(editor_mode_map *MapMode, u32 Width, u32 Height)
     MapMode->LayerCount = 0;
     MapMode->EntityCount = 0;
     MapMode->SelectedEntity = -1;
-    AddMapLayer(MapMode, "Ground", 0);
+    AddMapLayer(MapMode, "Ground", 0, 0);
     MapMode->HasMap = true;
     MapMode->Pan = V2(0, 0);
     RecordMapState(MapMode);
@@ -698,7 +706,16 @@ PickBrushFromMap(editor_mode_map *MapMode, s32 X, s32 Y)
     }
 }
 
-// NOTE(pvlso): The map's layers in drawing order: by Z, those sharing a Z in the list's order
+// NOTE(pvlso): True when layer A draws after layer B's place in the list would put it: a higher level, or a higher Z
+// on the same level
+inline b32
+MapLayerDrawsAfter(map_layer *A, map_layer *B)
+{
+    b32 Result = (A->Level > B->Level) || ((A->Level == B->Level) && (A->Z > B->Z));
+    return(Result);
+}
+
+// NOTE(pvlso): The map's layers in drawing order: by level, then Z, those sharing both in the list's order
 internal u32
 MapLayerOrder(editor_mode_map *MapMode, u32 *Order)
 {
@@ -708,7 +725,7 @@ MapLayerOrder(editor_mode_map *MapMode, u32 *Order)
     {
         u32 Node = Order[Index];
         s32 At = (s32)Index - 1;
-        while((At >= 0) && (MapMode->Layers[Order[At]].Z > MapMode->Layers[Node].Z))
+        while((At >= 0) && MapLayerDrawsAfter(MapMode->Layers + Order[At], MapMode->Layers + Node))
         {
             Order[At + 1] = Order[At];
             --At;
@@ -797,7 +814,9 @@ MapEntityUnder(editor_mode_map *MapMode, tileset_grid_view *View, v2 P)
     {
         map_placement *Entity = MapMode->Entities + EntityIndex;
         rectangle2 Rect = MapEntityRect(MapMode, View, MapEntityDefOf(MapMode, Entity), Entity->P, Entity->Flip);
-        if(IsInRectangle(Rect, P) && ((Result < 0) || (Entity->P.y >= MapMode->Entities[Result].P.y)))
+        map_placement *Front = (Result >= 0) ? MapMode->Entities + Result : 0;
+        if(IsInRectangle(Rect, P) &&
+           (!Front || (Entity->Level > Front->Level) || ((Entity->Level == Front->Level) && (Entity->P.y >= Front->P.y))))
         {
             Result = (s32)EntityIndex;
         }
@@ -806,11 +825,61 @@ MapEntityUnder(editor_mode_map *MapMode, tileset_grid_view *View, v2 P)
     return(Result);
 }
 
-// NOTE(pvlso): Entities stand over every layer, those lower on the map in front
-inline r32
-MapEntityZ(editor_mode_map *MapMode, v2 P)
+// NOTE(pvlso): The levels in use (by a layer, a placement, or the current one), lowest first. The map view's Z from 6
+// to 6.95 is split into a band per level, drawn from the lowest: a level's layers at the bottom of its band, its
+// entities over them, those lower on the map in front.
+struct map_level_bands
 {
-    r32 Result = 6.4f + 0.5f*Clamp01(P.y / Maximum(1.0f, (r32)MapMode->Height));
+    u32 Count;
+    s32 SlotOf[MAP_MAX_LEVEL - MAP_MIN_LEVEL + 1]; // NOTE(pvlso): by Level - MAP_MIN_LEVEL, -1 when not in use
+};
+
+inline s32
+ClampMapLevel(s32 Level)
+{
+    s32 Result = Maximum(MAP_MIN_LEVEL, Minimum(Level, MAP_MAX_LEVEL));
+    return(Result);
+}
+
+internal map_level_bands
+MapLevelBands(editor_mode_map *MapMode)
+{
+    map_level_bands Result = {};
+    b32 Used[ArrayCount(Result.SlotOf)] = {};
+    Used[ClampMapLevel(MapMode->CurrentLevel) - MAP_MIN_LEVEL] = true;
+    for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+    {
+        Used[ClampMapLevel(MapMode->Layers[LayerIndex].Level) - MAP_MIN_LEVEL] = true;
+    }
+    for(u32 EntityIndex = 0; EntityIndex < MapMode->EntityCount; ++EntityIndex)
+    {
+        Used[ClampMapLevel(MapMode->Entities[EntityIndex].Level) - MAP_MIN_LEVEL] = true;
+    }
+    for(u32 Index = 0; Index < ArrayCount(Result.SlotOf); ++Index)
+    {
+        Result.SlotOf[Index] = Used[Index] ? (s32)Result.Count++ : -1;
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): Where a level's band starts, and its size
+inline r32
+MapLevelBase(map_level_bands *Bands, s32 Level, r32 *Size)
+{
+    s32 Slot = Maximum(0, Bands->SlotOf[ClampMapLevel(Level) - MAP_MIN_LEVEL]);
+    *Size = 0.95f / (r32)Maximum(1u, Bands->Count);
+    r32 Result = 6.0f + (r32)Slot*(*Size);
+
+    return(Result);
+}
+
+inline r32
+MapEntityZ(editor_mode_map *MapMode, map_level_bands *Bands, map_placement *Entity)
+{
+    r32 Size;
+    r32 Base = MapLevelBase(Bands, Entity->Level, &Size);
+    r32 Result = Base + Size*(0.15f + 0.7f*Clamp01(Entity->P.y / Maximum(1.0f, (r32)MapMode->Height)));
     return(Result);
 }
 
@@ -863,7 +932,8 @@ UpdateMapScatter(editor_mode_map *MapMode, engine_input *Input, v2 MouseCell, b3
         for(s32 EntityIndex = (s32)MapMode->EntityCount - 1; EntityIndex >= 0; --EntityIndex)
         {
             map_placement *Entity = MapMode->Entities + EntityIndex;
-            if((Entity->Definition == Definition) && (LengthSq(Entity->P - MouseCell) <= Square(Radius)))
+            if((Entity->Definition == Definition) && (Entity->Level == MapMode->CurrentLevel) &&
+               (LengthSq(Entity->P - MouseCell) <= Square(Radius)))
             {
                 RemoveMapEntity(MapMode, EntityIndex);
                 MapMode->ScatterChanged = true;
@@ -887,7 +957,8 @@ UpdateMapScatter(editor_mode_map *MapMode, engine_input *Input, v2 MouseCell, b3
             for(u32 EntityIndex = 0; !Crowded && (EntityIndex < MapMode->EntityCount); ++EntityIndex)
             {
                 map_placement *Entity = MapMode->Entities + EntityIndex;
-                Crowded = ((Entity->Definition == Definition) && (LengthSq(Entity->P - P) < Square(Spacing)));
+                Crowded = ((Entity->Definition == Definition) && (Entity->Level == MapMode->CurrentLevel) &&
+                           (LengthSq(Entity->P - P) < Square(Spacing)));
             }
             if(!Crowded)
             {
@@ -989,11 +1060,13 @@ RenderMapEntities(editor_mode_map *MapMode, engine_input *Input, render_group *R
                   tileset_grid_view *View, v2 MouseP, b32 Inside)
 {
     b32 Tool = (MapMode->Tool == MapTool_Entities);
+    map_level_bands Bands = MapLevelBands(MapMode);
     for(u32 EntityIndex = 0; EntityIndex < MapMode->EntityCount; ++EntityIndex)
     {
         map_placement *Entity = MapMode->Entities + EntityIndex;
+        r32 Alpha = (MapMode->DimOtherLevels && (Entity->Level != MapMode->CurrentLevel)) ? 0.3f : 1.0f;
         PushMapEntity(RenderGroup, Flat, MapMode, View, MapEntityDefOf(MapMode, Entity), Entity->P, Entity->Flip,
-                      MapEntityZ(MapMode, Entity->P), 1.0f);
+                      MapEntityZ(MapMode, &Bands, Entity), Alpha);
     }
 
     if(Tool && (MapMode->SelectedEntity >= 0))
@@ -1207,14 +1280,19 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
     s32 LastY = ClampCell(0, CeilReal32ToInt32((View.TopLeft.y - Rect.Min.y) / View.Cell), (s32)MapMode->Height);
     u32 Order[MAP_MAX_LAYERS];
     u32 OrderCount = MapLayerOrder(MapMode, Order);
+    map_level_bands Bands = MapLevelBands(MapMode);
     for(u32 OrderIndex = 0; OrderIndex < OrderCount; ++OrderIndex)
     {
         u32 LayerIndex = Order[OrderIndex];
         map_layer *Layer = MapMode->Layers + LayerIndex;
         if(Layer->Hidden) {continue;}
-        b32 Dim = MapMode->DimOtherLayers && ((s32)LayerIndex != MapMode->CurrentLayer);
+        b32 Dim = ((MapMode->DimOtherLayers && ((s32)LayerIndex != MapMode->CurrentLayer)) ||
+                   (MapMode->DimOtherLevels && (Layer->Level != MapMode->CurrentLevel)));
         v4 Color = Dim ? V4(1, 1, 1, 0.3f) : V4(1, 1, 1, 1);
-        r32 Z = 6.0f + 0.01f*(r32)OrderIndex;
+        // NOTE(pvlso): The bottom tenth of its level's band, in drawing order
+        r32 BandSize;
+        r32 Z = MapLevelBase(&Bands, Layer->Level, &BandSize) +
+            0.1f*BandSize*(r32)(OrderIndex + 1) / (r32)(OrderCount + 1);
         for(s32 Y = FirstY; Y < LastY; ++Y)
         {
             for(s32 X = FirstX; X < LastX; ++X)
@@ -1388,8 +1466,10 @@ DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
         nk_layout_row_dynamic(Nk, 28, 2);
         nk_property_float(Nk, "#x", 0.0f, &Entity->P.x, (r32)MapMode->Width, 0.5f, 0.02f);
         nk_property_float(Nk, "#y", 0.0f, &Entity->P.y, (r32)MapMode->Height, 0.5f, 0.02f);
+        nk_property_int(Nk, "#Level", MAP_MIN_LEVEL, &Entity->Level, MAP_MAX_LEVEL, 1, 0.2f);
         nk_bool Flip = (Entity->Flip != 0);
         if(nk_checkbox_label(Nk, "Flip", &Flip)) {Entity->Flip = Flip;}
+        nk_layout_row_dynamic(Nk, 28, 1);
         if(nk_button_label(Nk, "Remove")) {MapMode->RemoveEntityRequested = true;}
     }
 
@@ -1409,6 +1489,7 @@ DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
     nk_layout_row_dynamic(Nk, 18, 1);
     nk_label(Nk, "", NK_TEXT_LEFT);
     nk_label(Nk, "Palette or list: pick a definition to place.", NK_TEXT_LEFT);
+    nk_label(Nk, "It goes on the current level (Level above).", NK_TEXT_LEFT);
     if(MapMode->Scatter)
     {
         nk_label(Nk, "Map: left drag scatters it, right drag removes it.", NK_TEXT_LEFT);
@@ -1501,6 +1582,25 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
             nk_bool Dim = MapMode->DimOtherLayers;
             if(nk_checkbox_label(Nk, "Dim other layers", &Dim)) {MapMode->DimOtherLayers = Dim;}
 
+            // NOTE(pvlso): The current level: entities are placed on it; in the Tiles tool, a layer of it is picked
+            // when the picked one isn't on it
+            s32 OldLevel = MapMode->CurrentLevel;
+            nk_property_int(Nk, "#Level", MAP_MIN_LEVEL, &MapMode->CurrentLevel, MAP_MAX_LEVEL, 1, 0.2f);
+            nk_bool DimLevels = MapMode->DimOtherLevels;
+            if(nk_checkbox_label(Nk, "Dim other levels", &DimLevels)) {MapMode->DimOtherLevels = DimLevels;}
+            if((MapMode->CurrentLevel != OldLevel) && MapMode->LayerCount &&
+               (MapMode->Layers[MapMode->CurrentLayer].Level != MapMode->CurrentLevel))
+            {
+                for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
+                {
+                    if(MapMode->Layers[LayerIndex].Level == MapMode->CurrentLevel)
+                    {
+                        MapMode->CurrentLayer = (s32)LayerIndex;
+                        break;
+                    }
+                }
+            }
+
             // NOTE(pvlso): The tool: painting tiles or placing entities
             nk_layout_row_dynamic(Nk, 28, 3);
             nk_bool Tiles = (MapMode->Tool == MapTool_Tiles);
@@ -1517,14 +1617,19 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
             {
                 // NOTE(pvlso): Layers: pick one to paint on; Z, name, hidden for the picked one
                 nk_layout_row_dynamic(Nk, 24, 1);
-                nk_label(Nk, "Layers (painting on the picked one):", NK_TEXT_LEFT);
+                nk_label(Nk, "Layers (L level, Z order in it; painting on the picked one):", NK_TEXT_LEFT);
                 for(u32 LayerIndex = 0; LayerIndex < MapMode->LayerCount; ++LayerIndex)
                 {
                     map_layer *Layer = MapMode->Layers + LayerIndex;
                     char Label[64];
-                    FormatString(sizeof(Label), Label, "Z %d  %s%s", Layer->Z, Layer->Name, Layer->Hidden ? "  (hidden)" : "");
+                    FormatString(sizeof(Label), Label, "L%d  Z %d  %s%s", Layer->Level, Layer->Z, Layer->Name,
+                                 Layer->Hidden ? "  (hidden)" : "");
                     nk_bool Picked = ((s32)LayerIndex == MapMode->CurrentLayer);
-                    if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Picked)) {MapMode->CurrentLayer = (s32)LayerIndex;}
+                    if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Picked))
+                    {
+                        MapMode->CurrentLayer = (s32)LayerIndex;
+                        MapMode->CurrentLevel = Layer->Level;
+                    }
                 }
                 if(MapMode->LayerCount)
                 {
@@ -1542,7 +1647,14 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
                     MapMode->TypingLayerName = ((LayerNameState & NK_EDIT_ACTIVE) != 0) || TypingMapName;
                     if(NameLength != OldNameLength) {MapMode->LayerEdited = true;}
 
-                    nk_layout_row_dynamic(Nk, 28, 2);
+                    nk_layout_row_dynamic(Nk, 28, 3);
+                    s32 OldLayerLevel = Layer->Level;
+                    nk_property_int(Nk, "#Level", MAP_MIN_LEVEL, &Layer->Level, MAP_MAX_LEVEL, 1, 0.2f);
+                    if(Layer->Level != OldLayerLevel)
+                    {
+                        MapMode->LayerEdited = true;
+                        MapMode->CurrentLevel = Layer->Level;
+                    }
                     s32 OldZ = Layer->Z;
                     nk_property_int(Nk, "#Z", -16, &Layer->Z, 16, 1, 0.2f);
                     if(Layer->Z != OldZ) {MapMode->LayerEdited = true;}
@@ -1721,8 +1833,11 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     {
         Changed = true;
         MapMode->AddLayerRequested = false;
-        s32 Z = MapMode->LayerCount ? MapMode->Layers[MapMode->CurrentLayer].Z : 0;
-        AddMapLayer(MapMode, MapMode->NewLayerNameLength ? MapMode->NewLayerName : (char *)"Layer", Z);
+        // NOTE(pvlso): On the current level, with the picked layer's Z when it's on that level
+        map_layer *Current = MapMode->LayerCount ? MapMode->Layers + MapMode->CurrentLayer : 0;
+        s32 Z = (Current && (Current->Level == MapMode->CurrentLevel)) ? Current->Z : 0;
+        AddMapLayer(MapMode, MapMode->NewLayerNameLength ? MapMode->NewLayerName : (char *)"Layer", Z,
+                    MapMode->CurrentLevel);
         MapMode->NewLayerNameLength = 0;
         MapMode->NewLayerName[0] = 0;
     }

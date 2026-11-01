@@ -50,6 +50,48 @@ U32FromMapText(char **AtInit, char *End)
     return(Result);
 }
 
+// NOTE(pvlso): A whole number, maybe negative; false when the word isn't one
+internal b32
+S32FromMapWord(char *Word, s32 *Value)
+{
+    char *At = Word;
+    b32 Negative = (*At == '-');
+    if(Negative) {++At;}
+    b32 Result = IsDigit(*At);
+    s64 Number = 0;
+    while(IsDigit(*At) && (Number <= 2147483647)) {Number = 10*Number + (s64)(*At++ - '0');}
+    Result = Result && !*At && (Number <= 2147483647);
+    if(Result) {*Value = (s32)(Negative ? -Number : Number);}
+
+    return(Result);
+}
+
+// NOTE(pvlso): The words after a layer's Z or an entity's position: "hidden", "flip", "level n", in any order. False
+// on a word it doesn't know.
+internal b32
+ReadMapOptions(char *Line, char *LineEnd, b32 *Hidden, b32 *Flip, s32 *Level)
+{
+    b32 Result = true;
+    char Word[64];
+    for(;;)
+    {
+        Line = ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+        if(!Word[0]) {break;}
+        if(Hidden && StringsAreEqual(Word, "hidden")) {*Hidden = true;}
+        else if(Flip && StringsAreEqual(Word, "flip")) {*Flip = true;}
+        else if(StringsAreEqual(Word, "level"))
+        {
+            Line = ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+            s32 Value = 0;
+            if(S32FromMapWord(Word, &Value) && (Value >= MAP_MIN_LEVEL) && (Value <= MAP_MAX_LEVEL)) {*Level = Value;}
+            else {Result = false;}
+        }
+        else {Result = false;}
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Reads data/maps/<FileName>; the layers' cells go in Arena. Mistakes are logged with their line.
 internal map_file
 ReadMapFile(char *FileName, memory_arena *Arena)
@@ -147,8 +189,12 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             b32 Negative = ((Line < LineEnd) && (*Line == '-'));
             if(Negative) {++Line;}
             Layer->Z = (s32)U32FromMapText(&Line, LineEnd)*(Negative ? -1 : 1);
-            ReadMapWord(Line, LineEnd, Word, sizeof(Word));
-            Layer->Hidden = StringsAreEqual(Word, "hidden");
+            if(!ReadMapOptions(Line, LineEnd, &Layer->Hidden, 0, &Layer->Level))
+            {
+                LOG_ERROR("Map %s, line %d: after a layer's Z come \"level n\" (%d to %d) and \"hidden\"", FileName,
+                          LineNumber, MAP_MIN_LEVEL, MAP_MAX_LEVEL);
+                ++Result.ErrorCount;
+            }
             umm Size = (umm)Result.Width*Result.Height*sizeof(map_cell);
             Layer->Cells = (map_cell *)PushSize(Arena, Size);
             ZeroSize(Size, Layer->Cells);
@@ -208,8 +254,7 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             Line = ReadMapWord(Line, LineEnd, Numbers[0], sizeof(Numbers[0]));
             Line = ReadMapWord(Line, LineEnd, Numbers[1], sizeof(Numbers[1]));
             Valid = Valid && IsTilesetNumber(Numbers[0]) && IsTilesetNumber(Numbers[1]);
-            ReadMapWord(Line, LineEnd, Word, sizeof(Word));
-            Read.Flip = StringsAreEqual(Word, "flip");
+            Valid = Valid && ReadMapOptions(Line, LineEnd, 0, &Read.Flip, &Read.Level);
             if(Valid)
             {
                 Read.P = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
@@ -217,7 +262,8 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             }
             else
             {
-                LOG_ERROR("Map %s, line %d: an entity is its GUID, its definition's GUID, x and y", FileName, LineNumber);
+                LOG_ERROR("Map %s, line %d: an entity is its GUID, its definition's GUID, x and y, maybe \"flip\" and "
+                          "\"level n\"", FileName, LineNumber);
                 ++Result.ErrorCount;
             }
         }
@@ -248,7 +294,7 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
     umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128) +
-        (umm)Map->EntityCount*96;
+        (umm)Map->EntityCount*112;
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define MAP_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -268,7 +314,9 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
             if(*C != '"') {Name[Length++] = *C;}
         }
         Name[Length] = 0;
-        MAP_OUT("\nlayer \"%s\" %d%s\n", Name, Layer->Z, Layer->Hidden ? " hidden" : "");
+        MAP_OUT("\nlayer \"%s\" %d", Name, Layer->Z);
+        if(Layer->Level) {MAP_OUT(" level %d", Layer->Level);}
+        MAP_OUT("%s\n", Layer->Hidden ? " hidden" : "");
         for(u32 Y = 0; Y < Map->Height; ++Y)
         {
             MAP_OUT("row");
@@ -292,7 +340,9 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
         char Definition[17];
         EntityGUIDToHex(Entity->GUID, GUID);
         EntityGUIDToHex(Entity->Definition, Definition);
-        MAP_OUT("entity %s %s %.3f %.3f%s\n", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
+        MAP_OUT("entity %s %s %.3f %.3f%s", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
+        if(Entity->Level) {MAP_OUT(" level %d", Entity->Level);}
+        MAP_OUT("\n");
     }
 #undef MAP_OUT
 

@@ -229,6 +229,7 @@ GameGetMapLayer(engine_assets *Assets, u32 MapIndex, u32 LayerIndex)
         kea_map_layer *Layer = Map->Layers + LayerIndex;
         FormatString(sizeof(Result.Name), Result.Name, "%.*s", (int)sizeof(Layer->Name), Layer->Name);
         Result.Z = Layer->Z;
+        Result.Level = Layer->Level;
         Result.Hidden = (Layer->Flags & KEAMapLayer_Hidden) != 0;
         Result.Cells = (map_tile_cell *)(Map->Cells + (umm)LayerIndex*Info->Width*Info->Height);
     }
@@ -400,6 +401,7 @@ GameGetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
         Result.Entity = GameFindEntityByGUID(Assets, Entity->Definition);
         Result.P = V2(Entity->P[0], Entity->P[1]);
         Result.Flip = (Entity->Flags & KEAMapEntity_Flip) != 0;
+        Result.Level = Entity->Level;
     }
 
     return(Result);

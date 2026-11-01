@@ -276,6 +276,7 @@ AddMapEntities(kea_builder *Builder, char *MapName, map_file *Map, kea_map *Info
         Entity->P[0] = Source->P.x;
         Entity->P[1] = Source->P.y;
         Entity->Flags = Source->Flip ? KEAMapEntity_Flip : 0;
+        Entity->Level = Source->Level;
         if(!IsKnownEntity(KnownCount, Known, Source->Definition)) {++Unknown;}
     }
     if(Unknown)
@@ -344,6 +345,7 @@ AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
         kea_map_layer *Layer = Data->Layers + LayerIndex;
         FormatString(sizeof(Layer->Name), Layer->Name, "%s", Source->Name);
         Layer->Z = Source->Z;
+        Layer->Level = Source->Level;
         Layer->Flags = Source->Hidden ? KEAMapLayer_Hidden : 0;
         kea_map_cell *Cells = Data->Cells + LayerIndex*CellCount;
         for(umm Index = 0; Index < CellCount; ++Index)

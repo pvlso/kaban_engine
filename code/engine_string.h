@@ -192,12 +192,21 @@ ReadVarArgUnsignedInteger(u32 Length, va_list *ArgList)
     return(Result);
 }
 
+// NOTE(pvlso): Ints up to 4 bytes come as an int and are sign extended (read as a u32 they printed negatives as
+// 4294967295...)
 inline s64
 ReadVarArgSignedInteger(u32 Length, va_list *ArgList)
 {
-    u64 Temp = ReadVarArgUnsignedInteger(Length, ArgList);
-    s64 Result = *(s64 *)&Temp;
-    
+    s64 Result = 0;
+    if(Length == 8)
+    {
+        Result = va_arg(*ArgList, s64);
+    }
+    else
+    {
+        Result = va_arg(*ArgList, s32);
+    }
+
     return(Result);
 }
 

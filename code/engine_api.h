@@ -78,8 +78,9 @@ struct tileset_info
     u32 TileSize; // NOTE(pvlso): in pixels
 };
 
-// NOTE(pvlso): A map made in the map editor (an island, in Spellweaver): Width x Height cells in layers, drawn by Z
-// and, within a Z, in their order. A cell's Set is 0 when empty, else the map's set + 1 (GetMapTileset gives that
+// NOTE(pvlso): A map made in the map editor (an island, in Spellweaver): Width x Height cells in layers. A map is drawn
+// level by level from the lowest (0 the ground, 1 a bridge or plateau above it, -1 below): a level's layers by Z and,
+// within a Z, in their order, then the entities on that level, then the next level. A cell's Set is 0 when empty, else the map's set + 1 (GetMapTileset gives that
 // set's tile set, for GetTileInfo); Tile is the tile's index in its set.
 struct map_info
 {
@@ -99,7 +100,8 @@ struct map_tile_cell
 struct map_layer_info
 {
     char Name[32];
-    s32 Z;
+    s32 Z;     // NOTE(pvlso): its order within its level
+    s32 Level;
     b32 Hidden;
     map_tile_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; valid while the game's assets are
 };
@@ -158,6 +160,7 @@ struct map_entity_info
     u32 Entity;        // NOTE(pvlso): the definition's asset index (FindEntityByGUID), 0 when it isn't in the KEA
     v2 P;              // NOTE(pvlso): the foot, in cells from the map's top left, y down (like the rows)
     b32 Flip;          // NOTE(pvlso): mirrored left to right
+    s32 Level;         // NOTE(pvlso): the level it stands on
 };
 
 struct tile_info

@@ -9,14 +9,15 @@
 
 /*
   NOTE(pvlso): The map editor (map editor plan, phase 2), for the project chosen on the title screen. A map is a
-  grid of Width x Height cells in layers; each layer has a Z (its level: 0 the ground, 1 a plateau...), layers draw
-  by Z, those sharing a Z in the list's order. A cell holds a tile of one of the map's curated tile sets
+  grid of Width x Height cells in layers. Each layer belongs to a level (phase 6: 0 the ground, 1 a bridge or plateau
+  above it, -1 below) and has a Z, its order within the level. The map draws level by level from the lowest: a
+  level's layers by Z (those sharing a Z in the list's order), then the entities placed on it. A cell holds a tile of one of the map's curated tile sets
   (data/tilesets), by its place in the set's grid, so editing a set doesn't shift a map's tiles. Each map is a text
   file in data/maps (engine_map_file.h), opened and saved here.
 
-  The Entities tool (phase 5d) places the project's entity definitions (data/entities) over every layer, each standing
-  on its foot, drawn front to back by it. A placement has a GUID of its own, its definition's, a position in cells,
-  a flip and a few overrides of its definition's fields.
+  The Entities tool (phase 5d) places the project's entity definitions (data/entities) on the current level, each
+  standing on its foot, drawn front to back by it. A placement has a GUID of its own, its definition's, a position in
+  cells, a flip and its level.
 */
 
 #define MAP_MAX_LAYERS 32
@@ -27,7 +28,8 @@
 struct map_layer
 {
     char Name[MAP_NAME_LENGTH];
-    s32 Z;
+    s32 Z;     // NOTE(pvlso): its order within its level
+    s32 Level;
     b32 Hidden;
     map_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; its own allocation
 };
@@ -52,6 +54,7 @@ struct map_placement
     u64 Definition;
     v2 P; // NOTE(pvlso): the foot, in cells from the map's top left, y down
     b32 Flip;
+    s32 Level;
 };
 
 // NOTE(pvlso): A definition to place, with the look of its first clip that has one (a sprite sheet shows its first
@@ -89,6 +92,7 @@ struct editor_mode_map
     u32 LayerCount;
     map_layer Layers[MAP_MAX_LAYERS];
     s32 CurrentLayer;
+    s32 CurrentLevel; // NOTE(pvlso): where entities are placed; picking a layer picks its level
 
     u32 SetCount;
     map_tileset Sets[MAP_MAX_TILESETS];
@@ -111,6 +115,7 @@ struct editor_mode_map
     s32 LastStampX, LastStampY;
     b32 ShowGrid;
     b32 DimOtherLayers;
+    b32 DimOtherLevels;
     s32 HoverX, HoverY;             // NOTE(pvlso): the map cell under the mouse, -1 outside
     b32 Erasing;
     b32 RectActive;                 // NOTE(pvlso): a Shift drag: fill (left) or clear (right) a rectangle
