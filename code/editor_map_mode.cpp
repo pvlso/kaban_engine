@@ -43,6 +43,10 @@ PlayMapEditor(editor_state *EditorState, transient_state *TranState, char *Proje
     MapMode->SelectedEntity = -1;
     MapMode->LastSelectedIndex = -1;
     MapMode->ShowEntities = true;
+    MapMode->ScatterRadius = 3.0f;
+    MapMode->ScatterSpacing = 1.0f;
+    MapMode->ScatterFlip = true;
+    MapMode->ScatterRandom = NewEntityGUID();
 
     ListMapFiles(MapMode, &EditorState->ModeArena);
     MapMode->TilesetFileCount = Platform.ListFilesInDirectory(PlatformFileType_TSBMP, 0, 0);
@@ -803,6 +807,93 @@ MapEntityZ(editor_mode_map *MapMode, v2 P)
     return(Result);
 }
 
+// NOTE(pvlso): 0 to 1 (xorshift64*)
+inline r32
+ScatterRandomUnit(editor_mode_map *MapMode)
+{
+    u64 X = MapMode->ScatterRandom;
+    X ^= X >> 12;
+    X ^= X << 25;
+    X ^= X >> 27;
+    MapMode->ScatterRandom = X;
+    r32 Result = (r32)((X*0x2545F4914F6CDD1Dull) >> 40) / 16777216.0f;
+    return(Result);
+}
+
+// NOTE(pvlso): The scatter brush while it's on. A held left button tries a few spots inside the circle each frame and
+// places the picked definition where no other of it is nearer than the spacing, so holding still fills the circle up
+// to that spacing; a held right button takes the picked definition's placements inside the circle away. True when a
+// stroke ended having changed something.
+internal b32
+UpdateMapScatter(editor_mode_map *MapMode, engine_input *Input, v2 MouseCell, b32 OnMap)
+{
+    b32 Finished = false;
+    engine_button_state Left = Input->MouseButtons[PlatformMouseButton_Left];
+    engine_button_state Right = Input->MouseButtons[PlatformMouseButton_Right];
+    b32 HaveDef = (MapMode->CurrentDef >= 0);
+    if(!MapMode->Scattering && OnMap && HaveDef && !Input->AltDown && (WasPressed(Left) || WasPressed(Right)))
+    {
+        MapMode->Scattering = true;
+        MapMode->ScatterErasing = WasPressed(Right);
+        MapMode->ScatterChanged = false;
+        MapMode->SelectedEntity = -1;
+    }
+    if(!MapMode->Scattering)
+    {
+        return(Finished);
+    }
+    if(!(MapMode->ScatterErasing ? Right.EndedDown : Left.EndedDown) || !HaveDef)
+    {
+        MapMode->Scattering = false;
+        Finished = MapMode->ScatterChanged;
+        return(Finished);
+    }
+
+    u64 Definition = MapMode->EntityDefs[MapMode->CurrentDef].File.GUID;
+    r32 Radius = MapMode->ScatterRadius;
+    if(MapMode->ScatterErasing)
+    {
+        for(s32 EntityIndex = (s32)MapMode->EntityCount - 1; EntityIndex >= 0; --EntityIndex)
+        {
+            map_placement *Entity = MapMode->Entities + EntityIndex;
+            if((Entity->Definition == Definition) && (LengthSq(Entity->P - MouseCell) <= Square(Radius)))
+            {
+                RemoveMapEntity(MapMode, EntityIndex);
+                MapMode->ScatterChanged = true;
+            }
+        }
+    }
+    else
+    {
+        v2 MapSize = V2((r32)MapMode->Width, (r32)MapMode->Height);
+        r32 Spacing = MapMode->ScatterSpacing;
+        for(u32 Try = 0; Try < 4; ++Try)
+        {
+            // NOTE(pvlso): Even over the circle's area
+            r32 Angle = 2.0f*Pi32*ScatterRandomUnit(MapMode);
+            r32 Distance = Radius*SquareRoot(ScatterRandomUnit(MapMode));
+            v2 P = MouseCell + Distance*V2(Cos(Angle), Sin(Angle));
+            if(Input->ControlDown) {P = SnapToCellCenter(P);}
+            if((P.x < 0.0f) || (P.y < 0.0f) || (P.x >= MapSize.x) || (P.y >= MapSize.y)) {continue;}
+
+            b32 Crowded = false;
+            for(u32 EntityIndex = 0; !Crowded && (EntityIndex < MapMode->EntityCount); ++EntityIndex)
+            {
+                map_placement *Entity = MapMode->Entities + EntityIndex;
+                Crowded = ((Entity->Definition == Definition) && (LengthSq(Entity->P - P) < Square(Spacing)));
+            }
+            if(!Crowded)
+            {
+                s32 Added = AddMapEntity(MapMode, Definition, P);
+                MapMode->Entities[Added].Flip = MapMode->ScatterFlip && (ScatterRandomUnit(MapMode) < 0.5f);
+                MapMode->ScatterChanged = true;
+            }
+        }
+    }
+
+    return(Finished);
+}
+
 // NOTE(pvlso): The Entities tool on the map (the panel's help says how). True when a change was finished, for the
 // history.
 internal b32
@@ -815,6 +906,14 @@ UpdateMapEntityTool(editor_mode_map *MapMode, engine_input *Input, tileset_grid_
     v2 MapSize = V2((r32)MapMode->Width, (r32)MapMode->Height);
     b32 OnMap = Inside && (MouseCell.x >= 0.0f) && (MouseCell.y >= 0.0f) && (MouseCell.x < MapSize.x) &&
         (MouseCell.y < MapSize.y);
+    if(MapMode->Scatter || MapMode->Scattering)
+    {
+        Finished |= UpdateMapScatter(MapMode, Input, MouseCell, OnMap);
+        if(MapMode->Scattering || !Input->AltDown || !WasPressed(Left))
+        {
+            return(Finished);
+        }
+    }
     if(Inside && !MapMode->DraggingEntity)
     {
         s32 Under = MapEntityUnder(MapMode, View, MouseP);
@@ -915,8 +1014,13 @@ RenderMapEntities(editor_mode_map *MapMode, engine_input *Input, render_group *R
     v2 MouseCell = MapCellOf(View, MouseP);
     b32 OnMap = Inside && (MouseCell.x >= 0.0f) && (MouseCell.y >= 0.0f) && (MouseCell.x < (r32)MapMode->Width) &&
         (MouseCell.y < (r32)MapMode->Height);
-    if(Tool && OnMap && !MapMode->DraggingEntity && !Input->AltDown && (MapMode->CurrentDef >= 0) &&
-       (MapEntityUnder(MapMode, View, MouseP) < 0))
+    if(Tool && MapMode->Scatter && OnMap)
+    {
+        v4 Color = MapMode->ScatterErasing && MapMode->Scattering ? V4(1.0f, 0.4f, 0.3f, 1.0f) : V4(1, 0.85f, 0.2f, 1);
+        PushCircleOutline(RenderGroup, Flat, V3(MouseP, 8.0f), View->Cell*MapMode->ScatterRadius, 48, Color);
+    }
+    else if(Tool && OnMap && !MapMode->DraggingEntity && !Input->AltDown && (MapMode->CurrentDef >= 0) &&
+            (MapEntityUnder(MapMode, View, MouseP) < 0))
     {
         v2 P = Input->ControlDown ? SnapToCellCenter(MouseCell) : MouseCell;
         PushMapEntity(RenderGroup, Flat, MapMode, View, MapMode->EntityDefs + MapMode->CurrentDef, P, false, 6.98f, 0.5f);
@@ -1282,12 +1386,34 @@ DrawMapEntityPanel(editor_mode_map *MapMode, nk_context *Nk)
         if(nk_button_label(Nk, "Remove")) {MapMode->RemoveEntityRequested = true;}
     }
 
+    nk_layout_row_dynamic(Nk, 24, 1);
+    nk_label(Nk, "", NK_TEXT_LEFT);
+    nk_bool Scatter = (MapMode->Scatter != 0);
+    if(nk_checkbox_label(Nk, "Scatter brush", &Scatter)) {MapMode->Scatter = Scatter;}
+    if(MapMode->Scatter)
+    {
+        nk_layout_row_dynamic(Nk, 28, 1);
+        nk_property_float(Nk, "#Radius (cells)", 0.5f, &MapMode->ScatterRadius, 16.0f, 0.5f, 0.05f);
+        nk_property_float(Nk, "#Spacing (cells)", 0.25f, &MapMode->ScatterSpacing, 8.0f, 0.25f, 0.02f);
+        nk_bool ScatterFlip = (MapMode->ScatterFlip != 0);
+        if(nk_checkbox_label(Nk, "Flip at random", &ScatterFlip)) {MapMode->ScatterFlip = ScatterFlip;}
+    }
+
     nk_layout_row_dynamic(Nk, 18, 1);
     nk_label(Nk, "", NK_TEXT_LEFT);
     nk_label(Nk, "Palette or list: pick a definition to place.", NK_TEXT_LEFT);
-    nk_label(Nk, "Map: left click places it, left drag moves one.", NK_TEXT_LEFT);
-    nk_label(Nk, "Hold Ctrl to stand the foot on a cell's centre.", NK_TEXT_LEFT);
-    nk_label(Nk, "Right click removes one, Del the selected one.", NK_TEXT_LEFT);
+    if(MapMode->Scatter)
+    {
+        nk_label(Nk, "Map: left drag scatters it, right drag removes it.", NK_TEXT_LEFT);
+        nk_label(Nk, "Hold still to fill the circle up to the spacing.", NK_TEXT_LEFT);
+        nk_label(Nk, "Hold Ctrl to stand them on cells' centres.", NK_TEXT_LEFT);
+    }
+    else
+    {
+        nk_label(Nk, "Map: left click places it, left drag moves one.", NK_TEXT_LEFT);
+        nk_label(Nk, "Hold Ctrl to stand the foot on a cell's centre.", NK_TEXT_LEFT);
+        nk_label(Nk, "Right click removes one, Del the selected one.", NK_TEXT_LEFT);
+    }
     nk_label(Nk, "Alt+click picks the definition of the one under it.", NK_TEXT_LEFT);
     nk_label(Nk, "Middle drag pans, the wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
 }
@@ -1671,7 +1797,8 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
             Changed = true;
         }
 
-        b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive || MapMode->DraggingEntity;
+        b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive || MapMode->DraggingEntity ||
+            MapMode->Scattering;
         if(!MapMode->TypingLayerName && !Busy && (MapMode->Tool == MapTool_Entities) &&
            (MapMode->SelectedEntity >= 0) && nk_input_is_key_pressed(&Nk->input, NK_KEY_DEL))
         {

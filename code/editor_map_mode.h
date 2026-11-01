@@ -165,6 +165,17 @@ struct editor_mode_map
     b32 RemoveEntityRequested;
     b32 EntityEdited;
 
+    // NOTE(pvlso): The scatter brush: a drag lays many of the picked definition inside a circle, none of them nearer
+    // than Spacing to another of it; a right drag takes them away. A stroke is one step of the history.
+    b32 Scatter;
+    r32 ScatterRadius;  // NOTE(pvlso): in cells
+    r32 ScatterSpacing; // NOTE(pvlso): in cells
+    b32 ScatterFlip;    // NOTE(pvlso): each one flipped or not at random
+    b32 Scattering;
+    b32 ScatterErasing;
+    b32 ScatterChanged;
+    u64 ScatterRandom;
+
     // NOTE(pvlso): Undo: every state after a change, History[HistoryAt] the current one; the oldest go when they pass
     // MAP_HISTORY_BYTES
     u32 HistoryCount;
