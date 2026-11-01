@@ -15,6 +15,28 @@
   what the engine uses.
 */
 
+// NOTE(pvlso): Clipper's SIMD paths follow the compiler's target (build.bat builds for AVX2 with clang and cl).
+// Its "SSE" paths use SSE3 and SSE4.1 (hadd, round), so they go on with AVX; its AVX-512 ones need DQ and VL.
+#if defined(__AVX512F__) && defined(__AVX512DQ__) && defined(__AVX512VL__)
+#define CLIPPER_AVX512 1
+#else
+#define CLIPPER_AVX512 0
+#endif
+#if defined(__AVX2__)
+#define CLIPPER_AVX2 1
+#else
+#define CLIPPER_AVX2 0
+#endif
+#if defined(__AVX__)
+#define CLIPPER_AVX 1
+#define CLIPPER_SSE 1
+#else
+#define CLIPPER_AVX 0
+#define CLIPPER_SSE 0
+#endif
+// NOTE(pvlso): The points' SIMD lanes (v2_f64.W, v2_s64.W) for those paths
+#define CLIPPER_SIMD CLIPPER_SSE
+
 #if !defined(CLIPPER_MATH_H)
 /* ========================================================================
    $File: $
@@ -33,7 +55,7 @@ union v2_s64
         s64 x, y;
     };
 
-#if MATH_SIMD
+#if CLIPPER_SIMD
     __m128i W;
 #endif
     s64 E[2];
@@ -62,7 +84,7 @@ union v2_f64
         f64 x, y;
     };
 
-#if MATH_SIMD
+#if CLIPPER_SIMD
     __m128d W;
 #endif
     f64 E[2];
@@ -1452,13 +1474,13 @@ PerpDistFromLineSq(v2_s64 p, v2_s64 a, v2_s64 b)
     __m256d Sub = _mm256_sub_pd(_mm256_set_pd((f64)p.x, (f64)b.x, (f64)p.y, (f64)b.y),
                                 _mm256_set_pd((f64)a.x, (f64)a.x, (f64)a.y, (f64)a.y));
 
-    _mm256_store_pd(buf, Sub);
+    _mm256_storeu_pd(buf, Sub);
 
     if(!((buf[0] == 0) && (buf[2] == 0)))    
     {
         __m256d Sub1 = _mm256_set_pd(buf[0], buf[2], buf[2], buf[0]);
         __m256d Mul = _mm256_mul_pd(Sub, Sub1);
-        _mm256_store_pd(buf, Mul);
+        _mm256_storeu_pd(buf, Mul);
 
         Result = Square(buf[3] - buf[1]) / (buf[2] + buf[0]);
     }
@@ -1906,7 +1928,7 @@ inline void *
 ClipperMalloc(umm Size)
 {
     Assert(ClipperArena);
-    void *Result = PushSize(ClipperArena, Size, AlignNoClear(16));
+    void *Result = PushSize(ClipperArena, Size, AlignNoClear(32)); // NOTE(pvlso): for its AVX loads
     ZeroSize(Size, Result);
     return(Result);
 }
@@ -2840,10 +2862,6 @@ MaxHeapExtractNode(clipper_heap *Heap)
    $Notice: $
    ======================================================================== */
 
-#define CLIPPER_AVX512 0
-#define CLIPPER_AVX2 0
-#define CLIPPER_AVX 0
-#define CLIPPER_SSE 0
 
 // NOTE(pvlso): Clipper2's fmin/fmax/nearbyint (https://github.com/AngusJohnson/Clipper2/discussions/334), as functions
 // so they don't take over the CRT's names in the unity build
