@@ -438,11 +438,18 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         u64 GUID = GUIDFromString(Clip->FileName);
         kesa_type Wanted = (Clip->Kind == EntityLook_Bitmap) ? KESA_Bitmap : KESA_SpriteSheet;
         b32 Stored = false;
+        v2 Align = V2(0.5f, 0.0f);
         for(u32 Index = 1; Index < Builder->KESAHeader->AssetCount; ++Index)
         {
             kesa_asset *StoredAsset = Builder->KESAAssets + Index;
-            if((StoredAsset->GUID == GUID) && (StoredAsset->Type == Wanted)) {Stored = true;}
+            if((StoredAsset->GUID == GUID) && (StoredAsset->Type == Wanted))
+            {
+                Stored = true;
+                Align = (Wanted == KESA_Bitmap) ? StoredAsset->Bitmap.AlignPercentage :
+                    StoredAsset->SpriteSheet.SpriteAlignPercentage;
+            }
         }
+        if(Clip->HasAlign) {Align = Clip->Align;}
         if(Stored)
         {
             kea_entity_clip *Dest = Data->Clips + Info->ClipCount++;
@@ -450,6 +457,8 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
             Dest->LookGUID = GUID;
             Dest->FramesPerSecond = Clip->FramesPerSecond;
             Dest->Loop = Clip->Loop;
+            Dest->Align[0] = Align.x;
+            Dest->Align[1] = Align.y;
         }
         else
         {

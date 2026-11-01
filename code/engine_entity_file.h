@@ -31,13 +31,14 @@
     display "Oak"
     type Tree
     clip Idle bitmap "oak.png"
-    clip Burnt spritesheet "oak burning.png" fps 6 once
+    clip Burnt spritesheet "oak burning.png" fps 6 once align 0.5 0.1
     footprint circle 0 4 6
     hitarea box 0 40 28 70
 
   Its GUID (16 hex digits) is made once when it's created and never changes: the asset file, maps and saves name it
   by it. A clip is a bitmap (a still) or a sprite sheet (frames, at fps, looping unless once), one of the project's
-  stored assets by its file name, standing on the asset's alignment (the foot). The footprint blocks movement, the hit
+  stored assets by its file name, standing on its foot: "align x y", where the foot is on a frame from 0 to 1 from its
+  bottom left (set in the entity editor), else the asset's alignment. The footprint blocks movement, the hit
   area is what spells and interaction hit: none, circle x y radius, or box x y width height, the centre from the foot
   in pixels, y up.
 */
@@ -73,6 +74,9 @@ struct entity_clip
     char FileName[ENTITY_LOOK_NAME_LENGTH];
     r32 FramesPerSecond;
     b32 Loop;
+    // NOTE(pvlso): Where the foot is on a frame, 0 to 1 from its bottom left; without it the asset's alignment
+    b32 HasAlign;
+    v2 Align;
 };
 
 struct entity_shape

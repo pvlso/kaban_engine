@@ -175,9 +175,43 @@ RenderEntityShape(render_group *RenderGroup, object_transform *Flat, entity_shap
     }
 }
 
+// NOTE(pvlso): Where a clip's foot is on its frame: its own, else its asset's alignment
+internal v2
+EntityClipAlign(editor_mode_entity *EntityMode, entity_clip *Clip)
+{
+    v2 Result = V2(0.5f, 0.0f);
+    s32 Choice = (Clip->Kind != EntityLook_None) ? FindLookChoice(EntityMode, Clip) : -1;
+    if(Clip->HasAlign) {Result = Clip->Align;}
+    else if(Choice >= 0) {Result = EntityMode->LookChoices[Choice].Align;}
+
+    return(Result);
+}
+
+// NOTE(pvlso): The shown clip's frame size in pixels, 0 without a picture
+internal v2
+EntityPreviewFrameDim(editor_mode_entity *EntityMode)
+{
+    v2 Result = {};
+    loaded_bitmap *Preview = &EntityMode->Preview;
+    if(Preview->Memory)
+    {
+        if(EntityMode->PreviewClip.Kind == EntityLook_Bitmap)
+        {
+            Result = V2((r32)Preview->Width, (r32)Preview->Height);
+        }
+        else if(EntityMode->PreviewChoice >= 0)
+        {
+            entity_look_choice *Choice = EntityMode->LookChoices + EntityMode->PreviewChoice;
+            Result = V2((r32)Choice->SpriteWidth, (r32)Choice->SpriteHeight);
+        }
+    }
+
+    return(Result);
+}
+
 internal void
-RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                    rectangle2 Rect, r32 Wheel)
+RenderEntityPreview(editor_mode_entity *EntityMode, engine_input *Input, render_group *RenderGroup,
+                    object_transform *Flat, v2 MouseP, rectangle2 Rect, r32 Wheel, b32 OverUI)
 {
     if(IsInRectangle(Rect, MouseP) && (Wheel != 0.0f))
     {
@@ -186,6 +220,41 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
 
     r32 Zoom = EntityMode->Zoom;
     v2 Foot = V2(GetCenter(Rect).x, Rect.Min.y + 0.3f*GetDim(Rect).y);
+    entity_clip *Shown = EntityMode->Entity.Clips + EntityMode->ShownClip;
+    v2 Align = EntityClipAlign(EntityMode, Shown);
+    v2 FrameDim = EntityPreviewFrameDim(EntityMode);
+
+    // NOTE(pvlso): Dragging the picture moves it over the foot, the foot staying on whole pixels of the frame
+    engine_button_state Left = Input->MouseButtons[PlatformMouseButton_Left];
+    if(WasPressed(Left) && !OverUI && (FrameDim.x > 0.0f) && IsInRectangle(Rect, MouseP))
+    {
+        rectangle2 Picture = RectMinDim(Foot - Zoom*Hadamard(Align, FrameDim), Zoom*FrameDim);
+        if(IsInRectangle(Picture, MouseP))
+        {
+            EntityMode->DraggingLook = true;
+            EntityMode->DragMouseStart = MouseP;
+            EntityMode->DragAlignStart = Align;
+        }
+    }
+    if(EntityMode->DraggingLook)
+    {
+        if(!Left.EndedDown || (FrameDim.x <= 0.0f))
+        {
+            EntityMode->DraggingLook = false;
+        }
+        else
+        {
+            v2 Pixels = Hadamard(EntityMode->DragAlignStart, FrameDim) - (1.0f / Zoom)*(MouseP - EntityMode->DragMouseStart);
+            Pixels = V2((r32)RoundReal32ToInt32(Pixels.x), (r32)RoundReal32ToInt32(Pixels.y));
+            v2 NewAlign = V2(Pixels.x / FrameDim.x, Pixels.y / FrameDim.y);
+            if(!Shown->HasAlign || (NewAlign.x != Shown->Align.x) || (NewAlign.y != Shown->Align.y))
+            {
+                Shown->HasAlign = true;
+                Shown->Align = NewAlign;
+            }
+            Align = NewAlign;
+        }
+    }
     u32 SavedClip = RenderGroup->CurrentClipRectIndex;
     RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
     PushRect(RenderGroup, Flat, Rect, 4.0f, V4(0.18f, 0.18f, 0.2f, 1.0f));
@@ -196,8 +265,7 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
     {
         if(EntityMode->PreviewClip.Kind == EntityLook_Bitmap)
         {
-            Preview->AlignPercentage = (EntityMode->PreviewChoice >= 0) ?
-                EntityMode->LookChoices[EntityMode->PreviewChoice].Align : V2(0.5f, 0.0f);
+            Preview->AlignPercentage = Align;
             PushBitmap(RenderGroup, Flat, Preview, Zoom*(r32)Preview->Height, V3(Foot, 6.0f));
         }
         else if(EntityMode->PreviewChoice >= 0)
@@ -207,12 +275,12 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
             u32 Count = Maximum(1, Choice->SpriteCount);
             u32 Frame = (u32)Maximum(0, FloorReal32ToInt32(EntityMode->Time*EntityMode->PreviewClip.FramesPerSecond));
             Frame = EntityMode->PreviewClip.Loop ? (Frame % Count) : Minimum(Frame, Count - 1);
-            v2 FrameDim = Zoom*V2((r32)Choice->SpriteWidth, (r32)Choice->SpriteHeight);
-            v2 FrameMin = Foot - Hadamard(Choice->Align, FrameDim);
+            v2 ShownDim = Zoom*FrameDim;
+            v2 FrameMin = Foot - Hadamard(Align, ShownDim);
             Preview->AlignPercentage = V2(0, 0);
-            RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, FrameDim), 0.0f, 0);
+            RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, ShownDim), 0.0f, 0);
             PushBitmap(RenderGroup, Flat, Preview, Zoom*(r32)Preview->Height,
-                       V3(FrameMin - V2((r32)Frame*FrameDim.x, 0.0f), 6.0f));
+                       V3(FrameMin - V2((r32)Frame*ShownDim.x, 0.0f), 6.0f));
             RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
         }
     }
@@ -445,6 +513,8 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                             entity_look_choice *Picked = EntityMode->LookChoices + ChoiceIndex;
                             Clip->Kind = Picked->Kind;
                             FormatString(ENTITY_LOOK_NAME_LENGTH, Clip->FileName, "%s", Picked->FileName);
+                            Clip->HasAlign = false;
+                            Clip->Align = {};
                             if(Clip->FramesPerSecond <= 0.0f) {Clip->FramesPerSecond = 8.0f; Clip->Loop = true;}
                             EntityMode->ShownClip = ClipIndex;
                             nk_combo_close(Nk);
@@ -464,6 +534,30 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                     nk_bool Loop = (Clip->Loop != 0);
                     if(nk_checkbox_label(Nk, "loop", &Loop)) {Clip->Loop = Loop; EntityMode->Time = 0.0f;}
                 }
+            }
+
+            // NOTE(pvlso): The shown clip's foot: where on its frame it stands (0 to 1 from the bottom left)
+            entity_clip *Shown = Entity->Clips + EntityMode->ShownClip;
+            if(Shown->Kind != EntityLook_None)
+            {
+                nk_layout_row_dynamic(Nk, 24, 1);
+                nk_labelf(Nk, NK_TEXT_LEFT, "%s's foot (drag the picture)%s:", Project->Clips[EntityMode->ShownClip],
+                          Shown->HasAlign ? "" : ", the asset's");
+                nk_layout_row_template_begin(Nk, 26);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_push_static(Nk, 70);
+                nk_layout_row_template_end(Nk);
+                v2 Align = EntityClipAlign(EntityMode, Shown);
+                v2 Edited = Align;
+                nk_property_float(Nk, "#x", -1.0f, &Edited.x, 2.0f, 0.01f, 0.002f);
+                nk_property_float(Nk, "#y", -1.0f, &Edited.y, 2.0f, 0.01f, 0.002f);
+                if((Edited.x != Align.x) || (Edited.y != Align.y))
+                {
+                    Shown->HasAlign = true;
+                    Shown->Align = Edited;
+                }
+                if(nk_button_label(Nk, "Asset's")) {Shown->HasAlign = false; Shown->Align = {};}
             }
 
             nk_layout_row_dynamic(Nk, 24, 1);
@@ -602,7 +696,8 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
             EntityMode->LastEntity = EntityMode->Entity;
         }
         UpdateEntityPreview(TextureOpQueue, EntityMode);
-        RenderEntityPreview(EntityMode, RenderGroup, &Flat, MouseP, PreviewRect, Nk->input.mouse.scroll_delta.y);
+        RenderEntityPreview(EntityMode, Input, RenderGroup, &Flat, MouseP, PreviewRect, Nk->input.mouse.scroll_delta.y,
+                            nk_window_is_any_hovered(Nk));
     }
     else
     {

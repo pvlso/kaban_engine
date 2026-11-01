@@ -255,6 +255,12 @@ ENTITY_LINE_CALLBACK(ReadEntityFileLine)
                 }
                 else if(StringsAreEqual(Tokens->Tokens[Index], "once")) {Look->Loop = false;}
                 else if(StringsAreEqual(Tokens->Tokens[Index], "loop")) {Look->Loop = true;}
+                else if(StringsAreEqual(Tokens->Tokens[Index], "align") && (Index + 2 < Tokens->Count))
+                {
+                    Look->HasAlign = true;
+                    Look->Align.x = R32FromTilesetToken(Tokens->Tokens[++Index]);
+                    Look->Align.y = R32FromTilesetToken(Tokens->Tokens[++Index]);
+                }
             }
         }
     }
@@ -358,16 +364,21 @@ WriteEntityFile(char *FileName, entity_file *Entity, entity_project *Project, me
     for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
     {
         entity_clip *Clip = Entity->Clips + ClipIndex;
+        char Align[48] = "";
+        if(Clip->HasAlign)
+        {
+            FormatString(sizeof(Align), Align, " align %.3f %.3f", Clip->Align.x, Clip->Align.y);
+        }
         if(Clip->Kind == EntityLook_Bitmap)
         {
             CopyWithoutQuotes(Clip->FileName, Clean, sizeof(Clean));
-            ENTITY_OUT("clip %s bitmap \"%s\"\n", Project->Clips[ClipIndex], Clean);
+            ENTITY_OUT("clip %s bitmap \"%s\"%s\n", Project->Clips[ClipIndex], Clean, Align);
         }
         else if(Clip->Kind == EntityLook_SpriteSheet)
         {
             CopyWithoutQuotes(Clip->FileName, Clean, sizeof(Clean));
-            ENTITY_OUT("clip %s spritesheet \"%s\" fps %.2f%s\n", Project->Clips[ClipIndex], Clean,
-                       Clip->FramesPerSecond, Clip->Loop ? "" : " once");
+            ENTITY_OUT("clip %s spritesheet \"%s\" fps %.2f%s%s\n", Project->Clips[ClipIndex], Clean,
+                       Clip->FramesPerSecond, Clip->Loop ? "" : " once", Align);
         }
     }
     At += WriteEntityShape(Text + At, Capacity - At, "footprint", &Entity->Footprint);

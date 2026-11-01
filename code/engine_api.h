@@ -145,6 +145,8 @@ struct entity_clip_info
     b32 Loop;
     b32 Finished;     // NOTE(pvlso): a clip played once is past its last frame (which stays showing)
     v2 Dim;           // NOTE(pvlso): the frame's size in pixels
+    v2 Align;         // NOTE(pvlso): where its foot is on the frame, 0 to 1 from the bottom left (the entity editor's,
+                      // else the asset's alignment): draw it with no alignment of its own at P - Align*Dim
 };
 
 // NOTE(pvlso): An entity placed on a map in the map editor: its own GUID (kept across the map's saves, for a save to

@@ -65,6 +65,10 @@ struct editor_mode_entity
     r32 Time; // NOTE(pvlso): since the shown clip started
     b32 ShowFootprint;
     b32 ShowHitArea;
+    // NOTE(pvlso): A left drag on the picture moves it over the foot: the shown clip's alignment
+    b32 DraggingLook;
+    v2 DragMouseStart;
+    v2 DragAlignStart;
 
     // NOTE(pvlso): The panel's inputs and requests, done by the next update
     char NameInput[48];

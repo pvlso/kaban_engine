@@ -359,6 +359,7 @@ struct kea_entity_clip
     u64 LookGUID; // NOTE(pvlso): a bitmap's or sprite sheet's asset
     r32 FramesPerSecond;
     u32 Loop;
+    r32 Align[2]; // NOTE(pvlso): the foot on a frame, 0 to 1 from its bottom left (the clip's, else the asset's)
 };
 
 struct kea_entity

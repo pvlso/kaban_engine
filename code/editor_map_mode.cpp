@@ -339,8 +339,6 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
     MapMode->EntityDefCount = MapMode->EntityFiles.Count;
     MapMode->EntityDefs = PushArray(Arena, Maximum(1, MapMode->EntityDefCount), map_entity_def);
 
-    kesa_header Header = {};
-    kesa_asset *Stored = ReadStoredAssetList(&EditorState->EditorMeta, &Header);
     for(u32 DefIndex = 0; DefIndex < MapMode->EntityDefCount; ++DefIndex)
     {
         map_entity_def *Def = MapMode->EntityDefs + DefIndex;
@@ -348,6 +346,27 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
         Def->FileName = MapMode->EntityFiles.Files[DefIndex];
         Def->File = ReadEntityFile(Def->FileName, Project, Arena);
         if(Def->File.Type > Project->TypeCount) {Def->File.Type = 0;}
+    }
+
+    // NOTE(pvlso): By type, keeping the files' order within one. Before the looks: their textures are given to
+    // where each look is when it's queued, so the definitions mustn't move after.
+    for(u32 Index = 1; Index < MapMode->EntityDefCount; ++Index)
+    {
+        map_entity_def Node = MapMode->EntityDefs[Index];
+        s32 At = (s32)Index - 1;
+        while((At >= 0) && (MapMode->EntityDefs[At].File.Type > Node.File.Type))
+        {
+            MapMode->EntityDefs[At + 1] = MapMode->EntityDefs[At];
+            --At;
+        }
+        MapMode->EntityDefs[At + 1] = Node;
+    }
+
+    kesa_header Header = {};
+    kesa_asset *Stored = ReadStoredAssetList(&EditorState->EditorMeta, &Header);
+    for(u32 DefIndex = 0; DefIndex < MapMode->EntityDefCount; ++DefIndex)
+    {
+        map_entity_def *Def = MapMode->EntityDefs + DefIndex;
         Def->Align = V2(0.5f, 0.0f);
         Def->FrameCount = 1;
         entity_clip *Clip = 0;
@@ -375,22 +394,10 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
                     Def->FrameCount = (Wanted == KESA_Bitmap) ? 1 : Maximum(1, Asset->SpriteSheet.SpriteCount);
                 }
             }
+            if(Clip->HasAlign) {Def->Align = Clip->Align;}
         }
     }
     if(Stored) {Platform.DeallocateMemory(Stored);}
-
-    // NOTE(pvlso): By type, keeping the files' order within one
-    for(u32 Index = 1; Index < MapMode->EntityDefCount; ++Index)
-    {
-        map_entity_def Node = MapMode->EntityDefs[Index];
-        s32 At = (s32)Index - 1;
-        while((At >= 0) && (MapMode->EntityDefs[At].File.Type > Node.File.Type))
-        {
-            MapMode->EntityDefs[At + 1] = MapMode->EntityDefs[At];
-            --At;
-        }
-        MapMode->EntityDefs[At + 1] = Node;
-    }
     MapMode->EntityDefsLoaded = true;
     LOG("Map editor: %u entity definitions", MapMode->EntityDefCount);
 }

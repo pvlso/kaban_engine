@@ -352,6 +352,7 @@ GameGetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Tim
         FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_ENTITY_NAME_LENGTH, Clip->Name);
         Result.FramesPerSecond = Clip->FramesPerSecond;
         Result.Loop = Clip->Loop;
+        Result.Align = V2(Clip->Align[0], Clip->Align[1]);
         asset *Look = GetAssetByGUID(Assets, Clip->LookGUID);
         if(Look)
         {
