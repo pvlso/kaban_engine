@@ -35,11 +35,20 @@
   rows), maybe "flip" (mirrored left to right) and "level n" (left out for level 0). Everything else about it is the
   game's.
 
+  Then the navigation areas (map editor plan, 6c), where things may walk on each level:
+
+    nav walk 0 2.000 3.000 20.000 3.000 20.000 15.000 2.000 15.000
+    nav hole 0 8.000 6.000 12.000 6.000 12.000 9.000
+
+  Walkable (walk) or cut out of the walkable ones (hole), its level, then its points (3 or more, a closed polygon) in
+  cells from the map's top left, y down. They're baked into navigation meshes by Write Assets (6d).
+
   Levels (map editor plan, phase 6) are heights: 0 the ground, 1 a bridge or a plateau above it, -1 below it. A map is
   drawn level by level from the lowest: a level's layers by Z (those sharing a Z in their order), then the entities
   on that level, then the next level.
 */
 
+#define MAP_NAV_MAX_POINTS 512
 #define MAP_MIN_LEVEL -16
 #define MAP_MAX_LEVEL 16
 
@@ -74,6 +83,14 @@ struct map_file_entity
     s32 Level;
 };
 
+struct map_file_nav
+{
+    s32 Level;
+    b32 Hole;
+    u32 PointCount;
+    v2 *Points; // NOTE(pvlso): in cells from the map's top left, y down
+};
+
 struct map_file
 {
     b32 Loaded;
@@ -86,6 +103,8 @@ struct map_file
     map_file_layer Layers[MAP_FILE_MAX_LAYERS];
     u32 EntityCount;
     map_file_entity *Entities;
+    u32 NavCount;
+    map_file_nav *Navs;
 };
 
 #define ENGINE_MAP_FILE_H

@@ -92,6 +92,24 @@ ReadMapOptions(char *Line, char *LineEnd, b32 *Hidden, b32 *Flip, s32 *Level)
     return(Result);
 }
 
+// NOTE(pvlso): How many lines start with Word
+internal u32
+CountMapLines(char *At, char *End, char *Word)
+{
+    u32 Result = 0;
+    for(char *LineAt = At; LineAt < End;)
+    {
+        char *Start = SkipMapSpaces(LineAt, End);
+        u32 Matched = 0;
+        while((Start + Matched < End) && Word[Matched] && (Start[Matched] == Word[Matched])) {++Matched;}
+        if(!Word[Matched]) {++Result;}
+        while((LineAt < End) && (*LineAt != '\n')) {++LineAt;}
+        if(LineAt < End) {++LineAt;}
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Reads data/maps/<FileName>; the layers' cells go in Arena. Mistakes are logged with their line.
 internal map_file
 ReadMapFile(char *FileName, memory_arena *Arena)
@@ -109,19 +127,11 @@ ReadMapFile(char *FileName, memory_arena *Arena)
     char *At = (char *)File.Contents;
     char *FileEnd = At + StringLength(At); // NOTE(pvlso): a text file's Size counts its closing zero
 
-    // NOTE(pvlso): Room for as many entities as there are lines starting with "entity"
-    u32 MaxEntities = 1;
-    for(char *LineAt = At; LineAt < FileEnd;)
-    {
-        char *Word = SkipMapSpaces(LineAt, FileEnd);
-        char *Entity = "entity";
-        u32 Matched = 0;
-        while((Word + Matched < FileEnd) && Entity[Matched] && (Word[Matched] == Entity[Matched])) {++Matched;}
-        if(!Entity[Matched]) {++MaxEntities;}
-        while((LineAt < FileEnd) && (*LineAt != '\n')) {++LineAt;}
-        if(LineAt < FileEnd) {++LineAt;}
-    }
+    // NOTE(pvlso): Room for as many entities and navigation areas as there are lines starting with "entity" and "nav"
+    u32 MaxEntities = 1 + CountMapLines(At, FileEnd, "entity ");
+    u32 MaxNavs = 1 + CountMapLines(At, FileEnd, "nav ");
     Result.Entities = PushArray(Arena, MaxEntities, map_file_entity);
+    Result.Navs = PushArray(Arena, MaxNavs, map_file_nav);
 
     u32 LineNumber = 0;
     map_file_layer *Layer = 0;
@@ -267,6 +277,45 @@ ReadMapFile(char *FileName, memory_arena *Arena)
                 ++Result.ErrorCount;
             }
         }
+        else if(StringsAreEqual(Word, "nav"))
+        {
+            map_file_nav Read = {};
+            char Kind[16];
+            char Level[16];
+            Line = ReadMapWord(Line, LineEnd, Kind, sizeof(Kind));
+            Read.Hole = StringsAreEqual(Kind, "hole");
+            b32 Valid = Read.Hole || StringsAreEqual(Kind, "walk");
+            Line = ReadMapWord(Line, LineEnd, Level, sizeof(Level));
+            Valid = Valid && S32FromMapWord(Level, &Read.Level) && (Read.Level >= MAP_MIN_LEVEL) &&
+                (Read.Level <= MAP_MAX_LEVEL);
+            v2 Points[MAP_NAV_MAX_POINTS];
+            char Numbers[2][32];
+            for(;;)
+            {
+                Line = ReadMapWord(Line, LineEnd, Numbers[0], sizeof(Numbers[0]));
+                if(!Numbers[0][0]) {break;}
+                Line = ReadMapWord(Line, LineEnd, Numbers[1], sizeof(Numbers[1]));
+                if(!IsTilesetNumber(Numbers[0]) || !IsTilesetNumber(Numbers[1]) ||
+                   (Read.PointCount >= MAP_NAV_MAX_POINTS))
+                {
+                    Valid = false;
+                    break;
+                }
+                Points[Read.PointCount++] = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
+            }
+            if(Valid && (Read.PointCount >= 3))
+            {
+                Read.Points = PushArray(Arena, Read.PointCount, v2);
+                Copy(Read.PointCount*sizeof(v2), Points, Read.Points);
+                Result.Navs[Result.NavCount++] = Read;
+            }
+            else
+            {
+                LOG_ERROR("Map %s, line %d: a nav is walk or hole, its level, then 3 to %d points (x y)", FileName,
+                          LineNumber, MAP_NAV_MAX_POINTS);
+                ++Result.ErrorCount;
+            }
+        }
         else if(StringsAreEqual(Word, "override"))
         {
             // NOTE(pvlso): Maps from before definitions lost their blocks (2026-10-31); saving the map drops them
@@ -274,7 +323,7 @@ ReadMapFile(char *FileName, memory_arena *Arena)
         }
         else
         {
-            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row or entity, not %s", FileName,
+            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row, entity or nav, not %s", FileName,
                       LineNumber, Word);
             ++Result.ErrorCount;
         }
@@ -295,6 +344,10 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
     umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128) +
         (umm)Map->EntityCount*112;
+    for(u32 NavIndex = 0; NavIndex < Map->NavCount; ++NavIndex)
+    {
+        Capacity += 32 + (umm)Map->Navs[NavIndex].PointCount*24;
+    }
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define MAP_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -342,6 +395,20 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
         EntityGUIDToHex(Entity->Definition, Definition);
         MAP_OUT("entity %s %s %.3f %.3f%s", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
         if(Entity->Level) {MAP_OUT(" level %d", Entity->Level);}
+        MAP_OUT("\n");
+    }
+    if(Map->NavCount)
+    {
+        MAP_OUT("\n");
+    }
+    for(u32 NavIndex = 0; NavIndex < Map->NavCount; ++NavIndex)
+    {
+        map_file_nav *Nav = Map->Navs + NavIndex;
+        MAP_OUT("nav %s %d", Nav->Hole ? "hole" : "walk", Nav->Level);
+        for(u32 PointIndex = 0; PointIndex < Nav->PointCount; ++PointIndex)
+        {
+            MAP_OUT(" %.3f %.3f", Nav->Points[PointIndex].x, Nav->Points[PointIndex].y);
+        }
         MAP_OUT("\n");
     }
 #undef MAP_OUT

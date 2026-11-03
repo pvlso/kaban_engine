@@ -18,6 +18,9 @@
   The Entities tool (phase 5d) places the project's entity definitions (data/entities) on the current level, each
   standing on its foot, drawn front to back by it. A placement has a GUID of its own, its definition's, a position in
   cells, a flip and its level.
+
+  The Navmesh tool (phase 6c) draws the navigation areas of each level: walkable polygons, and holes cut out of them,
+  saved with the map and baked into navigation meshes by Write Assets (6d).
 */
 
 #define MAP_MAX_LAYERS 32
@@ -69,10 +72,20 @@ struct map_entity_def
     u32 FrameCount;
 };
 
+// NOTE(pvlso): A navigation area: a closed polygon where things on its level may walk, or a hole cut out of them
+struct map_nav
+{
+    s32 Level;
+    b32 Hole;
+    u32 Count;
+    v2 Points[MAP_NAV_MAX_POINTS]; // NOTE(pvlso): in cells from the map's top left, y down
+};
+
 enum map_tool
 {
     MapTool_Tiles,
     MapTool_Entities,
+    MapTool_Navmesh,
 };
 
 struct editor_mode_map
@@ -180,6 +193,23 @@ struct editor_mode_map
     b32 ScatterErasing;
     b32 ScatterChanged;
     u64 ScatterRandom;
+
+    // NOTE(pvlso): Navigation areas (their own allocation, grown as needed), the one selected, the one being drawn
+    // (NewNav, closed into the list), a point being dragged
+    u32 NavCount;
+    u32 NavCapacity;
+    map_nav *Navs;
+    s32 SelectedNav;  // NOTE(pvlso): -1 for none
+    b32 NavDrawing;
+    map_nav NewNav;
+    b32 NewNavHole;   // NOTE(pvlso): what the next area drawn is
+    s32 DragVertex;   // NOTE(pvlso): of the selected area, -1 for none
+    b32 NavMoved;
+    b32 ShowNav;      // NOTE(pvlso): in the other tools
+    b32 NavEnterPressed;
+    b32 NavBackPressed;
+    b32 RemoveNavRequested;
+    b32 NavEdited;    // NOTE(pvlso): the panel changed the selected area's level or kind
 
     // NOTE(pvlso): Undo: every state after a change, History[HistoryAt] the current one; the oldest go when they pass
     // MAP_HISTORY_BYTES
