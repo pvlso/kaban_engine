@@ -344,8 +344,10 @@ GetAssetMemorySize(asset *Asset, asset_header_type HType)
             kea_map *Info = &Asset->KEA.Map;
             Size.Data = (sizeof(u64)*Info->SetCount + sizeof(kea_map_entity)*Info->EntityCount +
                          sizeof(kea_map_layer)*Info->LayerCount +
+                         sizeof(kea_nav_poly)*Info->NavPolyCount + sizeof(kea_nav_link)*Info->NavLinkCount +
+                         sizeof(v2)*Info->NavPointCount +
                          sizeof(kea_map_cell)*Info->LayerCount*Info->Width*Info->Height);
-            Size.Total = Size.Data + sizeof(asset_memory_header);
+            Size.Total = Size.Data + sizeof(asset_memory_header) + (u32)MapNavScratchSize(Info->NavPolyCount);
         } break;
 
         case AssetType_Entity:
@@ -467,7 +469,15 @@ PrepareAssetForLoading(engine_assets *Assets, asset *Asset,
             Map->SetGUIDs = (u64 *)(Asset->Header + 1);
             Map->Entities = (kea_map_entity *)(Map->SetGUIDs + Info->SetCount);
             Map->Layers = (kea_map_layer *)(Map->Entities + Info->EntityCount);
-            Map->Cells = (kea_map_cell *)(Map->Layers + Info->LayerCount);
+            Map->Nav.PolyCount = Info->NavPolyCount;
+            Map->Nav.LinkCount = Info->NavLinkCount;
+            Map->Nav.PointCount = Info->NavPointCount;
+            Map->Nav.Polys = (kea_nav_poly *)(Map->Layers + Info->LayerCount);
+            Map->Nav.Links = (kea_nav_link *)(Map->Nav.Polys + Info->NavPolyCount);
+            Map->Nav.Points = (v2 *)(Map->Nav.Links + Info->NavLinkCount);
+            Map->Cells = (kea_map_cell *)(Map->Nav.Points + Info->NavPointCount);
+            Map->NavScratch = MapNavScratchOf(Map->Cells + (umm)Info->LayerCount*Info->Width*Info->Height,
+                                              Info->NavPolyCount);
 
             Result.LoadDest = Map->SetGUIDs;
             Result.FinalizeOp = FinalizeAsset_None;

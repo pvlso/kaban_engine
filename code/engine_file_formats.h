@@ -325,6 +325,24 @@ enum kea_map_entity_flag
     KEAMapEntity_Flip = (1 << 0),
 };
 
+// NOTE(pvlso): The baked navigation mesh (engine_map_nav.h): convex polygons with their points and their links to
+// other polygons. A link's A and B are the ends of the edge between the two, in cells (y down).
+struct kea_nav_poly
+{
+    s32 Level;
+    u32 FirstPoint;
+    u32 PointCount;
+    u32 FirstLink;
+    u32 LinkCount;
+};
+
+struct kea_nav_link
+{
+    u32 Poly;
+    r32 A[2];
+    r32 B[2];
+};
+
 struct kea_map
 {
     u32 Width;
@@ -332,12 +350,18 @@ struct kea_map
     u16 LayerCount;
     u16 SetCount;
     u32 EntityCount;
+    u32 NavPolyCount;
+    u32 NavLinkCount;
+    u32 NavPointCount;
 
     /* NOTE(pvlso): Data is:
 
        u64 SetGUIDs[SetCount];
        kea_map_entity Entities[EntityCount];
        kea_map_layer Layers[LayerCount];
+       kea_nav_poly NavPolys[NavPolyCount];
+       kea_nav_link NavLinks[NavLinkCount];
+       r32 NavPoints[NavPointCount][2];
        kea_map_cell Cells[LayerCount][Height][Width];
     */
 };

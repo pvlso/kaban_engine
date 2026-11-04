@@ -1051,11 +1051,11 @@ V2S64(f64 X, f64 Y)
 {
     v2_s64 Result = {};
 #if CLIPPER_AVX512
-    Result.W = _mm_cvtpd_epi64(_mm_round_pd(_mm_set_pd(X, Y),
+    Result.W = _mm_cvtpd_epi64(_mm_round_pd(_mm_set_pd(Y, X),
                                             _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
 #elif CLIPPER_SSE
     v2_f64 T = {};
-    T.W = _mm_round_pd(_mm_set_pd(X, Y), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+    T.W = _mm_round_pd(_mm_set_pd(Y, X), _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
     Result = CastV2S64(T);
 #else
     Result.x = (s64)round(X);

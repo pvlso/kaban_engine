@@ -26,6 +26,8 @@ struct loaded_map
     kea_map_entity *Entities;
     kea_map_layer *Layers;
     kea_map_cell *Cells;
+    map_nav_mesh Nav;
+    map_nav_scratch NavScratch; // NOTE(pvlso): after the file's data, for path searches
 };
 
 struct loaded_entity

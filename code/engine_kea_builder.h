@@ -36,6 +36,7 @@ struct builder_added_map
     kea_map_entity *Entities;
     kea_map_layer *Layers;
     kea_map_cell *Cells;
+    map_nav_mesh Nav;
 };
 
 struct builder_added_entity

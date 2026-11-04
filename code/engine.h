@@ -73,6 +73,8 @@ struct task_with_memory
 
 #include "engine_render.h"
 #include "engine_render_group.h"
+#include "engine_map_file.h"
+#include "engine_map_nav.h"
 #include "engine_asset.h"
 #include "engine_font.h"
 #include "editor_audio.h"

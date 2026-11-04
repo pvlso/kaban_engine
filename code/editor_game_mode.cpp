@@ -213,6 +213,7 @@ GameGetMapInfo(engine_assets *Assets, u32 MapIndex)
         Result.LayerCount = Info->LayerCount;
         Result.SetCount = Info->SetCount;
         Result.EntityCount = Info->EntityCount;
+        Result.NavPolyCount = Info->NavPolyCount;
     }
 
     return(Result);
@@ -407,6 +408,45 @@ GameGetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
     return(Result);
 }
 
+internal s32
+GameFindNavPoly(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level)
+{
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    s32 Result = Map ? FindMapNavPoly(&Map->Nav, P, Level) : -1;
+
+    return(Result);
+}
+
+internal s32
+GameGetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly)
+{
+    s32 Result = 0;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && (Poly >= 0) && ((u32)Poly < Map->Nav.PolyCount))
+    {
+        Result = Map->Nav.Polys[Poly].Level;
+    }
+
+    return(Result);
+}
+
+internal u32
+GameFindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
+                u32 MaxPoints)
+{
+    u32 Result = 0;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map)
+    {
+        Result = FindMapNavPath(&Map->Nav, &Map->NavScratch, From, FromLevel, To, ToLevel, Points, MaxPoints);
+    }
+
+    return(Result);
+}
+
 internal void
 GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
 {
@@ -473,6 +513,9 @@ GetEngineAPI(void)
     Result.GetMapLayer = GameGetMapLayer;
     Result.GetMapTileset = GameGetMapTileset;
     Result.GetMapEntity = GameGetMapEntity;
+    Result.FindNavPoly = GameFindNavPoly;
+    Result.GetNavPolyLevel = GameGetNavPolyLevel;
+    Result.FindNavPath = GameFindNavPath;
     Result.FindEntity = GameFindEntity;
     Result.FindEntityByGUID = GameFindEntityByGUID;
     Result.GetEntityInfo = GameGetEntityInfo;

@@ -234,10 +234,11 @@ EPPRemoveHoles(epp_poly_list *insentinal, epp_poly_list **freelist, memory_arena
     if(!hasholes)
         return 1;
 
-    polys = inpolys;
-
     // NOTE(paul): Main Loop
     while (1) {
+        // NOTE(pvlso): The list's first polygon may have been merged away by the last round
+        polys = insentinal->Next;
+
         // Find the hole point with the largest x.
         hasholes = false;
         for(iter = polys;
@@ -569,13 +570,12 @@ inline int
 EPPTriangulateEC(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
                  epp_poly_list **freelist, memory_arena *Arena)
 {
-    epp_poly_list *inpolys = insentinal->Next;
     epp_poly_list *iter = 0;
 
     if(!EPPRemoveHoles(insentinal, freelist, Arena))
         return 0;
 
-    for(iter = inpolys;
+    for(iter = insentinal->Next;
         iter != insentinal;
         iter = iter->Next)
     {
@@ -749,13 +749,12 @@ inline int
 EPPConvexPartitionHM(epp_poly_list *insentinal, epp_poly_list *resultsentinal,
                      epp_poly_list **freelist, memory_arena *Arena)
 {
-    epp_poly_list *inpolys = insentinal->Next;
     epp_poly_list *iter = 0;
 
     if(!EPPRemoveHoles(insentinal, freelist, Arena))
         return 0;
 
-    for(iter = inpolys;
+    for(iter = insentinal->Next;
         iter != insentinal;
         iter = iter->Next)
     {

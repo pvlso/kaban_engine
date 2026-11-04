@@ -41,7 +41,7 @@
     nav hole 0 8.000 6.000 12.000 6.000 12.000 9.000
 
   Walkable (walk) or cut out of the walkable ones (hole), its level, then its points (3 or more, a closed polygon) in
-  cells from the map's top left, y down. They're baked into navigation meshes by Write Assets (6d).
+  cells from the map's top left, y down. Write Assets bakes them into the map's navigation mesh (engine_map_nav.h).
 
   Levels (map editor plan, phase 6) are heights: 0 the ground, 1 a bridge or a plateau above it, -1 below it. A map is
   drawn level by level from the lowest: a level's layers by Z (those sharing a Z in their order), then the entities

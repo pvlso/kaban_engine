@@ -275,6 +275,7 @@ RestoreMapState(editor_mode_map *MapMode, u32 HistoryIndex)
     if(MapMode->SelectedNav >= (s32)MapMode->NavCount) {MapMode->SelectedNav = -1;}
     MapMode->NavDrawing = false;
     MapMode->DragVertex = -1;
+    MapMode->NavTest = false;
     MapMode->HistoryAt = HistoryIndex;
 }
 
@@ -532,6 +533,7 @@ MapEntitiesToFile(editor_mode_map *MapMode, map_file *File, memory_arena *Arena)
 internal void
 SetMapNavsFromFile(editor_mode_map *MapMode, map_file *File)
 {
+    MapMode->NavTest = false;
     MapMode->NavCount = 0;
     MapMode->SelectedNav = -1;
     MapMode->NavDrawing = false;
@@ -1420,12 +1422,82 @@ CloseNewMapNav(editor_mode_map *MapMode)
     return(Result);
 }
 
+// NOTE(pvlso): Bakes the areas as they are now, for "Test the bake"
+internal void
+BakeMapNavTest(editor_mode_map *MapMode)
+{
+    memory_arena *Arena = &MapMode->NavTestArena;
+    Clear(Arena);
+    map_file_nav *Navs = PushArray(Arena, Maximum(1u, MapMode->NavCount), map_file_nav);
+    for(u32 NavIndex = 0; NavIndex < MapMode->NavCount; ++NavIndex)
+    {
+        map_nav *Nav = MapMode->Navs + NavIndex;
+        Navs[NavIndex].Level = Nav->Level;
+        Navs[NavIndex].Hole = Nav->Hole;
+        Navs[NavIndex].PointCount = Nav->Count;
+        Navs[NavIndex].Points = Nav->Points;
+    }
+    MapMode->NavTestMesh = BakeMapNav(Arena, MapMode->NavCount, Navs);
+    u32 PolyCount = MapMode->NavTestMesh.PolyCount;
+    MapMode->NavTestScratch = MapNavScratchOf(PushSize(Arena, MapNavScratchSize(PolyCount)), PolyCount);
+    MapMode->NavTestHasFrom = false;
+    MapMode->NavTestHasTo = false;
+    MapMode->NavTestPointCount = 0;
+    MapMode->SelectedNav = -1;
+    MapMode->NavDrawing = false;
+    MapMode->DragVertex = -1;
+}
+
+// NOTE(pvlso): Left click sets where a path starts, right click where it ends, on the current level if it's there
+internal void
+UpdateMapNavTest(editor_mode_map *MapMode, engine_input *Input, tileset_grid_view *View, v2 MouseP, b32 Inside)
+{
+    map_nav_mesh *Mesh = &MapMode->NavTestMesh;
+    b32 SetFrom = WasPressed(Input->MouseButtons[PlatformMouseButton_Left]);
+    b32 SetTo = WasPressed(Input->MouseButtons[PlatformMouseButton_Right]);
+    if(Inside && (SetFrom || SetTo))
+    {
+        v2 P = MapCellOf(View, MouseP);
+        s32 Poly = FindMapNavPoly(Mesh, P, MapMode->CurrentLevel);
+        if(Poly >= 0)
+        {
+            s32 Level = Mesh->Polys[Poly].Level;
+            if(SetFrom)
+            {
+                MapMode->NavTestHasFrom = true;
+                MapMode->NavTestFrom = P;
+                MapMode->NavTestFromLevel = Level;
+            }
+            else
+            {
+                MapMode->NavTestHasTo = true;
+                MapMode->NavTestTo = P;
+                MapMode->NavTestToLevel = Level;
+            }
+            MapMode->NavTestPointCount = 0;
+            if(MapMode->NavTestHasFrom && MapMode->NavTestHasTo)
+            {
+                MapMode->NavTestPointCount = FindMapNavPath(Mesh, &MapMode->NavTestScratch, MapMode->NavTestFrom,
+                                                            MapMode->NavTestFromLevel, MapMode->NavTestTo,
+                                                            MapMode->NavTestToLevel, MapMode->NavTestPoints,
+                                                            ArrayCount(MapMode->NavTestPoints));
+            }
+        }
+    }
+}
+
 // NOTE(pvlso): The Navmesh tool on the map (the panel's help says how). True when a change was finished, for the
 // history.
 internal b32
 UpdateMapNavTool(editor_mode_map *MapMode, engine_input *Input, tileset_grid_view *View, v2 MouseP, b32 Inside)
 {
     b32 Finished = false;
+    if(MapMode->NavTest)
+    {
+        UpdateMapNavTest(MapMode, Input, View, MouseP, Inside);
+        return(Finished);
+    }
+
     engine_button_state Left = Input->MouseButtons[PlatformMouseButton_Left];
     engine_button_state Right = Input->MouseButtons[PlatformMouseButton_Right];
     v2 MouseCell = MapCellOf(View, MouseP);
@@ -1650,6 +1722,60 @@ RenderMapNavs(editor_mode_map *MapMode, engine_input *Input, render_group *Rende
     }
 }
 
+// NOTE(pvlso): The baked mesh: the current level's polygons in white, the others' faint, the links between levels in
+// orange, then the path in yellow with a square where it changes level
+internal void
+RenderMapNavTest(editor_mode_map *MapMode, render_group *RenderGroup, object_transform *Flat, tileset_grid_view *View)
+{
+    map_nav_mesh *Mesh = &MapMode->NavTestMesh;
+    for(u32 PolyIndex = 0; PolyIndex < Mesh->PolyCount; ++PolyIndex)
+    {
+        kea_nav_poly *Poly = Mesh->Polys + PolyIndex;
+        v4 Color = V4(1, 1, 1, (Poly->Level == MapMode->CurrentLevel) ? 0.9f : 0.2f);
+        for(u32 Index = 0; Index < Poly->PointCount; ++Index)
+        {
+            v2 A = MapViewP(View, Mesh->Points[Poly->FirstPoint + Index]);
+            v2 B = MapViewP(View, Mesh->Points[Poly->FirstPoint + (Index + 1) % Poly->PointCount]);
+            PushLine(RenderGroup, Flat, V3(A, 7.85f), V3(B, 7.85f), Color);
+        }
+        for(u32 Index = 0; Index < Poly->LinkCount; ++Index)
+        {
+            kea_nav_link *Link = Mesh->Links + Poly->FirstLink + Index;
+            if(Mesh->Polys[Link->Poly].Level != Poly->Level)
+            {
+                v2 A = MapViewP(View, V2(Link->A[0], Link->A[1]));
+                v2 B = MapViewP(View, V2(Link->B[0], Link->B[1]));
+                PushLine(RenderGroup, Flat, V3(A, 7.9f), V3(B, 7.9f), V4(1, 0.5f, 0.1f, 1));
+            }
+        }
+    }
+
+    if(MapMode->NavTestHasFrom)
+    {
+        v2 P = MapViewP(View, MapMode->NavTestFrom);
+        PushRect(RenderGroup, Flat, RectCenterDim(P, V2(10, 10)), 7.96f, V4(0.2f, 1, 0.3f, 1));
+    }
+    if(MapMode->NavTestHasTo)
+    {
+        v2 P = MapViewP(View, MapMode->NavTestTo);
+        PushRect(RenderGroup, Flat, RectCenterDim(P, V2(10, 10)), 7.96f, V4(1, 0.25f, 0.2f, 1));
+    }
+    for(u32 Index = 0; Index < MapMode->NavTestPointCount; ++Index)
+    {
+        nav_path_point *Point = MapMode->NavTestPoints + Index;
+        v2 P = MapViewP(View, Point->P);
+        if((Index + 1) < MapMode->NavTestPointCount)
+        {
+            v2 Next = MapViewP(View, MapMode->NavTestPoints[Index + 1].P);
+            PushLine(RenderGroup, Flat, V3(P, 7.95f), V3(Next, 7.95f), V4(1, 0.9f, 0.2f, 1));
+        }
+        if((Index > 0) && (Point->Level != MapMode->NavTestPoints[Index - 1].Level))
+        {
+            PushRect(RenderGroup, Flat, RectCenterDim(P, V2(8, 8)), 7.96f, V4(1, 0.5f, 0.1f, 1));
+        }
+    }
+}
+
 // NOTE(pvlso): True when a change was finished this frame (a stroke, a rectangle), for the history
 internal b32
 UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_group *RenderGroup, object_transform *Flat,
@@ -1811,6 +1937,10 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
     if(MapMode->ShowNav || (MapMode->Tool == MapTool_Navmesh))
     {
         RenderMapNavs(MapMode, Input, RenderGroup, Flat, &View, MouseP, Inside);
+    }
+    if(MapMode->NavTest)
+    {
+        RenderMapNavTest(MapMode, RenderGroup, Flat, &View);
     }
 
     if(MapMode->ShowGrid && (View.Cell >= 8.0f))
@@ -2014,6 +2144,34 @@ DrawMapNavPanel(editor_mode_map *MapMode, nk_context *Nk)
     nk_label(Nk, "", NK_TEXT_LEFT);
     nk_labelf(Nk, NK_TEXT_LEFT, "Navigation areas: %u on level %d, %u in all", OnLevel, MapMode->CurrentLevel,
               MapMode->NavCount);
+
+    nk_bool Test = (MapMode->NavTest != 0);
+    if(nk_checkbox_label(Nk, "Test the bake", &Test))
+    {
+        MapMode->NavTest = Test;
+        if(Test) {BakeMapNavTest(MapMode);}
+    }
+    if(MapMode->NavTest)
+    {
+        map_nav_mesh *Mesh = &MapMode->NavTestMesh;
+        nk_labelf(Nk, NK_TEXT_LEFT, "Baked: %u polygons, %u links", Mesh->PolyCount, Mesh->LinkCount);
+        nk_label(Nk, "Left click: the path's start. Right click: its end.", NK_TEXT_LEFT);
+        nk_label(Nk, "White polygons; orange links join levels.", NK_TEXT_LEFT);
+        if(MapMode->NavTestHasFrom && MapMode->NavTestHasTo)
+        {
+            if(MapMode->NavTestPointCount)
+            {
+                nk_labelf(Nk, NK_TEXT_LEFT, "Path: %u points, level %d to %d", MapMode->NavTestPointCount,
+                          MapMode->NavTestFromLevel, MapMode->NavTestToLevel);
+            }
+            else
+            {
+                nk_label(Nk, "No way between them.", NK_TEXT_LEFT);
+            }
+        }
+        return;
+    }
+
     nk_layout_row_dynamic(Nk, 28, 2);
     nk_bool Walk = !MapMode->NewNavHole;
     if(nk_selectable_label(Nk, "Draw walkable", NK_TEXT_CENTERED, &Walk) && Walk) {MapMode->NewNavHole = false;}
@@ -2482,6 +2640,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     {
         MapMode->NavDrawing = false;
         MapMode->DragVertex = -1;
+        MapMode->NavTest = false;
     }
     MapMode->NavEnterPressed = !MapMode->TypingLayerName && nk_input_is_key_pressed(&Nk->input, NK_KEY_ENTER);
     MapMode->NavBackPressed = !MapMode->TypingLayerName && nk_input_is_key_pressed(&Nk->input, NK_KEY_BACKSPACE);

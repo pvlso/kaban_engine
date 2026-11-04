@@ -374,8 +374,15 @@ AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
                     Asset->SourceFileName, Missing);
     }
     AddMapEntities(Builder, Asset->SourceFileName, &Map, &KEAAsset->Map, Data);
-    LOG("Map %s: %u x %u, %u layers, %u tile sets, %u entities", Asset->SourceFileName, Map.Width, Map.Height,
-        Map.LayerCount, Map.SetCount, KEAAsset->Map.EntityCount);
+
+    Data->Nav = BakeMapNav(Builder->TempMem, Map.NavCount, Map.Navs);
+    KEAAsset->Map.NavPolyCount = Data->Nav.PolyCount;
+    KEAAsset->Map.NavLinkCount = Data->Nav.LinkCount;
+    KEAAsset->Map.NavPointCount = Data->Nav.PointCount;
+
+    LOG("Map %s: %u x %u, %u layers, %u tile sets, %u entities, %u navigation areas baked into %u polygons, %u links",
+        Asset->SourceFileName, Map.Width, Map.Height, Map.LayerCount, Map.SetCount, KEAAsset->Map.EntityCount,
+        Map.NavCount, Data->Nav.PolyCount, Data->Nav.LinkCount);
 
     Builder->CurrentAsset = BuilderAsset;
 }
@@ -849,6 +856,16 @@ BuilderWriteKEA(kea_builder *Builder)
                 At += EntitiesSize;
                 Platform.WriteDataToFile(&Out, At, LayersSize, BuilderAsset->Data.Map.Layers);
                 At += LayersSize;
+                map_nav_mesh *Nav = &BuilderAsset->Data.Map.Nav;
+                u32 NavPolysSize = Nav->PolyCount*sizeof(kea_nav_poly);
+                u32 NavLinksSize = Nav->LinkCount*sizeof(kea_nav_link);
+                u32 NavPointsSize = Nav->PointCount*sizeof(v2);
+                Platform.WriteDataToFile(&Out, At, NavPolysSize, Nav->Polys);
+                At += NavPolysSize;
+                Platform.WriteDataToFile(&Out, At, NavLinksSize, Nav->Links);
+                At += NavLinksSize;
+                Platform.WriteDataToFile(&Out, At, NavPointsSize, Nav->Points);
+                At += NavPointsSize;
                 Platform.WriteDataToFile(&Out, At, CellsSize, BuilderAsset->Data.Map.Cells);
                 At += CellsSize;
             }

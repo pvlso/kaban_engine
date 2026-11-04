@@ -89,6 +89,15 @@ struct map_info
     u32 LayerCount;
     u32 SetCount;
     u32 EntityCount; // NOTE(pvlso): the entities placed on it, GetMapEntity
+    u32 NavPolyCount; // NOTE(pvlso): the convex polygons of its navigation mesh, 0 when it has none
+};
+
+// NOTE(pvlso): A point of a path over a map's navigation mesh (FindNavPath), in cells from the map's top left (y
+// down); Level is the level from this point on
+struct nav_path_point
+{
+    v2 P;
+    s32 Level;
 };
 
 struct map_tile_cell
@@ -303,6 +312,15 @@ struct engine_api
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
     // NOTE(pvlso): All zero when there's no such entity
     map_entity_info (*GetMapEntity)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex);
+    // NOTE(pvlso): The polygon of the map's navigation mesh under P, on Level if there's one there, else the highest
+    // one; -1 when P isn't on the mesh
+    s32 (*FindNavPoly)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
+    s32 (*GetNavPolyLevel)(engine_assets *Assets, u32 MapIndex, s32 Poly);
+    // NOTE(pvlso): The shortest way over the mesh: Points gets its corners and the places where it changes level,
+    // starting with From and ending with To (points past MaxPoints are left out, walk them and ask again). The count
+    // comes back, 0 when there's no way or an end isn't on the mesh.
+    u32 (*FindNavPath)(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel,
+                       nav_path_point *Points, u32 MaxPoints);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
@@ -487,6 +505,14 @@ GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
     return(Result);
 }
 
+inline s32 FindNavPoly(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level) {return(Engine.FindNavPoly(Assets, MapIndex, P, Level));}
+inline s32 GetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly) {return(Engine.GetNavPolyLevel(Assets, MapIndex, Poly));}
+inline u32
+FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
+            u32 MaxPoints)
+{
+    return(Engine.FindNavPath(Assets, MapIndex, From, FromLevel, To, ToLevel, Points, MaxPoints));
+}
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
 inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}

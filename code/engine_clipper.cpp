@@ -2152,8 +2152,8 @@ ConvertHorzSegsToJoins(clipper *Clipper)
                        hs2->left_op->Next->P.x <= hs1->left_op->P.x)
                     hs2->left_op = hs2->left_op->Next;
 
-                horz_join Join = HorzJoin(DuplicateOp(Clipper, hs1->left_op, true),
-                                          DuplicateOp(Clipper, hs2->left_op, false));
+                horz_join Join = HorzJoin(DuplicateOp(Clipper, hs2->left_op, true),
+                                          DuplicateOp(Clipper, hs1->left_op, false));
 
                 Clipper->HorzJoinList[Clipper->JointCount++] = Join;
             }
@@ -3106,7 +3106,8 @@ BooleanOpD(u32 cliptype, u32 fillrule, paths_f64 *subjects, paths_f64 *subjects_
     }
 
     clipper Clipper = {};
-    InitClipper(&Clipper, 2);
+    // NOTE(pvlso): 2 rounds points to 1/128 and 4 to 1/16384: the map editor's points are kept to 1/1000 of a cell
+    InitClipper(&Clipper, 4);
     
     Clipper.PreserveCollinear = preserve_collinear;
     Clipper.ReverseSolution = reverse_solution;
@@ -3197,7 +3198,8 @@ ClipPolygons(memory_arena *Arena, clip_type Type, clip_polygon_set *Subjects, cl
 
 #if EDITOR_SLOW
 // NOTE(pvlso): Run once at startup in debug builds: two overlapping squares join into one outline, a square with a
-// smaller one cut out of its middle is an outline and a hole
+// smaller one cut out of its middle is an outline and a hole, two rectangles sharing an edge join into one, and two
+// that share edges around a gap leave an outline and a hole (the map editor's snapped areas meet like these)
 internal void
 TestClipper(memory_arena *Arena)
 {
@@ -3213,17 +3215,33 @@ TestClipper(memory_arena *Arena)
     clip_polygon_set Outer = {1, &PolygonA};
     clip_polygon_set Hole = {1, &PolygonInner};
 
+    v2 TopHalf[] = {V2(0, 0), V2(10, 0), V2(10, 5), V2(0, 5)};
+    v2 LowHalf[] = {V2(0, 5), V2(10, 5), V2(10, 10), V2(0, 10)};
+    clip_polygon Halves[] = {{ArrayCount(TopHalf), TopHalf}, {ArrayCount(LowHalf), LowHalf}};
+    clip_polygon_set HalvesSet = {ArrayCount(Halves), Halves};
+
+    v2 TopGap[] = {V2(0, 0), V2(20, 0), V2(20, 5), V2(12, 5), V2(12, 3), V2(8, 3), V2(8, 5), V2(0, 5)};
+    v2 LowGap[] = {V2(0, 5), V2(8, 5), V2(8, 7), V2(12, 7), V2(12, 5), V2(20, 5), V2(20, 10), V2(0, 10)};
+    clip_polygon Gaps[] = {{ArrayCount(TopGap), TopGap}, {ArrayCount(LowGap), LowGap}};
+    clip_polygon_set GapsSet = {ArrayCount(Gaps), Gaps};
+
     clip_polygon_set Joined = ClipPolygons(Arena, ClipType_Union, &Subjects, 0);
     clip_polygon_set Cut = ClipPolygons(Arena, ClipType_Difference, &Outer, &Hole);
-    b32 Passed = ((Joined.Count == 1) && (Joined.Polygons[0].Count == 8) && (Cut.Count == 2));
+    clip_polygon_set Shared = ClipPolygons(Arena, ClipType_Union, &HalvesSet, 0);
+    clip_polygon_set AroundGap = ClipPolygons(Arena, ClipType_Union, &GapsSet, 0);
+    b32 Passed = ((Joined.Count == 1) && (Joined.Polygons[0].Count == 8) && (Cut.Count == 2) &&
+                  (Shared.Count == 1) && (Shared.Polygons[0].Count == 4) &&
+                  (AroundGap.Count == 2) && (AroundGap.Polygons[0].Count == 4) && (AroundGap.Polygons[1].Count == 4));
     if(Passed)
     {
-        LOG("Clipper self-test passed: the union is 1 outline of 8 points, the difference an outline and a hole");
+        LOG("Clipper self-test passed: unions, shared edges and a difference came out right");
     }
     else
     {
-        LOG_ERROR("Clipper self-test failed: union %u polygons (%u points), difference %u polygons", Joined.Count,
-                  Joined.Count ? Joined.Polygons[0].Count : 0, Cut.Count);
+        LOG_ERROR("Clipper self-test failed: union %u polygons (%u points), difference %u polygons, shared edge %u "
+                  "polygons (%u points), around a gap %u polygons", Joined.Count,
+                  Joined.Count ? Joined.Polygons[0].Count : 0, Cut.Count, Shared.Count,
+                  Shared.Count ? Shared.Polygons[0].Count : 0, AroundGap.Count);
     }
     EndTemporaryMemory(Temp);
 }

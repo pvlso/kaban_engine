@@ -211,6 +211,21 @@ struct editor_mode_map
     b32 RemoveNavRequested;
     b32 NavEdited;    // NOTE(pvlso): the panel changed the selected area's level or kind
 
+    // NOTE(pvlso): "Test the bake": the areas baked as Write Assets would (the baked mesh in NavTestArena), a path
+    // between two clicks. It ends with anything that could change the areas.
+    b32 NavTest;
+    memory_arena NavTestArena;
+    map_nav_mesh NavTestMesh;
+    map_nav_scratch NavTestScratch;
+    b32 NavTestHasFrom;
+    b32 NavTestHasTo;
+    v2 NavTestFrom;
+    v2 NavTestTo;
+    s32 NavTestFromLevel;
+    s32 NavTestToLevel;
+    u32 NavTestPointCount;
+    nav_path_point NavTestPoints[128];
+
     // NOTE(pvlso): Undo: every state after a change, History[HistoryAt] the current one; the oldest go when they pass
     // MAP_HISTORY_BYTES
     u32 HistoryCount;
