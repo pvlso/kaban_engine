@@ -1334,16 +1334,24 @@ MapNavEdgeUnder(editor_mode_map *MapMode, tileset_grid_view *View, v2 MouseP, s3
     return(Result);
 }
 
-// NOTE(pvlso): Where a point goes for the mouse at MouseCell: on a cell's corner with Ctrl, onto any area's point
+// NOTE(pvlso): With Ctrl a navmesh point goes on the nearest cell edge, at one of this many steps along it
+#define MAP_NAV_EDGE_STEPS 10.0f
+
+// NOTE(pvlso): Where a point goes for the mouse at MouseCell: on a step of the nearest cell edge with Ctrl, onto any
+// area's point
 // (on any level, so areas share their edges) or the area being drawn's when it's near, inside the map. SkipNav and
 // SkipVertex are the point being dragged.
 internal v2
-MapNavSnap(editor_mode_map *MapMode, tileset_grid_view *View, v2 MouseCell, b32 ToCorner, s32 SkipNav, s32 SkipVertex)
+MapNavSnap(editor_mode_map *MapMode, tileset_grid_view *View, v2 MouseCell, b32 ToEdge, s32 SkipNav, s32 SkipVertex)
 {
     v2 Result = MouseCell;
-    if(ToCorner)
+    if(ToEdge)
     {
-        Result = V2((r32)RoundReal32ToInt32(MouseCell.x), (r32)RoundReal32ToInt32(MouseCell.y));
+        v2 Line = V2((r32)RoundReal32ToInt32(MouseCell.x), (r32)RoundReal32ToInt32(MouseCell.y));
+        v2 Step = V2((r32)RoundReal32ToInt32(MouseCell.x*MAP_NAV_EDGE_STEPS) / MAP_NAV_EDGE_STEPS,
+                     (r32)RoundReal32ToInt32(MouseCell.y*MAP_NAV_EDGE_STEPS) / MAP_NAV_EDGE_STEPS);
+        b32 OnVerticalEdge = (AbsoluteValue(MouseCell.x - Line.x) <= AbsoluteValue(MouseCell.y - Line.y));
+        Result = OnVerticalEdge ? V2(Line.x, Step.y) : V2(Step.x, Line.y);
     }
     else
     {
@@ -2047,7 +2055,7 @@ DrawMapNavPanel(editor_mode_map *MapMode, nk_context *Nk)
     nk_label(Nk, "Click a point or an edge to select its area;", NK_TEXT_LEFT);
     nk_label(Nk, "drag points, Shift+click an edge adds one,", NK_TEXT_LEFT);
     nk_label(Nk, "right click a point removes it, Del the area.", NK_TEXT_LEFT);
-    nk_label(Nk, "Ctrl snaps to cells' corners; points snap", NK_TEXT_LEFT);
+    nk_label(Nk, "Ctrl snaps to cells' edges, in tenths; points snap", NK_TEXT_LEFT);
     nk_label(Nk, "to other areas' points (any level) near them.", NK_TEXT_LEFT);
     nk_label(Nk, "Middle drag pans, the wheel zooms. Ctrl+Z / Ctrl+Y.", NK_TEXT_LEFT);
 }
