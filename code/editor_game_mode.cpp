@@ -447,6 +447,34 @@ GameFindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 
     return(Result);
 }
 
+internal v2
+GameMoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To)
+{
+    v2 Result = To;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && Map->Nav.PolyCount)
+    {
+        Result = MoveMapNav(&Map->Nav, From, Level, To);
+    }
+
+    return(Result);
+}
+
+internal v2
+GameClosestNavPoint(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level)
+{
+    v2 Result = P;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map)
+    {
+        ClosestMapNavPoint(&Map->Nav, &Result, Level);
+    }
+
+    return(Result);
+}
+
 internal void
 GameSetPixelWorldShader(render_group *Group, u32 ShaderIndex, render_shader_params Params)
 {
@@ -516,6 +544,8 @@ GetEngineAPI(void)
     Result.FindNavPoly = GameFindNavPoly;
     Result.GetNavPolyLevel = GameGetNavPolyLevel;
     Result.FindNavPath = GameFindNavPath;
+    Result.MoveOnNav = GameMoveOnNav;
+    Result.ClosestNavPoint = GameClosestNavPoint;
     Result.FindEntity = GameFindEntity;
     Result.FindEntityByGUID = GameFindEntityByGUID;
     Result.GetEntityInfo = GameGetEntityInfo;
