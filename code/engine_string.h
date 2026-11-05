@@ -272,6 +272,14 @@ F64ToASCII(format_dest *Dest, f64 Value, u32 Precision)
         Value = -Value;
     }
 
+    // NOTE(pvlso): Rounded to the last digit shown, not cut there: 16.8f is 16.7999992 and has to print as 16.800
+    f64 HalfOfLastDigit = 0.5;
+    for(u32 PrecisionIndex = 0; PrecisionIndex < Precision; ++PrecisionIndex)
+    {
+        HalfOfLastDigit *= 0.1;
+    }
+    Value += HalfOfLastDigit;
+
     u64 IntegerPart = (u64)Value;
     Value -= (f64)IntegerPart;
     U64ToASCII(Dest, IntegerPart, 10, DecChars);
