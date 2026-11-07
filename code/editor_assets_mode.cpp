@@ -15,20 +15,20 @@
 #include "editor_cut_edit.cpp"
 #include "engine_assets_mode_ui.cpp"
 
-inline void
-DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
+// NOTE(pvlso): The tags read by ReadTagFile, freed
+internal void
+FreeTagMaps(ket_header *Header, kea_tag_map *Tags, char **Keys)
 {
-    ket_header *Header = &AssetsMode->TagHeader;
-    if(AssetsMode->TagKeys)
+    if(Keys)
     {
-        Platform.DeallocateMemory(AssetsMode->TagKeys);    
+        Platform.DeallocateMemory(Keys);
     }
 
-    if(AssetsMode->Tags)
+    if(Tags)
     {
         for(u32 I = 0; I < Header->TagCount; ++I)
         {
-            kea_tag_map *TagMap = AssetsMode->Tags + I;
+            kea_tag_map *TagMap = Tags + I;
             Platform.DeallocateMemory(TagMap->ValueGUIDs);
             for(u32 J = 0; J < TagMap->ValueCount; ++J)
             {
@@ -37,54 +37,60 @@ DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
             Platform.DeallocateMemory(TagMap->Values);
         }
 
-        Platform.DeallocateMemory(AssetsMode->Tags);
+        Platform.DeallocateMemory(Tags);
     }
 }
 
-internal b32
-ReadTags(editor_mode_assets *AssetsMode)
+inline void
+DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
 {
-    b32 Result = true;
-    Assert(AssetsMode->StoredHeader.MagicValue);
-    ket_header *Header = &AssetsMode->TagHeader;
+    FreeTagMaps(&AssetsMode->TagHeader, AssetsMode->Tags, AssetsMode->TagKeys);
+    AssetsMode->Tags = 0;
+    AssetsMode->TagKeys = 0;
+}
 
-    DeallocateAssetsModeTags(AssetsMode);
-    
-    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
-    u8 TagVersion[4] =
-        {
-            (u8)((TagFullVersion >> 24) & 0xff),
-            (u8)((TagFullVersion >> 16) & 0xff),
-            (u8)((TagFullVersion >>  8) & 0xff),
-            (u8)((TagFullVersion >>  0) & 0xff),
-        };
+internal void
+TagsFileName(u32 TagFullVersion, char *Dest, umm DestSize)
+{
+    FormatString(DestSize, Dest, "asset_tags_%d.%d.%d.%d.ket",
+                 (TagFullVersion >> 24) & 0xff, (TagFullVersion >> 16) & 0xff,
+                 (TagFullVersion >>  8) & 0xff, (TagFullVersion >>  0) & 0xff);
+}
 
-    char TagsFileName[256];
-    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
-                 TagVersion[0], TagVersion[1],
-                 TagVersion[2], TagVersion[3]);
-    
-    platform_file_handle KETHandle =
-        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Read);
-    if(PlatformNoFileErrors(&KETHandle))
+// NOTE(pvlso): asset_tags_<Version>.ket read: its header, the tag maps and their keys (FreeTagMaps frees them). False
+// without the file, *Tags and *Keys are 0 then.
+internal b32
+ReadTagFile(u32 TagFullVersion, ket_header *Header, kea_tag_map **TagsOut, char ***KeysOut, memory_arena *TempArena)
+{
+    b32 Result = false;
+    *TagsOut = 0;
+    *KeysOut = 0;
+
+    char FileName[256];
+    TagsFileName(TagFullVersion, FileName, sizeof(FileName));
+    if(Platform.FileExists(FileName, PlatformFileType_KET))
     {
+        Result = true;
+        platform_file_handle KETHandle = Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Read);
         Platform.ReadDataFromFile(&KETHandle, 0, sizeof(ket_header), Header);
 
-        Assert(Header->Version == AssetsMode->StoredHeader.TagsVersion);
+        Assert(Header->Version == TagFullVersion);
         Assert(Header->TagCount);
 
         u32 TagsSize = Header->TagCount*sizeof(ket_tag);
 
-        temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+        temporary_memory TempMem = BeginTemporaryMemory(TempArena);
         ket_tag *RawTags = PushArray(TempMem.Arena, Header->TagCount, ket_tag);
         Platform.ReadDataFromFile(&KETHandle, Header->TagArrayOffset, TagsSize, RawTags);
 
-        AssetsMode->TagKeys = (char **)Platform.AllocateMemory(Header->TagCount*sizeof(char *));
-        AssetsMode->Tags = (kea_tag_map *)Platform.AllocateMemory(Header->TagCount*sizeof(kea_tag_map));
+        char **Keys = (char **)Platform.AllocateMemory(Header->TagCount*sizeof(char *));
+        kea_tag_map *Tags = (kea_tag_map *)Platform.AllocateMemory(Header->TagCount*sizeof(kea_tag_map));
+        *KeysOut = Keys;
+        *TagsOut = Tags;
         for(u32 I = 0; I < Header->TagCount; ++I)
         {
             ket_tag *Tag = RawTags + I;
-            kea_tag_map *Map = AssetsMode->Tags + I;
+            kea_tag_map *Map = Tags + I;
             Map->Values = (char **)Platform.AllocateMemory(Tag->ValueCount*sizeof(char *));
             Map->ValueGUIDs = (u64 *)Platform.AllocateMemory(Tag->ValueCount*sizeof(u64));
             for(u32 J = 0; J < Tag->ValueCount; ++J)
@@ -110,20 +116,38 @@ ReadTags(editor_mode_assets *AssetsMode)
                 StringAt += KET_TAG_KEY_LENGTH;
             }
 
-            AssetsMode->TagKeys[I] = Map->Key;
+            Keys[I] = Map->Key;
         }
 
         EndTemporaryMemory(TempMem);
-        
-        Platform.CloseFile(&KETHandle);
 
-        LOG("Read %s: %u tags", TagsFileName, Header->TagCount);
+        Platform.CloseFile(&KETHandle);
+    }
+
+    return(Result);
+}
+
+internal b32
+ReadTags(editor_mode_assets *AssetsMode)
+{
+    Assert(AssetsMode->StoredHeader.MagicValue);
+    ket_header *Header = &AssetsMode->TagHeader;
+
+    DeallocateAssetsModeTags(AssetsMode);
+
+    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
+    char FileName[256];
+    TagsFileName(TagFullVersion, FileName, sizeof(FileName));
+    b32 Result = ReadTagFile(TagFullVersion, Header, &AssetsMode->Tags, &AssetsMode->TagKeys,
+                             &AssetsMode->UtilityTempArena);
+    if(Result)
+    {
+        LOG("Read %s: %u tags", FileName, Header->TagCount);
     }
     else
     {
-        Result = false;
-        LOG_WARNING("No %s, writing one with only Tag_None", TagsFileName);
-        KETHandle = Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
+        LOG_WARNING("No %s, writing one with only Tag_None", FileName);
+        platform_file_handle KETHandle = Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Write);
         if(PlatformNoFileErrors(&KETHandle))
         {
             Header->MagicValue = KET_MAGIC_VALUE;
@@ -150,7 +174,7 @@ ReadTags(editor_mode_assets *AssetsMode)
         }
         else
         {
-            LOG_ERROR("Could not create %s", TagsFileName);
+            LOG_ERROR("Could not create %s", FileName);
         }
     }
 
@@ -289,6 +313,138 @@ SourceFileIndexOf(editor_mode_assets *AssetsMode, kesa_asset *Asset)
     for(u32 Index = 0; Index < AssetsMode->SourceFileCounts[Asset->Type]; ++Index)
     {
         if(AssetsMode->SourceFiles[Asset->Type][Index] == Asset->SourceFileName) {Result = Index;}
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): data/keas/last_build.txt: what the newest KEA was built from (AssetDataSignature), so a Run can tell
+// whether the data changed since, even across editor sessions
+#define LAST_BUILD_FILE_NAME "last_build.txt"
+
+internal b32 ParseGameDataKEAVersion(char *Name, u32 *Version);
+
+internal u64
+ReadLastBuildSignature(memory_arena *Arena)
+{
+    u64 Result = 0;
+    if(Platform.FileExists(LAST_BUILD_FILE_NAME, PlatformFileType_KEA))
+    {
+        temporary_memory TempMem = BeginTemporaryMemory(Arena);
+        read_file_result File = Platform.ReadEntireFile(LAST_BUILD_FILE_NAME, PlatformFileType_KEA, TempMem.Arena, true);
+        for(char *At = (char *)File.Contents; At && *At; ++At)
+        {
+            u32 Digit = IsDigit(*At) ? (u32)(*At - '0') :
+                ((*At >= 'a') && (*At <= 'f')) ? (u32)(*At - 'a' + 10) : 16;
+            if(Digit < 16) {Result = (Result << 4) | Digit;}
+            else if(*At == '\n') {break;}
+        }
+        EndTemporaryMemory(TempMem);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): Whether data/keas has a game_data_<version>.kea
+internal b32
+HasGameDataKEA(memory_arena *Arena)
+{
+    b32 Result = false;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version)) {Result = true;}
+    }
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}
+
+// NOTE(pvlso): Every game_data_<version>.kea but the newest and KeepOpen (the one a running game reads; Windows can't
+// delete it anyway) is deleted: only the newest is ever loaded
+internal void
+DeleteOlderKEAs(u32 NewestVersion, char *KeepOpen, memory_arena *Arena)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version) && (Version < NewestVersion) &&
+           !(KeepOpen && StringsAreEqual(Names[Index], KeepOpen)))
+        {
+            if(!Platform.RemoveFile(Names[Index], PlatformFileType_KEA))
+            {
+                LOG_WARNING("Could not delete the old %s", Names[Index]);
+            }
+        }
+    }
+    EndTemporaryMemory(TempMem);
+}
+
+// NOTE(pvlso): The project's KEA built from its folders, without the assets mode: the newest KET's tags, a scan, the
+// next version (editor_metadata.json). The data's signature is taken before the scan, so a file saved during a build
+// makes the next check build again. The older KEAs go, but KeepOpen. Built gets the new file's name.
+internal b32
+BuildProjectKEA(editor_state *EditorState, memory_arena *TempArena, char *KeepOpen, char *Built, umm BuiltSize)
+{
+    TIMED_FUNCTION();
+
+    f64 Start = Platform.GetSeconds();
+    u64 Signature = AssetDataSignature(TempArena);
+
+    temporary_memory TempMem = BeginTemporaryMemory(TempArena);
+    ket_header TagHeader = {};
+    kea_tag_map *Tags = 0;
+    char **Keys = 0;
+    if(!ReadTagFile(NewestTagsVersion(TempMem.Arena), &TagHeader, &Tags, &Keys, TempMem.Arena))
+    {
+        ZeroStruct(TagHeader);
+        LOG_WARNING("No asset_tags_*.ket in data/kets: the KEA is built without tags");
+    }
+
+    kesa_header Header = {};
+    kesa_asset *List = ScanAssetList(&Header, Tags, TagHeader.TagCount, TempMem.Arena);
+    Header.Version = UpdateEditorVersionFile(EditorState);
+    b32 Result = BuildKEA(&Header, List, &TagHeader, Tags, TempMem.Arena);
+    Platform.DeallocateMemory(List);
+    FreeTagMaps(&TagHeader, Tags, Keys);
+    EndTemporaryMemory(TempMem);
+
+    if(Built) {FormatString(BuiltSize, Built, "game_data_%u.kea", Header.Version);}
+    if(Result)
+    {
+        char Text[64];
+        FormatString(sizeof(Text), Text, "%016llx\n", Signature);
+        Platform.WriteEntireFile(LAST_BUILD_FILE_NAME, PlatformFileType_KEA, (u8 *)Text, StringLength(Text));
+        DeleteOlderKEAs(Header.Version, KeepOpen, TempArena);
+        LOG("Built game_data_%u.kea from %u assets in %.2f s", Header.Version, Header.AssetCount - 1,
+            Platform.GetSeconds() - Start);
+    }
+    else
+    {
+        LOG_ERROR("Building game_data_%u.kea failed", Header.Version);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): Builds the KEA when there's none or the data changed since the last build (a Run after editing maps)
+internal b32
+BuildProjectKEAIfStale(editor_state *EditorState, memory_arena *TempArena)
+{
+    b32 Result = false;
+    u64 Signature = AssetDataSignature(TempArena);
+    if(!HasGameDataKEA(TempArena) || (Signature != ReadLastBuildSignature(TempArena)))
+    {
+        LOG("The data changed since the last KEA, building a new one");
+        Result = BuildProjectKEA(EditorState, TempArena, 0, 0, 0);
     }
 
     return(Result);
@@ -1547,12 +1703,15 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
 
+                    // NOTE(pvlso): The same build a Run or a changed folder starts (BuildProjectKEA)
                     if(Build)
                     {
-                        AssetsMode->StoredHeader.Version = UpdateEditorVersionFile(EditorState);
-                        temporary_memory TempMemory = BeginTemporaryMemory(&TranState->TranArena);
-                        BuildKEA(AssetsMode, TempMemory.Arena);
-                        EndTemporaryMemory(TempMemory);
+                        BuildProjectKEA(EditorState, &TranState->TranArena, 0, 0, 0);
+                        editor_meta *EditorMeta = &EditorState->EditorMeta;
+                        AssetsMode->StoredHeader.Version = (((u32)EditorMeta->KESAVersion[0] << 24) |
+                                                            ((u32)EditorMeta->KESAVersion[1] << 16) |
+                                                            ((u32)EditorMeta->KESAVersion[2] <<  8) |
+                                                            ((u32)EditorMeta->KESAVersion[3]));
                     }
 
                 } break;

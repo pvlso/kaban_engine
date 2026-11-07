@@ -633,6 +633,37 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *File
 }
 
 #define GAME_SOURCE_CHECK_INTERVAL 0.5f
+#define GAME_DATA_CHECK_INTERVAL 0.5f
+
+// NOTE(pvlso): The data folders are checked like the sources: when what a KEA is built from changes (a map saved in
+// the map editor, a picture dropped in bmps/), a new KEA is built. The running game keeps the one it loaded until it's
+// run again.
+internal void
+UpdateGameData(editor_state *EditorState, editor_mode_game *Game, transient_state *TranState, f32 dt)
+{
+    Game->DataCheckTimer -= dt;
+    if(Game->DataCheckTimer <= 0.0f)
+    {
+        Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
+        u64 Signature = AssetDataSignature(&TranState->TranArena);
+        if(Signature != Game->BuiltDataSignature)
+        {
+            // NOTE(pvlso): Set before the build, a failed one isn't retried until the data changes again
+            Game->BuiltDataSignature = Signature;
+            char Built[64];
+            if(BuildProjectKEA(EditorState, &TranState->TranArena, Game->AssetFileName, Built, sizeof(Built)))
+            {
+                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                             "The data changed: %s built, Stop and Run to use it", Built);
+            }
+            else
+            {
+                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                             "The data changed, but building %s failed (see the log)", Built);
+            }
+        }
+    }
+}
 
 internal void
 StartGameBuild(editor_mode_game *Game)
@@ -759,11 +790,14 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
 
     SetEditorMode(EditorState, TranState, EditorMode_Game);
 
-    // NOTE(pvlso): The game's assets come from its own data/
+    // NOTE(pvlso): The game's assets come from its own data/, built again first when it changed since the last KEA
     UseDataOf(EditorState, Name);
+    BuildProjectKEAIfStale(EditorState, &TranState->TranArena);
 
     editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
     FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
+    Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
+    Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
     Game->Assets = LoadGameAssets(EditorState, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
     EditorState->Game = Game;
 
@@ -771,6 +805,13 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
     if(Game->Assets)
     {
         LOG("%s assets: %s", Game->ProjectName, Game->AssetFileName);
+
+        // NOTE(pvlso): One a game held open while a newer one was built goes now
+        u32 Version;
+        if(ParseGameDataKEAVersion(Game->AssetFileName, &Version))
+        {
+            DeleteOlderKEAs(Version, Game->AssetFileName, &TranState->TranArena);
+        }
     }
     else
     {
@@ -932,6 +973,10 @@ DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
                      Game->ProjectName);
     }
     nk_label(Nk, Assets, NK_TEXT_ALIGN_LEFT);
+    if(Game->AssetStatus[0])
+    {
+        nk_label(Nk, Game->AssetStatus, NK_TEXT_ALIGN_LEFT);
+    }
 
     char Counts[128];
     FormatString(sizeof(Counts), Counts, "Builds: %u   Reloads: %u", Game->BuildCount,
@@ -967,6 +1012,7 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     else
     {
         UpdateGameBuild(Game, TranState, Input->dtForFrame);
+        UpdateGameData(EditorState, Game, TranState, Input->dtForFrame);
 
 #if !EDITOR_INTERNAL
         DrawGameControls(Game, Nk, 400.0f);

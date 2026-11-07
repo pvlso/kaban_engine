@@ -63,6 +63,16 @@ OSDeallocateMemory(void *Memory)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): TIME
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+// NOTE(pvlso): Seconds from some fixed point, only to measure how long something took
+internal f64
+OSGetSeconds(void)
+{
+    struct timespec Now;
+    clock_gettime(CLOCK_MONOTONIC, &Now);
+    f64 Result = (f64)Now.tv_sec + 1e-9*(f64)Now.tv_nsec;
+    return(Result);
+}
+
 internal void
 OSSleep(s32 Milliseconds)
 {

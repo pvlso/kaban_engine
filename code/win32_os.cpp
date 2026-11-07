@@ -97,6 +97,17 @@ OSSleep(s32 Milliseconds)
         Sleep(Milliseconds);
     }
 }
+
+// NOTE(pvlso): Seconds from some fixed point, only to measure how long something took
+internal f64
+OSGetSeconds(void)
+{
+    LARGE_INTEGER Frequency, Counter;
+    QueryPerformanceFrequency(&Frequency);
+    QueryPerformanceCounter(&Counter);
+    f64 Result = (f64)Counter.QuadPart / (f64)Frequency.QuadPart;
+    return(Result);
+}
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------

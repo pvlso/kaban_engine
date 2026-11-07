@@ -492,3 +492,40 @@ WriteAssetList(kesa_asset *Assets, u32 AssetCount, kea_tag_map *Tags, u32 TagCou
 
     return(Result);
 }
+
+// NOTE(pvlso): One number for everything a KEA is built from: each file's name and write time in the asset folders,
+// data/entities, data/kets, and data/assets.txt. It changes when a file is added, removed, renamed or saved (a copied
+// file keeps its old write time, but its name is new). Files are summed, so the listing's order doesn't matter.
+internal u64
+AssetDataSignature(memory_arena *Arena)
+{
+    TIMED_FUNCTION();
+
+    platform_file_type Types[ArrayCount(AssetListFolders) + 2];
+    for(u32 Index = 0; Index < ArrayCount(AssetListFolders); ++Index) {Types[Index] = AssetListFolders[Index].FileType;}
+    Types[ArrayCount(AssetListFolders)] = PlatformFileType_Entity;
+    Types[ArrayCount(AssetListFolders) + 1] = PlatformFileType_KET;
+
+    u64 Result = 0;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    char Key[512];
+    for(u32 TypeIndex = 0; TypeIndex < ArrayCount(Types); ++TypeIndex)
+    {
+        platform_file_type Type = Types[TypeIndex];
+        u32 Count = Platform.ListFilesInDirectory(Type, 0, 0);
+        char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+        Count = Platform.ListFilesInDirectory(Type, Names, TempMem.Arena);
+        for(u32 Index = 0; Index < Count; ++Index)
+        {
+            u64 WriteTime = Platform.GetFileWriteTime(Names[Index], Type);
+            FormatString(sizeof(Key), Key, "%u|%s|%llu", (u32)Type, Names[Index], WriteTime);
+            Result += GUIDFromString(Key);
+        }
+    }
+    FormatString(sizeof(Key), Key, "assets.txt|%llu",
+                 Platform.GetFileWriteTime(ASSET_LIST_FILE_NAME, PlatformFileType_DataRoot));
+    Result += GUIDFromString(Key);
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}

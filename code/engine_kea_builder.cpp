@@ -16,15 +16,16 @@
 */
 
 internal kea_builder *
-InitKEABuilder(editor_mode_assets *AssetsMode, memory_arena *TempMem)
+InitKEABuilder(kesa_header *ListHeader, kesa_asset *List, ket_header *TagHeader, kea_tag_map *Tags,
+               memory_arena *TempMem)
 {
     kea_builder *KEABuilder = PushStruct(TempMem, kea_builder);
 
     KEABuilder->TempMem = TempMem;
-    KEABuilder->KESAHeader = &AssetsMode->StoredHeader;
-    KEABuilder->KESAAssets = AssetsMode->StoredAssets;
-    KEABuilder->KETHeader = &AssetsMode->TagHeader;
-    KEABuilder->TagMaps = AssetsMode->Tags;
+    KEABuilder->KESAHeader = ListHeader;
+    KEABuilder->KESAAssets = List;
+    KEABuilder->KETHeader = TagHeader;
+    KEABuilder->TagMaps = Tags;
 
     KEABuilder->Tags = PushStruct(TempMem, kea_builder_tag_list);
     KEABuilder->TagCount = 1;
@@ -709,9 +710,10 @@ AddStoredAssetTags(kea_builder *Builder, kesa_asset *StoredAsset)
     }    
 }
 
-internal void
+internal b32
 BuilderWriteKEA(kea_builder *Builder)
 {
+    b32 Result = false;
     TIMED_FUNCTION();
 
     kesa_header *KESAHeader = Builder->KESAHeader;
@@ -948,6 +950,7 @@ BuilderWriteKEA(kea_builder *Builder)
         if(PlatformNoFileErrors(&Out))
         {
             LOG("Wrote %s: %u assets, %u tags", KEAFileName, Builder->AssetCount, Builder->TagCount);
+            Result = true;
         }
         else
         {
@@ -960,6 +963,8 @@ BuilderWriteKEA(kea_builder *Builder)
     }
 
     Platform.CloseFile(&Out);
+
+    return(Result);
 }
 
 internal inline void
@@ -982,13 +987,13 @@ TagTableInsert(kea_tag_lookup_entry *Table, u32 Capacity, kea_tag_lookup_entry E
 }
 
 internal b32
-BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
+BuildKEA(kesa_header *ListHeader, kesa_asset *List, ket_header *TagHeader, kea_tag_map *Tags, memory_arena *TempMem)
 {
     TIMED_FUNCTION();
 
     b32 Result = true;
 
-    kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
+    kea_builder *Builder = InitKEABuilder(ListHeader, List, TagHeader, Tags, TempMem);
     LOG("Building the KEA from %u assets", Builder->KESAHeader->AssetCount - 1);
 
     // NOTE(pvlso): Create raw asset list
@@ -1157,7 +1162,7 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
         Search = Search->Next;
     }
     
-    BuilderWriteKEA(Builder);
-    
+    Result = BuilderWriteKEA(Builder);
+
     return(Result);
 }

@@ -34,6 +34,12 @@ struct editor_mode_game
     u64 BuiltSourceWriteTime;
     f32 SourceCheckTimer;
 
+    // NOTE(pvlso): The data folders are checked every GAME_DATA_CHECK_INTERVAL seconds, a KEA is built when their
+    // signature (AssetDataSignature) differs from the one the last build was started for
+    u64 BuiltDataSignature;
+    f32 DataCheckTimer;
+    char AssetStatus[256];
+
     char Status[256];
     char BuildLog[16384];
 
