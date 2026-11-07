@@ -99,8 +99,9 @@ struct map_mode
 };
 
 // NOTE(pvlso): The cut tool (editor_cut_edit.cpp): sprites cut out of any image under data/ into PNGs, a rectangle
-// into bmps/ (a static sprite) or frames side by side into spritesheets/ (an animation). It only cuts: the files are
-// added as stored assets through Edit Bitmaps and Edit SpriteSheets, where their alignment is set.
+// into bmps/ (a static sprite) or frames side by side into spritesheets/ (an animation). A saved file is an asset at
+// once (engine_asset_list.cpp); a strip's frame size goes into data/assets.txt, the alignment is set in Edit Bitmaps and
+// Edit SpriteSheets.
 #define CUT_MAX_FRAMES 64
 
 struct cut_rect
@@ -200,13 +201,12 @@ enum assets_mode_action
 {
     AM_Exit              = (1 << 0),
     AM_EditStoredAsset   = (1 << 1),
-    AM_RemoveStoredAsset = (1 << 2),
+    AM_Rescan            = (1 << 2), // NOTE(pvlso): save data/assets.txt, scan the folders again
 
     AM_ShowStoredAssets  = (1 << 3),
     AM_WriteKEA          = (1 << 4),
-    AM_WriteAssets       = (1 << 5),
-    
-    AM_AddAsset          = (1 << 6),
+    AM_WriteAssets       = (1 << 5), // NOTE(pvlso): save data/assets.txt
+
     AM_RemoveAssetTag    = (1 << 7),
     AM_AddAssetTag       = (1 << 8),
 
@@ -245,23 +245,23 @@ struct editor_mode_assets
     memory_arena UtilityArena;
     memory_arena UtilityTempArena;
     
-    b32 StoredAssetChanged;
-
     u32 ShowStoredAssetIndex;
     u32 LastShowStoredAssetIndex;
 
+    // NOTE(pvlso): Every file in the asset folders (engine_asset_list.cpp), grouped by folder, the first the null
+    // asset. Its Version is the last KEA's.
     kesa_header StoredHeader;
     kesa_asset *StoredAssets;
+    char **AssetNames; // NOTE(pvlso): each asset's SourceFileName, SourceFiles point into it
 
     ket_header TagHeader;
     char **TagKeys;
     // NOTE(pvlso): Sorted by GUID
     kea_tag_map *Tags;
 
-    u32 AddAssetCount;
-    kesa_asset AssetsToAdd[256];
-
+    // NOTE(pvlso): The asset shown or edited, one of StoredAssets; NoAsset in an edit mode whose folder is empty
     kesa_asset *CurrentAsset;
+    kesa_asset NoAsset;
 
     u32 LastTagIndex;
     u32 CurrentTagIndex;
@@ -276,6 +276,7 @@ struct editor_mode_assets
     s32 SearchLen;
     char Search[128];
     
+    // NOTE(pvlso): Each type's files for the edit modes' pickers, the scanned assets' names
     u32 SourceFileCounts[KESA_Count];
     char **SourceFiles[KESA_Count];
 

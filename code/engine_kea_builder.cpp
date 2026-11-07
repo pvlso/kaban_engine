@@ -323,7 +323,7 @@ AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
         }
         if(!Stored)
         {
-            LOG_WARNING("Map %s uses the tile set %s, which isn't in the stored assets: add it, or the game can't draw "
+            LOG_WARNING("Map %s uses the tile set %s, which isn't in tilesets/ (or shares its name with another asset): the game can't draw "
                         "its tiles", Asset->SourceFileName, Map.Sets[SetIndex]);
         }
 
@@ -434,7 +434,7 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         LOG_WARNING("Entity %s has no type, a game won't know what it is", Name);
     }
 
-    // NOTE(pvlso): The clips with a look that's still stored
+    // NOTE(pvlso): The clips whose look is still in the asset folders
     Data->Clips = PushArray(Builder->TempMem, ENTITY_MAX_CLIPS, kea_entity_clip);
     for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
     {
@@ -471,9 +471,9 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         }
         else
         {
-            LOG_WARNING("Entity %s: the clip %s's look, %s, isn't a stored %s any more, the clip is left out", Name,
+            LOG_WARNING("Entity %s: the clip %s's look, %s, isn't in %s any more, the clip is left out", Name,
                         Project->Clips[ClipIndex], Clip->FileName,
-                        (Clip->Kind == EntityLook_Bitmap) ? "bitmap" : "sprite sheet");
+                        (Clip->Kind == EntityLook_Bitmap) ? "bmps/" : "spritesheets/");
         }
     }
 
@@ -482,8 +482,8 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
     Builder->CurrentAsset = BuilderAsset;
 }
 
-// NOTE(pvlso): Every definition in data/entities is packed, they aren't added as stored assets one by one. Each gets a
-// stored asset of its own here, only for its file name. One without a GUID, or with one another has, is left out.
+// NOTE(pvlso): Every definition in data/entities is packed, they aren't in the asset list (engine_asset_list.cpp). Each
+// gets a list entry of its own here, only for its file name. One without a GUID, or with one another has, is left out.
 internal void
 AddEntityAssets(kea_builder *Builder)
 {
@@ -569,13 +569,13 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     
     KEAAsset->GUID = KESAAsset->GUID;
     KEAAsset->Type = KEAType_SpriteSheet;
-    KEAAsset->SpriteSheet.SpriteCount = KESAAsset->SpriteSheet.SpriteCount;
-
-    BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, KEAAsset->SpriteSheet.SpriteCount, u64);
-
     Builder->CurrentAsset = 0;
 
+    // NOTE(pvlso): Only the sprites that were cut: a sheet that can't be read, or is smaller than its frames say, has
+    // none (LoadSprites logs why)
     builder_loaded_sprites Sprites = LoadSprites(KESAAsset, Builder->TempMem);
+    KEAAsset->SpriteSheet.SpriteCount = Sprites.Count;
+    BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, Maximum(1, Sprites.Count), u64);
 
     // NOTE(pvlso): The sheet's normal map, when the art has one
     char NormalsFileName[256];
@@ -587,7 +587,7 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     }
 
     for(u32 I = 0;
-        I < KESAAsset->SpriteSheet.SpriteCount;
+        I < Sprites.Count;
         ++I)
     {
         kea_asset *Sprite = AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
@@ -989,7 +989,7 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
     b32 Result = true;
 
     kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
-    LOG("Building the KEA from %u stored assets", Builder->KESAHeader->AssetCount - 1);
+    LOG("Building the KEA from %u assets", Builder->KESAHeader->AssetCount - 1);
 
     // NOTE(pvlso): Create raw asset list
     kesa_header *StoredHeader = Builder->KESAHeader;

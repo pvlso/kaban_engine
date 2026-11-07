@@ -403,7 +403,7 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
     }
 
     kesa_header Header = {};
-    kesa_asset *Stored = ReadStoredAssetList(&EditorState->EditorMeta, &Header);
+    kesa_asset *Stored = ScanAssetList(&Header, 0, 0, Arena);
     for(u32 DefIndex = 0; DefIndex < MapMode->EntityDefCount; ++DefIndex)
     {
         map_entity_def *Def = MapMode->EntityDefs + DefIndex;

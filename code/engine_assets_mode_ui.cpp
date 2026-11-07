@@ -123,8 +123,9 @@ DrawShowStoredAssets(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
             if(nk_group_begin(Nk, Text, NK_WINDOW_BORDER|NK_WINDOW_NO_SCROLLBAR))
             {
                 nk_layout_row_static(Nk, 20, 440, 1);
-                nk_labelf(Nk, NK_TEXT_ALIGN_LEFT, "%d. AssetID: %u",
-                             AssetIndex, Asset.GUID);
+                char *Folder = AssetListFolderName(Asset.Type);
+                nk_labelf(Nk, NK_TEXT_ALIGN_LEFT, "%d. %s/%s", AssetIndex, Folder ? Folder : "?",
+                          Asset.SourceFileName);
                 nk_labelf(Nk, NK_TEXT_ALIGN_LEFT, "TagCount: %d",
                              Asset.TagCount);
 
@@ -433,13 +434,10 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
             }
 
             // NOTE(paul): Action on Current Stored Asset 
+            // NOTE(pvlso): Every file is an asset: one goes when its file is deleted (then Rescan)
             nk_layout_row_dynamic(Nk, 30, 2);
-            if(nk_button_label(Nk, "Edit Stored Asset"))
+            if(nk_button_label(Nk, "Edit"))
                 AddAction(AssetsMode, AM_EditStoredAsset);
-
-            nk_layout_space_push(Nk, nk_rect(790, 12, 470, 40));
-            if(nk_button_label(Nk, "Remove Stored Asset"))
-                AddAction(AssetsMode, AM_RemoveStoredAsset);
 
             nk_group_end(Nk);
         }
@@ -963,8 +961,8 @@ DrawStandardEditLayout(editor_mode_assets *AssetsMode, ui_state *UIState, nk_con
         if(nk_button_label(Nk, "Exit"))
             AssetsMode->EditMode = EditMode_None;
 
-        if(nk_button_label(Nk, "Add Asset"))
-            AddAction(AssetsMode, AM_AddAsset);
+        if(nk_button_label(Nk, "Save assets.txt"))
+            AddAction(AssetsMode, AM_WriteAssets);
         
         nk_group_end(Nk);
     }
@@ -1588,12 +1586,8 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
 
     nk_context *Nk = UIState->Nk;
     
-    kesa_asset *CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-    if(IsAction(AssetsMode, AM_EditStoredAsset))
-    {
-        CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
-    }
-    
+    kesa_asset *CurrentAsset = AssetsMode->CurrentAsset ? AssetsMode->CurrentAsset : &AssetsMode->NoAsset;
+
     switch(AssetsMode->EditMode)
     {
         case EditMode_None:
@@ -1642,19 +1636,14 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
             nk_labelf(Nk, NK_TEXT_LEFT, "  Project: %s", AssetsMode->ProjectName);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            nk_labelf(Nk, NK_TEXT_LEFT, "  Asset Count: %d",
-                         AssetsMode->StoredHeader.AssetCount);
+            nk_labelf(Nk, NK_TEXT_LEFT, "  Assets: %u (every file in the folders)",
+                      AssetsMode->StoredHeader.AssetCount - 1);
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            nk_labelf(Nk, NK_TEXT_LEFT, "  SizeOfStoredAsset: %d",
-                         AssetsMode->StoredHeader.SizeOfStoredAsset);
+            nk_labelf(Nk, NK_TEXT_LEFT, "  Settings: data/assets.txt");
             Rect = nk_widget_bounds(Nk);
             nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
-            nk_labelf(Nk, NK_TEXT_LEFT, "  Version: %d.%d.%d.%d",
-                         (AssetsMode->StoredHeader.Version >> 24) & 0xFF,
-                         (AssetsMode->StoredHeader.Version >> 16) & 0xFF,
-                         (AssetsMode->StoredHeader.Version >> 8) & 0xFF,
-                         AssetsMode->StoredHeader.Version & 0xFF);
+            nk_labelf(Nk, NK_TEXT_LEFT, "  Last KEA: game_data_%u.kea", AssetsMode->StoredHeader.Version);
 
             DrawShowStoredAssets(AssetsMode, UIState, Nk);
             
@@ -1664,11 +1653,11 @@ DrawAssetsModeUI(editor_mode_assets *AssetsMode, ui_state *UIState)
                 AddAction(AssetsMode, AM_Exit);
 
             nk_layout_space_push(Nk, nk_rect(134, 200, 130, 40));
-            if(nk_button_label(Nk, "Write Assets"))
-                AddAction(AssetsMode, AM_WriteAssets);
+            if(nk_button_label(Nk, "Rescan"))
+                AddAction(AssetsMode, AM_Rescan);
 
             nk_layout_space_push(Nk, nk_rect(268, 200, 130, 40));
-            if(nk_button_label(Nk, "Write SSA"))
+            if(nk_button_label(Nk, "Build KEA"))
                 AddAction(AssetsMode, AM_WriteKEA);
             nk_layout_space_end(Nk);
 
