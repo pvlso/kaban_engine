@@ -50,6 +50,66 @@ U32FromMapText(char **AtInit, char *End)
     return(Result);
 }
 
+// NOTE(pvlso): A whole number, maybe negative; false when the word isn't one
+internal b32
+S32FromMapWord(char *Word, s32 *Value)
+{
+    char *At = Word;
+    b32 Negative = (*At == '-');
+    if(Negative) {++At;}
+    b32 Result = IsDigit(*At);
+    s64 Number = 0;
+    while(IsDigit(*At) && (Number <= 2147483647)) {Number = 10*Number + (s64)(*At++ - '0');}
+    Result = Result && !*At && (Number <= 2147483647);
+    if(Result) {*Value = (s32)(Negative ? -Number : Number);}
+
+    return(Result);
+}
+
+// NOTE(pvlso): The words after a layer's Z or an entity's position: "hidden", "flip", "level n", in any order. False
+// on a word it doesn't know.
+internal b32
+ReadMapOptions(char *Line, char *LineEnd, b32 *Hidden, b32 *Flip, s32 *Level)
+{
+    b32 Result = true;
+    char Word[64];
+    for(;;)
+    {
+        Line = ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+        if(!Word[0]) {break;}
+        if(Hidden && StringsAreEqual(Word, "hidden")) {*Hidden = true;}
+        else if(Flip && StringsAreEqual(Word, "flip")) {*Flip = true;}
+        else if(StringsAreEqual(Word, "level"))
+        {
+            Line = ReadMapWord(Line, LineEnd, Word, sizeof(Word));
+            s32 Value = 0;
+            if(S32FromMapWord(Word, &Value) && (Value >= MAP_MIN_LEVEL) && (Value <= MAP_MAX_LEVEL)) {*Level = Value;}
+            else {Result = false;}
+        }
+        else {Result = false;}
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): How many lines start with Word
+internal u32
+CountMapLines(char *At, char *End, char *Word)
+{
+    u32 Result = 0;
+    for(char *LineAt = At; LineAt < End;)
+    {
+        char *Start = SkipMapSpaces(LineAt, End);
+        u32 Matched = 0;
+        while((Start + Matched < End) && Word[Matched] && (Start[Matched] == Word[Matched])) {++Matched;}
+        if(!Word[Matched]) {++Result;}
+        while((LineAt < End) && (*LineAt != '\n')) {++LineAt;}
+        if(LineAt < End) {++LineAt;}
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): Reads data/maps/<FileName>; the layers' cells go in Arena. Mistakes are logged with their line.
 internal map_file
 ReadMapFile(char *FileName, memory_arena *Arena)
@@ -67,23 +127,15 @@ ReadMapFile(char *FileName, memory_arena *Arena)
     char *At = (char *)File.Contents;
     char *FileEnd = At + StringLength(At); // NOTE(pvlso): a text file's Size counts its closing zero
 
-    // NOTE(pvlso): Room for as many entities as there are lines starting with "entity"
-    u32 MaxEntities = 1;
-    for(char *LineAt = At; LineAt < FileEnd;)
-    {
-        char *Word = SkipMapSpaces(LineAt, FileEnd);
-        char *Entity = "entity";
-        u32 Matched = 0;
-        while((Word + Matched < FileEnd) && Entity[Matched] && (Word[Matched] == Entity[Matched])) {++Matched;}
-        if(!Entity[Matched]) {++MaxEntities;}
-        while((LineAt < FileEnd) && (*LineAt != '\n')) {++LineAt;}
-        if(LineAt < FileEnd) {++LineAt;}
-    }
+    // NOTE(pvlso): Room for as many entities and navigation areas as there are lines starting with "entity" and "nav"
+    u32 MaxEntities = 1 + CountMapLines(At, FileEnd, "entity ");
+    u32 MaxNavs = 1 + CountMapLines(At, FileEnd, "nav ");
     Result.Entities = PushArray(Arena, MaxEntities, map_file_entity);
+    Result.Navs = PushArray(Arena, MaxNavs, map_file_nav);
 
     u32 LineNumber = 0;
     map_file_layer *Layer = 0;
-    map_file_entity *Entity = 0;
+    u32 Overrides = 0;
     u32 Row = 0;
     char Word[256];
     while(At < FileEnd)
@@ -147,8 +199,12 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             b32 Negative = ((Line < LineEnd) && (*Line == '-'));
             if(Negative) {++Line;}
             Layer->Z = (s32)U32FromMapText(&Line, LineEnd)*(Negative ? -1 : 1);
-            ReadMapWord(Line, LineEnd, Word, sizeof(Word));
-            Layer->Hidden = StringsAreEqual(Word, "hidden");
+            if(!ReadMapOptions(Line, LineEnd, &Layer->Hidden, 0, &Layer->Level))
+            {
+                LOG_ERROR("Map %s, line %d: after a layer's Z come \"level n\" (%d to %d) and \"hidden\"", FileName,
+                          LineNumber, MAP_MIN_LEVEL, MAP_MAX_LEVEL);
+                ++Result.ErrorCount;
+            }
             umm Size = (umm)Result.Width*Result.Height*sizeof(map_cell);
             Layer->Cells = (map_cell *)PushSize(Arena, Size);
             ZeroSize(Size, Layer->Cells);
@@ -208,54 +264,74 @@ ReadMapFile(char *FileName, memory_arena *Arena)
             Line = ReadMapWord(Line, LineEnd, Numbers[0], sizeof(Numbers[0]));
             Line = ReadMapWord(Line, LineEnd, Numbers[1], sizeof(Numbers[1]));
             Valid = Valid && IsTilesetNumber(Numbers[0]) && IsTilesetNumber(Numbers[1]);
-            ReadMapWord(Line, LineEnd, Word, sizeof(Word));
-            Read.Flip = StringsAreEqual(Word, "flip");
-            Entity = 0;
+            Valid = Valid && ReadMapOptions(Line, LineEnd, 0, &Read.Flip, &Read.Level);
             if(Valid)
             {
                 Read.P = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
-                Entity = Result.Entities + Result.EntityCount++;
-                *Entity = Read;
+                Result.Entities[Result.EntityCount++] = Read;
             }
             else
             {
-                LOG_ERROR("Map %s, line %d: an entity is its GUID, its definition's GUID, x and y", FileName, LineNumber);
+                LOG_ERROR("Map %s, line %d: an entity is its GUID, its definition's GUID, x and y, maybe \"flip\" and "
+                          "\"level n\"", FileName, LineNumber);
+                ++Result.ErrorCount;
+            }
+        }
+        else if(StringsAreEqual(Word, "nav"))
+        {
+            map_file_nav Read = {};
+            char Kind[16];
+            char Level[16];
+            Line = ReadMapWord(Line, LineEnd, Kind, sizeof(Kind));
+            Read.Hole = StringsAreEqual(Kind, "hole");
+            b32 Valid = Read.Hole || StringsAreEqual(Kind, "walk");
+            Line = ReadMapWord(Line, LineEnd, Level, sizeof(Level));
+            Valid = Valid && S32FromMapWord(Level, &Read.Level) && (Read.Level >= MAP_MIN_LEVEL) &&
+                (Read.Level <= MAP_MAX_LEVEL);
+            v2 Points[MAP_NAV_MAX_POINTS];
+            char Numbers[2][32];
+            for(;;)
+            {
+                Line = ReadMapWord(Line, LineEnd, Numbers[0], sizeof(Numbers[0]));
+                if(!Numbers[0][0]) {break;}
+                Line = ReadMapWord(Line, LineEnd, Numbers[1], sizeof(Numbers[1]));
+                if(!IsTilesetNumber(Numbers[0]) || !IsTilesetNumber(Numbers[1]) ||
+                   (Read.PointCount >= MAP_NAV_MAX_POINTS))
+                {
+                    Valid = false;
+                    break;
+                }
+                Points[Read.PointCount++] = V2(R32FromTilesetToken(Numbers[0]), R32FromTilesetToken(Numbers[1]));
+            }
+            if(Valid && (Read.PointCount >= 3))
+            {
+                Read.Points = PushArray(Arena, Read.PointCount, v2);
+                Copy(Read.PointCount*sizeof(v2), Points, Read.Points);
+                Result.Navs[Result.NavCount++] = Read;
+            }
+            else
+            {
+                LOG_ERROR("Map %s, line %d: a nav is walk or hole, its level, then 3 to %d points (x y)", FileName,
+                          LineNumber, MAP_NAV_MAX_POINTS);
                 ++Result.ErrorCount;
             }
         }
         else if(StringsAreEqual(Word, "override"))
         {
-            map_file_override Read = {};
-            Line = ReadMapWord(Line, LineEnd, Read.Block, sizeof(Read.Block));
-            Line = ReadMapWord(Line, LineEnd, Read.Field, sizeof(Read.Field));
-            ReadMapWord(Line, LineEnd, Read.Value, sizeof(Read.Value));
-            if(!Entity)
-            {
-                LOG_ERROR("Map %s, line %d: an override goes under its entity", FileName, LineNumber);
-                ++Result.ErrorCount;
-            }
-            else if(!Read.Field[0])
-            {
-                LOG_ERROR("Map %s, line %d: an override is a block, a field and a value", FileName, LineNumber);
-                ++Result.ErrorCount;
-            }
-            else if(Entity->OverrideCount >= MAP_FILE_MAX_ENTITY_OVERRIDES)
-            {
-                LOG_ERROR("Map %s, line %d: more than %d overrides on an entity", FileName, LineNumber,
-                          MAP_FILE_MAX_ENTITY_OVERRIDES);
-                ++Result.ErrorCount;
-            }
-            else
-            {
-                Entity->Overrides[Entity->OverrideCount++] = Read;
-            }
+            // NOTE(pvlso): Maps from before definitions lost their blocks (2026-10-31); saving the map drops them
+            ++Overrides;
         }
         else
         {
-            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row, entity or override, not %s", FileName,
+            LOG_ERROR("Map %s, line %d: a line is size, set, layer, row, entity or nav, not %s", FileName,
                       LineNumber, Word);
             ++Result.ErrorCount;
         }
+    }
+    if(Overrides)
+    {
+        LOG_WARNING("Map %s: %u override lines left out, placements don't override their definitions any more",
+                    FileName, Overrides);
     }
 
     return(Result);
@@ -267,7 +343,11 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
 {
     temporary_memory TempMem = BeginTemporaryMemory(Arena);
     umm Capacity = 4096 + (umm)Map->LayerCount*(Map->Height*(8 + Map->Width*16) + 128) +
-        (umm)Map->EntityCount*(96 + MAP_FILE_MAX_ENTITY_OVERRIDES*(2*ENTITY_NAME_LENGTH + ENTITY_TEXT_LENGTH + 16));
+        (umm)Map->EntityCount*112;
+    for(u32 NavIndex = 0; NavIndex < Map->NavCount; ++NavIndex)
+    {
+        Capacity += 32 + (umm)Map->Navs[NavIndex].PointCount*24;
+    }
     char *Text = (char *)PushSize(Arena, Capacity);
     umm At = 0;
 #define MAP_OUT(...) At += FormatString(Capacity - At, Text + At, __VA_ARGS__)
@@ -287,7 +367,9 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
             if(*C != '"') {Name[Length++] = *C;}
         }
         Name[Length] = 0;
-        MAP_OUT("\nlayer \"%s\" %d%s\n", Name, Layer->Z, Layer->Hidden ? " hidden" : "");
+        MAP_OUT("\nlayer \"%s\" %d", Name, Layer->Z);
+        if(Layer->Level) {MAP_OUT(" level %d", Layer->Level);}
+        MAP_OUT("%s\n", Layer->Hidden ? " hidden" : "");
         for(u32 Y = 0; Y < Map->Height; ++Y)
         {
             MAP_OUT("row");
@@ -311,12 +393,23 @@ WriteMapFile(char *FileName, map_file *Map, memory_arena *Arena)
         char Definition[17];
         EntityGUIDToHex(Entity->GUID, GUID);
         EntityGUIDToHex(Entity->Definition, Definition);
-        MAP_OUT("entity %s %s %.3f %.3f%s\n", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
-        for(u32 OverrideIndex = 0; OverrideIndex < Entity->OverrideCount; ++OverrideIndex)
+        MAP_OUT("entity %s %s %.3f %.3f%s", GUID, Definition, Entity->P.x, Entity->P.y, Entity->Flip ? " flip" : "");
+        if(Entity->Level) {MAP_OUT(" level %d", Entity->Level);}
+        MAP_OUT("\n");
+    }
+    if(Map->NavCount)
+    {
+        MAP_OUT("\n");
+    }
+    for(u32 NavIndex = 0; NavIndex < Map->NavCount; ++NavIndex)
+    {
+        map_file_nav *Nav = Map->Navs + NavIndex;
+        MAP_OUT("nav %s %d", Nav->Hole ? "hole" : "walk", Nav->Level);
+        for(u32 PointIndex = 0; PointIndex < Nav->PointCount; ++PointIndex)
         {
-            map_file_override *Override = Entity->Overrides + OverrideIndex;
-            MAP_OUT("override %s %s %s\n", Override->Block, Override->Field, Override->Value);
+            MAP_OUT(" %.3f %.3f", Nav->Points[PointIndex].x, Nav->Points[PointIndex].y);
         }
+        MAP_OUT("\n");
     }
 #undef MAP_OUT
 

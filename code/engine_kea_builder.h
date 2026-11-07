@@ -34,18 +34,16 @@ struct builder_added_map
 {
     u64 *SetGUIDs;
     kea_map_entity *Entities;
-    kea_map_override *Overrides;
     kea_map_layer *Layers;
     kea_map_cell *Cells;
+    map_nav_mesh Nav;
 };
 
 struct builder_added_entity
 {
     char *DisplayName;
-    char *Category;
+    char *Type;
     kea_entity_clip *Clips;
-    kea_entity_block *Blocks;
-    kea_entity_field *Fields;
 };
 
 struct builder_added_tile

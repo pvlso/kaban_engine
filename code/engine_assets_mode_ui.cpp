@@ -1437,8 +1437,10 @@ DrawAssetsMapEditMode(editor_mode_assets *AssetsMode, ui_state *UIState, nk_cont
             for(u32 LayerIndex = 0; LayerIndex < File->LayerCount; ++LayerIndex)
             {
                 map_file_layer *Layer = File->Layers + LayerIndex;
-                nk_labelf(Nk, NK_TEXT_LEFT, "  Z %d  %s%s", Layer->Z, Layer->Name, Layer->Hidden ? "  (hidden)" : "");
+                nk_labelf(Nk, NK_TEXT_LEFT, "  L%d  Z %d  %s%s", Layer->Level, Layer->Z, Layer->Name,
+                          Layer->Hidden ? "  (hidden)" : "");
             }
+            nk_labelf(Nk, NK_TEXT_LEFT, "%u entities, %u navigation areas", File->EntityCount, File->NavCount);
         }
         nk_group_end(Nk);
     }

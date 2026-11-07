@@ -192,12 +192,21 @@ ReadVarArgUnsignedInteger(u32 Length, va_list *ArgList)
     return(Result);
 }
 
+// NOTE(pvlso): Ints up to 4 bytes come as an int and are sign extended (read as a u32 they printed negatives as
+// 4294967295...)
 inline s64
 ReadVarArgSignedInteger(u32 Length, va_list *ArgList)
 {
-    u64 Temp = ReadVarArgUnsignedInteger(Length, ArgList);
-    s64 Result = *(s64 *)&Temp;
-    
+    s64 Result = 0;
+    if(Length == 8)
+    {
+        Result = va_arg(*ArgList, s64);
+    }
+    else
+    {
+        Result = va_arg(*ArgList, s32);
+    }
+
     return(Result);
 }
 
@@ -262,6 +271,14 @@ F64ToASCII(format_dest *Dest, f64 Value, u32 Precision)
         OutChar(Dest, '-');
         Value = -Value;
     }
+
+    // NOTE(pvlso): Rounded to the last digit shown, not cut there: 16.8f is 16.7999992 and has to print as 16.800
+    f64 HalfOfLastDigit = 0.5;
+    for(u32 PrecisionIndex = 0; PrecisionIndex < Precision; ++PrecisionIndex)
+    {
+        HalfOfLastDigit *= 0.1;
+    }
+    Value += HalfOfLastDigit;
 
     u64 IntegerPart = (u64)Value;
     Value -= (f64)IntegerPart;

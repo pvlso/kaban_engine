@@ -78,8 +78,9 @@ struct tileset_info
     u32 TileSize; // NOTE(pvlso): in pixels
 };
 
-// NOTE(pvlso): A map made in the map editor (an island, in Spellweaver): Width x Height cells in layers, drawn by Z
-// and, within a Z, in their order. A cell's Set is 0 when empty, else the map's set + 1 (GetMapTileset gives that
+// NOTE(pvlso): A map made in the map editor (an island, in Spellweaver): Width x Height cells in layers. A map is drawn
+// level by level from the lowest (0 the ground, 1 a bridge or plateau above it, -1 below): a level's layers by Z and,
+// within a Z, in their order, then the entities on that level, then the next level. A cell's Set is 0 when empty, else the map's set + 1 (GetMapTileset gives that
 // set's tile set, for GetTileInfo); Tile is the tile's index in its set.
 struct map_info
 {
@@ -88,6 +89,15 @@ struct map_info
     u32 LayerCount;
     u32 SetCount;
     u32 EntityCount; // NOTE(pvlso): the entities placed on it, GetMapEntity
+    u32 NavPolyCount; // NOTE(pvlso): the convex polygons of its navigation mesh, 0 when it has none
+};
+
+// NOTE(pvlso): A point of a path over a map's navigation mesh (FindNavPath), in cells from the map's top left (y
+// down); Level is the level from this point on
+struct nav_path_point
+{
+    v2 P;
+    s32 Level;
 };
 
 struct map_tile_cell
@@ -99,28 +109,17 @@ struct map_tile_cell
 struct map_layer_info
 {
     char Name[32];
-    s32 Z;
+    s32 Z;     // NOTE(pvlso): its order within its level
+    s32 Level;
     b32 Hidden;
     map_tile_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; valid while the game's assets are
 };
 
-// NOTE(pvlso): An entity definition made in the entity editor, packed from the project's data/entities. Each state of a
-// thing is a definition of its own; a game finds one by its name (FindEntity) or by its GUID (FindEntityByGUID: maps,
-// saves and entity fields name definitions by it). The engine core: a display name, a category, clips, a footprint
-// (blocks movement) and a hit area (what spells and interaction hit). Then the project's blocks it uses and their
-// fields, by name; the game gives them their meaning.
-enum entity_field_kind
-{
-    EntityField_Int,
-    EntityField_Number,
-    EntityField_Bool,
-    EntityField_Text,
-    EntityField_Choice, // NOTE(pvlso): one of the field's words: Text holds it, Int its place in the list
-    EntityField_Entity, // NOTE(pvlso): another definition: Entity holds its GUID, 0 for none
-
-    EntityField_Count,
-};
-
+// NOTE(pvlso): An entity definition made in the entity editor, packed from the project's data/entities; a game finds
+// one by its name (FindEntity) or by its GUID (FindEntityByGUID: maps and saves name definitions by it). It's only
+// what any game needs to show and place a thing: a display name, its type (one of the project's
+// data/txts/entity_types.txt), clips, a footprint (blocks movement) and a hit area (what spells and interaction hit).
+// What it does is the game's.
 enum entity_collision_shape
 {
     EntityCollision_None,
@@ -140,9 +139,8 @@ struct entity_info
     u64 GUID;
     char Name[32]; // NOTE(pvlso): its file's, without .txt
     char DisplayName[64];
-    char Category[32];
+    char Type[32];  // NOTE(pvlso): empty when it has none
     u32 ClipCount;  // NOTE(pvlso): the clips it has a look for; the first is its default
-    u32 BlockCount; // NOTE(pvlso): the blocks it uses
     entity_shape_info Footprint;
     entity_shape_info HitArea;
 };
@@ -157,28 +155,13 @@ struct entity_clip_info
     r32 FramesPerSecond;
     b32 Loop;
     b32 Finished;     // NOTE(pvlso): a clip played once is past its last frame (which stays showing)
-};
-
-struct entity_block_info
-{
-    char Name[32];
-    u32 FieldCount;
-};
-
-struct entity_field_info
-{
-    char Name[32];
-    entity_field_kind Kind;
-    s32 Int;
-    r32 Number;
-    b32 Bool;
-    u64 Entity;
-    char Text[128];
+    v2 Dim;           // NOTE(pvlso): the frame's size in pixels
+    v2 Align;         // NOTE(pvlso): where its foot is on the frame, 0 to 1 from the bottom left (the entity editor's,
+                      // else the asset's alignment): draw it with no alignment of its own at P - Align*Dim
 };
 
 // NOTE(pvlso): An entity placed on a map in the map editor: its own GUID (kept across the map's saves, for a save to
-// name it by), its definition, where its foot stands and whether it's mirrored. Its overrides start it with other
-// values than its definition's for a few fields (GetMapEntityField gives a field either way).
+// name it by), its definition, where its foot stands and whether it's mirrored
 struct map_entity_info
 {
     u64 GUID;
@@ -186,13 +169,7 @@ struct map_entity_info
     u32 Entity;        // NOTE(pvlso): the definition's asset index (FindEntityByGUID), 0 when it isn't in the KEA
     v2 P;              // NOTE(pvlso): the foot, in cells from the map's top left, y down (like the rows)
     b32 Flip;          // NOTE(pvlso): mirrored left to right
-    u32 OverrideCount;
-};
-
-struct map_entity_override
-{
-    char Block[32];
-    entity_field_info Field;
+    s32 Level;         // NOTE(pvlso): the level it stands on
 };
 
 struct tile_info
@@ -333,19 +310,31 @@ struct engine_api
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
-    // NOTE(pvlso): All zero when there's no such entity or override
+    // NOTE(pvlso): All zero when there's no such entity
     map_entity_info (*GetMapEntity)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex);
-    map_entity_override (*GetMapEntityOverride)(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex);
+    // NOTE(pvlso): The polygon of the map's navigation mesh under P, on Level if there's one there, else the highest
+    // one; -1 when P isn't on the mesh
+    s32 (*FindNavPoly)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
+    s32 (*GetNavPolyLevel)(engine_assets *Assets, u32 MapIndex, s32 Poly);
+    // NOTE(pvlso): The shortest way over the mesh: Points gets its corners and the places where it changes level,
+    // starting with From and ending with To (points past MaxPoints are left out, walk them and ask again). The count
+    // comes back, 0 when there's no way or an end isn't on the mesh.
+    u32 (*FindNavPath)(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel,
+                       nav_path_point *Points, u32 MaxPoints);
+    // NOTE(pvlso): Walks straight from From to To over the mesh, across links (Level follows) and sliding along walls;
+    // gives where it got to. From off the mesh goes to the closest point first. Without a mesh it gives To.
+    v2 (*MoveOnNav)(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To);
+    // NOTE(pvlso): The point of the mesh closest to P and its level in Level; P itself where it's on the mesh, on Level
+    // if there's a polygon of that level there. Without a mesh it gives P.
+    v2 (*ClosestNavPoint)(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
     u32 (*FindEntityByGUID)(engine_assets *Assets, u64 GUID);
-    // NOTE(pvlso): All zero when EntityIndex isn't an entity, or it has no such clip, block or field. Time in seconds
-    // since the clip started picks a sprite sheet's frame.
+    // NOTE(pvlso): All zero when EntityIndex isn't an entity, or it has no such clip. Time in seconds since the clip
+    // started picks a sprite sheet's frame.
     entity_info (*GetEntityInfo)(engine_assets *Assets, u32 EntityIndex);
     entity_clip_info (*GetEntityClip)(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time);
-    entity_block_info (*GetEntityBlock)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex);
-    entity_field_info (*GetEntityField)(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex);
 // NOTE(pvlso): The normal map of a sprite or tile, when its sheet had one (<name>_n next to it), else 0
     bitmap_id (*GetNormalMap)(engine_assets *Assets, bitmap_id Bitmap);
 };
@@ -521,13 +510,17 @@ GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
     map_entity_info Result = Engine.GetMapEntity(Assets, MapIndex, EntityIndex);
     return(Result);
 }
-inline map_entity_override
-GetMapEntityOverride(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, u32 OverrideIndex)
-{
-    map_entity_override Result = Engine.GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
-    return(Result);
-}
 
+inline s32 FindNavPoly(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level) {return(Engine.FindNavPoly(Assets, MapIndex, P, Level));}
+inline s32 GetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly) {return(Engine.GetNavPolyLevel(Assets, MapIndex, Poly));}
+inline u32
+FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
+            u32 MaxPoints)
+{
+    return(Engine.FindNavPath(Assets, MapIndex, From, FromLevel, To, ToLevel, Points, MaxPoints));
+}
+inline v2 MoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To) {return(Engine.MoveOnNav(Assets, MapIndex, From, Level, To));}
+inline v2 ClosestNavPoint(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level) {return(Engine.ClosestNavPoint(Assets, MapIndex, P, Level));}
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
 inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}
@@ -537,20 +530,7 @@ GetEntityClip(engine_assets *Assets, u32 EntityIndex, u32 ClipIndex, r32 Time = 
     entity_clip_info Result = Engine.GetEntityClip(Assets, EntityIndex, ClipIndex, Time);
     return(Result);
 }
-inline entity_block_info
-GetEntityBlock(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex)
-{
-    entity_block_info Result = Engine.GetEntityBlock(Assets, EntityIndex, BlockIndex);
-    return(Result);
-}
-inline entity_field_info
-GetEntityField(engine_assets *Assets, u32 EntityIndex, u32 BlockIndex, u32 FieldIndex)
-{
-    entity_field_info Result = Engine.GetEntityField(Assets, EntityIndex, BlockIndex, FieldIndex);
-    return(Result);
-}
-
-// NOTE(pvlso): A clip or block of a definition by its name, -1 when it has none of that name
+// NOTE(pvlso): A clip of a definition by its name, -1 when it has none of that name
 inline s32
 GetEntityClipIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
 {
@@ -563,67 +543,6 @@ GetEntityClipIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
 
     return(Result);
 }
-inline s32
-GetEntityBlockIndex(engine_assets *Assets, u32 EntityIndex, char *Name)
-{
-    s32 Result = -1;
-    entity_info Info = GetEntityInfo(Assets, EntityIndex);
-    for(u32 BlockIndex = 0; (Result < 0) && (BlockIndex < Info.BlockCount); ++BlockIndex)
-    {
-        if(StringsAreEqual(GetEntityBlock(Assets, EntityIndex, BlockIndex).Name, Name)) {Result = (s32)BlockIndex;}
-    }
-
-    return(Result);
-}
-// NOTE(pvlso): A field by its block's and its own name; Found is false (and the rest zero) when there's no such field,
-// as for a definition that doesn't use the block
-inline entity_field_info
-GetEntityFieldByName(engine_assets *Assets, u32 EntityIndex, char *BlockName, char *FieldName, b32 *Found = 0)
-{
-    entity_field_info Result = {};
-    b32 WasFound = false;
-    s32 Block = GetEntityBlockIndex(Assets, EntityIndex, BlockName);
-    if(Block >= 0)
-    {
-        entity_block_info BlockInfo = GetEntityBlock(Assets, EntityIndex, (u32)Block);
-        for(u32 FieldIndex = 0; !WasFound && (FieldIndex < BlockInfo.FieldCount); ++FieldIndex)
-        {
-            entity_field_info Field = GetEntityField(Assets, EntityIndex, (u32)Block, FieldIndex);
-            if(StringsAreEqual(Field.Name, FieldName)) {Result = Field; WasFound = true;}
-        }
-    }
-    if(Found) {*Found = WasFound;}
-
-    return(Result);
-}
-
-// NOTE(pvlso): A field of an entity placed on a map: its override when it has one, else its definition's value. Found
-// is false when neither has it.
-inline entity_field_info
-GetMapEntityField(engine_assets *Assets, u32 MapIndex, u32 EntityIndex, char *BlockName, char *FieldName,
-                  b32 *Found = 0)
-{
-    entity_field_info Result = {};
-    b32 WasFound = false;
-    map_entity_info Entity = GetMapEntity(Assets, MapIndex, EntityIndex);
-    for(u32 OverrideIndex = 0; !WasFound && (OverrideIndex < Entity.OverrideCount); ++OverrideIndex)
-    {
-        map_entity_override Override = GetMapEntityOverride(Assets, MapIndex, EntityIndex, OverrideIndex);
-        if(StringsAreEqual(Override.Block, BlockName) && StringsAreEqual(Override.Field.Name, FieldName))
-        {
-            Result = Override.Field;
-            WasFound = true;
-        }
-    }
-    if(!WasFound && Entity.Entity)
-    {
-        Result = GetEntityFieldByName(Assets, Entity.Entity, BlockName, FieldName, &WasFound);
-    }
-    if(Found) {*Found = WasFound;}
-
-    return(Result);
-}
-
 inline engine_font *GetFont(char *FileName) {return(Engine.GetFont(FileName));}
 
 inline void

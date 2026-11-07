@@ -175,9 +175,43 @@ RenderEntityShape(render_group *RenderGroup, object_transform *Flat, entity_shap
     }
 }
 
+// NOTE(pvlso): Where a clip's foot is on its frame: its own, else its asset's alignment
+internal v2
+EntityClipAlign(editor_mode_entity *EntityMode, entity_clip *Clip)
+{
+    v2 Result = V2(0.5f, 0.0f);
+    s32 Choice = (Clip->Kind != EntityLook_None) ? FindLookChoice(EntityMode, Clip) : -1;
+    if(Clip->HasAlign) {Result = Clip->Align;}
+    else if(Choice >= 0) {Result = EntityMode->LookChoices[Choice].Align;}
+
+    return(Result);
+}
+
+// NOTE(pvlso): The shown clip's frame size in pixels, 0 without a picture
+internal v2
+EntityPreviewFrameDim(editor_mode_entity *EntityMode)
+{
+    v2 Result = {};
+    loaded_bitmap *Preview = &EntityMode->Preview;
+    if(Preview->Memory)
+    {
+        if(EntityMode->PreviewClip.Kind == EntityLook_Bitmap)
+        {
+            Result = V2((r32)Preview->Width, (r32)Preview->Height);
+        }
+        else if(EntityMode->PreviewChoice >= 0)
+        {
+            entity_look_choice *Choice = EntityMode->LookChoices + EntityMode->PreviewChoice;
+            Result = V2((r32)Choice->SpriteWidth, (r32)Choice->SpriteHeight);
+        }
+    }
+
+    return(Result);
+}
+
 internal void
-RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, object_transform *Flat, v2 MouseP,
-                    rectangle2 Rect, r32 Wheel)
+RenderEntityPreview(editor_mode_entity *EntityMode, engine_input *Input, render_group *RenderGroup,
+                    object_transform *Flat, v2 MouseP, rectangle2 Rect, r32 Wheel, b32 OverUI)
 {
     if(IsInRectangle(Rect, MouseP) && (Wheel != 0.0f))
     {
@@ -186,6 +220,41 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
 
     r32 Zoom = EntityMode->Zoom;
     v2 Foot = V2(GetCenter(Rect).x, Rect.Min.y + 0.3f*GetDim(Rect).y);
+    entity_clip *Shown = EntityMode->Entity.Clips + EntityMode->ShownClip;
+    v2 Align = EntityClipAlign(EntityMode, Shown);
+    v2 FrameDim = EntityPreviewFrameDim(EntityMode);
+
+    // NOTE(pvlso): Dragging the picture moves it over the foot, the foot staying on whole pixels of the frame
+    engine_button_state Left = Input->MouseButtons[PlatformMouseButton_Left];
+    if(WasPressed(Left) && !OverUI && (FrameDim.x > 0.0f) && IsInRectangle(Rect, MouseP))
+    {
+        rectangle2 Picture = RectMinDim(Foot - Zoom*Hadamard(Align, FrameDim), Zoom*FrameDim);
+        if(IsInRectangle(Picture, MouseP))
+        {
+            EntityMode->DraggingLook = true;
+            EntityMode->DragMouseStart = MouseP;
+            EntityMode->DragAlignStart = Align;
+        }
+    }
+    if(EntityMode->DraggingLook)
+    {
+        if(!Left.EndedDown || (FrameDim.x <= 0.0f))
+        {
+            EntityMode->DraggingLook = false;
+        }
+        else
+        {
+            v2 Pixels = Hadamard(EntityMode->DragAlignStart, FrameDim) - (1.0f / Zoom)*(MouseP - EntityMode->DragMouseStart);
+            Pixels = V2((r32)RoundReal32ToInt32(Pixels.x), (r32)RoundReal32ToInt32(Pixels.y));
+            v2 NewAlign = V2(Pixels.x / FrameDim.x, Pixels.y / FrameDim.y);
+            if(!Shown->HasAlign || (NewAlign.x != Shown->Align.x) || (NewAlign.y != Shown->Align.y))
+            {
+                Shown->HasAlign = true;
+                Shown->Align = NewAlign;
+            }
+            Align = NewAlign;
+        }
+    }
     u32 SavedClip = RenderGroup->CurrentClipRectIndex;
     RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
     PushRect(RenderGroup, Flat, Rect, 4.0f, V4(0.18f, 0.18f, 0.2f, 1.0f));
@@ -196,8 +265,7 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
     {
         if(EntityMode->PreviewClip.Kind == EntityLook_Bitmap)
         {
-            Preview->AlignPercentage = (EntityMode->PreviewChoice >= 0) ?
-                EntityMode->LookChoices[EntityMode->PreviewChoice].Align : V2(0.5f, 0.0f);
+            Preview->AlignPercentage = Align;
             PushBitmap(RenderGroup, Flat, Preview, Zoom*(r32)Preview->Height, V3(Foot, 6.0f));
         }
         else if(EntityMode->PreviewChoice >= 0)
@@ -207,12 +275,12 @@ RenderEntityPreview(editor_mode_entity *EntityMode, render_group *RenderGroup, o
             u32 Count = Maximum(1, Choice->SpriteCount);
             u32 Frame = (u32)Maximum(0, FloorReal32ToInt32(EntityMode->Time*EntityMode->PreviewClip.FramesPerSecond));
             Frame = EntityMode->PreviewClip.Loop ? (Frame % Count) : Minimum(Frame, Count - 1);
-            v2 FrameDim = Zoom*V2((r32)Choice->SpriteWidth, (r32)Choice->SpriteHeight);
-            v2 FrameMin = Foot - Hadamard(Choice->Align, FrameDim);
+            v2 ShownDim = Zoom*FrameDim;
+            v2 FrameMin = Foot - Hadamard(Align, ShownDim);
             Preview->AlignPercentage = V2(0, 0);
-            RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, FrameDim), 0.0f, 0);
+            RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, RectMinDim(FrameMin, ShownDim), 0.0f, 0);
             PushBitmap(RenderGroup, Flat, Preview, Zoom*(r32)Preview->Height,
-                       V3(FrameMin - V2((r32)Frame*FrameDim.x, 0.0f), 6.0f));
+                       V3(FrameMin - V2((r32)Frame*ShownDim.x, 0.0f), 6.0f));
             RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
         }
     }
@@ -302,101 +370,6 @@ DrawEntityShapeEditor(nk_context *Nk, char *Label, entity_shape *Shape)
     }
 }
 
-// NOTE(pvlso): A field's name and its value's widget; an entity field picks among Files. True while a text is typed in.
-internal b32
-DrawEntityFieldEditor(entity_file_list *Files, nk_context *Nk, entity_field_def *Field, entity_field_value *Value)
-{
-    b32 Typing = false;
-    nk_layout_row_template_begin(Nk, 26);
-    nk_layout_row_template_push_static(Nk, 120);
-    nk_layout_row_template_push_dynamic(Nk);
-    nk_layout_row_template_end(Nk);
-    nk_label(Nk, Field->Name, NK_TEXT_LEFT);
-    switch(Field->Kind)
-    {
-        case EntityField_Int:
-        {
-            nk_property_int(Nk, "#", -1000000, &Value->Int, 1000000, 1, 0.2f);
-        } break;
-
-        case EntityField_Number:
-        {
-            nk_property_float(Nk, "#", -1000000.0f, &Value->Number, 1000000.0f, 0.1f, 0.05f);
-        } break;
-
-        case EntityField_Bool:
-        {
-            nk_bool On = (Value->Bool != 0);
-            if(nk_checkbox_label(Nk, "", &On)) {Value->Bool = On;}
-        } break;
-
-        case EntityField_Text:
-        {
-            int Length = (int)StringLength(Value->Text);
-            nk_flags State = nk_edit_string(Nk, NK_EDIT_FIELD, Value->Text, &Length, ENTITY_TEXT_LENGTH - 1,
-                                            nk_filter_default);
-            Value->Text[Length] = 0;
-            Typing = ((State & NK_EDIT_ACTIVE) != 0);
-        } break;
-
-        case EntityField_Choice:
-        {
-            u32 Choice = ((u32)Value->Int < Field->ChoiceCount) ? (u32)Value->Int : 0;
-            if(nk_combo_begin_label(Nk, Field->Choices[Choice], nk_vec2(nk_widget_width(Nk), 300)))
-            {
-                nk_layout_row_dynamic(Nk, 20, 1);
-                for(u32 Index = 0; Index < Field->ChoiceCount; ++Index)
-                {
-                    nk_bool Selected = (Index == Choice);
-                    if(nk_selectable_label(Nk, Field->Choices[Index], NK_TEXT_LEFT, &Selected))
-                    {
-                        Value->Int = (s32)Index;
-                        nk_combo_close(Nk);
-                    }
-                }
-                nk_combo_end(Nk);
-            }
-        } break;
-
-        case EntityField_Entity:
-        {
-            char *Name = EntityFileOfGUID(Files, Value->Entity);
-            char Unknown[32];
-            if(Value->Entity && !Name)
-            {
-                char Hex[17];
-                EntityGUIDToHex(Value->Entity, Hex);
-                FormatString(sizeof(Unknown), Unknown, "? %s", Hex);
-                Name = Unknown;
-            }
-            if(nk_combo_begin_label(Nk, Name ? Name : "(none)", nk_vec2(nk_widget_width(Nk), 300)))
-            {
-                nk_layout_row_dynamic(Nk, 20, 1);
-                nk_bool NoneSelected = (Value->Entity == 0);
-                if(nk_selectable_label(Nk, "(none)", NK_TEXT_LEFT, &NoneSelected))
-                {
-                    Value->Entity = 0;
-                    nk_combo_close(Nk);
-                }
-                for(u32 Index = 0; Index < Files->Count; ++Index)
-                {
-                    nk_bool Selected = (Files->GUIDs[Index] == Value->Entity);
-                    if(Files->GUIDs[Index] && nk_selectable_label(Nk, Files->Files[Index], NK_TEXT_LEFT, &Selected))
-                    {
-                        Value->Entity = Files->GUIDs[Index];
-                        nk_combo_close(Nk);
-                    }
-                }
-                nk_combo_end(Nk);
-            }
-        } break;
-
-        InvalidDefaultCase;
-    }
-
-    return(Typing);
-}
-
 internal void
 DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
 {
@@ -481,19 +454,19 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                            nk_filter_default);
             Entity->DisplayName[DisplayLength] = 0;
 
-            nk_label(Nk, "Category", NK_TEXT_LEFT);
-            const char *CategoryPreview = (Entity->Category && (Entity->Category <= Project->CategoryCount)) ?
-                Project->Categories[Entity->Category - 1] : "(none)";
-            if(nk_combo_begin_label(Nk, CategoryPreview, nk_vec2(nk_widget_width(Nk), 300)))
+            nk_label(Nk, "Type", NK_TEXT_LEFT);
+            const char *TypePreview = (Entity->Type && (Entity->Type <= Project->TypeCount)) ?
+                Project->Types[Entity->Type - 1] : "(none)";
+            if(nk_combo_begin_label(Nk, TypePreview, nk_vec2(nk_widget_width(Nk), 300)))
             {
                 nk_layout_row_dynamic(Nk, 20, 1);
-                for(u32 Category = 0; Category <= Project->CategoryCount; ++Category)
+                for(u32 Type = 0; Type <= Project->TypeCount; ++Type)
                 {
-                    nk_bool Selected = (Category == Entity->Category);
-                    char *Label = Category ? Project->Categories[Category - 1] : (char *)"(none)";
+                    nk_bool Selected = (Type == Entity->Type);
+                    char *Label = Type ? Project->Types[Type - 1] : (char *)"(none)";
                     if(nk_selectable_label(Nk, Label, NK_TEXT_LEFT, &Selected))
                     {
-                        Entity->Category = Category;
+                        Entity->Type = Type;
                         nk_combo_close(Nk);
                     }
                 }
@@ -540,6 +513,8 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                             entity_look_choice *Picked = EntityMode->LookChoices + ChoiceIndex;
                             Clip->Kind = Picked->Kind;
                             FormatString(ENTITY_LOOK_NAME_LENGTH, Clip->FileName, "%s", Picked->FileName);
+                            Clip->HasAlign = false;
+                            Clip->Align = {};
                             if(Clip->FramesPerSecond <= 0.0f) {Clip->FramesPerSecond = 8.0f; Clip->Loop = true;}
                             EntityMode->ShownClip = ClipIndex;
                             nk_combo_close(Nk);
@@ -561,40 +536,36 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
                 }
             }
 
+            // NOTE(pvlso): The shown clip's foot: where on its frame it stands (0 to 1 from the bottom left)
+            entity_clip *Shown = Entity->Clips + EntityMode->ShownClip;
+            if(Shown->Kind != EntityLook_None)
+            {
+                nk_layout_row_dynamic(Nk, 24, 1);
+                nk_labelf(Nk, NK_TEXT_LEFT, "%s's foot (drag the picture)%s:", Project->Clips[EntityMode->ShownClip],
+                          Shown->HasAlign ? "" : ", the asset's");
+                nk_layout_row_template_begin(Nk, 26);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_push_dynamic(Nk);
+                nk_layout_row_template_push_static(Nk, 70);
+                nk_layout_row_template_end(Nk);
+                v2 Align = EntityClipAlign(EntityMode, Shown);
+                v2 Edited = Align;
+                nk_property_float(Nk, "#x", -1.0f, &Edited.x, 2.0f, 0.01f, 0.002f);
+                nk_property_float(Nk, "#y", -1.0f, &Edited.y, 2.0f, 0.01f, 0.002f);
+                if((Edited.x != Align.x) || (Edited.y != Align.y))
+                {
+                    Shown->HasAlign = true;
+                    Shown->Align = Edited;
+                }
+                if(nk_button_label(Nk, "Asset's")) {Shown->HasAlign = false; Shown->Align = {};}
+            }
+
             nk_layout_row_dynamic(Nk, 24, 1);
             nk_label(Nk, "Footprint blocks movement (green):", NK_TEXT_LEFT);
             DrawEntityShapeEditor(Nk, "Footprint", &Entity->Footprint);
             nk_layout_row_dynamic(Nk, 24, 1);
             nk_label(Nk, "Hit area takes spells and interaction (blue):", NK_TEXT_LEFT);
             DrawEntityShapeEditor(Nk, "Hit area", &Entity->HitArea);
-
-            // NOTE(pvlso): The project's blocks: ticked ones are used, their fields below them
-            nk_layout_row_dynamic(Nk, 24, 1);
-            nk_label(Nk, "", NK_TEXT_LEFT);
-            nk_label(Nk, "Blocks (data/txts/entity_blocks.txt):", NK_TEXT_LEFT);
-            if(!Project->BlockCount)
-            {
-                nk_label(Nk, "(none declared)", NK_TEXT_LEFT);
-            }
-            for(u32 BlockIndex = 0; BlockIndex < Project->BlockCount; ++BlockIndex)
-            {
-                entity_block_def *Block = Project->Blocks + BlockIndex;
-                nk_layout_row_dynamic(Nk, 26, 1);
-                nk_bool Uses = ((Entity->Blocks & (1u << BlockIndex)) != 0);
-                if(nk_checkbox_label(Nk, Block->Name, &Uses))
-                {
-                    Entity->Blocks ^= (1u << BlockIndex);
-                    if(!Uses) {ResetEntityBlock(Entity, Project, BlockIndex);}
-                }
-                if(Uses)
-                {
-                    for(u32 FieldIndex = 0; FieldIndex < Block->FieldCount; ++FieldIndex)
-                    {
-                        DrawEntityFieldEditor(&EntityMode->Files, Nk, Block->Fields + FieldIndex,
-                                              &Entity->Fields[BlockIndex][FieldIndex]);
-                    }
-                }
-            }
         }
 
         nk_layout_row_dynamic(Nk, 18, 1);
@@ -634,8 +605,8 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
 
     if(EntityMode->ReloadRequested)
     {
-        // NOTE(pvlso): The blocks file, the stored assets or data/entities changed. What's being made keeps its values
-        // by place: a block file whose blocks moved should be followed by opening the definition again.
+        // NOTE(pvlso): The types file, the stored assets or data/entities changed. What's being made keeps its type and
+        // clips by place: a types file whose lines moved should be followed by opening the definition again.
         EntityMode->ReloadRequested = false;
         EntityMode->Project = ReadEntityProject(EntityMode->Arena);
         ListLookChoices(EditorState, EntityMode);
@@ -657,7 +628,7 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
             }
             else
             {
-                SetEditedEntity(TextureOpQueue, EntityMode, NewEntityDefinition(Project), FileName, true);
+                SetEditedEntity(TextureOpQueue, EntityMode, NewEntityDefinition(), FileName, true);
             }
         }
     }
@@ -725,7 +696,8 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
             EntityMode->LastEntity = EntityMode->Entity;
         }
         UpdateEntityPreview(TextureOpQueue, EntityMode);
-        RenderEntityPreview(EntityMode, RenderGroup, &Flat, MouseP, PreviewRect, Nk->input.mouse.scroll_delta.y);
+        RenderEntityPreview(EntityMode, Input, RenderGroup, &Flat, MouseP, PreviewRect, Nk->input.mouse.scroll_delta.y,
+                            nk_window_is_any_hovered(Nk));
     }
     else
     {

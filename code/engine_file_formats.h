@@ -295,7 +295,8 @@ struct kea_tileset
 struct kea_map_layer
 {
     char Name[32];
-    s32 Z;
+    s32 Z;     // NOTE(pvlso): its order within its level
+    s32 Level; // NOTE(pvlso): 0 the ground (engine_map_file.h)
     u32 Flags; // NOTE(pvlso): KEAMapLayer_*
 };
 enum kea_map_layer_flag
@@ -310,19 +311,36 @@ struct kea_map_cell
 };
 
 // NOTE(pvlso): An entity placed on the map: its own GUID, its definition's, its foot in cells from the map's top left
-// (y down), and its overrides, Overrides[FirstOverride] on
+// (y down), its level
 struct kea_map_entity
 {
     u64 GUID;
     u64 Definition;
     r32 P[2];
     u32 Flags; // NOTE(pvlso): KEAMapEntity_*
-    u32 FirstOverride;
-    u32 OverrideCount;
+    s32 Level;
 };
 enum kea_map_entity_flag
 {
     KEAMapEntity_Flip = (1 << 0),
+};
+
+// NOTE(pvlso): The baked navigation mesh (engine_map_nav.h): convex polygons with their points and their links to
+// other polygons. A link's A and B are the ends of the edge between the two, in cells (y down).
+struct kea_nav_poly
+{
+    s32 Level;
+    u32 FirstPoint;
+    u32 PointCount;
+    u32 FirstLink;
+    u32 LinkCount;
+};
+
+struct kea_nav_link
+{
+    u32 Poly;
+    r32 A[2];
+    r32 B[2];
 };
 
 struct kea_map
@@ -332,24 +350,27 @@ struct kea_map
     u16 LayerCount;
     u16 SetCount;
     u32 EntityCount;
-    u32 OverrideCount;
+    u32 NavPolyCount;
+    u32 NavLinkCount;
+    u32 NavPointCount;
 
     /* NOTE(pvlso): Data is:
 
        u64 SetGUIDs[SetCount];
        kea_map_entity Entities[EntityCount];
-       kea_map_override Overrides[OverrideCount];
        kea_map_layer Layers[LayerCount];
+       kea_nav_poly NavPolys[NavPolyCount];
+       kea_nav_link NavLinks[NavLinkCount];
+       r32 NavPoints[NavPointCount][2];
        kea_map_cell Cells[LayerCount][Height][Width];
     */
 };
 
 // NOTE(pvlso): An entity definition (engine_entity_file.h), the project's names written out so a game needs no data
-// file: its clips that have a look (by name, the look as its stored asset's GUID), the blocks it uses and their
-// fields. Its asset GUID is the definition's own.
+// file: its type and its clips that have a look (by name, the look as its stored asset's GUID). Its asset GUID is the
+// definition's own.
 #define KEA_ENTITY_NAME_LENGTH 32
 #define KEA_ENTITY_DISPLAY_LENGTH 64
-#define KEA_ENTITY_TEXT_LENGTH 128
 
 struct kea_entity_shape
 {
@@ -364,32 +385,13 @@ struct kea_entity_clip
     u64 LookGUID; // NOTE(pvlso): a bitmap's or sprite sheet's asset
     r32 FramesPerSecond;
     u32 Loop;
-};
-
-struct kea_entity_block
-{
-    char Name[KEA_ENTITY_NAME_LENGTH];
-    u32 FirstField;
-    u32 FieldCount;
-};
-
-struct kea_entity_field
-{
-    char Name[KEA_ENTITY_NAME_LENGTH];
-    u32 Kind; // NOTE(pvlso): entity_field_kind
-    s32 Int;
-    r32 Number;
-    b32 Bool;
-    u64 Entity;
-    char Text[KEA_ENTITY_TEXT_LENGTH]; // NOTE(pvlso): a text, or a choice's word
+    r32 Align[2]; // NOTE(pvlso): the foot on a frame, 0 to 1 from its bottom left (the clip's, else the asset's)
 };
 
 struct kea_entity
 {
     char Name[KEA_ENTITY_NAME_LENGTH]; // NOTE(pvlso): its file's, without .txt, so it's found without loading it
     u16 ClipCount;
-    u16 BlockCount;
-    u16 FieldCount;
     u16 Flags;
     kea_entity_shape Footprint;
     kea_entity_shape HitArea;
@@ -397,18 +399,9 @@ struct kea_entity
     /* NOTE(pvlso): Data is:
 
        char DisplayName[KEA_ENTITY_DISPLAY_LENGTH];
-       char Category[KEA_ENTITY_NAME_LENGTH];
+       char Type[KEA_ENTITY_NAME_LENGTH];
        kea_entity_clip Clips[ClipCount];
-       kea_entity_block Blocks[BlockCount];
-       kea_entity_field Fields[FieldCount];
     */
-};
-
-// NOTE(pvlso): A map's entity starting with another value for one field of its definition's blocks
-struct kea_map_override
-{
-    char Block[KEA_ENTITY_NAME_LENGTH];
-    kea_entity_field Field;
 };
 
 struct kea_spritesheet

@@ -18,6 +18,8 @@
 
 #include "polypartition.cpp"
 #include "engine_poly_partition.cpp"
+#include "engine_clipper.cpp"
+#include "engine_map_nav.cpp"
 
 internal task_with_memory *
 BeginTaskWithMemory(u32 TaskCount, task_with_memory *Tasks)
@@ -208,6 +210,10 @@ extern "C" ENGINE_UPDATE_AND_RENDER(EngineUpdateAndRender)
             task_with_memory *Task = TranState->Tasks + TaskIndex;
             Task->BeingUsed = false;
         }
+#if EDITOR_SLOW
+        TestClipper(&TranState->TranArena);
+        TestMapNav(&TranState->TranArena);
+#endif
     }
     
     if(EditorState->EditorMode == EditorMode_None)
