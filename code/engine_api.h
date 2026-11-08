@@ -280,6 +280,8 @@ struct engine_api
     void (*PushLine)(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color);
     void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
                               s32 Segments, v4 Color);
+    // NOTE(pvlso): A filled triangle (the corners in the transform's space; Color's alpha blends it)
+    void (*PushTriangle)(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color);
 
     // NOTE(pvlso): Loads data/ttfs/<FileName> the first time, 0 when it's missing or not a font (logged once).
     engine_font *(*GetFont)(char *FileName);
@@ -316,6 +318,9 @@ struct engine_api
     // one; -1 when P isn't on the mesh
     s32 (*FindNavPoly)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
     s32 (*GetNavPolyLevel)(engine_assets *Assets, u32 MapIndex, s32 Poly);
+    // NOTE(pvlso): The corners of the mesh's polygon Poly (0 to map_info NavPolyCount - 1), convex, in cells from the
+    // map's top left, up to MaxPoints of them; the count comes back, 0 when there's no such polygon
+    u32 (*GetNavPolyPoints)(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints);
     // NOTE(pvlso): The shortest way over the mesh: Points gets its corners and the places where it changes level,
     // starting with From and ending with To (points past MaxPoints are left out, walk them and ask again). The count
     // comes back, 0 when there's no way or an end isn't on the mesh.
@@ -460,6 +465,12 @@ PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Cen
     Engine.PushCircleOutline(Group, ObjectTransform, Center, Radius, Segments, Color);
 }
 
+inline void
+PushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushTriangle(Group, ObjectTransform, A, B, C, Color);
+}
+
 inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
@@ -518,6 +529,11 @@ GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
 
 inline s32 FindNavPoly(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level) {return(Engine.FindNavPoly(Assets, MapIndex, P, Level));}
 inline s32 GetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly) {return(Engine.GetNavPolyLevel(Assets, MapIndex, Poly));}
+inline u32
+GetNavPolyPoints(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints)
+{
+    return(Engine.GetNavPolyPoints(Assets, MapIndex, Poly, Points, MaxPoints));
+}
 inline u32
 FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
             u32 MaxPoints)

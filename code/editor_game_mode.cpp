@@ -28,6 +28,13 @@ GameEndRenderGroup(render_group *Group)
     }
 }
 
+// NOTE(pvlso): PushTriangle is overloaded, the table needs the one taking three corners
+internal void
+GamePushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color)
+{
+    PushTriangle(Group, ObjectTransform, A, B, C, Color);
+}
+
 internal void
 GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
                v4 Color, r32 CAlign, r32 Angle, bitmap_id NormalMap)
@@ -433,6 +440,25 @@ GameGetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly)
 }
 
 internal u32
+GameGetNavPolyPoints(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints)
+{
+    u32 Result = 0;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && (Poly >= 0) && ((u32)Poly < Map->Nav.PolyCount))
+    {
+        kea_nav_poly *Found = Map->Nav.Polys + Poly;
+        Result = Minimum(Found->PointCount, MaxPoints);
+        for(u32 Index = 0; Index < Result; ++Index)
+        {
+            Points[Index] = Map->Nav.Points[Found->FirstPoint + Index];
+        }
+    }
+
+    return(Result);
+}
+
+internal u32
 GameFindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
                 u32 MaxPoints)
 {
@@ -527,6 +553,7 @@ GetEngineAPI(void)
     Result.PushRect = PushRect;
     Result.PushLine = PushLine;
     Result.PushCircleOutline = PushCircleOutline;
+    Result.PushTriangle = GamePushTriangle;
 
     Result.GetFont = GameGetFont;
     Result.PushText = GamePushText;
@@ -543,6 +570,7 @@ GetEngineAPI(void)
     Result.GetMapEntity = GameGetMapEntity;
     Result.FindNavPoly = GameFindNavPoly;
     Result.GetNavPolyLevel = GameGetNavPolyLevel;
+    Result.GetNavPolyPoints = GameGetNavPolyPoints;
     Result.FindNavPath = GameFindNavPath;
     Result.MoveOnNav = GameMoveOnNav;
     Result.ClosestNavPoint = GameClosestNavPoint;
