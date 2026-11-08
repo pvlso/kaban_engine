@@ -306,6 +306,22 @@ BakeMapNav(memory_arena *Arena, u32 NavCount, map_file_nav *Navs)
     return(Result);
 }
 
+// NOTE(pvlso): P in the convex polygon, its edges included
+internal b32
+MapNavPolyContains(map_nav_mesh *Mesh, u32 PolyIndex, v2 P)
+{
+    kea_nav_poly *Poly = Mesh->Polys + PolyIndex;
+    b32 Result = true;
+    for(u32 Index = 0; Result && (Index < Poly->PointCount); ++Index)
+    {
+        v2 A = Mesh->Points[Poly->FirstPoint + Index];
+        v2 B = Mesh->Points[Poly->FirstPoint + (Index + 1) % Poly->PointCount];
+        Result = (Cross(B - A, P - A) >= -MAP_NAV_EPSILON*MAP_NAV_EPSILON);
+    }
+
+    return(Result);
+}
+
 // NOTE(pvlso): The polygon under P: on Level if there's one, else the highest one there; -1 when P isn't on the mesh
 internal s32
 FindMapNavPoly(map_nav_mesh *Mesh, v2 P, s32 Level)
@@ -314,14 +330,7 @@ FindMapNavPoly(map_nav_mesh *Mesh, v2 P, s32 Level)
     for(u32 PolyIndex = 0; PolyIndex < Mesh->PolyCount; ++PolyIndex)
     {
         kea_nav_poly *Poly = Mesh->Polys + PolyIndex;
-        b32 Inside = true;
-        for(u32 Index = 0; Inside && (Index < Poly->PointCount); ++Index)
-        {
-            v2 A = Mesh->Points[Poly->FirstPoint + Index];
-            v2 B = Mesh->Points[Poly->FirstPoint + (Index + 1) % Poly->PointCount];
-            Inside = (Cross(B - A, P - A) >= -MAP_NAV_EPSILON*MAP_NAV_EPSILON);
-        }
-        if(Inside)
+        if(MapNavPolyContains(Mesh, PolyIndex, P))
         {
             if(Poly->Level == Level)
             {
@@ -608,6 +617,8 @@ MoveMapNav(map_nav_mesh *Mesh, v2 From, s32 *Level, v2 To)
 
     s32 EndPoly = Poly;
     v2 Goal = To;
+    // NOTE(pvlso): Set when the way moved on into a neighbour without getting anywhere, so two can't hand it back and forth
+    b32 Handed = false;
     // NOTE(pvlso): Each turn crosses a polygon or meets a wall; a step is short, so this is plenty
     for(u32 Turn = 0; (Poly >= 0) && (Turn < 32); ++Turn)
     {
@@ -662,6 +673,37 @@ MoveMapNav(map_nav_mesh *Mesh, v2 From, s32 *Level, v2 To)
                 Next = (s32)Link->Poly;
                 break;
             }
+        }
+
+        // NOTE(pvlso): A wall right where it stands, while it stands on a link too (a corner the polygon shares with
+        // the one past the link, the foot of stairs): the way may go on in that one, along its edge. Without this a
+        // walk that comes down the stairs to their corner and turns along the wall stops there.
+        if((Next < 0) && !Handed && (LengthSq(Hit - At) <= MAP_NAV_EPSILON*MAP_NAV_EPSILON))
+        {
+            v2 Ahead = At + MAP_NAV_EPSILON*Normalize(Goal - At);
+            for(u32 Index = 0; Index < Current->LinkCount; ++Index)
+            {
+                kea_nav_link *Link = Mesh->Links + Current->FirstLink + Index;
+                v2 A = V2(Link->A[0], Link->A[1]);
+                v2 Along = V2(Link->B[0], Link->B[1]) - A;
+                r32 AlongSq = Inner(Along, Along);
+                r32 T = (AlongSq > 0.0f) ? Clamp01(Inner(At - A, Along) / AlongSq) : 0.0f;
+                // NOTE(pvlso): One the way goes into is best; else any linked here, whose own links take it on
+                if(LengthSq(At - (A + T*Along)) <= MAP_NAV_EPSILON*MAP_NAV_EPSILON)
+                {
+                    if(MapNavPolyContains(Mesh, Link->Poly, Ahead))
+                    {
+                        Next = (s32)Link->Poly;
+                        break;
+                    }
+                    if(Next < 0) {Next = (s32)Link->Poly;}
+                }
+            }
+            Handed = (Next >= 0);
+        }
+        else
+        {
+            Handed = false;
         }
 
         At = Hit;
@@ -736,13 +778,17 @@ TestMapNav(memory_arena *Arena)
     v2 AtWall = MoveMapNav(&Mesh, V2(1, 8), &WallLevel, V2(-3, 8));
     s32 UnderLevel = 0;
     v2 Under = MoveMapNav(&Mesh, V2(0.5f, 2.0f), &UnderLevel, V2(2, 2));
+    // NOTE(pvlso): From the stairs' corner on the room's wall, down along that wall past the link's end
+    s32 FootLevel = 1;
+    v2 FromFoot = MoveMapNav(&Mesh, V2(10, 6), &FootLevel, V2(10, 9));
     s32 ClosestLevel = 0;
     v2 Closest = V2(16, 5);
     ClosestMapNavPoint(&Mesh, &Closest, &ClosestLevel);
     b32 Moved = ((StairsLevel == 1) && PointsAreEqual(UpStairs, V2(11, 5), 0.001f) && (PillarLevel == 0) &&
                  (AbsoluteValue(AlongPillar.x - 4.0f) < 0.05f) && (AlongPillar.y > 5.1f) && (WallLevel == 0) &&
                  (AbsoluteValue(AtWall.x) < 0.05f) && (UnderLevel == 0) && PointsAreEqual(Under, V2(2, 2), 0.001f) &&
-                 (ClosestLevel == 1) && (AbsoluteValue(Closest.x - 14.0f) < 0.05f));
+                 (ClosestLevel == 1) && (AbsoluteValue(Closest.x - 14.0f) < 0.05f) && (FootLevel == 0) &&
+                 PointsAreEqual(FromFoot, V2(10, 9), 0.05f));
 
     // NOTE(pvlso): Around the pillar over its corners, then a point on the stairs' edge where the level changes
     b32 AroundPillar = false;
@@ -766,6 +812,7 @@ TestMapNav(memory_arena *Arena)
         LOG_ERROR("  stairs %.3f,%.3f on %d, pillar %.3f,%.3f, wall %.3f,%.3f, under %.3f,%.3f on %d, closest %.3f,%.3f on %d",
                   UpStairs.x, UpStairs.y, StairsLevel, AlongPillar.x, AlongPillar.y, AtWall.x, AtWall.y, Under.x, Under.y,
                   UnderLevel, Closest.x, Closest.y, ClosestLevel);
+        LOG_ERROR("  from the stairs' foot %.3f,%.3f on %d", FromFoot.x, FromFoot.y, FootLevel);
         for(u32 Index = 0; Index < Across; ++Index)
         {
             LOG_ERROR("  %.3f %.3f level %d", Path[Index].P.x, Path[Index].P.y, Path[Index].Level);
