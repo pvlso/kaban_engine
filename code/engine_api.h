@@ -349,6 +349,11 @@ struct game_memory
     // NOTE(pvlso): The game's own state, usually pushed on the permanent arena on the first frame
     void *GameState;
 
+    // NOTE(pvlso): Goes up by one every time the engine swaps the running game to a newly built KEA (a map saved in the
+    // map editor, a picture added). Asset indices and pointers taken from the old one are wrong then: a game that
+    // keeps any compares this with the count it last saw and takes them again (reloads its map).
+    u32 AssetSwapCount;
+
     // NOTE(pvlso): Refilled before every call, the engine code can be reloaded as well
     platform_api PlatformAPI;
     engine_api EngineAPI;

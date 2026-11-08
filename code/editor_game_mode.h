@@ -20,6 +20,8 @@ struct editor_mode_game
 
     game_memory Memory;
     engine_assets *Assets;
+    // NOTE(pvlso): Assets lives here, so a swap to a new KEA frees the old one's memory (see SwapRequested)
+    memory_arena AssetArena;
     // NOTE(pvlso): The fonts the game asked for (GetFont), freed when it stops
     game_fonts Fonts;
     // NOTE(pvlso): The KEA in the project's data/keas that Assets was loaded from, empty when there's none
@@ -39,6 +41,11 @@ struct editor_mode_game
     u64 BuiltDataSignature;
     f32 DataCheckTimer;
     char AssetStatus[256];
+    // NOTE(pvlso): A new KEA was built while the game runs. A swap takes two frames like Stop: the first one lets
+    // the in-flight loads finish and doesn't run the game (SwapRequested), the second frees the old assets, loads
+    // the new KEA and counts the swap in Memory.AssetSwapCount (Swapping).
+    b32 SwapRequested;
+    b32 Swapping;
 
     char Status[256];
     char BuildLog[16384];

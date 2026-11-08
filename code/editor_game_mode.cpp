@@ -591,9 +591,10 @@ ParseGameDataKEAVersion(char *Name, u32 *Version)
 }
 
 // NOTE(pvlso): The newest game_data_<version>.kea in the project's data/keas (the data root is the
-// project's while it runs), the assets mode writes those. Its name goes to FileName, empty when there's none.
+// project's while it runs), the assets mode writes those. Its name goes to FileName, empty when there's none. The
+// assets go into Arena, the game's own (editor_mode_game AssetArena), so a swap can free them.
 internal engine_assets *
-LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *FileName, umm FileNameCount)
+LoadGameAssets(memory_arena *Arena, transient_state *TranState, char *FileName, umm FileNameCount)
 {
     TIMED_FUNCTION();
 
@@ -622,7 +623,7 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *File
 
         if(BestFileName)
         {
-            Result = AllocateAssets(BestFileName, &EditorState->ModeArena, TempMem.Arena,
+            Result = AllocateAssets(BestFileName, Arena, TempMem.Arena,
                                     TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
             FormatString(FileNameCount, FileName, "%s", BestFileName);
         }
@@ -636,8 +637,8 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *File
 #define GAME_DATA_CHECK_INTERVAL 0.5f
 
 // NOTE(pvlso): The data folders are checked like the sources: when what a KEA is built from changes (a map saved in
-// the map editor, a picture dropped in bmps/), a new KEA is built. The running game keeps the one it loaded until it's
-// run again.
+// the map editor, a picture dropped in bmps/), a new KEA is built and the running game is swapped to it (see
+// SwapRequested).
 internal void
 UpdateGameData(editor_state *EditorState, editor_mode_game *Game, transient_state *TranState, f32 dt)
 {
@@ -653,8 +654,8 @@ UpdateGameData(editor_state *EditorState, editor_mode_game *Game, transient_stat
             char Built[64];
             if(BuildProjectKEA(EditorState, &TranState->TranArena, Game->AssetFileName, Built, sizeof(Built)))
             {
-                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
-                             "The data changed: %s built, Stop and Run to use it", Built);
+                Game->SwapRequested = true;
+                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: %s built", Built);
             }
             else
             {
@@ -798,7 +799,7 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
     FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
     Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
     Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
-    Game->Assets = LoadGameAssets(EditorState, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
+    Game->Assets = LoadGameAssets(&Game->AssetArena, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
     EditorState->Game = Game;
 
     LOG("Run %s", Game->ProjectName);
@@ -830,8 +831,8 @@ ClearGameMemory(editor_mode_game *Game)
     Game->Memory.GameState = 0;
 }
 
-// NOTE(pvlso): Queues a delete for the texture of every loaded bitmap and closes the KEA. The
-// asset memory itself is in the mode arena, which the next mode frees.
+// NOTE(pvlso): Queues a delete for the texture of every loaded bitmap and closes the KEA. The asset memory itself
+// is in Game->AssetArena, which the caller clears.
 internal void
 FreeGameAssets(engine_assets *Assets)
 {
@@ -904,9 +905,53 @@ FinishStopGame(editor_state *EditorState, transient_state *TranState)
     {
         FreeGameAssets(Game->Assets);
     }
+    Clear(&Game->AssetArena);
     FreeGameFonts(&Game->Fonts, TranState->TextureOpQueue);
 
     PlayTitleScreen(EditorState, TranState);
+}
+
+// NOTE(pvlso): The second frame of a swap (see SwapRequested): the loads the first frame finished have their
+// textures by now, so the old assets can go. The game is told by Memory.AssetSwapCount and reloads what it took
+// from them on this frame's update.
+internal void
+FinishAssetSwap(editor_mode_game *Game, transient_state *TranState)
+{
+    TIMED_FUNCTION();
+
+    Game->Swapping = false;
+
+    char OldFileName[256];
+    FormatString(sizeof(OldFileName), OldFileName, "%s", Game->AssetFileName);
+    if(Game->Assets)
+    {
+        FreeGameAssets(Game->Assets);
+        Game->Assets = 0;
+    }
+    Clear(&Game->AssetArena);
+
+    Game->Assets = LoadGameAssets(&Game->AssetArena, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
+    ++Game->Memory.AssetSwapCount;
+
+    if(Game->Assets)
+    {
+        LOG("%s assets swapped: %s -> %s", Game->ProjectName, OldFileName[0] ? OldFileName : "none",
+            Game->AssetFileName);
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: the game swapped to %s",
+                     Game->AssetFileName);
+
+        // NOTE(pvlso): Closed by FreeGameAssets, so the one the game held goes now too
+        u32 Version;
+        if(ParseGameDataKEAVersion(Game->AssetFileName, &Version))
+        {
+            DeleteOlderKEAs(Version, Game->AssetFileName, &TranState->TranArena);
+        }
+    }
+    else
+    {
+        LOG_WARNING("%s: the swap found no game_data_<version>.kea in its data/keas", Game->ProjectName);
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed, but no KEA was found to swap to");
+    }
 }
 
 internal void
@@ -1012,6 +1057,10 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     else
     {
         UpdateGameBuild(Game, TranState, Input->dtForFrame);
+        if(Game->Swapping)
+        {
+            FinishAssetSwap(Game, TranState);
+        }
         UpdateGameData(EditorState, Game, TranState, Input->dtForFrame);
 
 #if !EDITOR_INTERNAL
@@ -1026,7 +1075,14 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
             LOG("Restart %s", Game->ProjectName);
         }
 
-        if(Game->UpdateAndRender)
+        if(Game->SwapRequested)
+        {
+            // NOTE(pvlso): The first frame of a swap: the game doesn't run, so nothing new starts loading
+            Platform.CompleteAllWork(TranState->LowPriorityQueue);
+            Game->SwapRequested = false;
+            Game->Swapping = true;
+        }
+        else if(Game->UpdateAndRender)
         {
             Game->Memory.PlatformAPI = Platform;
             Game->Memory.EngineAPI = GetEngineAPI();
