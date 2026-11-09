@@ -148,7 +148,8 @@ struct ttf_name_record
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): KEA
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'f')
+// NOTE(pvlso): 'keag' since kea_asset got SourceStamp (2026-11-08); a KEA of another magic is rebuilt
+#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'g')
 
 enum kea_asset_type
 {
@@ -436,6 +437,9 @@ struct kea_asset
 {
     u64 DataOffset;
     u64 GUID;
+    // NOTE(pvlso): For a bitmap of any kind: what its pixels were made of (the image file's name and write time, how
+    // it was cut), so the next build copies them from this KEA instead of decoding the image again. 0 for the rest.
+    u64 SourceStamp;
 
     u32 AssetIndex;
 

@@ -656,34 +656,12 @@ LoadGameAssets(memory_arena *Arena, transient_state *TranState, char *FileName, 
     TIMED_FUNCTION();
 
     engine_assets *Result = 0;
-    FileName[0] = 0;
 
     temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
-    u32 FileCount = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
-    if(FileCount)
+    if(NewestGameDataKEA(FileName, FileNameCount, TempMem.Arena))
     {
-        char **FileNames = PushArray(TempMem.Arena, FileCount, char *);
-        FileCount = Platform.ListFilesInDirectory(PlatformFileType_KEA, FileNames, TempMem.Arena);
-
-        char *BestFileName = 0;
-        u32 BestVersion = 0;
-        for(u32 FileIndex = 0; FileIndex < FileCount; ++FileIndex)
-        {
-            u32 Version = 0;
-            if(ParseGameDataKEAVersion(FileNames[FileIndex], &Version) &&
-               (!BestFileName || (Version > BestVersion)))
-            {
-                BestFileName = FileNames[FileIndex];
-                BestVersion = Version;
-            }
-        }
-
-        if(BestFileName)
-        {
-            Result = AllocateAssets(BestFileName, Arena, TempMem.Arena,
-                                    TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
-            FormatString(FileNameCount, FileName, "%s", BestFileName);
-        }
+        Result = AllocateAssets(FileName, Arena, TempMem.Arena,
+                                TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
     }
     EndTemporaryMemory(TempMem);
 
@@ -704,21 +682,30 @@ UpdateGameData(editor_state *EditorState, editor_mode_game *Game, transient_stat
     {
         Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
         u64 Signature = AssetDataSignature(&TranState->TranArena);
-        if(Signature != Game->BuiltDataSignature)
+        if(!Game->DataBuilding && !Game->LoadingAssets && (Signature != Game->BuiltDataSignature) &&
+           StartKEABuild(EditorState, TranState, Game->AssetFileName))
         {
             // NOTE(pvlso): Set before the build, a failed one isn't retried until the data changes again
             Game->BuiltDataSignature = Signature;
-            char Built[64];
-            if(BuildProjectKEA(EditorState, &TranState->TranArena, Game->AssetFileName, Built, sizeof(Built)))
-            {
-                Game->SwapRequested = true;
-                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: %s built", Built);
-            }
-            else
-            {
-                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
-                             "The data changed, but building %s failed (see the log)", Built);
-            }
+            Game->DataBuilding = true;
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: building a new KEA...");
+        }
+    }
+
+    // NOTE(pvlso): The game runs on while the worker builds, and swaps once it's done
+    kea_build_job *Job = &EditorState->KEABuild;
+    if(Game->DataBuilding && !Job->Running)
+    {
+        Game->DataBuilding = false;
+        if(Job->Result)
+        {
+            Game->SwapRequested = true;
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: %s built", Job->Built);
+        }
+        else
+        {
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                         "The data changed, but building %s failed (see the log)", Job->Built);
         }
     }
 }
@@ -790,7 +777,7 @@ ReadGameBuildLog(editor_mode_game *Game, transient_state *TranState)
 }
 
 internal void
-UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
+UpdateGameBuild(editor_state *EditorState, editor_mode_game *Game, transient_state *TranState, f32 dt)
 {
     if(Game->Building)
     {
@@ -823,6 +810,10 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
                 Game->BuildFailed = false;
                 FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
                 LOG("%s %s", Game->ProjectName, (Game->LoadCount > 1) ? "reloaded" : "loaded");
+
+                game_code_memo *Memo = &EditorState->LastGameBuild;
+                FormatString(sizeof(Memo->ProjectName), Memo->ProjectName, "%s", Game->ProjectName);
+                Memo->SourceWriteTime = Game->BuiltSourceWriteTime;
             }
         }
     }
@@ -839,22 +830,11 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
     }
 }
 
-// NOTE(pvlso): The game mode, pushed on Arena: the mode arena for Run, PlayArena when the map editor's Play started it
-internal editor_mode_game *
-StartGame(editor_state *EditorState, transient_state *TranState, char *Name, memory_arena *Arena)
+// NOTE(pvlso): The newest KEA loaded into the game mode, the older ones deleted
+internal void
+LoadGameModeAssets(editor_mode_game *Game, transient_state *TranState)
 {
-    // NOTE(pvlso): The game's assets come from its own data/, built again first when it changed since the last KEA
-    UseDataOf(EditorState, Name);
-    BuildProjectKEAIfStale(EditorState, &TranState->TranArena);
-
-    editor_mode_game *Game = PushStruct(Arena, editor_mode_game);
-    FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
-    Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
-    Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
     Game->Assets = LoadGameAssets(&Game->AssetArena, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
-    EditorState->Game = Game;
-
-    LOG("Run %s", Game->ProjectName);
     if(Game->Assets)
     {
         LOG("%s assets: %s", Game->ProjectName, Game->AssetFileName);
@@ -870,9 +850,52 @@ StartGame(editor_state *EditorState, transient_state *TranState, char *Name, mem
     {
         LOG_WARNING("%s has no game_data_<version>.kea in its data/keas", Game->ProjectName);
     }
+}
 
-    // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
-    StartGameBuild(Game);
+// NOTE(pvlso): The game mode, pushed on Arena: the mode arena for Run, PlayArena when the map editor's Play started it.
+// The KEA is built first on a worker when the data changed since the last one (the game waits for it, LoadingAssets),
+// while the game's library builds alongside; a library the last good build made this session from the same sources
+// loads without building.
+internal editor_mode_game *
+StartGame(editor_state *EditorState, transient_state *TranState, char *Name, memory_arena *Arena)
+{
+    f64 Start = Platform.GetSeconds();
+    UseDataOf(EditorState, Name);
+
+    editor_mode_game *Game = PushStruct(Arena, editor_mode_game);
+    FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
+    Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
+    Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
+    Game->StartSeconds = Start;
+    EditorState->Game = Game;
+
+    LOG("Run %s", Game->ProjectName);
+    if(ProjectKEAIsStale(&TranState->TranArena) && StartKEABuild(EditorState, TranState, 0))
+    {
+        LOG("The data changed since the last KEA, building a new one");
+        Game->LoadingAssets = true;
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "Building the KEA...");
+    }
+    else
+    {
+        LoadGameModeAssets(Game, TranState);
+    }
+
+    game_code_memo *Memo = &EditorState->LastGameBuild;
+    u64 SourceWriteTime = Platform.GetProjectWriteTime(Game->ProjectName);
+    if(StringsAreEqual(Memo->ProjectName, Game->ProjectName) && (Memo->SourceWriteTime == SourceWriteTime) &&
+       LoadGameCode(Game))
+    {
+        Game->BuiltSourceWriteTime = SourceWriteTime;
+        Game->SourceCheckTimer = GAME_SOURCE_CHECK_INTERVAL;
+        FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
+        LOG("%s: no source changed since its last build, the library loads as it is", Game->ProjectName);
+    }
+    else
+    {
+        // NOTE(pvlso): The first Run of a session builds, so the library matches the sources and the editor's mode
+        StartGameBuild(Game);
+    }
 
     return(Game);
 }
@@ -1194,7 +1217,18 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     }
     else
     {
-        UpdateGameBuild(Game, TranState, Input->dtForFrame);
+        UpdateGameBuild(EditorState, Game, TranState, Input->dtForFrame);
+        if(Game->LoadingAssets && !EditorState->KEABuild.Running)
+        {
+            Game->LoadingAssets = false;
+            Game->AssetStatus[0] = 0;
+            if(!EditorState->KEABuild.Result)
+            {
+                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                             "Building %s failed (see the log), the newest KEA there is loads", EditorState->KEABuild.Built);
+            }
+            LoadGameModeAssets(Game, TranState);
+        }
         if(Game->Swapping)
         {
             FinishAssetSwap(Game, TranState);
@@ -1220,8 +1254,13 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
             Game->SwapRequested = false;
             Game->Swapping = true;
         }
-        else if(Game->UpdateAndRender)
+        else if(Game->UpdateAndRender && !Game->LoadingAssets)
         {
+            if(!Game->StartLogged)
+            {
+                Game->StartLogged = true;
+                LOG("%s started in %.2f s", Game->ProjectName, Platform.GetSeconds() - Game->StartSeconds);
+            }
             Game->Memory.PlatformAPI = Platform;
             Game->Memory.EngineAPI = GetEngineAPI();
 #if EDITOR_INTERNAL

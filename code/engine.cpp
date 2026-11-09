@@ -107,9 +107,14 @@ LoadEditorMetadata(editor_state *EditorState)
 // NOTE(pvlso): Points every data file at a project (projects/<name>/data/ and its editor_metadata.json),
 // or at the engine's data/ when ProjectName is 0. The assets mode and a running game use their
 // project's data, the title screen goes back to the engine's.
+internal void WaitForKEABuild(editor_state *EditorState);
+
 internal b32
 UseDataOf(editor_state *EditorState, char *ProjectName)
 {
+    // NOTE(pvlso): A KEA build reads and writes under the data root
+    WaitForKEABuild(EditorState);
+
     b32 Result = Platform.SetDataProject(ProjectName);
     if(Result)
     {

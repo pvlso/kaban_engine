@@ -46,6 +46,13 @@ struct editor_mode_game
     // the new KEA and counts the swap in Memory.AssetSwapCount (Swapping).
     b32 SwapRequested;
     b32 Swapping;
+    // NOTE(pvlso): The KEA builds on a worker (EditorState->KEABuild): at the start the game waits for it
+    // (LoadingAssets); while it runs, a changed folder's build goes on beside it (DataBuilding) and swaps when done
+    b32 LoadingAssets;
+    b32 DataBuilding;
+    // NOTE(pvlso): For the log: how long from Run or Play to the game's first frame
+    f64 StartSeconds;
+    b32 StartLogged;
 
     char Status[256];
     char BuildLog[16384];

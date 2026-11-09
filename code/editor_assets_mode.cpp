@@ -364,6 +364,32 @@ HasGameDataKEA(memory_arena *Arena)
     return(Result);
 }
 
+// NOTE(pvlso): The newest game_data_<version>.kea in data/keas into Dest, false (and Dest empty) when there's none
+internal b32
+NewestGameDataKEA(char *Dest, umm DestCount, memory_arena *Arena)
+{
+    b32 Result = false;
+    Dest[0] = 0;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    u32 BestVersion = 0;
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version) && (!Result || (Version > BestVersion)))
+        {
+            FormatString(DestCount, Dest, "%s", Names[Index]);
+            BestVersion = Version;
+            Result = true;
+        }
+    }
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}
+
 // NOTE(pvlso): Every game_data_<version>.kea but the newest and KeepOpen (the one a running game reads; Windows can't
 // delete it anyway) is deleted: only the newest is ever loaded
 internal void
@@ -409,10 +435,14 @@ BuildProjectKEA(editor_state *EditorState, memory_arena *TempArena, char *KeepOp
         LOG_WARNING("No asset_tags_*.ket in data/kets: the KEA is built without tags");
     }
 
+    // NOTE(pvlso): The newest KEA is the previous build, its unchanged bitmaps are copied (BuildKEA)
+    char Previous[256];
+    NewestGameDataKEA(Previous, sizeof(Previous), TempMem.Arena);
+
     kesa_header Header = {};
     kesa_asset *List = ScanAssetList(&Header, Tags, TagHeader.TagCount, TempMem.Arena);
     Header.Version = UpdateEditorVersionFile(EditorState);
-    b32 Result = BuildKEA(&Header, List, &TagHeader, Tags, TempMem.Arena);
+    b32 Result = BuildKEA(&Header, List, &TagHeader, Tags, TempMem.Arena, Previous);
     Platform.DeallocateMemory(List);
     FreeTagMaps(&TagHeader, Tags, Keys);
     EndTemporaryMemory(TempMem);
@@ -435,19 +465,57 @@ BuildProjectKEA(editor_state *EditorState, memory_arena *TempArena, char *KeepOp
     return(Result);
 }
 
-// NOTE(pvlso): Builds the KEA when there's none or the data changed since the last build (a Run after editing maps)
+// NOTE(pvlso): Whether the KEA has to be built: there's none, or the data changed since the last build
 internal b32
-BuildProjectKEAIfStale(editor_state *EditorState, memory_arena *TempArena)
+ProjectKEAIsStale(memory_arena *TempArena)
 {
-    b32 Result = false;
-    u64 Signature = AssetDataSignature(TempArena);
-    if(!HasGameDataKEA(TempArena) || (Signature != ReadLastBuildSignature(TempArena)))
+    b32 Result = (!HasGameDataKEA(TempArena) || (AssetDataSignature(TempArena) != ReadLastBuildSignature(TempArena)));
+    return(Result);
+}
+
+// NOTE(pvlso): The KEA build on a worker thread (the high priority queue), so the editor doesn't stop while it runs
+// (kea_build_job). The data root mustn't change under it: UseDataOf waits for it first.
+internal PLATFORM_WORK_QUEUE_CALLBACK(DoKEABuildWork)
+{
+    kea_build_job *Job = (kea_build_job *)Data;
+    Job->Result = BuildProjectKEA(Job->EditorState, &Job->Arena, Job->KeepOpen[0] ? Job->KeepOpen : 0, Job->Built,
+                                  sizeof(Job->Built));
+    Clear(&Job->Arena);
+
+    CompletePreviousWritesBeforeFutureWrites;
+    Job->Running = false;
+}
+
+// NOTE(pvlso): False when a build is already running (its result comes first, then a new check)
+internal b32
+StartKEABuild(editor_state *EditorState, transient_state *TranState, char *KeepOpen)
+{
+    kea_build_job *Job = &EditorState->KEABuild;
+    b32 Result = !Job->Running;
+    if(Result)
     {
-        LOG("The data changed since the last KEA, building a new one");
-        Result = BuildProjectKEA(EditorState, TempArena, 0, 0, 0);
+        Job->EditorState = EditorState;
+        Job->Queue = TranState->HighPriorityQueue;
+        Job->Result = false;
+        Job->Built[0] = 0;
+        FormatString(sizeof(Job->KeepOpen), Job->KeepOpen, "%s", KeepOpen ? KeepOpen : "");
+        Job->Running = true;
+        CompletePreviousWritesBeforeFutureWrites;
+        Platform.AddEntry(Job->Queue, DoKEABuildWork, Job);
     }
 
     return(Result);
+}
+
+internal void
+WaitForKEABuild(editor_state *EditorState)
+{
+    kea_build_job *Job = &EditorState->KEABuild;
+    if(Job->Running)
+    {
+        LOG("Waiting for the KEA build to finish");
+        Platform.CompleteAllWork(Job->Queue);
+    }
 }
 
 internal void
@@ -1706,6 +1774,7 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     // NOTE(pvlso): The same build a Run or a changed folder starts (BuildProjectKEA)
                     if(Build)
                     {
+                        WaitForKEABuild(EditorState);
                         BuildProjectKEA(EditorState, &TranState->TranArena, 0, 0, 0);
                         editor_meta *EditorMeta = &EditorState->EditorMeta;
                         AssetsMode->StoredHeader.Version = (((u32)EditorMeta->KESAVersion[0] << 24) |

@@ -107,6 +107,27 @@ struct editor_meta
     u8 KESAVersion[4];
 };
 
+// NOTE(pvlso): A KEA build running on a worker thread (StartKEABuild). The worker owns everything below until Running
+// goes false; Result and Built say how it went.
+struct kea_build_job
+{
+    volatile b32 Running;
+    b32 Result;
+    char Built[64];      // NOTE(pvlso): the new KEA's name
+    char KeepOpen[256];  // NOTE(pvlso): the KEA a running game reads, not deleted
+    struct editor_state *EditorState;
+    platform_work_queue *Queue;
+    memory_arena Arena;
+};
+
+// NOTE(pvlso): The game library the last successful build made this session: Run and Play load it as it is when the
+// project's sources haven't changed since (no build.bat)
+struct game_code_memo
+{
+    char ProjectName[PROJECT_NAME_COUNT];
+    u64 SourceWriteTime;
+};
+
 struct game_state;
 struct editor_state
 {
@@ -145,6 +166,9 @@ struct editor_state
     // it was, its undo history and all. 0 when the game was started by Run.
     editor_mode_map *PausedMap;
     memory_arena PlayArena;
+
+    kea_build_job KEABuild;
+    game_code_memo LastGameBuild;
 };
 
 struct transient_state

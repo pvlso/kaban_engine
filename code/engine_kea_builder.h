@@ -70,6 +70,8 @@ struct kea_builder_added_asset_list
 {
     kea_asset KEAAsset;
     kesa_asset *StoredAsset;
+    // NOTE(pvlso): A bitmap whose pixels are copied from the previous KEA (same GUID and SourceStamp), 0 otherwise
+    kea_asset *Reuse;
 
     added_asset_additional_data Data;
 
@@ -119,6 +121,14 @@ struct kea_builder
     u32 TagAssetsIndeciesCount;
     u32 *TagAssetsIndecies;
     
+    // NOTE(pvlso): The previous KEA (sorted by GUID like any), whose unchanged bitmaps are copied, not decoded again
+    b32 HasPrevious;
+    platform_file_handle PreviousFile;
+    u32 PreviousCount;
+    kea_asset *PreviousAssets;
+    u32 ReusedCount;
+    u32 DecodedCount;
+
     u32 AssetCount;
     kea_builder_added_asset_list *BuilderAssets;
     kea_builder_added_asset_list **SortedBuilderAssets;

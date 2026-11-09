@@ -525,6 +525,9 @@ AssetDataSignature(memory_arena *Arena)
     FormatString(sizeof(Key), Key, "assets.txt|%llu",
                  Platform.GetFileWriteTime(ASSET_LIST_FILE_NAME, PlatformFileType_DataRoot));
     Result += GUIDFromString(Key);
+    // NOTE(pvlso): The KEA format too: a KEA written by an older engine is built again
+    FormatString(sizeof(Key), Key, "kea format|%u", (u32)KEA_MAGIC_VALUE);
+    Result += GUIDFromString(Key);
     EndTemporaryMemory(TempMem);
 
     return(Result);
