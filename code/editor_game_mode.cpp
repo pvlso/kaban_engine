@@ -1173,9 +1173,14 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     editor_mode_game *Game = EditorState->Game;
     nk_context *Nk = EditorState->UIState.Nk;
 
-    if(Game->FromMap && !Game->Stopping && WasPressed(GetController(Input, 0)->Play))
+    engine_button_state PlayKey = GetController(Input, 0)->Play;
+    if(Game->FromMap && Game->PlayKeyArmed && !Game->Stopping && WasPressed(PlayKey))
     {
         Game->StopRequested = true;
+    }
+    if(!PlayKey.EndedDown)
+    {
+        Game->PlayKeyArmed = true;
     }
 
     if(Game->Stopping)

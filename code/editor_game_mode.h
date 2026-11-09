@@ -59,6 +59,9 @@ struct editor_mode_game
 
     // NOTE(pvlso): The map editor's Play started it (EditorState->PausedMap): Stop or F5 goes back there
     b32 FromMap;
+    // NOTE(pvlso): F5 goes back only once it was seen up: the press that started the game runs this mode's first
+    // update on the same frame
+    b32 PlayKeyArmed;
 };
 
 internal void PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName);
