@@ -305,6 +305,19 @@ GameFindEntity(engine_assets *Assets, char *Name)
 }
 
 internal u32
+GameFindMap(engine_assets *Assets, char *FileName)
+{
+    u32 Result = 0;
+    asset *Asset = (Assets && FileName && FileName[0]) ? GetAssetByGUID(Assets, GUIDFromString(FileName)) : 0;
+    if(Asset && (Asset->KEA.Type == KEAType_Map))
+    {
+        Result = (u32)(Asset - Assets->Assets);
+    }
+
+    return(Result);
+}
+
+internal u32
 GameFindEntityByGUID(engine_assets *Assets, u64 GUID)
 {
     u32 Result = 0;
@@ -579,6 +592,7 @@ GetEngineAPI(void)
     Result.GetTilesetInfo = GameGetTilesetInfo;
     Result.GetTileInfo = GameGetTileInfo;
     Result.GetMapInfo = GameGetMapInfo;
+    Result.FindMap = GameFindMap;
     Result.GetMapLayer = GameGetMapLayer;
     Result.GetMapTileset = GameGetMapTileset;
     Result.GetMapEntity = GameGetMapEntity;
@@ -825,20 +839,15 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
     }
 }
 
-internal void
-PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName)
+// NOTE(pvlso): The game mode, pushed on Arena: the mode arena for Run, PlayArena when the map editor's Play started it
+internal editor_mode_game *
+StartGame(editor_state *EditorState, transient_state *TranState, char *Name, memory_arena *Arena)
 {
-    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
-    char Name[PROJECT_NAME_COUNT];
-    FormatString(sizeof(Name), Name, "%s", ProjectName);
-
-    SetEditorMode(EditorState, TranState, EditorMode_Game);
-
     // NOTE(pvlso): The game's assets come from its own data/, built again first when it changed since the last KEA
     UseDataOf(EditorState, Name);
     BuildProjectKEAIfStale(EditorState, &TranState->TranArena);
 
-    editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
+    editor_mode_game *Game = PushStruct(Arena, editor_mode_game);
     FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
     Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
     Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
@@ -864,6 +873,70 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
 
     // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
     StartGameBuild(Game);
+
+    return(Game);
+}
+
+internal void
+PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName)
+{
+    // NOTE(pvlso): ProjectName lives in the mode arena, which SetEditorMode frees
+    char Name[PROJECT_NAME_COUNT];
+    FormatString(sizeof(Name), Name, "%s", ProjectName);
+
+    SetEditorMode(EditorState, TranState, EditorMode_Game);
+    EditorState->PausedMap = 0;
+    StartGame(EditorState, TranState, Name, &EditorState->ModeArena);
+}
+
+// NOTE(pvlso): The map editor's Play (map editor plan, phase 7): the map editor, its map saved, waits in the mode arena
+// (EditorState->PausedMap) and the game starts on that map, at P on Level when HasP (cells from the map's top left,
+// y down), else where the game itself starts. Stop or F5 goes back (ReturnToMapEditor).
+internal void
+PlayGameFromMap(editor_state *EditorState, transient_state *TranState, editor_mode_map *MapMode, b32 HasP, v2 P,
+                s32 Level)
+{
+    Platform.CompleteAllWork(TranState->LowPriorityQueue);
+
+    EditorState->PausedMap = MapMode;
+    EditorState->EditorMode = EditorMode_Game;
+    LOG("Editor mode: Game, from the map editor on %s%s", MapMode->FileName, HasP ? " at the mouse" : "");
+
+    editor_mode_game *Game = StartGame(EditorState, TranState, MapMode->ProjectName, &EditorState->PlayArena);
+    Game->FromMap = true;
+    game_start *Start = &Game->Memory.Start;
+    FormatString(sizeof(Start->MapFileName), Start->MapFileName, "%s", MapMode->FileName);
+    Start->HasP = HasP;
+    Start->P = P;
+    Start->Level = Level;
+    if(HasP)
+    {
+        LOG("Start on %s at %.1f,%.1f, level %d", Start->MapFileName, P.x, P.y, Level);
+    }
+}
+
+// NOTE(pvlso): Back from a game the map editor's Play started: the game mode goes with PlayArena, the map editor goes on
+// as it was. Drags it had going ended while the game ran.
+internal void
+ReturnToMapEditor(editor_state *EditorState, transient_state *TranState)
+{
+    Platform.CompleteAllWork(TranState->LowPriorityQueue);
+
+    editor_mode_map *MapMode = EditorState->PausedMap;
+    EditorState->PausedMap = 0;
+    Clear(&EditorState->PlayArena);
+
+    MapMode->Panning = 0;
+    MapMode->Painting = false;
+    MapMode->Erasing = false;
+    MapMode->RectActive = false;
+    MapMode->PickingBrush = false;
+    MapMode->DraggingEntity = false;
+    MapMode->Scattering = false;
+    MapMode->DragVertex = -1;
+    EditorState->EditorMode = EditorMode_MapEditor;
+    EditorState->MapMode = MapMode;
+    LOG("Editor mode: Map Editor, back on %s", MapMode->FileName);
 }
 
 internal void
@@ -951,7 +1024,14 @@ FinishStopGame(editor_state *EditorState, transient_state *TranState)
     Clear(&Game->AssetArena);
     FreeGameFonts(&Game->Fonts, TranState->TextureOpQueue);
 
-    PlayTitleScreen(EditorState, TranState);
+    if(Game->FromMap && EditorState->PausedMap)
+    {
+        ReturnToMapEditor(EditorState, TranState);
+    }
+    else
+    {
+        PlayTitleScreen(EditorState, TranState);
+    }
 }
 
 // NOTE(pvlso): The second frame of a swap (see SwapRequested): the loads the first frame finished have their
@@ -1049,6 +1129,11 @@ DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
 
     nk_layout_row_dynamic(Nk, 30, 1);
     nk_label(Nk, Game->Status, NK_TEXT_ALIGN_LEFT);
+    if(Game->FromMap)
+    {
+        nk_labelf(Nk, NK_TEXT_ALIGN_LEFT, "Started from the map editor on %s: Stop or F5 goes back",
+                  Game->Memory.Start.MapFileName);
+    }
 
     char Assets[320];
     if(Game->AssetFileName[0])
@@ -1087,6 +1172,11 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
 
     editor_mode_game *Game = EditorState->Game;
     nk_context *Nk = EditorState->UIState.Nk;
+
+    if(Game->FromMap && !Game->Stopping && WasPressed(GetController(Input, 0)->Play))
+    {
+        Game->StopRequested = true;
+    }
 
     if(Game->Stopping)
     {

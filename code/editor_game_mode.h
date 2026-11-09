@@ -56,9 +56,14 @@ struct editor_mode_game
 
     // NOTE(pvlso): Stop takes two frames, see StopGame
     b32 Stopping;
+
+    // NOTE(pvlso): The map editor's Play started it (EditorState->PausedMap): Stop or F5 goes back there
+    b32 FromMap;
 };
 
 internal void PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName);
+internal void PlayGameFromMap(editor_state *EditorState, transient_state *TranState, struct editor_mode_map *MapMode,
+                              b32 HasP, v2 P, s32 Level);
 
 #define EDITOR_GAME_MODE_H
 #endif

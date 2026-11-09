@@ -1803,6 +1803,7 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
     b32 OnMap = Inside && (CellX >= 0) && (CellY >= 0) && ((u32)CellX < MapMode->Width) && ((u32)CellY < MapMode->Height);
     MapMode->HoverX = OnMap ? CellX : -1;
     MapMode->HoverY = OnMap ? CellY : -1;
+    MapMode->HoverCell = MapCellOf(&View, MouseP);
 
     b32 CanPaint = MapMode->HasBrush && (MapMode->CurrentSet >= 0) && MapMode->LayerCount;
     b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive;
@@ -2280,6 +2281,12 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
             nk_layout_row_dynamic(Nk, 28, 2);
             if(nk_button_label(Nk, MapMode->Dirty ? "Save *" : "Save")) {MapMode->SaveRequested = true;}
             if(nk_button_label(Nk, "Save as")) {MapMode->SaveAsRequested = true;}
+            nk_layout_row_template_begin(Nk, 28);
+            nk_layout_row_template_push_static(Nk, 100);
+            nk_layout_row_template_push_dynamic(Nk);
+            nk_layout_row_template_end(Nk);
+            if(nk_button_label(Nk, "Play")) {MapMode->PlayRequested = true;}
+            nk_label(Nk, "saves, F5 over the map: from there", NK_TEXT_LEFT);
         }
 
         if(MapMode->HasMap)
@@ -2510,6 +2517,29 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         PlayTitleScreen(EditorState, TranState);
         return(true);
     }
+
+    // NOTE(pvlso): Play (map editor plan, phase 7): the map is saved, so the KEA the game loads has it, and the game
+    // starts on it; F5 with the mouse over the map starts the hero there, on the current level. Not in the middle of
+    // a drag.
+    b32 PlayKey = WasPressed(GetController(Input, 0)->Play);
+    b32 Dragging = MapMode->Painting || MapMode->Erasing || MapMode->RectActive || MapMode->DraggingEntity ||
+        MapMode->Scattering || MapMode->NavDrawing || (MapMode->DragVertex >= 0) || MapMode->Panning;
+    if((PlayKey || MapMode->PlayRequested) && MapMode->HasMap && !Dragging)
+    {
+        b32 FromMouse = PlayKey && (MapMode->HoverX >= 0);
+        v2 StartP = MapMode->HoverCell;
+        MapMode->PlayRequested = false;
+        b32 WasDirty = MapMode->Dirty;
+        b32 Saved = !WasDirty || SaveMap(MapMode, MapMode->FileName, &TranState->TranArena);
+        if(Saved)
+        {
+            if(WasDirty) {ListMapFiles(MapMode, &EditorState->ModeArena);}
+            PlayGameFromMap(EditorState, TranState, MapMode, FromMouse, StartP, MapMode->CurrentLevel);
+            return(true);
+        }
+        LOG_ERROR("Play: %s couldn't be saved, the game isn't started", MapMode->FileName);
+    }
+    MapMode->PlayRequested = false;
 
     // NOTE(pvlso): The panel changed the selected placement (position, flip, overrides) last frame
     if((MapMode->SelectedEntity >= 0) && (MapMode->SelectedEntity == MapMode->LastSelectedIndex) &&

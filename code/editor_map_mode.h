@@ -130,6 +130,7 @@ struct editor_mode_map
     b32 DimOtherLayers;
     b32 DimOtherLevels;
     s32 HoverX, HoverY;             // NOTE(pvlso): the map cell under the mouse, -1 outside
+    v2 HoverCell;                   // NOTE(pvlso): the point under the mouse in cells, when HoverX isn't -1
     b32 Erasing;
     b32 RectActive;                 // NOTE(pvlso): a Shift drag: fill (left) or clear (right) a rectangle
     b32 RectErase;
@@ -143,6 +144,7 @@ struct editor_mode_map
     u32 MapFileIndex;
     b32 OpenRequested;
     b32 SaveRequested;
+    b32 PlayRequested; // NOTE(pvlso): the panel's Play: the game on this map, where it starts (F5: at the mouse)
     b32 SaveAsRequested;
     s32 NewWidth;
     s32 NewHeight;

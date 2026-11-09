@@ -309,6 +309,8 @@ struct engine_api
     tile_info (*GetTileInfo)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time);
     // NOTE(pvlso): A map at MapIndex (found with GetBestMatchAssets); all zero when it isn't one
     map_info (*GetMapInfo)(engine_assets *Assets, u32 MapIndex);
+    // NOTE(pvlso): The map made of FileName in data/maps (as game_start names it), 0 when the asset file hasn't got it
+    u32 (*FindMap)(engine_assets *Assets, char *FileName);
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
@@ -349,6 +351,14 @@ struct engine_api
 
 // NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
 // start empty and grow through Platform.AllocateMemory, the engine frees them when the game stops.
+struct game_start
+{
+    char MapFileName[64];
+    b32 HasP;
+    v2 P;
+    s32 Level;
+};
+
 struct game_memory
 {
     memory_arena PermanentArena;
@@ -361,6 +371,11 @@ struct game_memory
     // map editor, a picture added). Asset indices and pointers taken from the old one are wrong then: a game that
     // keeps any compares this with the count it last saw and takes them again (reloads its map).
     u32 AssetSwapCount;
+
+    // NOTE(pvlso): Set when the map editor's Play (F5) started the game, empty when Run did: the map being edited by
+    // its file name in data/maps (FindMap gives its asset) and, when HasP, where to start on it: P in cells from the
+    // map's top left (y down), on Level. It stays for Restart.
+    game_start Start;
 
     // NOTE(pvlso): Refilled before every call, the engine code can be reloaded as well
     platform_api PlatformAPI;
@@ -510,6 +525,7 @@ GetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time = 0
 }
 
 inline map_info GetMapInfo(engine_assets *Assets, u32 MapIndex) {return(Engine.GetMapInfo(Assets, MapIndex));}
+inline u32 FindMap(engine_assets *Assets, char *FileName) {return(Engine.FindMap(Assets, FileName));}
 inline map_layer_info
 GetMapLayer(engine_assets *Assets, u32 MapIndex, u32 LayerIndex)
 {

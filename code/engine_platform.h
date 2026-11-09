@@ -146,7 +146,7 @@ typedef struct engine_controller_input
     
     union
     {
-        engine_button_state Buttons[20];
+        engine_button_state Buttons[21];
         struct
         {
             engine_button_state MoveUp;
@@ -174,6 +174,7 @@ typedef struct engine_controller_input
             engine_button_state Undo;
             engine_button_state ShowUI;
             engine_button_state ToggleMute;
+            engine_button_state Play; // NOTE(pvlso): F5, the map editor's Play and back (map editor plan, phase 7)
 
             // NOTE(casey): All buttons must be added above this line
             

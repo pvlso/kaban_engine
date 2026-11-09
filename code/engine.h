@@ -139,6 +139,12 @@ struct editor_state
 //        engine_map_editor *MapEditor;
 //        editor_game_simulate_mode *SimulateGame;
     };
+
+    // NOTE(pvlso): Play from the map editor (map editor plan, phase 7): the map editor stays in the mode arena while
+    // the game runs, the game mode lives in PlayArena; Stop (or F5) clears PlayArena and the map editor goes on where
+    // it was, its undo history and all. 0 when the game was started by Run.
+    editor_mode_map *PausedMap;
+    memory_arena PlayArena;
 };
 
 struct transient_state
