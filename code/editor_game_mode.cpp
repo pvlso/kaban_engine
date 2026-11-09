@@ -488,6 +488,20 @@ GameMoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To)
 }
 
 internal v2
+GameClosestNavPointOnLevel(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level)
+{
+    v2 Result = P;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map)
+    {
+        ClosestMapNavPointOnLevel(&Map->Nav, &Result, Level);
+    }
+
+    return(Result);
+}
+
+internal v2
 GameClosestNavPoint(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level)
 {
     v2 Result = P;
@@ -574,6 +588,7 @@ GetEngineAPI(void)
     Result.FindNavPath = GameFindNavPath;
     Result.MoveOnNav = GameMoveOnNav;
     Result.ClosestNavPoint = GameClosestNavPoint;
+    Result.ClosestNavPointOnLevel = GameClosestNavPointOnLevel;
     Result.FindEntity = GameFindEntity;
     Result.FindEntityByGUID = GameFindEntityByGUID;
     Result.GetEntityInfo = GameGetEntityInfo;

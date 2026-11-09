@@ -332,6 +332,9 @@ struct engine_api
     // NOTE(pvlso): The point of the mesh closest to P and its level in Level; P itself where it's on the mesh, on Level
     // if there's a polygon of that level there. Without a mesh it gives P.
     v2 (*ClosestNavPoint)(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level);
+    // NOTE(pvlso): Only on Level: P where a polygon of Level is under it, else the closest point of Level's polygons,
+    // even where another level is under P. P when Level has no polygons, or without a mesh.
+    v2 (*ClosestNavPointOnLevel)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
@@ -542,6 +545,11 @@ FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, 
 }
 inline v2 MoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To) {return(Engine.MoveOnNav(Assets, MapIndex, From, Level, To));}
 inline v2 ClosestNavPoint(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level) {return(Engine.ClosestNavPoint(Assets, MapIndex, P, Level));}
+inline v2
+ClosestNavPointOnLevel(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level)
+{
+    return(Engine.ClosestNavPointOnLevel(Assets, MapIndex, P, Level));
+}
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
 inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}

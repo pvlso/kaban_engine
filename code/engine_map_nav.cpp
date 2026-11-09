@@ -653,56 +653,82 @@ FindMapNavPath(map_nav_mesh *Mesh, map_nav_scratch *Scratch, v2 From, s32 FromLe
     return(Result);
 }
 
+// NOTE(pvlso): The point on the edges of the mesh's polygons (only Level's when OnlyLevel) closest to P, moved a little
+// inside its polygon; that polygon comes back, -1 when there's none
+internal s32
+NearestMapNavEdgePoint(map_nav_mesh *Mesh, v2 *P, b32 OnlyLevel, s32 Level)
+{
+    s32 Poly = -1;
+    v2 Closest = {};
+    r32 ClosestSq = 0.0f;
+    for(u32 PolyIndex = 0; PolyIndex < Mesh->PolyCount; ++PolyIndex)
+    {
+        kea_nav_poly *Candidate = Mesh->Polys + PolyIndex;
+        if(OnlyLevel && (Candidate->Level != Level)) {continue;}
+        for(u32 Index = 0; Index < Candidate->PointCount; ++Index)
+        {
+            v2 A = Mesh->Points[Candidate->FirstPoint + Index];
+            v2 B = Mesh->Points[Candidate->FirstPoint + (Index + 1) % Candidate->PointCount];
+            v2 Along = B - A;
+            r32 AlongSq = Inner(Along, Along);
+            r32 T = (AlongSq > 0.0f) ? Clamp01(Inner(*P - A, Along) / AlongSq) : 0.0f;
+            v2 OnEdge = A + T*Along;
+            r32 DistanceSq = LengthSq(*P - OnEdge);
+            if((Poly < 0) || (DistanceSq < ClosestSq))
+            {
+                ClosestSq = DistanceSq;
+                Closest = OnEdge;
+                Poly = (s32)PolyIndex;
+            }
+        }
+    }
+
+    if(Poly >= 0)
+    {
+        kea_nav_poly *Found = Mesh->Polys + Poly;
+        v2 Center = {};
+        for(u32 Index = 0; Index < Found->PointCount; ++Index)
+        {
+            Center += Mesh->Points[Found->FirstPoint + Index];
+        }
+        Center *= 1.0f / (r32)Found->PointCount;
+        *P = Closest + 2.0f*MAP_NAV_EPSILON*Normalize(Center - Closest);
+    }
+
+    return(Poly);
+}
+
 // NOTE(pvlso): The point of the mesh closest to P, a little inside its polygon, and that polygon's level in Level. Where
 // P is on the mesh it stays, on Level if there's a polygon of that level there. False on an empty mesh.
 internal b32
 ClosestMapNavPoint(map_nav_mesh *Mesh, v2 *P, s32 *Level)
 {
-    b32 Result = false;
     s32 Poly = FindMapNavPoly(Mesh, *P, *Level);
+    if(Poly < 0)
+    {
+        Poly = NearestMapNavEdgePoint(Mesh, P, false, 0);
+    }
     if(Poly >= 0)
     {
         *Level = Mesh->Polys[Poly].Level;
-        Result = true;
     }
-    else
-    {
-        v2 Closest = {};
-        r32 ClosestSq = 0.0f;
-        for(u32 PolyIndex = 0; PolyIndex < Mesh->PolyCount; ++PolyIndex)
-        {
-            kea_nav_poly *Candidate = Mesh->Polys + PolyIndex;
-            for(u32 Index = 0; Index < Candidate->PointCount; ++Index)
-            {
-                v2 A = Mesh->Points[Candidate->FirstPoint + Index];
-                v2 B = Mesh->Points[Candidate->FirstPoint + (Index + 1) % Candidate->PointCount];
-                v2 Along = B - A;
-                r32 AlongSq = Inner(Along, Along);
-                r32 T = (AlongSq > 0.0f) ? Clamp01(Inner(*P - A, Along) / AlongSq) : 0.0f;
-                v2 OnEdge = A + T*Along;
-                r32 DistanceSq = LengthSq(*P - OnEdge);
-                if((Poly < 0) || (DistanceSq < ClosestSq))
-                {
-                    ClosestSq = DistanceSq;
-                    Closest = OnEdge;
-                    Poly = (s32)PolyIndex;
-                }
-            }
-        }
 
-        if(Poly >= 0)
-        {
-            kea_nav_poly *Found = Mesh->Polys + Poly;
-            v2 Center = {};
-            for(u32 Index = 0; Index < Found->PointCount; ++Index)
-            {
-                Center += Mesh->Points[Found->FirstPoint + Index];
-            }
-            Center *= 1.0f / (r32)Found->PointCount;
-            *P = Closest + 2.0f*MAP_NAV_EPSILON*Normalize(Center - Closest);
-            *Level = Found->Level;
-            Result = true;
-        }
+    return(Poly >= 0);
+}
+
+// NOTE(pvlso): Like ClosestMapNavPoint, but only on Level: P stays where a polygon of Level is under it, else it goes
+// to the closest point of Level's polygons, even where another level is under P. False when Level has no polygons.
+internal b32
+ClosestMapNavPointOnLevel(map_nav_mesh *Mesh, v2 *P, s32 Level)
+{
+    b32 Result = false;
+    for(u32 PolyIndex = 0; !Result && (PolyIndex < Mesh->PolyCount); ++PolyIndex)
+    {
+        Result = ((Mesh->Polys[PolyIndex].Level == Level) && MapNavPolyContains(Mesh, PolyIndex, *P));
+    }
+    if(!Result)
+    {
+        Result = (NearestMapNavEdgePoint(Mesh, P, true, Level) >= 0);
     }
 
     return(Result);
@@ -888,6 +914,9 @@ TestMapNav(memory_arena *Arena)
     // NOTE(pvlso): From the stairs' corner on the room's wall, down along that wall past the link's end
     s32 FootLevel = 1;
     v2 FromFoot = MoveMapNav(&Mesh, V2(10, 6), &FootLevel, V2(10, 9));
+    // NOTE(pvlso): A point on the room beside the platform, kept on the platform's level, goes to its edge
+    v2 OnPlatform = V2(4, 2);
+    b32 PlatformFound = ClosestMapNavPointOnLevel(&Mesh, &OnPlatform, 2);
     s32 ClosestLevel = 0;
     v2 Closest = V2(16, 5);
     ClosestMapNavPoint(&Mesh, &Closest, &ClosestLevel);
@@ -895,7 +924,8 @@ TestMapNav(memory_arena *Arena)
                  (AbsoluteValue(AlongPillar.x - 4.0f) < 0.05f) && (AlongPillar.y > 5.1f) && (WallLevel == 0) &&
                  (AbsoluteValue(AtWall.x) < 0.05f) && (UnderLevel == 0) && PointsAreEqual(Under, V2(2, 2), 0.001f) &&
                  (ClosestLevel == 1) && (AbsoluteValue(Closest.x - 14.0f) < 0.05f) && (FootLevel == 0) &&
-                 PointsAreEqual(FromFoot, V2(10, 9), 0.05f));
+                 PointsAreEqual(FromFoot, V2(10, 9), 0.05f) && PlatformFound &&
+                 PointsAreEqual(OnPlatform, V2(3, 2), 0.05f));
 
     // NOTE(pvlso): Around the pillar over its corners, then a point on the stairs' edge where the level changes
     b32 AroundPillar = false;
@@ -920,7 +950,8 @@ TestMapNav(memory_arena *Arena)
         LOG_ERROR("  stairs %.3f,%.3f on %d, pillar %.3f,%.3f, wall %.3f,%.3f, under %.3f,%.3f on %d, closest %.3f,%.3f on %d",
                   UpStairs.x, UpStairs.y, StairsLevel, AlongPillar.x, AlongPillar.y, AtWall.x, AtWall.y, Under.x, Under.y,
                   UnderLevel, Closest.x, Closest.y, ClosestLevel);
-        LOG_ERROR("  from the stairs' foot %.3f,%.3f on %d", FromFoot.x, FromFoot.y, FootLevel);
+        LOG_ERROR("  from the stairs' foot %.3f,%.3f on %d, kept on the platform %.3f,%.3f", FromFoot.x, FromFoot.y,
+                  FootLevel, OnPlatform.x, OnPlatform.y);
         for(u32 Index = 0; Index < Across; ++Index)
         {
             LOG_ERROR("  %.3f %.3f level %d", Path[Index].P.x, Path[Index].P.y, Path[Index].Level);
