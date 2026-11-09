@@ -8,9 +8,9 @@
 
 /*
   NOTE(pvlso): The platform side of the log (engine_debug_interface.h). Internal builds only.
-  Every entry goes into GlobalDebugTable->Log and is appended to kaban.log next to the exe,
-  which is truncated at startup. Times come from glfwGetTime, so PlatformInitLog has to run
-  after glfwInit.
+  Every entry goes into GlobalDebugTable->Log, is appended to kaban.log next to the exe,
+  which is truncated at startup, and is printed to the console window the debug exe opens
+  with (stdout). Times come from glfwGetTime, so PlatformInitLog has to run after glfwInit.
 */
 
 #if EDITOR_INTERNAL
@@ -67,23 +67,24 @@ DEBUG_LOG_WRITE(PlatformLogWrite)
     PlatformLogCopyString(Entry->Message, sizeof(Entry->Message), Message);
     ++Log->EntryCount;
 
-    if(GlobalLogFileIsOpen)
-    {
-        char const *LevelName = ((Level == DebugLog_Error) ? "ERROR" :
-                                 (Level == DebugLog_Warning) ? "WARNING" : "INFO");
+    char const *LevelName = ((Level == DebugLog_Error) ? "ERROR" :
+                             (Level == DebugLog_Warning) ? "WARNING" : "INFO");
 
-        char Line[512];
-        int LineLength = snprintf(Line, sizeof(Line), "%10.3fs  %-7s  %s  %s  %s\n",
-                                  Seconds, LevelName, Entry->FileName, Entry->Function, Entry->Message);
-        if(LineLength > 0)
+    char Line[512];
+    int LineLength = snprintf(Line, sizeof(Line), "%10.3fs  %-7s  %s  %s  %s\n",
+                              Seconds, LevelName, Entry->FileName, Entry->Function, Entry->Message);
+    if(LineLength > 0)
+    {
+        // NOTE(pvlso): snprintf returns the length it wanted, a cut line is sizeof(Line) - 1
+        u64 Size = ((umm)LineLength < sizeof(Line)) ? (u64)LineLength : (u64)(sizeof(Line) - 1);
+        if(GlobalLogFileIsOpen && OSWriteFile(&GlobalLogFile, GlobalLogFileSize, Size, Line))
         {
-            // NOTE(pvlso): snprintf returns the length it wanted, a cut line is sizeof(Line) - 1
-            u64 Size = ((umm)LineLength < sizeof(Line)) ? (u64)LineLength : (u64)(sizeof(Line) - 1);
-            if(OSWriteFile(&GlobalLogFile, GlobalLogFileSize, Size, Line))
-            {
-                GlobalLogFileSize += Size;
-            }
+            GlobalLogFileSize += Size;
         }
+
+        // NOTE(pvlso): The console the debug exe opens with; flushed so a crash doesn't eat the last lines
+        fwrite(Line, 1, (size_t)Size, stdout);
+        fflush(stdout);
     }
 
     EndTicketMutex(&Log->Mutex);
