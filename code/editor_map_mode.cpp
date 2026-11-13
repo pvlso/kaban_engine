@@ -61,10 +61,7 @@ PlayMapEditor(editor_state *EditorState, transient_state *TranState, char *Proje
 internal void
 ReleaseMapTileset(platform_texture_op_queue *TextureOpQueue, map_tileset *Set)
 {
-    for(u32 TileIndex = 0; Set->Tiles && (TileIndex < Set->File.TileCount); ++TileIndex)
-    {
-        ReleaseTileTexture(TextureOpQueue, Set->Tiles + TileIndex);
-    }
+    ReleaseTileTexture(TextureOpQueue, &Set->Atlas.Bitmap);
     Clear(&Set->Arena);
     *Set = {};
 }
@@ -82,23 +79,21 @@ LoadMapTileset(platform_texture_op_queue *TextureOpQueue, map_tileset *Set, char
         Set->Sheets[SheetIndex] = LoadImageFile(File->Sheets[SheetIndex], PlatformFileType_DataRoot, Arena);
     }
 
-    Set->Tiles = PushArray(Arena, Maximum(1, File->TileCount), loaded_bitmap);
+    Set->Atlas = BuildTileAtlas(File, Set->Sheets, Arena);
+    if(Set->Atlas.Bitmap.Memory)
+    {
+        AllocateBitmap(TextureOpQueue, &Set->Atlas.Bitmap);
+    }
     u32 GridCells = Maximum(1, File->GridWidth*File->GridHeight);
     Set->TileAt = PushArray(Arena, GridCells, s32);
     for(u32 Index = 0; Index < GridCells; ++Index) {Set->TileAt[Index] = -1;}
     for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
     {
         tileset_file_tile *Tile = File->Tiles + TileIndex;
-        tileset_file_cell Cell = Tile->Frames[0];
-        loaded_bitmap *Bitmap = Set->Tiles + TileIndex;
-        *Bitmap = CutTilesetCell(Set->Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, Arena);
-        if(Bitmap->Memory)
-        {
-            AllocateBitmap(TextureOpQueue, Bitmap);
-        }
         Set->TileAt[Tile->GridY*File->GridWidth + Tile->GridX] = (s32)TileIndex;
     }
-    LOG("Map editor: tile set %s, %u tiles", FileName, File->TileCount);
+    LOG("Map editor: tile set %s, %u tiles, a %d x %d atlas", FileName, File->TileCount, Set->Atlas.Bitmap.Width,
+        Set->Atlas.Bitmap.Height);
 }
 
 inline s32
@@ -1921,10 +1916,15 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
                 {
                     map_tileset *Set = MapMode->Sets + Cell->Set - 1;
                     s32 TileIndex = MapTileAt(Set, Cell->X, Cell->Y);
-                    if((TileIndex >= 0) && Set->Tiles[TileIndex].Memory)
+                    if((TileIndex >= 0) && Set->Atlas.Bitmap.Memory)
                     {
-                        PushBitmap(RenderGroup, Flat, Set->Tiles + TileIndex, View.Cell, V3(CellCenter(&View, X, Y), Z),
-                                   Color);
+                        u32 AtlasCell = TileAtlasCell(&Set->Atlas, Set->File.Tiles + TileIndex, TileIndex,
+                                                      MapMode->Time);
+                        v2 MinUV, MaxUV;
+                        TileAtlasUV(&Set->Atlas, AtlasCell, &MinUV, &MaxUV);
+                        PushBitmapPart(RenderGroup, Flat, &Set->Atlas.Bitmap,
+                                       RectCenterDim(CellCenter(&View, X, Y), V2(View.Cell, View.Cell)), Z,
+                                       MinUV, MaxUV, Color);
                     }
                 }
             }
@@ -2032,10 +2032,13 @@ UpdateAndRenderPalette(editor_mode_map *MapMode, engine_input *Input, render_gro
         for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
         {
             tileset_file_tile *Tile = File->Tiles + TileIndex;
-            if(Set->Tiles[TileIndex].Memory)
+            if(Set->Atlas.Bitmap.Memory)
             {
-                PushBitmap(RenderGroup, Flat, Set->Tiles + TileIndex, View.Cell,
-                           V3(CellCenter(&View, Tile->GridX, Tile->GridY), 6.0f));
+                v2 MinUV, MaxUV;
+                TileAtlasUV(&Set->Atlas, TileAtlasCell(&Set->Atlas, Tile, TileIndex, 0.0f), &MinUV, &MaxUV);
+                PushBitmapPart(RenderGroup, Flat, &Set->Atlas.Bitmap,
+                               RectCenterDim(CellCenter(&View, Tile->GridX, Tile->GridY), V2(View.Cell, View.Cell)),
+                               6.0f, MinUV, MaxUV);
             }
         }
         if(MapMode->HasBrush)
@@ -2484,6 +2487,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     render_group *RenderGroup = &UIState->RenderGroup;
     object_transform Flat = DefaultFlatTransform();
     v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
+    MapMode->Time += Input->dtForFrame;
 
     if(!MapMode->EntityDefsLoaded)
     {
