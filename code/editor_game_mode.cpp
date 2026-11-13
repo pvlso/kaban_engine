@@ -45,6 +45,16 @@ GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id
     }
 }
 
+internal void
+GamePushTile(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size, v4 Color)
+{
+    if(Group->Assets && Tile && Tile->Atlas.Value)
+    {
+        PushBitmapPart(Group, ObjectTransform, Tile->Atlas, RectMinDim(Corner.xy, V2(Size, Size)), Corner.z,
+                       Tile->MinUV, Tile->MaxUV, Color);
+    }
+}
+
 internal bitmap_id
 GameGetNormalMap(engine_assets *Assets, bitmap_id Bitmap)
 {
@@ -128,20 +138,6 @@ GameLoadedTileset(engine_assets *Assets, u32 TilesetIndex, kea_tileset **Info)
     return(Result);
 }
 
-internal bitmap_id
-GameGetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
-{
-    bitmap_id Result = {};
-    kea_tileset *Info = 0;
-    loaded_tileset *Tileset = GameLoadedTileset(Assets, TilesetIndex, &Info);
-    if(Tileset && (TileIndex < Info->TileCount))
-    {
-        Result.Value = Tileset->Tiles[TileIndex].BitmapGUID;
-    }
-
-    return(Result);
-}
-
 internal tileset_info
 GameGetTilesetInfo(engine_assets *Assets, u32 TilesetIndex)
 {
@@ -167,17 +163,31 @@ GameGetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time
     if(Tileset && (TileIndex < Info->TileCount))
     {
         kea_tile *Tile = Tileset->Tiles + TileIndex;
-        Result.Bitmap.Value = Tile->BitmapGUID;
         Result.Flags = Tile->Flags;
         Result.Kind = Tile->Kind;
         Result.GridX = Tile->GridX;
         Result.GridY = Tile->GridY;
         Result.Animated = (Tile->FrameCount > 1);
         FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_TILE_NAME_LENGTH, Tile->Name);
+        u32 Cell = Tile->Cell;
         if(Result.Animated && (Tile->FirstFrame + Tile->FrameCount <= Info->FrameCount))
         {
             u32 Frame = (u32)FloorReal32ToInt32(Time*Tile->FramesPerSecond) % Tile->FrameCount;
-            Result.Bitmap = Tileset->Frames[Tile->FirstFrame + Frame];
+            Cell = Tileset->FrameCells[Tile->FirstFrame + Frame];
+        }
+
+        // NOTE(pvlso): The cell's inside, its border left out (engine_tileset_file.cpp, TileAtlasUV)
+        asset *Atlas = Info->AtlasGUID ? GetAssetByGUID(Assets, Info->AtlasGUID) : 0;
+        if(Atlas && Info->AtlasColumns && Atlas->KEA.Bitmap.Dim[0] && Atlas->KEA.Bitmap.Dim[1])
+        {
+            u32 Stride = Info->TileSize + 2;
+            r32 InvWidth = 1.0f / (r32)Atlas->KEA.Bitmap.Dim[0];
+            r32 InvHeight = 1.0f / (r32)Atlas->KEA.Bitmap.Dim[1];
+            r32 X = (r32)((Cell % Info->AtlasColumns)*Stride + 1);
+            r32 Y = (r32)((Cell / Info->AtlasColumns)*Stride + 1);
+            Result.Atlas.Value = Info->AtlasGUID;
+            Result.MinUV = V2(X*InvWidth, Y*InvHeight);
+            Result.MaxUV = V2((X + (r32)Info->TileSize)*InvWidth, (Y + (r32)Info->TileSize)*InvHeight);
         }
     }
 
@@ -581,6 +591,7 @@ GetEngineAPI(void)
     Result.PushLine = PushLine;
     Result.PushCircleOutline = PushCircleOutline;
     Result.PushTriangle = GamePushTriangle;
+    Result.PushTile = GamePushTile;
 
     Result.GetFont = GameGetFont;
     Result.PushText = GamePushText;
@@ -588,7 +599,6 @@ GetEngineAPI(void)
 
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
     Result.GetSprite = GameGetSprite;
-    Result.GetTilesetTile = GameGetTilesetTile;
     Result.GetTilesetInfo = GameGetTilesetInfo;
     Result.GetTileInfo = GameGetTileInfo;
     Result.GetMapInfo = GameGetMapInfo;

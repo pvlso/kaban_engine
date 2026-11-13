@@ -90,6 +90,8 @@ struct tile_atlas
     u32 CellCount;
     u32 *TileFirstFrame; // NOTE(pvlso): per tile, where its frames start in FrameCells
     u32 *FrameCells;     // NOTE(pvlso): each frame's cell in the atlas; a tile that isn't animated has one
+    u32 FrameTotal;
+    tileset_file_cell *Cells; // NOTE(pvlso): the sheet cell in each atlas cell
 };
 
 #define ENGINE_TILESET_FILE_H

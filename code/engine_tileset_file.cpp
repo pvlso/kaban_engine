@@ -340,6 +340,7 @@ CutTilesetCell(loaded_bitmap *Sheet, u32 TileSize, u32 CellX, u32 CellY, memory_
 }
 
 // NOTE(pvlso): The set's atlas (tile_atlas). A cell outside its sheet, or on a sheet that didn't load, stays clear.
+// Without Sheets only the layout is made (the size, the cells), no pixels.
 internal tile_atlas
 BuildTileAtlas(tileset_file *File, loaded_bitmap *Sheets, memory_arena *Arena)
 {
@@ -354,7 +355,9 @@ BuildTileAtlas(tileset_file *File, loaded_bitmap *Sheets, memory_arena *Arena)
     }
     Result.TileFirstFrame = PushArray(Arena, Maximum(1u, File->TileCount), u32);
     Result.FrameCells = PushArray(Arena, Maximum(1u, FrameTotal), u32);
+    Result.FrameTotal = FrameTotal;
     tileset_file_cell *Cells = PushArray(Arena, Maximum(1u, FrameTotal), tileset_file_cell);
+    Result.Cells = Cells;
 
     // NOTE(pvlso): A cell used twice (a tile and another's frame) is packed once
     u32 FrameAt = 0;
@@ -398,11 +401,14 @@ BuildTileAtlas(tileset_file *File, loaded_bitmap *Sheets, memory_arena *Arena)
         Bitmap.WidthOverHeight = (r32)Bitmap.Width / (r32)Bitmap.Height;
         Bitmap.AlignPercentage = V2(0.5f, 0.5f);
         Bitmap.Pitch = Bitmap.Width*BITMAP_BYTES_PER_PIXEL;
-        umm Size = (umm)Bitmap.Height*Bitmap.Pitch;
-        Bitmap.Memory = PushSize(Arena, Size);
-        ZeroSize(Size, Bitmap.Memory);
+        if(Sheets)
+        {
+            umm Size = (umm)Bitmap.Height*Bitmap.Pitch;
+            Bitmap.Memory = PushSize(Arena, Size);
+            ZeroSize(Size, Bitmap.Memory);
+        }
 
-        for(u32 CellIndex = 0; CellIndex < Result.CellCount; ++CellIndex)
+        for(u32 CellIndex = 0; Sheets && (CellIndex < Result.CellCount); ++CellIndex)
         {
             tileset_file_cell Cell = Cells[CellIndex];
             loaded_bitmap *Sheet = (Cell.Sheet < File->SheetCount) ? Sheets + Cell.Sheet : 0;

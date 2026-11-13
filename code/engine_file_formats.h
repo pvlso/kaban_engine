@@ -148,8 +148,9 @@ struct ttf_name_record
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // NOTE(pvlso): KEA
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
-// NOTE(pvlso): 'keag' since kea_asset got SourceStamp (2026-11-08); a KEA of another magic is rebuilt
-#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'g')
+// NOTE(pvlso): 'keah' since tile sets keep their pictures in one atlas (2026-11-12; 'keag' since kea_asset got
+// SourceStamp, 2026-11-08); a KEA of another magic is rebuilt
+#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'h')
 
 enum kea_asset_type
 {
@@ -265,17 +266,19 @@ struct kea_sound
 
 struct kea_tile
 {
-    u64 BitmapGUID; // NOTE(pvlso): the tile, the first frame when it's animated
+    u32 Cell;       // NOTE(pvlso): its picture's cell in the set's atlas, the first frame's when it's animated
     u32 Flags;
     u32 Kind;       // NOTE(pvlso): 0 for none, else the n-th name in the project's tile_kinds.txt, from 1
     u16 GridX;
     u16 GridY;
-    u32 FirstFrame; // NOTE(pvlso): into the set's FrameGUIDs
+    u32 FirstFrame; // NOTE(pvlso): into the set's FrameCells
     u32 FrameCount; // NOTE(pvlso): 0 when it isn't animated
     r32 FramesPerSecond;
     char Name[KEA_TILE_NAME_LENGTH];
 };
 
+// NOTE(pvlso): The tiles' pictures are one bitmap asset, the atlas (engine_tileset_file.h, tile_atlas): cells of
+// TileSize + 2 pixels in rows of AtlasColumns from the bottom left, each picture inside a border of its own edge
 struct kea_tileset
 {
     u32 TileCount;
@@ -283,11 +286,13 @@ struct kea_tileset
     u16 GridHeight;
     u32 FrameCount;
     u32 TileSize;
+    u64 AtlasGUID;
+    u32 AtlasColumns;
 
     /* NOTE(pvlso): Data is:
 
        kea_tile Tiles[TileCount];
-       u64 FrameGUIDs[FrameCount];
+       u32 FrameCells[FrameCount];
     */
 };
 

@@ -17,7 +17,7 @@ struct loaded_sound
 struct loaded_tileset
 {
     kea_tile *Tiles;
-    bitmap_id *Frames; // NOTE(pvlso): the animated tiles' frames, after the tiles
+    u32 *FrameCells; // NOTE(pvlso): the animated tiles' frames' atlas cells, after the tiles
 };
 
 struct loaded_map

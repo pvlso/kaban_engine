@@ -27,7 +27,7 @@ struct builder_added_spritesheet
 struct builder_added_tileset
 {
     kea_tile *Tiles;
-    u64 *FrameGUIDs;
+    u32 *FrameCells;
 };
 
 struct builder_added_map

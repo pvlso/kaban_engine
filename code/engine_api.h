@@ -172,9 +172,12 @@ struct map_entity_info
     s32 Level;         // NOTE(pvlso): the level it stands on
 };
 
+// NOTE(pvlso): Its picture is a part of its set's atlas, drawn with PushTile
 struct tile_info
 {
-    bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
+    bitmap_id Atlas;  // NOTE(pvlso): its set's pictures; 0 when the set has none
+    v2 MinUV;         // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
+    v2 MaxUV;
     u32 Flags;        // NOTE(pvlso): bit n is the n-th name in the project's data/txts/tile_flags.txt
     u32 Kind;         // NOTE(pvlso): 0 for none, else the n-th name in the project's data/txts/tile_kinds.txt, from 1
     u32 GridX;        // NOTE(pvlso): its place in the set's grid, from the top left
@@ -282,6 +285,10 @@ struct engine_api
                               s32 Segments, v4 Color);
     // NOTE(pvlso): A filled triangle (the corners in the transform's space; Color's alpha blends it)
     void (*PushTriangle)(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color);
+    // NOTE(pvlso): A tile (GetTileInfo, at the frame asked for there) as a Size square, its bottom left corner at
+    // Corner. Its set's atlas loads the first time; nothing is drawn until it has.
+    void (*PushTile)(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size,
+                     v4 Color);
 
     // NOTE(pvlso): Loads data/ttfs/<FileName> the first time, 0 when it's missing or not a font (logged once).
     engine_font *(*GetFont)(char *FileName);
@@ -298,14 +305,11 @@ struct engine_api
     // NOTE(pvlso): The sprite at SpriteIndex (left to right) of the sprite sheet at SheetIndex (found with
     // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
     bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
-    // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets), for
-    // PushBitmap: its first frame when it's animated. Tiles are numbered in the order the set lists them.
-    // 0 when it isn't a tile set or has no such tile.
-    bitmap_id (*GetTilesetTile)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex);
     // NOTE(pvlso): All zero when TilesetIndex isn't a tile set
     tileset_info (*GetTilesetInfo)(engine_assets *Assets, u32 TilesetIndex);
-    // NOTE(pvlso): Time in seconds picks an animated tile's frame (any running clock). All zero when there's no
-    // such tile.
+    // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets, or a map's
+    // GetMapTileset); tiles are numbered in the order the set lists them. Time in seconds picks an animated tile's
+    // frame (any running clock). All zero when there's no such tile.
     tile_info (*GetTileInfo)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time);
     // NOTE(pvlso): A map at MapIndex (found with GetBestMatchAssets); all zero when it isn't one
     map_info (*GetMapInfo)(engine_assets *Assets, u32 MapIndex);
@@ -489,6 +493,13 @@ PushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B,
     Engine.PushTriangle(Group, ObjectTransform, A, B, C, Color);
 }
 
+inline void
+PushTile(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size = 1.0f,
+         v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushTile(Group, ObjectTransform, Tile, Corner, Size, Color);
+}
+
 inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
@@ -500,13 +511,6 @@ inline bitmap_id
 GetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
 {
     bitmap_id Result = Engine.GetSprite(Assets, SheetIndex, SpriteIndex);
-    return(Result);
-}
-
-inline bitmap_id
-GetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
-{
-    bitmap_id Result = Engine.GetTilesetTile(Assets, TilesetIndex, TileIndex);
     return(Result);
 }
 
