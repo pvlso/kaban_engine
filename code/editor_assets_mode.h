@@ -41,8 +41,9 @@ struct spritesheet_mode
     loaded_bitmap Sprites[256];
 };
 
-// NOTE(pvlso): Curated tile sets (engine_tileset_file.h): the set read from its text file and its tiles cut from
-// their sheets, shown in the set's own grid. Everything but the textures lives in Arena, cleared with the view.
+// NOTE(pvlso): Curated tile sets (engine_tileset_file.h): the set read from its text file and its tiles packed from
+// their sheets into one atlas, shown in the set's own grid. Everything but the texture lives in Arena (the atlas in
+// AtlasArena, made again on every change), cleared with the view.
 struct tileset_mode
 {
     memory_arena Arena;
@@ -51,7 +52,9 @@ struct tileset_mode
     tileset_file File;
     s32 HoverTile; // NOTE(pvlso): -1 when the mouse isn't on a tile
 
-    loaded_bitmap Tiles[TILESET_MAX_TILES]; // NOTE(pvlso): each tile's first frame
+    tile_atlas Atlas;
+    memory_arena AtlasArena;
+    b32 AtlasDirty; // NOTE(pvlso): the set changed, the atlas is made again before it's drawn
 
     // NOTE(pvlso): Editing (editor_tileset_edit.cpp). The sheet open on the left, any image under data/; what's
     // selected on it in cells; the set's grid on the right; the tile picked for the panel.

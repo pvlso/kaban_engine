@@ -47,18 +47,18 @@ ReleaseTileTexture(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Til
     *Tile = {};
 }
 
+// NOTE(pvlso): The view's atlas made again from the set as it is now: one texture however many tiles changed
 internal void
-CutTileForView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, u32 TileIndex)
+RebuildTilesetAtlas(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
 {
-    tileset_file *File = &TilesetMode->File;
-    loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-    ReleaseTileTexture(TextureOpQueue, Tile);
-    tileset_file_cell Cell = File->Tiles[TileIndex].Frames[0];
-    *Tile = CutTilesetCell(TilesetMode->Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, &TilesetMode->Arena);
-    if(Tile->Memory)
+    ReleaseTileTexture(TextureOpQueue, &TilesetMode->Atlas.Bitmap);
+    Clear(&TilesetMode->AtlasArena);
+    TilesetMode->Atlas = BuildTileAtlas(&TilesetMode->File, TilesetMode->Sheets, &TilesetMode->AtlasArena);
+    if(TilesetMode->Atlas.Bitmap.Memory)
     {
-        AllocateBitmap(TextureOpQueue, Tile);
+        AllocateBitmap(TextureOpQueue, &TilesetMode->Atlas.Bitmap);
     }
+    TilesetMode->AtlasDirty = false;
 }
 
 internal void
@@ -127,10 +127,6 @@ RestoreTilesetState(platform_texture_op_queue *TextureOpQueue, tileset_mode *Til
 {
     tileset_snapshot *Snapshot = TilesetMode->History[HistoryIndex];
     tileset_file *File = &TilesetMode->File;
-    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
-    {
-        ReleaseTileTexture(TextureOpQueue, TilesetMode->Tiles + TileIndex);
-    }
     File->TileCount = Snapshot->TileCount;
     File->SheetCount = Snapshot->SheetCount;
     Copy(sizeof(Snapshot->Sheets), Snapshot->Sheets, File->Sheets);
@@ -139,10 +135,7 @@ RestoreTilesetState(platform_texture_op_queue *TextureOpQueue, tileset_mode *Til
     {
         LoadSetSheet(TilesetMode, SheetIndex);
     }
-    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
-    {
-        CutTileForView(TextureOpQueue, TilesetMode, TileIndex);
-    }
+    TilesetMode->AtlasDirty = true;
     RecountTilesetGrid(File);
     TilesetMode->HistoryAt = HistoryIndex;
     TilesetMode->SelectedTile = -1;
@@ -189,15 +182,13 @@ internal void
 RemoveTile(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, u32 TileIndex)
 {
     tileset_file *File = &TilesetMode->File;
-    ReleaseTileTexture(TextureOpQueue, TilesetMode->Tiles + TileIndex);
     // NOTE(pvlso): The rest keep their order, it's the tiles' numbering in the KEA
     for(u32 Index = TileIndex + 1; Index < File->TileCount; ++Index)
     {
         File->Tiles[Index - 1] = File->Tiles[Index];
-        TilesetMode->Tiles[Index - 1] = TilesetMode->Tiles[Index];
     }
     --File->TileCount;
-    TilesetMode->Tiles[File->TileCount] = {};
+    TilesetMode->AtlasDirty = true;
     if(TilesetMode->SelectedTile == (s32)TileIndex) {TilesetMode->SelectedTile = -1;}
     else if(TilesetMode->SelectedTile > (s32)TileIndex) {--TilesetMode->SelectedTile;}
 }
@@ -237,7 +228,7 @@ PlaceSelection(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetM
                 Tile->Frames[0].X = (u16)X;
                 Tile->Frames[0].Y = (u16)Y;
                 Tile->FrameCount = 1;
-                CutTileForView(TextureOpQueue, TilesetMode, TileIndex);
+                TilesetMode->AtlasDirty = true;
             }
         }
     }
@@ -268,7 +259,7 @@ SetFramesFromSelection(platform_texture_op_queue *TextureOpQueue, tileset_mode *
             }
         }
         if((Tile->FrameCount > 1) && (Tile->FramesPerSecond <= 0.0f)) {Tile->FramesPerSecond = 8.0f;}
-        CutTileForView(TextureOpQueue, TilesetMode, TilesetMode->SelectedTile);
+        TilesetMode->AtlasDirty = true;
     }
 }
 
@@ -508,16 +499,22 @@ UpdateAndRenderSetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *
     RenderGroup->CurrentClipRectIndex = PushClipRect(RenderGroup, Flat, Rect, 0.0f, 0);
     PushRect(RenderGroup, Flat, Rect, 5.0f, V4(0.25f, 0.25f, 0.25f, 1.0f));
     DrawGridLines(RenderGroup, Flat, &View, 6.0f, V4(1, 1, 1, 0.1f));
+    if(TilesetMode->AtlasDirty)
+    {
+        RebuildTilesetAtlas(TextureOpQueue, TilesetMode);
+    }
+    tile_atlas *Atlas = &TilesetMode->Atlas;
     for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
     {
         tileset_file_tile *Tile = File->Tiles + TileIndex;
         v2 Center = CellCenter(&View, Tile->GridX, Tile->GridY);
-        loaded_bitmap *Bitmap = TilesetMode->Tiles + TileIndex;
-        if(Bitmap->Memory)
-        {
-            PushBitmap(RenderGroup, Flat, Bitmap, View.Cell, V3(Center, 7.0f));
-        }
         rectangle2 TileRect = RectCenterDim(Center, V2(View.Cell, View.Cell));
+        if(Atlas->Bitmap.Memory)
+        {
+            v2 MinUV, MaxUV;
+            TileAtlasUV(Atlas, TileAtlasCell(Atlas, Tile, TileIndex, 0.0f), &MinUV, &MaxUV);
+            PushBitmapPart(RenderGroup, Flat, &Atlas->Bitmap, TileRect, 7.0f, MinUV, MaxUV);
+        }
         if((s32)TileIndex == TilesetMode->SelectedTile)
         {
             PushRectOutline(RenderGroup, Flat, TileRect, 8.0f, V4(1, 0.3f, 0.3f, 1), 2.0f);

@@ -275,11 +275,19 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     nk_fill_rect(&Nk->current->buffer, Rect, 10.0f, ColorTable[2]);
                     nk_labelf(Nk, NK_TEXT_CENTERED, "Source: %s", StoredAsset->SourceFileName);
 
-                    // NOTE(pvlso): Its tiles one after another, a second each
-                    loaded_bitmap *TileBitmap = 0;
-                    if(TilesetMode->Loaded && File->TileCount)
+                    // NOTE(pvlso): Its tiles one after another, a second each, cut out of the set's atlas
+                    tile_atlas *Atlas = &TilesetMode->Atlas;
+                    b32 ShowTile = (TilesetMode->Loaded && File->TileCount && Atlas->Bitmap.TextureHandle &&
+                                    Atlas->Columns);
+                    struct nk_rect TileRegion = {};
+                    if(ShowTile)
                     {
-                        TileBitmap = TilesetMode->Tiles + (FloorReal32ToInt32(AssetsMode->Time) % File->TileCount);
+                        u32 TileIndex = (u32)FloorReal32ToInt32(AssetsMode->Time) % File->TileCount;
+                        u32 Cell = TileAtlasCell(Atlas, File->Tiles + TileIndex, TileIndex, 0.0f);
+                        u32 Stride = Atlas->TileSize + 2;
+                        TileRegion = nk_rect((float)((Cell % Atlas->Columns)*Stride + 1),
+                                             (float)((Cell / Atlas->Columns)*Stride + 1),
+                                             (float)Atlas->TileSize, (float)Atlas->TileSize);
                     }
                     nk_layout_row_static(Nk, 530, 530, 1);
                     Rect = nk_widget_bounds(Nk);
@@ -288,9 +296,11 @@ DrawAssetAdvanceView(editor_mode_assets *AssetsMode, ui_state *UIState, nk_conte
                     if(nk_group_begin(Nk, "Image Stats", NK_WINDOW_NO_SCROLLBAR))
                     {
                         nk_layout_row_static(Nk, 520, 520, 1);
-                        if(TileBitmap && TileBitmap->TextureHandle)
+                        if(ShowTile)
                         {
-                            struct nk_image Img = nk_image_ptr(TileBitmap->TextureHandle);
+                            struct nk_image Img = nk_subimage_ptr(Atlas->Bitmap.TextureHandle,
+                                                                  (nk_ushort)Atlas->Bitmap.Width,
+                                                                  (nk_ushort)Atlas->Bitmap.Height, TileRegion);
                             nk_image(Nk, Img);
                         }
 

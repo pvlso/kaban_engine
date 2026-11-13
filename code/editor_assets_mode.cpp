@@ -595,7 +595,7 @@ CutSpriteSheet(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *Spri
 
 internal void AllocateBitmap(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Bitmap);
 
-// NOTE(pvlso): Reads a curated tile set and cuts each tile's first frame from its sheets, to show the set
+// NOTE(pvlso): Reads a curated tile set and packs its tiles from their sheets into one atlas, to show the set
 internal void
 LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_asset *Asset)
 {
@@ -617,16 +617,7 @@ LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tileset
         }
     }
 
-    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
-    {
-        tileset_file_cell Cell = File->Tiles[TileIndex].Frames[0];
-        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        *Tile = CutTilesetCell(Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, Arena);
-        if(Tile->Memory)
-        {
-            AllocateBitmap(TextureOpQueue, Tile);
-        }
-    }
+    RebuildTilesetAtlas(TextureOpQueue, TilesetMode);
 
     Asset->Tileset.TileCount = File->TileCount;
     Asset->Tileset.GridWidth = File->GridWidth;
@@ -635,21 +626,12 @@ LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tileset
     TilesetMode->Loaded = File->Loaded;
 }
 
-// NOTE(pvlso): The tiles' pixels are in the view's arena, so only their textures are released one by one
 internal void
 ClearTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
 {
-    for(u32 TileIndex = 0; TileIndex < ArrayCount(TilesetMode->Tiles); ++TileIndex)
-    {
-        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        if(Tile->TextureHandle)
-        {
-            texture_op Op = {};
-            Op.IsAllocate = false;
-            Op.Deallocate.Handle = Tile->TextureHandle;
-            AddOp(TextureOpQueue, &Op);
-        }
-    }
+    ReleaseTileTexture(TextureOpQueue, &TilesetMode->Atlas.Bitmap);
+    Clear(&TilesetMode->AtlasArena);
+    TilesetMode->AtlasDirty = false;
     ClearTilesetEditing(TextureOpQueue, TilesetMode);
     Clear(&TilesetMode->Arena);
 }
