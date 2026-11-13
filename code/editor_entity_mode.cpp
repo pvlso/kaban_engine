@@ -38,12 +38,12 @@ EntityFileOfGUID(entity_file_list *List, u64 GUID)
     return(Result);
 }
 
-// NOTE(pvlso): The project's stored bitmaps and sprite sheets, what a clip can look like
+// NOTE(pvlso): The project's bitmaps and sprite sheets (every file in bmps/ and spritesheets/), what a clip can look like
 internal void
 ListLookChoices(editor_state *EditorState, editor_mode_entity *EntityMode)
 {
     kesa_header Header = {};
-    kesa_asset *Stored = ReadStoredAssetList(&EditorState->EditorMeta, &Header);
+    kesa_asset *Stored = ScanAssetList(&Header, 0, 0, EntityMode->Arena);
     u32 Count = 0;
     for(u32 AssetIndex = 1; Stored && (AssetIndex < Header.AssetCount); ++AssetIndex)
     {
@@ -86,7 +86,7 @@ ListLookChoices(editor_state *EditorState, editor_mode_entity *EntityMode)
         ++ChoiceIndex;
     }
     Platform.DeallocateMemory(Stored);
-    LOG("Entity editor: %u looks among the stored assets", Count);
+    LOG("Entity editor: %u looks among the assets", Count);
 }
 
 internal s32
@@ -478,7 +478,7 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
             nk_label(Nk, "Clips (click one to show it):", NK_TEXT_LEFT);
             if(!EntityMode->LookChoiceCount)
             {
-                nk_label(Nk, "No bitmaps or sprite sheets stored yet", NK_TEXT_LEFT);
+                nk_label(Nk, "No bitmaps or sprite sheets in bmps/ or spritesheets/ yet", NK_TEXT_LEFT);
             }
             for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
             {
@@ -570,7 +570,7 @@ DrawEntityEditorUI(editor_mode_entity *EntityMode, ui_state *UIState)
 
         nk_layout_row_dynamic(Nk, 18, 1);
         nk_label(Nk, "", NK_TEXT_LEFT);
-        nk_label(Nk, "Clips: the bitmaps and sprite sheets stored", NK_TEXT_LEFT);
+        nk_label(Nk, "Clips: the bitmaps and sprite sheets", NK_TEXT_LEFT);
         nk_label(Nk, "in the assets mode. Preview: the wheel zooms,", NK_TEXT_LEFT);
         nk_label(Nk, "yellow is the foot.", NK_TEXT_LEFT);
 
@@ -605,7 +605,7 @@ UpdateAndRenderEntityEditor(editor_state *EditorState, transient_state *TranStat
 
     if(EntityMode->ReloadRequested)
     {
-        // NOTE(pvlso): The types file, the stored assets or data/entities changed. What's being made keeps its type and
+        // NOTE(pvlso): The types file, the asset folders or data/entities changed. What's being made keeps its type and
         // clips by place: a types file whose lines moved should be followed by opening the definition again.
         EntityMode->ReloadRequested = false;
         EntityMode->Project = ReadEntityProject(EntityMode->Arena);

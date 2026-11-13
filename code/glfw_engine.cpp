@@ -663,6 +663,7 @@ GLFWKeyCallback(GLFWwindow *Window, int Key, int Scancode, int Action, int Mods)
             case GLFW_KEY_RIGHT:  GLFWProcessKeyboardMessage(&KeyboardController->ActionRight, IsDown); break;
             case GLFW_KEY_ESCAPE: GLFWProcessKeyboardMessage(&KeyboardController->Back, IsDown); break;
             case GLFW_KEY_SPACE:  GLFWProcessKeyboardMessage(&KeyboardController->Start, IsDown); break;
+            case GLFW_KEY_F5:     GLFWProcessKeyboardMessage(&KeyboardController->Play, IsDown); break;
         }
     }
 

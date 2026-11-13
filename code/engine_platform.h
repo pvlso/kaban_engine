@@ -146,7 +146,7 @@ typedef struct engine_controller_input
     
     union
     {
-        engine_button_state Buttons[20];
+        engine_button_state Buttons[21];
         struct
         {
             engine_button_state MoveUp;
@@ -174,6 +174,7 @@ typedef struct engine_controller_input
             engine_button_state Undo;
             engine_button_state ShowUI;
             engine_button_state ToggleMute;
+            engine_button_state Play; // NOTE(pvlso): F5, the map editor's Play and back (map editor plan, phase 7)
 
             // NOTE(casey): All buttons must be added above this line
             
@@ -402,6 +403,18 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(platform_write_entire_file);
 #define PLATFORM_FILE_EXISTS(name) b32 name(char *FileName, platform_file_type Type)
 typedef PLATFORM_FILE_EXISTS(platform_file_exists);
 
+// NOTE(pvlso): When the file was last written (an OS timestamp, only to compare), 0 when it doesn't exist
+#define PLATFORM_GET_FILE_WRITE_TIME(name) u64 name(char *FileName, platform_file_type Type)
+typedef PLATFORM_GET_FILE_WRITE_TIME(platform_get_file_write_time);
+
+// NOTE(pvlso): True when the file is gone afterwards (false while another handle holds it open, on Windows)
+#define PLATFORM_REMOVE_FILE(name) b32 name(char *FileName, platform_file_type Type)
+typedef PLATFORM_REMOVE_FILE(platform_remove_file);
+
+// NOTE(pvlso): Seconds from some fixed point, only to measure how long something took
+#define PLATFORM_GET_SECONDS(name) f64 name(void)
+typedef PLATFORM_GET_SECONDS(platform_get_seconds);
+
 #define PlatformNoFileErrors(Handle) ((Handle)->NoErrors)
 // -----------------------------------------------------------------------------------------------------------------------------------------------------------
 // ...........................................................................................................................................................
@@ -525,6 +538,9 @@ typedef struct platform_api
     platform_read_entire_file *ReadEntireFile;
     platform_write_entire_file *WriteEntireFile;
     platform_file_exists *FileExists;
+    platform_get_file_write_time *GetFileWriteTime;
+    platform_remove_file *RemoveFile;
+    platform_get_seconds *GetSeconds;
 
     platform_seek_file *FileSeek;
     platform_file_tell *FileTell;

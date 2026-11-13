@@ -67,8 +67,8 @@ SetEditorMode(editor_state *EditorState, transient_state *TranState, editor_mode
     LOG("Editor mode: %s", (EditorMode < ArrayCount(ModeNames)) ? ModeNames[EditorMode] : "?");
 }
 
-// NOTE(pvlso): Next to every data/ directory (the engine's, each project's), holds the version
-// of the stored assets (stored_assets_<version>.kesa) that the assets mode bumps on every write
+// NOTE(pvlso): Next to every data/ directory (the engine's, each project's), holds the version of the last KEA
+// (game_data_<version>.kea), bumped by every build. Stored assets files used to share it.
 #define EDITOR_METADATA_FILE_NAME "editor_metadata.json"
 
 internal void
@@ -90,7 +90,7 @@ LoadEditorMetadata(editor_state *EditorState)
         }
 
         u8 *Version = EditorState->EditorMeta.KESAVersion;
-        LOG("%s: stored assets version %d.%d.%d.%d", EDITOR_METADATA_FILE_NAME,
+        LOG("%s: KEA version %d.%d.%d.%d", EDITOR_METADATA_FILE_NAME,
             Version[0], Version[1], Version[2], Version[3]);
     }
     else
@@ -107,9 +107,14 @@ LoadEditorMetadata(editor_state *EditorState)
 // NOTE(pvlso): Points every data file at a project (projects/<name>/data/ and its editor_metadata.json),
 // or at the engine's data/ when ProjectName is 0. The assets mode and a running game use their
 // project's data, the title screen goes back to the engine's.
+internal void WaitForKEABuild(editor_state *EditorState);
+
 internal b32
 UseDataOf(editor_state *EditorState, char *ProjectName)
 {
+    // NOTE(pvlso): A KEA build reads and writes under the data root
+    WaitForKEABuild(EditorState);
+
     b32 Result = Platform.SetDataProject(ProjectName);
     if(Result)
     {
@@ -146,7 +151,7 @@ UpdateEditorVersionFile(editor_state *EditorState)
                  EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
     Platform.WriteDataToFile(&EditorMetaHandle, 0, StringLength(Data), Data);
     Platform.CloseFile(&EditorMetaHandle);
-    LOG("Stored assets version is now %u", Result);
+    LOG("KEA version is now %u", Result);
 
     return(Result);
 }

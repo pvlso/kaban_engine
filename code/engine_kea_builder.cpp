@@ -16,15 +16,16 @@
 */
 
 internal kea_builder *
-InitKEABuilder(editor_mode_assets *AssetsMode, memory_arena *TempMem)
+InitKEABuilder(kesa_header *ListHeader, kesa_asset *List, ket_header *TagHeader, kea_tag_map *Tags,
+               memory_arena *TempMem)
 {
     kea_builder *KEABuilder = PushStruct(TempMem, kea_builder);
 
     KEABuilder->TempMem = TempMem;
-    KEABuilder->KESAHeader = &AssetsMode->StoredHeader;
-    KEABuilder->KESAAssets = AssetsMode->StoredAssets;
-    KEABuilder->KETHeader = &AssetsMode->TagHeader;
-    KEABuilder->TagMaps = AssetsMode->Tags;
+    KEABuilder->KESAHeader = ListHeader;
+    KEABuilder->KESAAssets = List;
+    KEABuilder->KETHeader = TagHeader;
+    KEABuilder->TagMaps = Tags;
 
     KEABuilder->Tags = PushStruct(TempMem, kea_builder_tag_list);
     KEABuilder->TagCount = 1;
@@ -83,6 +84,80 @@ GetAssetByGUID(kea_builder *Builder, u64 GUID)
     return(Result);
 }
 
+// NOTE(pvlso): The previous KEA's assets, read once; a KEA of an older format (another magic) has none to give
+internal void
+OpenPreviousKEA(kea_builder *Builder, char *FileName)
+{
+    if(!FileName || !FileName[0]) {return;}
+
+    platform_file_handle File = Platform.OpenFile(FileName, PlatformFileType_KEA, PlatformFileOp_Read);
+    kea_header Header = {};
+    if(PlatformNoFileErrors(&File))
+    {
+        Platform.ReadDataFromFile(&File, 0, sizeof(Header), &Header);
+    }
+    if(PlatformNoFileErrors(&File) && (Header.MagicValue == KEA_MAGIC_VALUE) && Header.AssetCount)
+    {
+        Builder->PreviousAssets = PushArray(Builder->TempMem, Header.AssetCount, kea_asset);
+        Platform.ReadDataFromFile(&File, Header.AssetsOffset, Header.AssetCount*sizeof(kea_asset),
+                                  Builder->PreviousAssets);
+    }
+    if(PlatformNoFileErrors(&File) && Builder->PreviousAssets)
+    {
+        Builder->HasPrevious = true;
+        Builder->PreviousFile = File;
+        Builder->PreviousCount = Header.AssetCount;
+    }
+    else
+    {
+        Builder->PreviousAssets = 0;
+        Platform.CloseFile(&File);
+        LOG("%s can't be built on (older format or unreadable): every image is decoded", FileName);
+    }
+}
+
+// NOTE(pvlso): What a bitmap's pixels are made of: the image, its write time and how it's cut (Cut). 0 when the image
+// isn't there, which nothing matches.
+internal u64
+ImageStamp(kea_builder *Builder, char *FileName, platform_file_type Type, char *Cut)
+{
+    u64 Result = 0;
+    u64 WriteTime = Platform.GetFileWriteTime(FileName, Type);
+    if(WriteTime)
+    {
+        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%u|%s|%llu|%s", (u32)Type, FileName, WriteTime, Cut);
+        Result = GUIDFromString(Builder->Buffer);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): The previous KEA's bitmap of this GUID when it was made of the same (Stamp), else 0
+internal kea_asset *
+PreviousPixels(kea_builder *Builder, u64 GUID, u64 Stamp)
+{
+    kea_asset *Result = 0;
+    if(Builder->HasPrevious && Stamp)
+    {
+        u32 Low = 1;
+        u32 High = Builder->PreviousCount;
+        while(Low < High)
+        {
+            u32 Middle = Low + (High - Low)/2;
+            kea_asset *Asset = Builder->PreviousAssets + Middle;
+            if(Asset->GUID < GUID) {Low = Middle + 1;}
+            else if(Asset->GUID > GUID) {High = Middle;}
+            else
+            {
+                if(Asset->SourceStamp == Stamp) {Result = Asset;}
+                break;
+            }
+        }
+    }
+
+    return(Result);
+}
+
 internal kea_builder_added_asset_list *
 BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
 {
@@ -102,9 +177,12 @@ BuilderAddAsset(kea_builder *Builder, kesa_asset *Asset)
 
 // NOTE(pvlso): The normal map of a sprite or tile (Image), from its sheet's _n file
 internal void
-AddNormalMapAsset(kea_builder *Builder, kesa_asset *Asset, kea_asset *Image, loaded_bitmap *Normals)
+AddNormalMapAsset(kea_builder *Builder, kesa_asset *Asset, kea_asset *Image, loaded_bitmap *Normals, u64 Stamp,
+                  kea_asset *Reuse)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Asset);
+    BuilderAsset->KEAAsset.SourceStamp = Stamp;
+    BuilderAsset->Reuse = Reuse;
 
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
     KEAAsset->GUID = NormalMapGUID(Image->GUID);
@@ -116,11 +194,13 @@ AddNormalMapAsset(kea_builder *Builder, kesa_asset *Asset, kea_asset *Image, loa
     Builder->CurrentAsset = 0;
 }
 
-// NOTE(pvlso): One cell of a curated tile set's sheets, cut into its own bitmap
+// NOTE(pvlso): A tile set's atlas (engine_tileset_file.h, tile_atlas), a bitmap asset of its own
 internal void
-AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, u64 GUID, loaded_bitmap *TileBitmap)
+AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, u64 GUID, loaded_bitmap *TileBitmap, u64 Stamp, kea_asset *Reuse)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, Tileset);
+    BuilderAsset->KEAAsset.SourceStamp = Stamp;
+    BuilderAsset->Reuse = Reuse;
 
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
     KEAAsset->GUID = GUID;
@@ -132,20 +212,31 @@ AddTileAsset(kea_builder *Builder, kesa_asset *Tileset, u64 GUID, loaded_bitmap 
     Builder->CurrentAsset = 0;
 }
 
-// NOTE(pvlso): The bitmap GUID of a sheet cell in a set: the same cell used twice in a set (a tile and another's frame)
-// is one bitmap, two sets never share one
+// NOTE(pvlso): What a set's atlas is made of: the cells it packs, in order, and the stamps of the sheets they're
+// on. 0 when a sheet isn't there, which nothing matches.
 internal u64
-TileCellGUID(kea_builder *Builder, kesa_asset *Asset, tileset_file *File, tileset_file_cell Cell)
+TileAtlasStamp(tileset_file *File, tile_atlas *Layout, u64 *SheetStamps)
 {
-    FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s|%s|%d,%d",
-                 Asset->SourceFileName, File->Sheets[Cell.Sheet], Cell.X, Cell.Y);
-    u64 Result = GUIDFromString(Builder->Buffer);
+    u64 Hash = 14695981039346656037ull;
+    for(u32 CellIndex = 0; CellIndex < Layout->CellCount; ++CellIndex)
+    {
+        tileset_file_cell Cell = Layout->Cells[CellIndex];
+        u64 Sheet = (Cell.Sheet < File->SheetCount) ? SheetStamps[Cell.Sheet] : 0;
+        if(!Sheet) {return(0);}
+        u64 Values[2] = {Sheet, ((u64)Cell.Sheet << 32) | ((u64)Cell.X << 16) | (u64)Cell.Y};
+        u8 *Bytes = (u8 *)Values;
+        for(u32 Index = 0; Index < sizeof(Values); ++Index)
+        {
+            Hash = (Hash ^ Bytes[Index])*1099511628211ull;
+        }
+    }
+    Hash = (Hash ^ File->TileSize)*1099511628211ull;
 
-    return(Result);
+    return(Hash ? Hash : 1);
 }
 
-// NOTE(pvlso): A curated tile set (engine_tileset_file.cpp): its text file read, every cell it uses cut from its sheets
-// into a tile bitmap, the tiles' records (place in the set's grid, flags, name, frames) as the set's data
+// NOTE(pvlso): A curated tile set (engine_tileset_file.cpp): its text file read, every cell it uses packed from its
+// sheets into one atlas bitmap, the tiles' records (place in the set's grid, flags, name, atlas cells) as the set's data
 internal void
 AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
 {
@@ -158,20 +249,65 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     tile_flag_names FlagNames = ReadTileFlagNames(Builder->TempMem);
     tileset_file File = ReadTilesetFile(Asset->SourceFileName, &FlagNames, Builder->TempMem);
 
-    loaded_bitmap *Sheets = PushArray(Builder->TempMem, TILESET_MAX_SHEETS, loaded_bitmap);
+    // NOTE(pvlso): The sheets are decoded only when the atlas isn't in the previous KEA as it is now
+    u64 *SheetStamps = PushArray(Builder->TempMem, TILESET_MAX_SHEETS, u64);
+    char Cut[32];
+    FormatString(sizeof(Cut), Cut, "tile %u", File.TileSize);
     for(u32 SheetIndex = 0; SheetIndex < File.SheetCount; ++SheetIndex)
     {
-        Sheets[SheetIndex] = LoadImageFile(File.Sheets[SheetIndex], PlatformFileType_DataRoot, Builder->TempMem);
-        if(!Sheets[SheetIndex].Memory)
+        SheetStamps[SheetIndex] = ImageStamp(Builder, File.Sheets[SheetIndex], PlatformFileType_DataRoot, Cut);
+    }
+    tile_atlas Layout = BuildTileAtlas(&File, 0, Builder->TempMem);
+    u64 AtlasGUID = 0;
+    b32 Reused = false;
+    if(Layout.CellCount)
+    {
+        FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s|atlas", Asset->SourceFileName);
+        AtlasGUID = GUIDFromString(Builder->Buffer);
+        u64 Stamp = TileAtlasStamp(&File, &Layout, SheetStamps);
+        kea_asset *Reuse = PreviousPixels(Builder, AtlasGUID, Stamp);
+        if(Reuse)
         {
-            LOG_ERROR("Tile set %s: can't read the sheet %s", Asset->SourceFileName, File.Sheets[SheetIndex]);
+            AddTileAsset(Builder, Asset, AtlasGUID, 0, Stamp, Reuse);
+            ++Builder->ReusedCount;
+            Reused = true;
+        }
+        else
+        {
+            loaded_bitmap *Sheets = PushArray(Builder->TempMem, TILESET_MAX_SHEETS, loaded_bitmap);
+            for(u32 SheetIndex = 0; SheetIndex < File.SheetCount; ++SheetIndex)
+            {
+                Sheets[SheetIndex] = LoadImageFile(File.Sheets[SheetIndex], PlatformFileType_DataRoot, Builder->TempMem);
+                if(!Sheets[SheetIndex].Memory)
+                {
+                    LOG_ERROR("Tile set %s: can't read the sheet %s", Asset->SourceFileName, File.Sheets[SheetIndex]);
+                }
+            }
+            for(u32 CellIndex = 0; CellIndex < Layout.CellCount; ++CellIndex)
+            {
+                tileset_file_cell Cell = Layout.Cells[CellIndex];
+                loaded_bitmap *Sheet = Sheets + Cell.Sheet;
+                if(Sheet->Memory && (((Cell.X + 1)*File.TileSize > (u32)Sheet->Width) ||
+                                     ((Cell.Y + 1)*File.TileSize > (u32)Sheet->Height)))
+                {
+                    LOG_ERROR("Tile set %s: cell %d,%d is outside %s, the tile is left empty", Asset->SourceFileName,
+                              Cell.X, Cell.Y, File.Sheets[Cell.Sheet]);
+                }
+            }
+            loaded_bitmap *Bitmap = PushStruct(Builder->TempMem, loaded_bitmap);
+            *Bitmap = BuildTileAtlas(&File, Sheets, Builder->TempMem).Bitmap;
+            AddTileAsset(Builder, Asset, AtlasGUID, Bitmap, Stamp, 0);
+            ++Builder->DecodedCount;
         }
     }
 
     u32 FrameCount = 0;
     for(u32 TileIndex = 0; TileIndex < File.TileCount; ++TileIndex)
     {
-        if(File.Tiles[TileIndex].FrameCount > 1) {FrameCount += File.Tiles[TileIndex].FrameCount;}
+        if(File.Tiles[TileIndex].FrameCount > 1)
+        {
+            FrameCount += Minimum(File.Tiles[TileIndex].FrameCount, (u32)TILESET_MAX_TILE_FRAMES);
+        }
     }
 
     KEAAsset->Tileset.TileCount = File.TileCount;
@@ -179,17 +315,19 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
     KEAAsset->Tileset.GridHeight = (u16)File.GridHeight;
     KEAAsset->Tileset.FrameCount = FrameCount;
     KEAAsset->Tileset.TileSize = File.TileSize;
+    KEAAsset->Tileset.AtlasGUID = AtlasGUID;
+    KEAAsset->Tileset.AtlasColumns = Layout.Columns;
     builder_added_tileset *Data = &BuilderAsset->Data.Tileset;
     Data->Tiles = PushArray(Builder->TempMem, Maximum(1, File.TileCount), kea_tile);
-    Data->FrameGUIDs = PushArray(Builder->TempMem, Maximum(1, FrameCount), u64);
+    Data->FrameCells = PushArray(Builder->TempMem, Maximum(1, FrameCount), u32);
 
-    u32 AddedCount = 0;
-    u64 *Added = PushArray(Builder->TempMem, File.TileCount*TILESET_MAX_TILE_FRAMES + 1, u64);
     u32 FrameAt = 0;
     for(u32 TileIndex = 0; TileIndex < File.TileCount; ++TileIndex)
     {
         tileset_file_tile *Source = File.Tiles + TileIndex;
         kea_tile *Tile = Data->Tiles + TileIndex;
+        u32 *Cells = Layout.FrameCells + Layout.TileFirstFrame[TileIndex];
+        Tile->Cell = Cells[0];
         Tile->Flags = Source->Flags;
         Tile->Kind = Source->Kind;
         Tile->GridX = Source->GridX;
@@ -198,43 +336,18 @@ AddTilesetAsset(kea_builder *Builder, kesa_asset *Asset)
         FormatString(KEA_TILE_NAME_LENGTH, Tile->Name, "%s", Source->Name);
         if(Source->FrameCount > 1)
         {
+            u32 SourceFrames = Minimum(Source->FrameCount, (u32)TILESET_MAX_TILE_FRAMES);
             Tile->FirstFrame = FrameAt;
-            Tile->FrameCount = Source->FrameCount;
-        }
-
-        for(u32 FrameIndex = 0; FrameIndex < Source->FrameCount; ++FrameIndex)
-        {
-            tileset_file_cell Cell = Source->Frames[FrameIndex];
-            u64 GUID = TileCellGUID(Builder, Asset, &File, Cell);
-            if(FrameIndex == 0) {Tile->BitmapGUID = GUID;}
-            if(Source->FrameCount > 1) {Data->FrameGUIDs[FrameAt++] = GUID;}
-
-            b32 AlreadyAdded = false;
-            for(u32 Index = 0; Index < AddedCount; ++Index)
+            Tile->FrameCount = SourceFrames;
+            for(u32 FrameIndex = 0; FrameIndex < SourceFrames; ++FrameIndex)
             {
-                if(Added[Index] == GUID) {AlreadyAdded = true;}
-            }
-            if(!AlreadyAdded)
-            {
-                loaded_bitmap *Bitmap = PushStruct(Builder->TempMem, loaded_bitmap);
-                *Bitmap = CutTilesetCell(Sheets + Cell.Sheet, File.TileSize, Cell.X, Cell.Y, Builder->TempMem);
-                if(!Bitmap->Memory)
-                {
-                    LOG_ERROR("Tile set %s: cell %d,%d is outside %s, the tile is left empty", Asset->SourceFileName,
-                              Cell.X, Cell.Y, File.Sheets[Cell.Sheet]);
-                    Bitmap->Width = Bitmap->Height = File.TileSize;
-                    Bitmap->WidthOverHeight = 1.0f;
-                    Bitmap->AlignPercentage = V2(0.5f, 0.5f);
-                    Bitmap->Pitch = File.TileSize*BITMAP_BYTES_PER_PIXEL;
-                    Bitmap->Memory = PushSize(Builder->TempMem, Bitmap->Height*Bitmap->Pitch);
-                }
-                AddTileAsset(Builder, Asset, GUID, Bitmap);
-                Added[AddedCount++] = GUID;
+                Data->FrameCells[FrameAt++] = Cells[FrameIndex];
             }
         }
     }
-    LOG("Tile set %s: %u tiles from %u sheets, %u bitmaps%s", Asset->SourceFileName, File.TileCount, File.SheetCount,
-        AddedCount, File.ErrorCount ? " (with mistakes, see above)" : "");
+    LOG("Tile set %s: %u tiles from %u sheets, a %d x %d atlas of %u pictures%s%s", Asset->SourceFileName,
+        File.TileCount, File.SheetCount, Layout.Bitmap.Width, Layout.Bitmap.Height, Layout.CellCount,
+        Reused ? " (from the previous KEA)" : "", File.ErrorCount ? " (with mistakes, see above)" : "");
 
     Builder->CurrentAsset = BuilderAsset;
 }
@@ -323,7 +436,7 @@ AddMapAsset(kea_builder *Builder, kesa_asset *Asset)
         }
         if(!Stored)
         {
-            LOG_WARNING("Map %s uses the tile set %s, which isn't in the stored assets: add it, or the game can't draw "
+            LOG_WARNING("Map %s uses the tile set %s, which isn't in tilesets/ (or shares its name with another asset): the game can't draw "
                         "its tiles", Asset->SourceFileName, Map.Sets[SetIndex]);
         }
 
@@ -434,7 +547,7 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         LOG_WARNING("Entity %s has no type, a game won't know what it is", Name);
     }
 
-    // NOTE(pvlso): The clips with a look that's still stored
+    // NOTE(pvlso): The clips whose look is still in the asset folders
     Data->Clips = PushArray(Builder->TempMem, ENTITY_MAX_CLIPS, kea_entity_clip);
     for(u32 ClipIndex = 0; ClipIndex < Project->ClipCount; ++ClipIndex)
     {
@@ -471,9 +584,9 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
         }
         else
         {
-            LOG_WARNING("Entity %s: the clip %s's look, %s, isn't a stored %s any more, the clip is left out", Name,
+            LOG_WARNING("Entity %s: the clip %s's look, %s, isn't in %s any more, the clip is left out", Name,
                         Project->Clips[ClipIndex], Clip->FileName,
-                        (Clip->Kind == EntityLook_Bitmap) ? "bitmap" : "sprite sheet");
+                        (Clip->Kind == EntityLook_Bitmap) ? "bmps/" : "spritesheets/");
         }
     }
 
@@ -482,8 +595,8 @@ AddEntityAsset(kea_builder *Builder, kesa_asset *Asset, entity_file *Entity, ent
     Builder->CurrentAsset = BuilderAsset;
 }
 
-// NOTE(pvlso): Every definition in data/entities is packed, they aren't added as stored assets one by one. Each gets a
-// stored asset of its own here, only for its file name. One without a GUID, or with one another has, is left out.
+// NOTE(pvlso): Every definition in data/entities is packed, they aren't in the asset list (engine_asset_list.cpp). Each
+// gets a list entry of its own here, only for its file name. One without a GUID, or with one another has, is left out.
 internal void
 AddEntityAssets(kea_builder *Builder)
 {
@@ -534,19 +647,28 @@ AddEntityAssets(kea_builder *Builder)
     Builder->CurrentAsset = 0;
 }
 
+// NOTE(pvlso): A sprite's GUID: its sheet's name and its place on it
+internal u64
+SpriteGUID(kea_builder *Builder, kesa_asset *SpriteSheet, u32 SpriteIndex)
+{
+    FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%d", SpriteSheet->SourceFileName, "Sprite", SpriteIndex);
+    u64 Result = GUIDFromString(Builder->Buffer);
+
+    return(Result);
+}
+
 internal kea_asset *
 AddSpriteAsset(kea_builder *Builder, kesa_asset *SpriteSheet, added_asset_additional_data *Data,
-               u32 SpriteIndex, loaded_bitmap *Sprite)
+               u32 SpriteIndex, loaded_bitmap *Sprite, u64 Stamp, kea_asset *Reuse)
 {
     kea_builder_added_asset_list *BuilderAsset = BuilderAddAsset(Builder, SpriteSheet);
+    BuilderAsset->KEAAsset.SourceStamp = Stamp;
+    BuilderAsset->Reuse = Reuse;
 
     kea_asset *KEAAsset = &BuilderAsset->KEAAsset;
     kesa_asset *KESAAsset = BuilderAsset->StoredAsset;
 
-    FormatString(ArrayCount(Builder->Buffer), Builder->Buffer, "%s%s%d",
-                 SpriteSheet->SourceFileName, "Sprite", SpriteIndex);
-
-    KEAAsset->GUID = GUIDFromString(Builder->Buffer);
+    KEAAsset->GUID = SpriteGUID(Builder, SpriteSheet, SpriteIndex);
     KEAAsset->Type = KEAType_Sprite;
     KEAAsset->Bitmap.AlignPercentage[0] = KESAAsset->SpriteSheet.SpriteAlignPercentage.x;
     KEAAsset->Bitmap.AlignPercentage[1] = KESAAsset->SpriteSheet.SpriteAlignPercentage.y;
@@ -569,31 +691,66 @@ AddSpriteSheetAsset(kea_builder *Builder, kesa_asset *Asset)
     
     KEAAsset->GUID = KESAAsset->GUID;
     KEAAsset->Type = KEAType_SpriteSheet;
-    KEAAsset->SpriteSheet.SpriteCount = KESAAsset->SpriteSheet.SpriteCount;
-
-    BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, KEAAsset->SpriteSheet.SpriteCount, u64);
-
     Builder->CurrentAsset = 0;
-
-    builder_loaded_sprites Sprites = LoadSprites(KESAAsset, Builder->TempMem);
 
     // NOTE(pvlso): The sheet's normal map, when the art has one
     char NormalsFileName[256];
     NormalMapFileName(KESAAsset->SourceFileName, NormalsFileName, sizeof(NormalsFileName));
-    builder_loaded_sprites Normals = {};
-    if(Platform.FileExists(NormalsFileName, PlatformFileType_SSBMP))
+    b32 HasNormals = Platform.FileExists(NormalsFileName, PlatformFileType_SSBMP);
+
+    // NOTE(pvlso): When every sprite (and normal map) is in the previous KEA as the sheet is now, they're copied from
+    // there and the sheet isn't decoded
+    kesa_spritesheet *Sheet = &KESAAsset->SpriteSheet;
+    char Cut[64];
+    FormatString(sizeof(Cut), Cut, "sprites %u x %u, %u", Sheet->SpriteWidth, Sheet->SpriteHeight, Sheet->SpriteCount);
+    u64 Stamp = ImageStamp(Builder, KESAAsset->SourceFileName, PlatformFileType_SSBMP, Cut);
+    u64 NormalsStamp = HasNormals ? ImageStamp(Builder, NormalsFileName, PlatformFileType_SSBMP, Cut) : 0;
+    kea_asset **Reuse = PushArray(Builder->TempMem, Maximum(1, Sheet->SpriteCount), kea_asset *);
+    kea_asset **ReuseNormals = PushArray(Builder->TempMem, Maximum(1, Sheet->SpriteCount), kea_asset *);
+    b32 ReuseAll = (Sheet->SpriteCount > 0);
+    for(u32 I = 0; ReuseAll && (I < Sheet->SpriteCount); ++I)
     {
-        Normals = LoadSprites(KESAAsset, Builder->TempMem, NormalsFileName, true);
+        u64 GUID = SpriteGUID(Builder, KESAAsset, I);
+        Reuse[I] = PreviousPixels(Builder, GUID, Stamp);
+        ReuseNormals[I] = HasNormals ? PreviousPixels(Builder, NormalMapGUID(GUID), NormalsStamp) : 0;
+        ReuseAll = Reuse[I] && (!HasNormals || ReuseNormals[I]);
     }
 
+    builder_loaded_sprites Sprites = {};
+    builder_loaded_sprites Normals = {};
+    u32 SpriteCount = Sheet->SpriteCount;
+    if(ReuseAll)
+    {
+        Builder->ReusedCount += SpriteCount*(HasNormals ? 2 : 1);
+    }
+    else
+    {
+        // NOTE(pvlso): Only the sprites that were cut: a sheet that can't be read, or is smaller than its frames say,
+        // has none (LoadSprites logs why)
+        Sprites = LoadSprites(KESAAsset, Builder->TempMem);
+        SpriteCount = Sprites.Count;
+        if(HasNormals)
+        {
+            Normals = LoadSprites(KESAAsset, Builder->TempMem, NormalsFileName, true);
+        }
+        Builder->DecodedCount += Sprites.Count + Normals.Count;
+    }
+    KEAAsset->SpriteSheet.SpriteCount = SpriteCount;
+    BuilderAsset->Data.SpriteSheet.SpriteGUIDs = PushArray(Builder->TempMem, Maximum(1, SpriteCount), u64);
+
     for(u32 I = 0;
-        I < KESAAsset->SpriteSheet.SpriteCount;
+        I < SpriteCount;
         ++I)
     {
-        kea_asset *Sprite = AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, Sprites.Sprites + I);
-        if(I < Normals.Count)
+        kea_asset *Sprite = AddSpriteAsset(Builder, Asset, &BuilderAsset->Data, I, ReuseAll ? 0 : Sprites.Sprites + I,
+                                           Stamp, ReuseAll ? Reuse[I] : 0);
+        if(ReuseAll && HasNormals)
         {
-            AddNormalMapAsset(Builder, Asset, Sprite, Normals.Sprites + I);
+            AddNormalMapAsset(Builder, Asset, Sprite, 0, NormalsStamp, ReuseNormals[I]);
+        }
+        else if(I < Normals.Count)
+        {
+            AddNormalMapAsset(Builder, Asset, Sprite, Normals.Sprites + I, NormalsStamp, 0);
         }
     }
 
@@ -649,6 +806,9 @@ AddBitmapAsset(kea_builder *Builder, kesa_asset *Asset)
     KEAAsset->Type = KEAType_Bitmap;
     KEAAsset->Bitmap.AlignPercentage[0] = KESAAsset->Bitmap.AlignPercentage.x;
     KEAAsset->Bitmap.AlignPercentage[1] = KESAAsset->Bitmap.AlignPercentage.y;
+    KEAAsset->SourceStamp = ImageStamp(Builder, KESAAsset->SourceFileName, PlatformFileType_BMP, "bitmap");
+    BuilderAsset->Reuse = PreviousPixels(Builder, KEAAsset->GUID, KEAAsset->SourceStamp);
+    if(BuilderAsset->Reuse) {++Builder->ReusedCount;} else {++Builder->DecodedCount;}
 }
 
 internal void
@@ -709,9 +869,10 @@ AddStoredAssetTags(kea_builder *Builder, kesa_asset *StoredAsset)
     }    
 }
 
-internal void
+internal b32
 BuilderWriteKEA(kea_builder *Builder)
 {
+    b32 Result = false;
     TIMED_FUNCTION();
 
     kesa_header *KESAHeader = Builder->KESAHeader;
@@ -838,8 +999,8 @@ BuilderWriteKEA(kea_builder *Builder)
                 Platform.WriteDataToFile(&Out, At, TilesSize, BuilderAsset->Data.Tileset.Tiles);
                 At += TilesSize;
 
-                u32 FramesSize = Dest->Tileset.FrameCount*sizeof(u64);
-                Platform.WriteDataToFile(&Out, At, FramesSize, BuilderAsset->Data.Tileset.FrameGUIDs);
+                u32 FramesSize = Dest->Tileset.FrameCount*sizeof(u32);
+                Platform.WriteDataToFile(&Out, At, FramesSize, BuilderAsset->Data.Tileset.FrameCells);
                 At += FramesSize;
             }
             else if(Dest->Type == KEAType_Map)
@@ -907,6 +1068,20 @@ BuilderWriteKEA(kea_builder *Builder)
                 Platform.WriteDataToFile(&Out, At, ReadResult.Size, ReadResult.Contents);
                 At += ReadResult.Size;
             }
+            else if(BuilderAsset->Reuse)
+            {
+                // NOTE(pvlso): The same pixels as the previous KEA's, copied over
+                kea_asset *Previous = BuilderAsset->Reuse;
+                Dest->Bitmap.Dim[0] = Previous->Bitmap.Dim[0];
+                Dest->Bitmap.Dim[1] = Previous->Bitmap.Dim[1];
+                u32 BitmapSize = Dest->Bitmap.Dim[0]*Dest->Bitmap.Dim[1]*BITMAP_BYTES_PER_PIXEL;
+                temporary_memory PixelMem = BeginTemporaryMemory(Builder->TempMem);
+                void *Pixels = PushSize(Builder->TempMem, Maximum(1, BitmapSize));
+                Platform.ReadDataFromFile(&Builder->PreviousFile, Previous->DataOffset, BitmapSize, Pixels);
+                Platform.WriteDataToFile(&Out, At, BitmapSize, Pixels);
+                EndTemporaryMemory(PixelMem);
+                At += BitmapSize;
+            }
             else
             {
                 loaded_bitmap Bitmap = {};
@@ -945,9 +1120,15 @@ BuilderWriteKEA(kea_builder *Builder)
         Platform.WriteDataToFile(&Out, Header.AssetsOffset, AssetArraySize, KEAAssets);
         Platform.WriteDataToFile(&Out, 0, sizeof(kea_header), &Header);
 
-        if(PlatformNoFileErrors(&Out))
+        if(Builder->HasPrevious && !PlatformNoFileErrors(&Builder->PreviousFile))
         {
-            LOG("Wrote %s: %u assets, %u tags", KEAFileName, Builder->AssetCount, Builder->TagCount);
+            LOG_ERROR("Reading the previous KEA's pixels failed: %s is left incomplete", KEAFileName);
+        }
+        else if(PlatformNoFileErrors(&Out))
+        {
+            LOG("Wrote %s: %u assets, %u tags; %u bitmaps copied from the previous KEA, %u decoded", KEAFileName,
+                Builder->AssetCount, Builder->TagCount, Builder->ReusedCount, Builder->DecodedCount);
+            Result = true;
         }
         else
         {
@@ -960,6 +1141,8 @@ BuilderWriteKEA(kea_builder *Builder)
     }
 
     Platform.CloseFile(&Out);
+
+    return(Result);
 }
 
 internal inline void
@@ -981,15 +1164,19 @@ TagTableInsert(kea_tag_lookup_entry *Table, u32 Capacity, kea_tag_lookup_entry E
     }
 }
 
+// NOTE(pvlso): PreviousKEA (in data/keas, or 0) is the last build: the bitmaps whose images haven't changed since are
+// copied from it (SourceStamp), so saving a map doesn't decode every tile set's sheets again
 internal b32
-BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
+BuildKEA(kesa_header *ListHeader, kesa_asset *List, ket_header *TagHeader, kea_tag_map *Tags, memory_arena *TempMem,
+         char *PreviousKEA)
 {
     TIMED_FUNCTION();
 
     b32 Result = true;
 
-    kea_builder *Builder = InitKEABuilder(AssetsMode, TempMem);
-    LOG("Building the KEA from %u stored assets", Builder->KESAHeader->AssetCount - 1);
+    kea_builder *Builder = InitKEABuilder(ListHeader, List, TagHeader, Tags, TempMem);
+    OpenPreviousKEA(Builder, PreviousKEA);
+    LOG("Building the KEA from %u assets", Builder->KESAHeader->AssetCount - 1);
 
     // NOTE(pvlso): Create raw asset list
     kesa_header *StoredHeader = Builder->KESAHeader;
@@ -1157,7 +1344,11 @@ BuildKEA(editor_mode_assets *AssetsMode, memory_arena *TempMem)
         Search = Search->Next;
     }
     
-    BuilderWriteKEA(Builder);
-    
+    Result = BuilderWriteKEA(Builder);
+    if(Builder->HasPrevious)
+    {
+        Platform.CloseFile(&Builder->PreviousFile);
+    }
+
     return(Result);
 }

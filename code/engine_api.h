@@ -172,9 +172,12 @@ struct map_entity_info
     s32 Level;         // NOTE(pvlso): the level it stands on
 };
 
+// NOTE(pvlso): Its picture is a part of its set's atlas, drawn with PushTile
 struct tile_info
 {
-    bitmap_id Bitmap; // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
+    bitmap_id Atlas;  // NOTE(pvlso): its set's pictures; 0 when the set has none
+    v2 MinUV;         // NOTE(pvlso): the frame showing at the time asked for, when the tile is animated
+    v2 MaxUV;
     u32 Flags;        // NOTE(pvlso): bit n is the n-th name in the project's data/txts/tile_flags.txt
     u32 Kind;         // NOTE(pvlso): 0 for none, else the n-th name in the project's data/txts/tile_kinds.txt, from 1
     u32 GridX;        // NOTE(pvlso): its place in the set's grid, from the top left
@@ -280,6 +283,12 @@ struct engine_api
     void (*PushLine)(render_group *Group, object_transform *ObjectTransform, v3 P0, v3 P1, v4 Color);
     void (*PushCircleOutline)(render_group *Group, object_transform *ObjectTransform, v3 Center, f32 Radius,
                               s32 Segments, v4 Color);
+    // NOTE(pvlso): A filled triangle (the corners in the transform's space; Color's alpha blends it)
+    void (*PushTriangle)(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color);
+    // NOTE(pvlso): A tile (GetTileInfo, at the frame asked for there) as a Size square, its bottom left corner at
+    // Corner. Its set's atlas loads the first time; nothing is drawn until it has.
+    void (*PushTile)(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size,
+                     v4 Color);
 
     // NOTE(pvlso): Loads data/ttfs/<FileName> the first time, 0 when it's missing or not a font (logged once).
     engine_font *(*GetFont)(char *FileName);
@@ -296,17 +305,16 @@ struct engine_api
     // NOTE(pvlso): The sprite at SpriteIndex (left to right) of the sprite sheet at SheetIndex (found with
     // GetBestMatchAssets), for PushBitmap. 0 when it isn't a sprite sheet or has no such sprite.
     bitmap_id (*GetSprite)(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex);
-    // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets), for
-    // PushBitmap: its first frame when it's animated. Tiles are numbered in the order the set lists them.
-    // 0 when it isn't a tile set or has no such tile.
-    bitmap_id (*GetTilesetTile)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex);
     // NOTE(pvlso): All zero when TilesetIndex isn't a tile set
     tileset_info (*GetTilesetInfo)(engine_assets *Assets, u32 TilesetIndex);
-    // NOTE(pvlso): Time in seconds picks an animated tile's frame (any running clock). All zero when there's no
-    // such tile.
+    // NOTE(pvlso): The tile at TileIndex of the tile set at TilesetIndex (found with GetBestMatchAssets, or a map's
+    // GetMapTileset); tiles are numbered in the order the set lists them. Time in seconds picks an animated tile's
+    // frame (any running clock). All zero when there's no such tile.
     tile_info (*GetTileInfo)(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time);
     // NOTE(pvlso): A map at MapIndex (found with GetBestMatchAssets); all zero when it isn't one
     map_info (*GetMapInfo)(engine_assets *Assets, u32 MapIndex);
+    // NOTE(pvlso): The map made of FileName in data/maps (as game_start names it), 0 when the asset file hasn't got it
+    u32 (*FindMap)(engine_assets *Assets, char *FileName);
     map_layer_info (*GetMapLayer)(engine_assets *Assets, u32 MapIndex, u32 LayerIndex);
     // NOTE(pvlso): The asset index of the map's set SetIndex (from 0; a cell's Set - 1), 0 when it isn't in the KEA
     u32 (*GetMapTileset)(engine_assets *Assets, u32 MapIndex, u32 SetIndex);
@@ -316,6 +324,9 @@ struct engine_api
     // one; -1 when P isn't on the mesh
     s32 (*FindNavPoly)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
     s32 (*GetNavPolyLevel)(engine_assets *Assets, u32 MapIndex, s32 Poly);
+    // NOTE(pvlso): The corners of the mesh's polygon Poly (0 to map_info NavPolyCount - 1), convex, in cells from the
+    // map's top left, up to MaxPoints of them; the count comes back, 0 when there's no such polygon
+    u32 (*GetNavPolyPoints)(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints);
     // NOTE(pvlso): The shortest way over the mesh: Points gets its corners and the places where it changes level,
     // starting with From and ending with To (points past MaxPoints are left out, walk them and ask again). The count
     // comes back, 0 when there's no way or an end isn't on the mesh.
@@ -327,6 +338,9 @@ struct engine_api
     // NOTE(pvlso): The point of the mesh closest to P and its level in Level; P itself where it's on the mesh, on Level
     // if there's a polygon of that level there. Without a mesh it gives P.
     v2 (*ClosestNavPoint)(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level);
+    // NOTE(pvlso): Only on Level: P where a polygon of Level is under it, else the closest point of Level's polygons,
+    // even where another level is under P. P when Level has no polygons, or without a mesh.
+    v2 (*ClosestNavPointOnLevel)(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level);
     // NOTE(pvlso): The asset index of the definition saved as data/entities/<Name>.txt, or with that GUID; 0 when it
     // isn't in the KEA
     u32 (*FindEntity)(engine_assets *Assets, char *Name);
@@ -341,6 +355,14 @@ struct engine_api
 
 // NOTE(pvlso): Owned by the engine, so it survives hot reloads of the game code. The arenas
 // start empty and grow through Platform.AllocateMemory, the engine frees them when the game stops.
+struct game_start
+{
+    char MapFileName[64];
+    b32 HasP;
+    v2 P;
+    s32 Level;
+};
+
 struct game_memory
 {
     memory_arena PermanentArena;
@@ -348,6 +370,16 @@ struct game_memory
 
     // NOTE(pvlso): The game's own state, usually pushed on the permanent arena on the first frame
     void *GameState;
+
+    // NOTE(pvlso): Goes up by one every time the engine swaps the running game to a newly built KEA (a map saved in the
+    // map editor, a picture added). Asset indices and pointers taken from the old one are wrong then: a game that
+    // keeps any compares this with the count it last saw and takes them again (reloads its map).
+    u32 AssetSwapCount;
+
+    // NOTE(pvlso): Set when the map editor's Play (F5) started the game, empty when Run did: the map being edited by
+    // its file name in data/maps (FindMap gives its asset) and, when HasP, where to start on it: P in cells from the
+    // map's top left (y down), on Level. It stays for Restart.
+    game_start Start;
 
     // NOTE(pvlso): Refilled before every call, the engine code can be reloaded as well
     platform_api PlatformAPI;
@@ -455,6 +487,19 @@ PushCircleOutline(render_group *Group, object_transform *ObjectTransform, v3 Cen
     Engine.PushCircleOutline(Group, ObjectTransform, Center, Radius, Segments, Color);
 }
 
+inline void
+PushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushTriangle(Group, ObjectTransform, A, B, C, Color);
+}
+
+inline void
+PushTile(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size = 1.0f,
+         v4 Color = V4(1, 1, 1, 1))
+{
+    Engine.PushTile(Group, ObjectTransform, Tile, Corner, Size, Color);
+}
+
 inline asset_best_match_result
 GetBestMatchAssets(engine_assets *Assets, asset_tag_vector *Vector, memory_arena *Arena = 0)
 {
@@ -466,13 +511,6 @@ inline bitmap_id
 GetSprite(engine_assets *Assets, u32 SheetIndex, u32 SpriteIndex)
 {
     bitmap_id Result = Engine.GetSprite(Assets, SheetIndex, SpriteIndex);
-    return(Result);
-}
-
-inline bitmap_id
-GetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
-{
-    bitmap_id Result = Engine.GetTilesetTile(Assets, TilesetIndex, TileIndex);
     return(Result);
 }
 
@@ -491,6 +529,7 @@ GetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time = 0
 }
 
 inline map_info GetMapInfo(engine_assets *Assets, u32 MapIndex) {return(Engine.GetMapInfo(Assets, MapIndex));}
+inline u32 FindMap(engine_assets *Assets, char *FileName) {return(Engine.FindMap(Assets, FileName));}
 inline map_layer_info
 GetMapLayer(engine_assets *Assets, u32 MapIndex, u32 LayerIndex)
 {
@@ -514,6 +553,11 @@ GetMapEntity(engine_assets *Assets, u32 MapIndex, u32 EntityIndex)
 inline s32 FindNavPoly(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level) {return(Engine.FindNavPoly(Assets, MapIndex, P, Level));}
 inline s32 GetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly) {return(Engine.GetNavPolyLevel(Assets, MapIndex, Poly));}
 inline u32
+GetNavPolyPoints(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints)
+{
+    return(Engine.GetNavPolyPoints(Assets, MapIndex, Poly, Points, MaxPoints));
+}
+inline u32
 FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
             u32 MaxPoints)
 {
@@ -521,6 +565,11 @@ FindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, 
 }
 inline v2 MoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To) {return(Engine.MoveOnNav(Assets, MapIndex, From, Level, To));}
 inline v2 ClosestNavPoint(engine_assets *Assets, u32 MapIndex, v2 P, s32 *Level) {return(Engine.ClosestNavPoint(Assets, MapIndex, P, Level));}
+inline v2
+ClosestNavPointOnLevel(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level)
+{
+    return(Engine.ClosestNavPointOnLevel(Assets, MapIndex, P, Level));
+}
 inline u32 FindEntity(engine_assets *Assets, char *Name) {return(Engine.FindEntity(Assets, Name));}
 inline u32 FindEntityByGUID(engine_assets *Assets, u64 GUID) {return(Engine.FindEntityByGUID(Assets, GUID));}
 inline entity_info GetEntityInfo(engine_assets *Assets, u32 EntityIndex) {return(Engine.GetEntityInfo(Assets, EntityIndex));}

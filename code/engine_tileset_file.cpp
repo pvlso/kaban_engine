@@ -339,6 +339,132 @@ CutTilesetCell(loaded_bitmap *Sheet, u32 TileSize, u32 CellX, u32 CellY, memory_
     return(Result);
 }
 
+// NOTE(pvlso): The set's atlas (tile_atlas). A cell outside its sheet, or on a sheet that didn't load, stays clear.
+// Without Sheets only the layout is made (the size, the cells), no pixels.
+internal tile_atlas
+BuildTileAtlas(tileset_file *File, loaded_bitmap *Sheets, memory_arena *Arena)
+{
+    tile_atlas Result = {};
+    u32 TileSize = File->TileSize;
+    Result.TileSize = TileSize;
+
+    u32 FrameTotal = 0;
+    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
+    {
+        FrameTotal += Maximum(1u, File->Tiles[TileIndex].FrameCount);
+    }
+    Result.TileFirstFrame = PushArray(Arena, Maximum(1u, File->TileCount), u32);
+    Result.FrameCells = PushArray(Arena, Maximum(1u, FrameTotal), u32);
+    Result.FrameTotal = FrameTotal;
+    tileset_file_cell *Cells = PushArray(Arena, Maximum(1u, FrameTotal), tileset_file_cell);
+    Result.Cells = Cells;
+
+    // NOTE(pvlso): A cell used twice (a tile and another's frame) is packed once
+    u32 FrameAt = 0;
+    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
+    {
+        tileset_file_tile *Tile = File->Tiles + TileIndex;
+        Result.TileFirstFrame[TileIndex] = FrameAt;
+        u32 FrameCount = Minimum(Maximum(1u, Tile->FrameCount), (u32)TILESET_MAX_TILE_FRAMES);
+        for(u32 FrameIndex = 0; FrameIndex < FrameCount; ++FrameIndex)
+        {
+            tileset_file_cell Cell = Tile->Frames[FrameIndex];
+            u32 Found = Result.CellCount;
+            for(u32 CellIndex = 0; CellIndex < Result.CellCount; ++CellIndex)
+            {
+                if((Cells[CellIndex].Sheet == Cell.Sheet) && (Cells[CellIndex].X == Cell.X) &&
+                   (Cells[CellIndex].Y == Cell.Y))
+                {
+                    Found = CellIndex;
+                    break;
+                }
+            }
+            if(Found == Result.CellCount)
+            {
+                Cells[Result.CellCount++] = Cell;
+            }
+            Result.FrameCells[FrameAt++] = Found;
+        }
+    }
+
+    if(TileSize && Result.CellCount)
+    {
+        u32 Columns = 1;
+        while(Columns*Columns < Result.CellCount) {++Columns;}
+        u32 Rows = (Result.CellCount + Columns - 1) / Columns;
+        u32 Stride = TileSize + 2;
+        Result.Columns = Columns;
+
+        loaded_bitmap Bitmap = {};
+        Bitmap.Width = Columns*Stride;
+        Bitmap.Height = Rows*Stride;
+        Bitmap.WidthOverHeight = (r32)Bitmap.Width / (r32)Bitmap.Height;
+        Bitmap.AlignPercentage = V2(0.5f, 0.5f);
+        Bitmap.Pitch = Bitmap.Width*BITMAP_BYTES_PER_PIXEL;
+        if(Sheets)
+        {
+            umm Size = (umm)Bitmap.Height*Bitmap.Pitch;
+            Bitmap.Memory = PushSize(Arena, Size);
+            ZeroSize(Size, Bitmap.Memory);
+        }
+
+        for(u32 CellIndex = 0; Sheets && (CellIndex < Result.CellCount); ++CellIndex)
+        {
+            tileset_file_cell Cell = Cells[CellIndex];
+            loaded_bitmap *Sheet = (Cell.Sheet < File->SheetCount) ? Sheets + Cell.Sheet : 0;
+            if(!Sheet || !Sheet->Memory || ((Cell.X + 1)*TileSize > (u32)Sheet->Width) ||
+               ((Cell.Y + 1)*TileSize > (u32)Sheet->Height))
+            {
+                continue;
+            }
+
+            u32 FirstRow = Sheet->Height - (Cell.Y + 1)*TileSize;
+            u32 DestX = (CellIndex % Columns)*Stride;
+            u32 DestY = (CellIndex / Columns)*Stride;
+            for(s32 Y = -1; Y <= (s32)TileSize; ++Y)
+            {
+                u32 SourceY = (Y < 0) ? 0 : (((u32)Y >= TileSize) ? TileSize - 1 : (u32)Y);
+                u32 *Source = (u32 *)((u8 *)Sheet->Memory + (FirstRow + SourceY)*Sheet->Pitch) + Cell.X*TileSize;
+                u32 *Dest = (u32 *)((u8 *)Bitmap.Memory + (DestY + 1 + Y)*Bitmap.Pitch) + DestX;
+                for(s32 X = -1; X <= (s32)TileSize; ++X)
+                {
+                    Dest[1 + X] = Source[(X < 0) ? 0 : (((u32)X >= TileSize) ? TileSize - 1 : (u32)X)];
+                }
+            }
+        }
+        Result.Bitmap = Bitmap;
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): The inside of the atlas cell, border left out, as UVs from the bitmap's bottom left
+internal void
+TileAtlasUV(tile_atlas *Atlas, u32 CellIndex, v2 *MinUV, v2 *MaxUV)
+{
+    u32 Stride = Atlas->TileSize + 2;
+    r32 InvWidth = 1.0f / (r32)Atlas->Bitmap.Width;
+    r32 InvHeight = 1.0f / (r32)Atlas->Bitmap.Height;
+    r32 X = (r32)((CellIndex % Atlas->Columns)*Stride + 1);
+    r32 Y = (r32)((CellIndex / Atlas->Columns)*Stride + 1);
+    *MinUV = V2(X*InvWidth, Y*InvHeight);
+    *MaxUV = V2((X + (r32)Atlas->TileSize)*InvWidth, (Y + (r32)Atlas->TileSize)*InvHeight);
+}
+
+// NOTE(pvlso): The atlas cell a tile shows at Time (seconds on any clock)
+internal u32
+TileAtlasCell(tile_atlas *Atlas, tileset_file_tile *Tile, u32 TileIndex, r32 Time)
+{
+    u32 Frame = 0;
+    u32 FrameCount = Minimum(Tile->FrameCount, (u32)TILESET_MAX_TILE_FRAMES);
+    if((FrameCount > 1) && (Tile->FramesPerSecond > 0.0f))
+    {
+        Frame = (u32)FloorReal32ToInt32(Time*Tile->FramesPerSecond) % FrameCount;
+    }
+    u32 Result = Atlas->FrameCells[Atlas->TileFirstFrame[TileIndex] + Frame];
+    return(Result);
+}
+
 // NOTE(pvlso): Writes the set to data/tilesets/<FileName> in the format ReadTilesetFile reads. Sheets no tile uses are
 // left out and the rest renumbered. False when the file can't be written.
 internal b32

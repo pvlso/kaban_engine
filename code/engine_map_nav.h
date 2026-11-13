@@ -23,6 +23,7 @@
 
 #define MAP_NAV_ROUNDING 1000.0f // NOTE(pvlso): baked points are rounded to this part of a cell
 #define MAP_NAV_EPSILON 0.01f    // NOTE(pvlso): in cells: closer than this is touching
+#define MAP_NAV_CLEARANCE 0.1f   // NOTE(pvlso): in cells: how far a path's corners keep from the walls they go around
 
 struct map_nav_mesh
 {

@@ -698,6 +698,25 @@ internal PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFile)
     return(Result);
 }
 
+internal PLATFORM_GET_FILE_WRITE_TIME(PlatformGetFileWriteTime)
+{
+    char Path[PLATFORM_PATH_COUNT];
+    PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
+
+    u64 Result = OSGetLastWriteTime(Path);
+    return(Result);
+}
+
+internal PLATFORM_REMOVE_FILE(PlatformRemoveFile)
+{
+    char Path[PLATFORM_PATH_COUNT];
+    PlatformBuildDataPath(FileName, Type, Path, sizeof(Path));
+
+    OSDeleteFile(Path);
+    b32 Result = !OSFileExists(Path);
+    return(Result);
+}
+
 internal PLATFORM_FILE_EXISTS(PlatformFileExists)
 {
     char Path[PLATFORM_PATH_COUNT];
@@ -1083,6 +1102,9 @@ PlatformInitAPI(engine_memory *Memory, platform_work_queue *HighPQ, platform_wor
     Memory->PlatformAPI.ReadEntireFile = PlatformReadEntireFile;
     Memory->PlatformAPI.WriteEntireFile = PlatformWriteEntireFile;
     Memory->PlatformAPI.FileExists = PlatformFileExists;
+    Memory->PlatformAPI.GetFileWriteTime = PlatformGetFileWriteTime;
+    Memory->PlatformAPI.RemoveFile = PlatformRemoveFile;
+    Memory->PlatformAPI.GetSeconds = OSGetSeconds;
     Memory->PlatformAPI.FreeFileMemory = PlatformFreeFileMemory;
     Memory->PlatformAPI.FileSeek = PlatformSeekFile;
     Memory->PlatformAPI.FileTell = PlatformFileTell;

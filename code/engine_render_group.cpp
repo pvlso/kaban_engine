@@ -177,6 +177,30 @@ PushBitmapPart(render_group *Group, object_transform *ObjectTransform, loaded_bi
     }
 }
 
+// NOTE(pvlso): The same for an asset's bitmap, asked to load when it isn't in yet (nothing drawn until it is)
+inline void
+PushBitmapPart(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, rectangle2 Rect, r32 Z,
+               v2 MinUV, v2 MaxUV, v4 Color = V4(1, 1, 1, 1))
+{
+    loaded_bitmap *Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
+    if(Group->RendersInBackground && !Bitmap)
+    {
+        LoadAsset(Group->Assets, AssetType_Bitmap, ID.Value, true);
+        Bitmap = GetBitmap(Group->Assets, ID, Group->GenerationID);
+    }
+
+    if(Bitmap)
+    {
+        PushBitmapPart(Group, ObjectTransform, Bitmap, Rect, Z, MinUV, MaxUV, Color);
+    }
+    else
+    {
+        Assert(!Group->RendersInBackground);
+        LoadAsset(Group->Assets, AssetType_Bitmap, ID.Value, false);
+        ++Group->MissingResourceCount;
+    }
+}
+
 inline void
 PushBitmap(render_group *Group, object_transform *ObjectTransform,
            bitmap_id ID, real32 Height, v3 Offset, v4 Color = V4(1, 1, 1, 1), r32 CAlign = 1.0f,

@@ -43,7 +43,7 @@ struct kea_tag_map
 
 struct kea_header
 {
-#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'f')
+#define KEA_MAGIC_VALUE ENCODE_MAGIC('k', 'e', 'a', 'g')
     u32 MagicValue;
 #define KEA_VERSION 0
     u32 Version;

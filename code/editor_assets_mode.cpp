@@ -9,25 +9,26 @@
 #include "engine_tileset_file.cpp"
 #include "engine_entity_file.cpp"
 #include "engine_map_file.cpp"
+#include "engine_asset_list.cpp"
 #include "engine_kea_builder.cpp"
 #include "editor_tileset_edit.cpp"
 #include "editor_cut_edit.cpp"
 #include "engine_assets_mode_ui.cpp"
 
-inline void
-DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
+// NOTE(pvlso): The tags read by ReadTagFile, freed
+internal void
+FreeTagMaps(ket_header *Header, kea_tag_map *Tags, char **Keys)
 {
-    ket_header *Header = &AssetsMode->TagHeader;
-    if(AssetsMode->TagKeys)
+    if(Keys)
     {
-        Platform.DeallocateMemory(AssetsMode->TagKeys);    
+        Platform.DeallocateMemory(Keys);
     }
 
-    if(AssetsMode->Tags)
+    if(Tags)
     {
         for(u32 I = 0; I < Header->TagCount; ++I)
         {
-            kea_tag_map *TagMap = AssetsMode->Tags + I;
+            kea_tag_map *TagMap = Tags + I;
             Platform.DeallocateMemory(TagMap->ValueGUIDs);
             for(u32 J = 0; J < TagMap->ValueCount; ++J)
             {
@@ -36,54 +37,60 @@ DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
             Platform.DeallocateMemory(TagMap->Values);
         }
 
-        Platform.DeallocateMemory(AssetsMode->Tags);
+        Platform.DeallocateMemory(Tags);
     }
 }
 
-internal b32
-ReadTags(editor_mode_assets *AssetsMode)
+inline void
+DeallocateAssetsModeTags(editor_mode_assets *AssetsMode)
 {
-    b32 Result = true;
-    Assert(AssetsMode->StoredHeader.MagicValue);
-    ket_header *Header = &AssetsMode->TagHeader;
+    FreeTagMaps(&AssetsMode->TagHeader, AssetsMode->Tags, AssetsMode->TagKeys);
+    AssetsMode->Tags = 0;
+    AssetsMode->TagKeys = 0;
+}
 
-    DeallocateAssetsModeTags(AssetsMode);
-    
-    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
-    u8 TagVersion[4] =
-        {
-            (u8)((TagFullVersion >> 24) & 0xff),
-            (u8)((TagFullVersion >> 16) & 0xff),
-            (u8)((TagFullVersion >>  8) & 0xff),
-            (u8)((TagFullVersion >>  0) & 0xff),
-        };
+internal void
+TagsFileName(u32 TagFullVersion, char *Dest, umm DestSize)
+{
+    FormatString(DestSize, Dest, "asset_tags_%d.%d.%d.%d.ket",
+                 (TagFullVersion >> 24) & 0xff, (TagFullVersion >> 16) & 0xff,
+                 (TagFullVersion >>  8) & 0xff, (TagFullVersion >>  0) & 0xff);
+}
 
-    char TagsFileName[256];
-    FormatString(ArrayCount(TagsFileName), TagsFileName, "asset_tags_%d.%d.%d.%d.ket",
-                 TagVersion[0], TagVersion[1],
-                 TagVersion[2], TagVersion[3]);
-    
-    platform_file_handle KETHandle =
-        Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Read);
-    if(PlatformNoFileErrors(&KETHandle))
+// NOTE(pvlso): asset_tags_<Version>.ket read: its header, the tag maps and their keys (FreeTagMaps frees them). False
+// without the file, *Tags and *Keys are 0 then.
+internal b32
+ReadTagFile(u32 TagFullVersion, ket_header *Header, kea_tag_map **TagsOut, char ***KeysOut, memory_arena *TempArena)
+{
+    b32 Result = false;
+    *TagsOut = 0;
+    *KeysOut = 0;
+
+    char FileName[256];
+    TagsFileName(TagFullVersion, FileName, sizeof(FileName));
+    if(Platform.FileExists(FileName, PlatformFileType_KET))
     {
+        Result = true;
+        platform_file_handle KETHandle = Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Read);
         Platform.ReadDataFromFile(&KETHandle, 0, sizeof(ket_header), Header);
 
-        Assert(Header->Version == AssetsMode->StoredHeader.TagsVersion);
+        Assert(Header->Version == TagFullVersion);
         Assert(Header->TagCount);
 
         u32 TagsSize = Header->TagCount*sizeof(ket_tag);
 
-        temporary_memory TempMem = BeginTemporaryMemory(&AssetsMode->UtilityTempArena);
+        temporary_memory TempMem = BeginTemporaryMemory(TempArena);
         ket_tag *RawTags = PushArray(TempMem.Arena, Header->TagCount, ket_tag);
         Platform.ReadDataFromFile(&KETHandle, Header->TagArrayOffset, TagsSize, RawTags);
 
-        AssetsMode->TagKeys = (char **)Platform.AllocateMemory(Header->TagCount*sizeof(char *));
-        AssetsMode->Tags = (kea_tag_map *)Platform.AllocateMemory(Header->TagCount*sizeof(kea_tag_map));
+        char **Keys = (char **)Platform.AllocateMemory(Header->TagCount*sizeof(char *));
+        kea_tag_map *Tags = (kea_tag_map *)Platform.AllocateMemory(Header->TagCount*sizeof(kea_tag_map));
+        *KeysOut = Keys;
+        *TagsOut = Tags;
         for(u32 I = 0; I < Header->TagCount; ++I)
         {
             ket_tag *Tag = RawTags + I;
-            kea_tag_map *Map = AssetsMode->Tags + I;
+            kea_tag_map *Map = Tags + I;
             Map->Values = (char **)Platform.AllocateMemory(Tag->ValueCount*sizeof(char *));
             Map->ValueGUIDs = (u64 *)Platform.AllocateMemory(Tag->ValueCount*sizeof(u64));
             for(u32 J = 0; J < Tag->ValueCount; ++J)
@@ -109,20 +116,38 @@ ReadTags(editor_mode_assets *AssetsMode)
                 StringAt += KET_TAG_KEY_LENGTH;
             }
 
-            AssetsMode->TagKeys[I] = Map->Key;
+            Keys[I] = Map->Key;
         }
 
         EndTemporaryMemory(TempMem);
-        
-        Platform.CloseFile(&KETHandle);
 
-        LOG("Read %s: %u tags", TagsFileName, Header->TagCount);
+        Platform.CloseFile(&KETHandle);
+    }
+
+    return(Result);
+}
+
+internal b32
+ReadTags(editor_mode_assets *AssetsMode)
+{
+    Assert(AssetsMode->StoredHeader.MagicValue);
+    ket_header *Header = &AssetsMode->TagHeader;
+
+    DeallocateAssetsModeTags(AssetsMode);
+
+    u32 TagFullVersion = AssetsMode->StoredHeader.TagsVersion;
+    char FileName[256];
+    TagsFileName(TagFullVersion, FileName, sizeof(FileName));
+    b32 Result = ReadTagFile(TagFullVersion, Header, &AssetsMode->Tags, &AssetsMode->TagKeys,
+                             &AssetsMode->UtilityTempArena);
+    if(Result)
+    {
+        LOG("Read %s: %u tags", FileName, Header->TagCount);
     }
     else
     {
-        Result = false;
-        LOG_WARNING("No %s, writing one with only Tag_None", TagsFileName);
-        KETHandle = Platform.OpenFile(TagsFileName, PlatformFileType_KET, PlatformFileOp_Write);
+        LOG_WARNING("No %s, writing one with only Tag_None", FileName);
+        platform_file_handle KETHandle = Platform.OpenFile(FileName, PlatformFileType_KET, PlatformFileOp_Write);
         if(PlatformNoFileErrors(&KETHandle))
         {
             Header->MagicValue = KET_MAGIC_VALUE;
@@ -149,14 +174,15 @@ ReadTags(editor_mode_assets *AssetsMode)
         }
         else
         {
-            LOG_ERROR("Could not create %s", TagsFileName);
+            LOG_ERROR("Could not create %s", FileName);
         }
     }
 
     return(Result);
 }
 
-// NOTE(pvlso): stored_assets_<version>.kesa, the version from the data's editor_metadata.json
+// NOTE(pvlso): stored_assets_<version>.kesa, the version from the data's editor_metadata.json. Only read once, to write
+// data/assets.txt from it (ConvertStoredAssets).
 internal void
 StoredAssetsFileName(editor_meta *EditorMeta, char *Dest, u32 DestSize)
 {
@@ -165,10 +191,10 @@ StoredAssetsFileName(editor_meta *EditorMeta, char *Dest, u32 DestSize)
                  EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
 }
 
-// NOTE(pvlso): Only reads the project's stored assets (the first is the null asset), for the modes that pick from
-// them; Platform.DeallocateMemory frees them. 0 without the file.
+// NOTE(pvlso): The last stored assets file the project wrote (the first is the null asset), 0 without it;
+// Platform.DeallocateMemory frees them
 internal kesa_asset *
-ReadStoredAssetList(editor_meta *EditorMeta, kesa_header *Header)
+ReadLastStoredAssets(editor_meta *EditorMeta, kesa_header *Header)
 {
     kesa_asset *Result = 0;
     char StoredFileName[256];
@@ -187,142 +213,309 @@ ReadStoredAssetList(editor_meta *EditorMeta, kesa_header *Header)
     }
     if(!Result)
     {
-        LOG_WARNING("Can't read %s, there are no stored assets to pick from", StoredFileName);
         ZeroStruct(*Header);
     }
 
     return(Result);
 }
 
-internal b32
-ReadStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
+// NOTE(pvlso): A project without data/assets.txt gets one, from its last stored assets file when it has one: what the
+// stored assets knew that their files don't (tags, alignments, frame sizes) carries over
+internal void
+ConvertStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
 {
-    TIMED_FUNCTION();
-
-    b32 Result = true;
-    kesa_header *StoredHeader = &AssetsMode->StoredHeader;
-
-    editor_meta *EditorMeta = &EditorState->EditorMeta;
-    char StoredFileName[256];
-    StoredAssetsFileName(EditorMeta, StoredFileName, sizeof(StoredFileName));
-
-    u32 FullVersion = (((u32)EditorMeta->KESAVersion[0] << 24) |
-                       ((u32)EditorMeta->KESAVersion[1] << 16) |
-                       ((u32)EditorMeta->KESAVersion[2] <<  8) |
-                       ((u32)EditorMeta->KESAVersion[3]));
-    
-    platform_file_handle KESAHandle =
-        Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Read);
-    if(PlatformNoFileErrors(&KESAHandle))
+    if(!Platform.FileExists(ASSET_LIST_FILE_NAME, PlatformFileType_DataRoot))
     {
-        Platform.ReadDataFromFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-
-        Assert(StoredHeader->SizeOfStoredAsset == sizeof(kesa_asset));
-        Assert(StoredHeader->Version == FullVersion);
-        Assert(StoredHeader->AssetCount);
-
-        u32 AssetsSize = StoredHeader->AssetCount*StoredHeader->SizeOfStoredAsset;
-        Platform.DeallocateMemory(AssetsMode->StoredAssets);
-        AssetsMode->StoredAssets = (kesa_asset *)Platform.AllocateMemory(AssetsSize);
-
-        Platform.ReadDataFromFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                  AssetsSize, AssetsMode->StoredAssets);
-        
-        Platform.CloseFile(&KESAHandle);
-
-        // NOTE(pvlso): The first stored asset is the null asset
-        LOG("Read %s: %u stored assets", StoredFileName, StoredHeader->AssetCount - 1);
+        kesa_header Header = {};
+        kesa_asset *Stored = ReadLastStoredAssets(&EditorState->EditorMeta, &Header);
+        kesa_asset Null = {};
+        WriteAssetList(Stored ? Stored : &Null, Stored ? Header.AssetCount : 1, AssetsMode->Tags,
+                       AssetsMode->TagHeader.TagCount, &AssetsMode->UtilityTempArena);
+        if(Stored)
+        {
+            char StoredFileName[256];
+            StoredAssetsFileName(&EditorState->EditorMeta, StoredFileName, sizeof(StoredFileName));
+            LOG("Wrote %s from %s (%u assets); stored assets files aren't read any more", ASSET_LIST_FILE_NAME,
+                StoredFileName, Header.AssetCount - 1);
+            Platform.DeallocateMemory(Stored);
+        }
     }
-    else
+}
+
+// NOTE(pvlso): The asset folders scanned into StoredAssets, each type's names for the pickers. The current asset is
+// looked up again by its type and name (NoAsset when it's gone); the shown one stays in range.
+internal void
+ScanAssets(editor_mode_assets *AssetsMode)
+{
+    kesa_type CurrentType = KESA_None;
+    char CurrentName[sizeof(AssetsMode->NoAsset.SourceFileName)] = {};
+    if(AssetsMode->CurrentAsset)
     {
-        Result = false;
-        LOG_WARNING("No %s, writing an empty one", StoredFileName);
-        KESAHandle = Platform.OpenFile(StoredFileName, PlatformFileType_KESA, PlatformFileOp_Write);
-        if(PlatformNoFileErrors(&KESAHandle))
-        {
-            StoredHeader->MagicValue = KESA_MAGIC_VALUE;
-            StoredHeader->Version = FullVersion;
-            StoredHeader->TagsVersion = 0;
-            StoredHeader->SizeOfStoredAsset = sizeof(kesa_asset);
-            StoredHeader->AssetCount = 1;
-            StoredHeader->AssetsOffset = sizeof(kesa_header);
+        CurrentType = AssetsMode->CurrentAsset->Type;
+        FormatString(sizeof(CurrentName), CurrentName, "%s", AssetsMode->CurrentAsset->SourceFileName);
+    }
 
-            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-        
-            kesa_asset NullAsset = {};
-            Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                     sizeof(kesa_asset), &NullAsset);
+    u32 Version = AssetsMode->StoredHeader.Version;
+    if(AssetsMode->StoredAssets) {Platform.DeallocateMemory(AssetsMode->StoredAssets);}
+    if(AssetsMode->AssetNames) {Platform.DeallocateMemory(AssetsMode->AssetNames);}
+    AssetsMode->StoredAssets = ScanAssetList(&AssetsMode->StoredHeader, AssetsMode->Tags,
+                                             AssetsMode->TagHeader.TagCount, &AssetsMode->UtilityTempArena);
+    AssetsMode->StoredHeader.Version = Version;
 
-            Platform.CloseFile(&KESAHandle);
-        }
-        else
-        {
-            LOG_ERROR("Could not create %s", StoredFileName);
-        }
+    u32 Count = AssetsMode->StoredHeader.AssetCount;
+    AssetsMode->AssetNames = (char **)Platform.AllocateMemory(Count*sizeof(char *));
+    ZeroArray(KESA_Count, AssetsMode->SourceFileCounts);
+    for(u32 Type = 0; Type < KESA_Count; ++Type) {AssetsMode->SourceFiles[Type] = AssetsMode->AssetNames;}
+    for(u32 Index = 1; Index < Count; ++Index)
+    {
+        kesa_asset *Asset = AssetsMode->StoredAssets + Index;
+        AssetsMode->AssetNames[Index] = Asset->SourceFileName;
+        if(!AssetsMode->SourceFileCounts[Asset->Type]) {AssetsMode->SourceFiles[Asset->Type] = AssetsMode->AssetNames + Index;}
+        ++AssetsMode->SourceFileCounts[Asset->Type];
+    }
+
+    AssetsMode->NoAsset = {};
+    AssetsMode->NoAsset.Type = CurrentType;
+    if(AssetsMode->CurrentAsset)
+    {
+        kesa_asset *Found = FindListedAsset(AssetsMode->StoredAssets, Count, CurrentType, CurrentName);
+        AssetsMode->CurrentAsset = Found ? Found : &AssetsMode->NoAsset;
+    }
+    if(AssetsMode->ShowStoredAssetIndex >= Count) {AssetsMode->ShowStoredAssetIndex = Count - 1;}
+    if(AssetsMode->LastShowStoredAssetIndex >= Count) {AssetsMode->LastShowStoredAssetIndex = Count - 1;}
+
+    LOG("Scanned the asset folders: %u assets", Count - 1);
+}
+
+internal void
+SaveAssetList(editor_mode_assets *AssetsMode)
+{
+    if(!WriteAssetList(AssetsMode->StoredAssets, AssetsMode->StoredHeader.AssetCount, AssetsMode->Tags,
+                       AssetsMode->TagHeader.TagCount, &AssetsMode->UtilityTempArena))
+    {
+        LOG("%s: nothing changed", ASSET_LIST_FILE_NAME);
+    }
+}
+
+// NOTE(pvlso): What was edited is saved first, a scan would lose it
+internal void
+RescanAssets(editor_mode_assets *AssetsMode)
+{
+    SaveAssetList(AssetsMode);
+    ScanAssets(AssetsMode);
+}
+
+// NOTE(pvlso): Where an asset is in its type's picker
+internal u32
+SourceFileIndexOf(editor_mode_assets *AssetsMode, kesa_asset *Asset)
+{
+    u32 Result = 0;
+    for(u32 Index = 0; Index < AssetsMode->SourceFileCounts[Asset->Type]; ++Index)
+    {
+        if(AssetsMode->SourceFiles[Asset->Type][Index] == Asset->SourceFileName) {Result = Index;}
     }
 
     return(Result);
 }
 
+// NOTE(pvlso): data/keas/last_build.txt: what the newest KEA was built from (AssetDataSignature), so a Run can tell
+// whether the data changed since, even across editor sessions
+#define LAST_BUILD_FILE_NAME "last_build.txt"
 
+internal b32 ParseGameDataKEAVersion(char *Name, u32 *Version);
 
+internal u64
+ReadLastBuildSignature(memory_arena *Arena)
+{
+    u64 Result = 0;
+    if(Platform.FileExists(LAST_BUILD_FILE_NAME, PlatformFileType_KEA))
+    {
+        temporary_memory TempMem = BeginTemporaryMemory(Arena);
+        read_file_result File = Platform.ReadEntireFile(LAST_BUILD_FILE_NAME, PlatformFileType_KEA, TempMem.Arena, true);
+        for(char *At = (char *)File.Contents; At && *At; ++At)
+        {
+            u32 Digit = IsDigit(*At) ? (u32)(*At - '0') :
+                ((*At >= 'a') && (*At <= 'f')) ? (u32)(*At - 'a' + 10) : 16;
+            if(Digit < 16) {Result = (Result << 4) | Digit;}
+            else if(*At == '\n') {break;}
+        }
+        EndTemporaryMemory(TempMem);
+    }
+
+    return(Result);
+}
+
+// NOTE(pvlso): Whether data/keas has a game_data_<version>.kea
+internal b32
+HasGameDataKEA(memory_arena *Arena)
+{
+    b32 Result = false;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version)) {Result = true;}
+    }
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}
+
+// NOTE(pvlso): The newest game_data_<version>.kea in data/keas into Dest, false (and Dest empty) when there's none
+internal b32
+NewestGameDataKEA(char *Dest, umm DestCount, memory_arena *Arena)
+{
+    b32 Result = false;
+    Dest[0] = 0;
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    u32 BestVersion = 0;
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version) && (!Result || (Version > BestVersion)))
+        {
+            FormatString(DestCount, Dest, "%s", Names[Index]);
+            BestVersion = Version;
+            Result = true;
+        }
+    }
+    EndTemporaryMemory(TempMem);
+
+    return(Result);
+}
+
+// NOTE(pvlso): Every game_data_<version>.kea but the newest and KeepOpen (the one a running game reads; Windows can't
+// delete it anyway) is deleted: only the newest is ever loaded
 internal void
-WriteStoredAssets(editor_state *EditorState, editor_mode_assets *AssetsMode)
+DeleteOlderKEAs(u32 NewestVersion, char *KeepOpen, memory_arena *Arena)
+{
+    temporary_memory TempMem = BeginTemporaryMemory(Arena);
+    u32 Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
+    char **Names = PushArray(TempMem.Arena, Maximum(1, Count), char *);
+    Count = Platform.ListFilesInDirectory(PlatformFileType_KEA, Names, TempMem.Arena);
+    for(u32 Index = 0; Index < Count; ++Index)
+    {
+        u32 Version;
+        if(ParseGameDataKEAVersion(Names[Index], &Version) && (Version < NewestVersion) &&
+           !(KeepOpen && StringsAreEqual(Names[Index], KeepOpen)))
+        {
+            if(!Platform.RemoveFile(Names[Index], PlatformFileType_KEA))
+            {
+                LOG_WARNING("Could not delete the old %s", Names[Index]);
+            }
+        }
+    }
+    EndTemporaryMemory(TempMem);
+}
+
+// NOTE(pvlso): The project's KEA built from its folders, without the assets mode: the newest KET's tags, a scan, the
+// next version (editor_metadata.json). The data's signature is taken before the scan, so a file saved during a build
+// makes the next check build again. The older KEAs go, but KeepOpen. Built gets the new file's name.
+internal b32
+BuildProjectKEA(editor_state *EditorState, memory_arena *TempArena, char *KeepOpen, char *Built, umm BuiltSize)
 {
     TIMED_FUNCTION();
 
-    if(AssetsMode->AddAssetCount || AssetsMode->StoredAssetChanged)
+    f64 Start = Platform.GetSeconds();
+    u64 Signature = AssetDataSignature(TempArena);
+
+    temporary_memory TempMem = BeginTemporaryMemory(TempArena);
+    ket_header TagHeader = {};
+    kea_tag_map *Tags = 0;
+    char **Keys = 0;
+    if(!ReadTagFile(NewestTagsVersion(TempMem.Arena), &TagHeader, &Tags, &Keys, TempMem.Arena))
     {
-        char FileName[256];
-        kesa_header *StoredHeader = &AssetsMode->StoredHeader;
+        ZeroStruct(TagHeader);
+        LOG_WARNING("No asset_tags_*.ket in data/kets: the KEA is built without tags");
+    }
 
-        u32 FullVersion = UpdateEditorVersionFile(EditorState);
-    
-        editor_meta *EditorMeta = &EditorState->EditorMeta;
-        FormatString(ArrayCount(FileName), FileName, "stored_assets_%d.%d.%d.%d.kesa",
-                     EditorMeta->KESAVersion[0], EditorMeta->KESAVersion[1],
-                     EditorMeta->KESAVersion[2], EditorMeta->KESAVersion[3]);
+    // NOTE(pvlso): The newest KEA is the previous build, its unchanged bitmaps are copied (BuildKEA)
+    char Previous[256];
+    NewestGameDataKEA(Previous, sizeof(Previous), TempMem.Arena);
 
-        platform_file_handle KESAHandle =
-            Platform.OpenFile(FileName, PlatformFileType_KESA, PlatformFileOp_Write);
-        if(PlatformNoFileErrors(&KESAHandle))
-        {
-            StoredHeader->Version = FullVersion;
-            StoredHeader->TagsVersion = AssetsMode->TagHeader.Version;
+    kesa_header Header = {};
+    kesa_asset *List = ScanAssetList(&Header, Tags, TagHeader.TagCount, TempMem.Arena);
+    Header.Version = UpdateEditorVersionFile(EditorState);
+    b32 Result = BuildKEA(&Header, List, &TagHeader, Tags, TempMem.Arena, Previous);
+    Platform.DeallocateMemory(List);
+    FreeTagMaps(&TagHeader, Tags, Keys);
+    EndTemporaryMemory(TempMem);
 
-            u32 ExistingAssetsCount = StoredHeader->AssetCount;
-            StoredHeader->AssetCount += AssetsMode->AddAssetCount;
-
-            Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), StoredHeader);
-
-            u32 ExistingAssetsSize = ExistingAssetsCount*sizeof(kesa_asset);
-            if(ExistingAssetsCount)
-            {
-                Platform.WriteDataToFile(&KESAHandle, StoredHeader->AssetsOffset,
-                                         ExistingAssetsSize, AssetsMode->StoredAssets);
-            }
-
-            u32 AssetsSize = AssetsMode->AddAssetCount*sizeof(kesa_asset);
-            u64 Offset = StoredHeader->AssetsOffset + ExistingAssetsSize;
-            Platform.WriteDataToFile(&KESAHandle, Offset, AssetsSize, AssetsMode->AssetsToAdd);
-
-            Platform.CloseFile(&KESAHandle);
-
-            LOG("Wrote %s: %u stored assets, %u new", FileName, StoredHeader->AssetCount - 1, AssetsMode->AddAssetCount);
-        }
-        else
-        {
-            LOG_ERROR("Could not write %s", FileName);
-        }
+    if(Built) {FormatString(BuiltSize, Built, "game_data_%u.kea", Header.Version);}
+    if(Result)
+    {
+        char Text[64];
+        FormatString(sizeof(Text), Text, "%016llx\n", Signature);
+        Platform.WriteEntireFile(LAST_BUILD_FILE_NAME, PlatformFileType_KEA, (u8 *)Text, StringLength(Text));
+        DeleteOlderKEAs(Header.Version, KeepOpen, TempArena);
+        LOG("Built game_data_%u.kea from %u assets in %.2f s", Header.Version, Header.AssetCount - 1,
+            Platform.GetSeconds() - Start);
     }
     else
     {
-        LOG("Write Assets: nothing added or changed");
+        LOG_ERROR("Building game_data_%u.kea failed", Header.Version);
     }
 
-    AssetsMode->AddAssetCount = 0;
-    ZeroArray(ArrayCount(AssetsMode->AssetsToAdd), AssetsMode->AssetsToAdd);
-    ReadStoredAssets(EditorState, AssetsMode);
+    return(Result);
+}
+
+// NOTE(pvlso): Whether the KEA has to be built: there's none, or the data changed since the last build
+internal b32
+ProjectKEAIsStale(memory_arena *TempArena)
+{
+    b32 Result = (!HasGameDataKEA(TempArena) || (AssetDataSignature(TempArena) != ReadLastBuildSignature(TempArena)));
+    return(Result);
+}
+
+// NOTE(pvlso): The KEA build on a worker thread (the high priority queue), so the editor doesn't stop while it runs
+// (kea_build_job). The data root mustn't change under it: UseDataOf waits for it first.
+internal PLATFORM_WORK_QUEUE_CALLBACK(DoKEABuildWork)
+{
+    kea_build_job *Job = (kea_build_job *)Data;
+    Job->Result = BuildProjectKEA(Job->EditorState, &Job->Arena, Job->KeepOpen[0] ? Job->KeepOpen : 0, Job->Built,
+                                  sizeof(Job->Built));
+    Clear(&Job->Arena);
+
+    CompletePreviousWritesBeforeFutureWrites;
+    Job->Running = false;
+}
+
+// NOTE(pvlso): False when a build is already running (its result comes first, then a new check)
+internal b32
+StartKEABuild(editor_state *EditorState, transient_state *TranState, char *KeepOpen)
+{
+    kea_build_job *Job = &EditorState->KEABuild;
+    b32 Result = !Job->Running;
+    if(Result)
+    {
+        Job->EditorState = EditorState;
+        Job->Queue = TranState->HighPriorityQueue;
+        Job->Result = false;
+        Job->Built[0] = 0;
+        FormatString(sizeof(Job->KeepOpen), Job->KeepOpen, "%s", KeepOpen ? KeepOpen : "");
+        Job->Running = true;
+        CompletePreviousWritesBeforeFutureWrites;
+        Platform.AddEntry(Job->Queue, DoKEABuildWork, Job);
+    }
+
+    return(Result);
+}
+
+internal void
+WaitForKEABuild(editor_state *EditorState)
+{
+    kea_build_job *Job = &EditorState->KEABuild;
+    if(Job->Running)
+    {
+        LOG("Waiting for the KEA build to finish");
+        Platform.CompleteAllWork(Job->Queue);
+    }
 }
 
 internal void
@@ -344,19 +537,9 @@ PlayAssetsMode(editor_state *EditorState, transient_state *TranState, char *Proj
     SubArena(&Result->UtilityTempArena, &EditorState->ModeArena, Megabytes(1));
     SubArena(&Result->UtilityArena, &EditorState->ModeArena, Megabytes(1));
 
-    // NOTE(pvlso): Setting it to one because first stored asset is always zero
+    // NOTE(pvlso): Setting it to one because first stored asset is always zero; the folders are scanned on the first
+    // update
     Result->ShowStoredAssetIndex = 1;
-
-    for(u32 I = 1; I < KESA_Count; ++I)
-    {
-        Result->SourceFileCounts[I] =
-            Platform.ListFilesInDirectory(StoredToSourceTypeMap[I], 0, 0);
-        if(Result->SourceFileCounts[I])
-        {
-            Result->SourceFiles[I] = PushArray(&EditorState->ModeArena, Result->SourceFileCounts[I], char *);
-            Platform.ListFilesInDirectory(StoredToSourceTypeMap[I], Result->SourceFiles[I], &EditorState->ModeArena);
-        }
-    }
 
     EditorState->AssetsMode = Result;
 }
@@ -412,7 +595,7 @@ CutSpriteSheet(platform_texture_op_queue *TextureOpQueue, spritesheet_mode *Spri
 
 internal void AllocateBitmap(platform_texture_op_queue *TextureOpQueue, loaded_bitmap *Bitmap);
 
-// NOTE(pvlso): Reads a curated tile set and cuts each tile's first frame from its sheets, to show the set
+// NOTE(pvlso): Reads a curated tile set and packs its tiles from their sheets into one atlas, to show the set
 internal void
 LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode, kesa_asset *Asset)
 {
@@ -434,16 +617,7 @@ LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tileset
         }
     }
 
-    for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
-    {
-        tileset_file_cell Cell = File->Tiles[TileIndex].Frames[0];
-        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        *Tile = CutTilesetCell(Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, Arena);
-        if(Tile->Memory)
-        {
-            AllocateBitmap(TextureOpQueue, Tile);
-        }
-    }
+    RebuildTilesetAtlas(TextureOpQueue, TilesetMode);
 
     Asset->Tileset.TileCount = File->TileCount;
     Asset->Tileset.GridWidth = File->GridWidth;
@@ -452,21 +626,12 @@ LoadTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *Tileset
     TilesetMode->Loaded = File->Loaded;
 }
 
-// NOTE(pvlso): The tiles' pixels are in the view's arena, so only their textures are released one by one
 internal void
 ClearTilesetView(platform_texture_op_queue *TextureOpQueue, tileset_mode *TilesetMode)
 {
-    for(u32 TileIndex = 0; TileIndex < ArrayCount(TilesetMode->Tiles); ++TileIndex)
-    {
-        loaded_bitmap *Tile = TilesetMode->Tiles + TileIndex;
-        if(Tile->TextureHandle)
-        {
-            texture_op Op = {};
-            Op.IsAllocate = false;
-            Op.Deallocate.Handle = Tile->TextureHandle;
-            AddOp(TextureOpQueue, &Op);
-        }
-    }
+    ReleaseTileTexture(TextureOpQueue, &TilesetMode->Atlas.Bitmap);
+    Clear(&TilesetMode->AtlasArena);
+    TilesetMode->AtlasDirty = false;
     ClearTilesetEditing(TextureOpQueue, TilesetMode);
     Clear(&TilesetMode->Arena);
 }
@@ -479,16 +644,6 @@ AddTagToCurrentAsset(editor_mode_assets *AssetsMode, kesa_asset *CurrentAsset)
 
     Tag->TagGUID = Map->GUID;
     Tag->TagValueIndex = AssetsMode->CurrentTagValue;
-}
-
-internal void
-AddCurrentAsset(editor_mode_assets *AssetsMode)
-{
-    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount].GUID = GUIDFromString(AssetsMode->CurrentAsset->SourceFileName);
-    ++AssetsMode->AddAssetCount;
-
-    LOG("Added %s, %u asset(s) waiting for Write Assets", AssetsMode->CurrentAsset->SourceFileName,
-        AssetsMode->AddAssetCount);
 }
 
 inline void
@@ -669,31 +824,7 @@ UpdateEditorTags(editor_mode_assets *AssetsMode, update_tags_op Op)
     
     EndTemporaryMemory(TempMem);
 
-    u8 StoredVersion[4] =
-        {
-            (u8)((AssetsMode->StoredHeader.Version >> 24) & 0xff),
-            (u8)((AssetsMode->StoredHeader.Version >> 16) & 0xff),
-            (u8)((AssetsMode->StoredHeader.Version >>  8) & 0xff),
-            (u8)((AssetsMode->StoredHeader.Version >>  0) & 0xff),
-        };
-
-    FormatString(ArrayCount(FileName), FileName, "stored_assets_%d.%d.%d.%d.kesa",
-                 StoredVersion[0], StoredVersion[1],
-                 StoredVersion[2], StoredVersion[3]);
-
-    //NOTE(pvlso): Update stored assets file header
-    platform_file_handle KESAHandle =
-        Platform.OpenFile(FileName, PlatformFileType_KESA, PlatformFileOp_WriteExisting);
-    if(PlatformNoFileErrors(&KESAHandle))
-    {
-        Platform.WriteDataToFile(&KESAHandle, 0, sizeof(kesa_header), &AssetsMode->StoredHeader);
-        Platform.CloseFile(&KESAHandle);
-    }
-    else
-    {
-        LOG_ERROR("Could not update the header of %s", FileName);
-    }
-
+    // NOTE(pvlso): The newest KET is the one read, there's no stored assets file to point at it any more
     char *OpNames[] = {"added", "edited", "removed"};
     LOG("Tag %s, tags version is now %u", (Op < ArrayCount(OpNames)) ? OpNames[Op] : "?", TagFullVersion);
 
@@ -906,8 +1037,6 @@ ClearEditModeData(editor_state *EditorState, editor_mode_assets *AssetsMode,
 {
     kesa_type Type = Asset->Type;
 
-    AssetsMode->AssetsToAdd[AssetsMode->AddAssetCount] = {};
-    RemoveAction(AssetsMode, AM_AddAsset); 
     RemoveAction(AssetsMode, AM_RemoveAssetTag); 
     RemoveAction(AssetsMode, AM_AddAssetTag); 
 
@@ -1021,61 +1150,43 @@ LoadStoredAssetData(editor_mode_assets *AssetsMode, platform_texture_op_queue *T
     }
 }
 
-internal void
-LoadNewStoredAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
+// NOTE(pvlso): The edit mode's picked file (FileIndex) becomes the current asset and is loaded. Every file is an
+// asset already; an empty folder gives NoAsset, which loads nothing.
+internal kesa_asset *
+SelectEditedAsset(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue)
 {
-    if(AssetsMode->SourceFileCounts[Asset->Type])
-        StringCopy(AssetsMode->SourceFiles[Asset->Type][AssetsMode->FileIndex], Asset->SourceFileName);
-
-    switch(Asset->Type)
+    kesa_type Type = KESAFromEditMode(AssetsMode->EditMode);
+    kesa_asset *Asset = 0;
+    if(AssetsMode->FileIndex < AssetsMode->SourceFileCounts[Type])
     {
-        case KESA_None:
-            break;
-
-        case KESA_Bitmap:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-            Asset->Bitmap.AlignPercentage = AssetsMode->BitmapMode.Bitmap.AlignPercentage;
-        } break;
-
-        case KESA_SpriteSheet:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-            Asset->SpriteSheet.SpriteHeight = AssetsMode->SpriteSheetMode.SpriteSheetBitmap.Height;
-        } break;
-
-        case KESA_Tileset:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-        } break;
-
-        case KESA_Text:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-            text_mode *TextMode = &AssetsMode->TextMode;
-            
-            TextMode->EditBufferLength = StringLength(TextMode->Text.String);
-            Copy(TextMode->EditBufferLength, TextMode->Text.String, TextMode->EditBuffer);
-            TextMode->EditBufferMaxLength = 4096;
-        } break;
-
-        case KESA_Sound:
-        case KESA_File:
-        case KESA_SSWM:
-        case KESA_Map:
-        {
-            LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
-        } break;
-
-        InvalidDefaultCase;
+        Asset = FindListedAsset(AssetsMode->StoredAssets, AssetsMode->StoredHeader.AssetCount, Type,
+                                AssetsMode->SourceFiles[Type][AssetsMode->FileIndex]);
     }
-}
+    if(!Asset)
+    {
+        AssetsMode->NoAsset = {};
+        AssetsMode->NoAsset.Type = Type;
+        Asset = &AssetsMode->NoAsset;
+    }
+    AssetsMode->CurrentAsset = Asset;
 
-inline void
-InitAssetsMode(editor_mode_assets *AssetsMode, platform_texture_op_queue *TextureOpQueue, kesa_asset *Asset)
-{
-    Asset->Type = KESAFromEditMode(AssetsMode->EditMode);
-    LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+    if(Asset->SourceFileName[0])
+    {
+        LoadStoredAssetData(AssetsMode, TextureOpQueue, Asset);
+        if(Type == KESA_Text)
+        {
+            text_mode *TextMode = &AssetsMode->TextMode;
+            TextMode->EditBufferMaxLength = sizeof(TextMode->EditBuffer);
+            TextMode->EditBufferLength = TextMode->Text.String ? StringLength(TextMode->Text.String) : 0;
+            if(TextMode->EditBufferLength >= (s32)TextMode->EditBufferMaxLength)
+            {
+                TextMode->EditBufferLength = TextMode->EditBufferMaxLength - 1;
+            }
+            Copy(TextMode->EditBufferLength, TextMode->Text.String, TextMode->EditBuffer);
+        }
+    }
+
+    return(Asset);
 }
 
 inline void
@@ -1112,14 +1223,13 @@ UpdateAndRenderBitmapEditMode(editor_mode_assets *AssetsMode, engine_input *Inpu
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, CanvasCenter);
 
     bitmap_mode *BitmapMode = &AssetsMode->BitmapMode;
-    kesa_bitmap *StoredBitmap = &Asset->Bitmap;
-                
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Bitmap);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
+    kesa_bitmap *StoredBitmap = &Asset->Bitmap;
 
     loaded_bitmap *Bitmap = &BitmapMode->Bitmap;
     PushRect(RenderGroup, Flat, V3(0, 0, 5.0f), CanvasDim, V4(0.25f, 0.25f, 0.25f, 1.0f));
@@ -1169,17 +1279,14 @@ UpdateAndRenderSpriteSheetEditMode(editor_mode_assets *AssetsMode, engine_input 
     DrawCanvasOutline(RenderGroup, Flat, CanvasDim, CanvasCenter);
 
     spritesheet_mode *SpriteSheetMode = &AssetsMode->SpriteSheetMode;
-    kesa_spritesheet *SpriteSheet = &CurrentAsset->SpriteSheet;
-
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_SpriteSheet);
-        SpriteSheet->SpriteCount = 0;
-
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, CurrentAsset);
+        CurrentAsset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         SpriteSheetMode->ShowAnimated = false;
     }
+    kesa_spritesheet *SpriteSheet = &CurrentAsset->SpriteSheet;
 
     loaded_bitmap *SpriteSheetBitmap = &SpriteSheetMode->SpriteSheetBitmap;
     if(SpriteSheetMode->CutSpriteSheet)
@@ -1266,17 +1373,6 @@ CleanFileName(char *Name, char *Dest, u32 DestSize)
     return(Length);
 }
 
-// NOTE(pvlso): A type's source files listed again after one was written, so its edit mode can pick it
-internal void
-RelistSourceFiles(editor_mode_assets *AssetsMode, kesa_type Type)
-{
-    platform_file_type FileType = StoredToSourceTypeMap[Type];
-    u32 Count = Platform.ListFilesInDirectory(FileType, 0, 0);
-    AssetsMode->SourceFiles[Type] = PushArray(&AssetsMode->UtilityArena, Maximum(1, Count), char *);
-    AssetsMode->SourceFileCounts[Type] = Platform.ListFilesInDirectory(FileType, AssetsMode->SourceFiles[Type],
-                                                                       &AssetsMode->UtilityArena);
-}
-
 internal void
 CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
 {
@@ -1297,7 +1393,7 @@ CreateTilesetFile(editor_mode_assets *AssetsMode, char *Name)
         char *Text = "; A curated tile set (Kaban engine). Format: engine_tileset_file.h\nsize 32\n";
         Platform.WriteEntireFile(FileName, PlatformFileType_TSBMP, (u8 *)Text, StringLength(Text));
 
-        RelistSourceFiles(AssetsMode, KESA_Tileset);
+        RescanAssets(AssetsMode);
         for(u32 Index = 0; Index < AssetsMode->SourceFileCounts[KESA_Tileset]; ++Index)
         {
             if(StringsAreEqual(AssetsMode->SourceFiles[KESA_Tileset][Index], FileName)) {AssetsMode->FileIndex = Index;}
@@ -1324,7 +1420,7 @@ UpdateAndRenderTilesetEditMode(editor_mode_assets *AssetsMode, engine_input *Inp
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Tileset);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 
@@ -1432,7 +1528,7 @@ UpdateAndRenderSoundEditMode(editor_mode_assets *AssetsMode, platform_texture_op
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Sound, AudioState);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 
@@ -1462,7 +1558,7 @@ UpdateAndRenderTextEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
     if((AssetsMode->FileIndex != AssetsMode->LastFileIndex) || TextMode->Reload)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Text);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
 
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
         TextMode->Reload = false;
@@ -1491,7 +1587,7 @@ UpdateAndRenderFileEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_File);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
@@ -1505,7 +1601,7 @@ UpdateAndRenderSSWMEditMode(editor_mode_assets *AssetsMode, platform_texture_op_
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_SSWM);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
     }
 }
@@ -1516,36 +1612,8 @@ UpdateAndRenderMapAssetEditMode(editor_mode_assets *AssetsMode, platform_texture
     if(AssetsMode->FileIndex != AssetsMode->LastFileIndex)
     {
         ClearStoredAssetData(AssetsMode, TextureOpQueue, KESA_Map);
-        LoadNewStoredAsset(AssetsMode, TextureOpQueue, Asset);
+        Asset = SelectEditedAsset(AssetsMode, TextureOpQueue);
         AssetsMode->LastFileIndex = AssetsMode->FileIndex;
-    }
-}
-
-internal void
-RemoveStoredAsset(editor_mode_assets *AssetsMode)
-{
-    if(AssetsMode->ShowStoredAssetIndex)
-    {
-        kesa_asset *AssetToRemove = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
-        LOG("Removed stored asset %s (not written until Write Assets)", AssetToRemove->SourceFileName);
-        *AssetToRemove = {};
-        for(u32 StoredIndex = AssetsMode->ShowStoredAssetIndex;
-            StoredIndex < AssetsMode->StoredHeader.AssetCount - 1;
-            ++StoredIndex)
-        {
-            AssetsMode->StoredAssets[StoredIndex] = AssetsMode->StoredAssets[StoredIndex + 1];           
-        }
-
-        --AssetsMode->StoredHeader.AssetCount;
-        if(AssetsMode->StoredHeader.AssetCount == 1)
-        {
-            AssetsMode->ShowStoredAssetIndex = 0;
-        }
-
-        if(AssetsMode->ShowStoredAssetIndex > AssetsMode->StoredHeader.AssetCount - 1)
-        {
-            AssetsMode->ShowStoredAssetIndex = AssetsMode->StoredHeader.AssetCount - 1;
-        }
     }
 }
 
@@ -1566,11 +1634,20 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
         if(!AssetsMode->AssetsInitialized)
         {
-            if(!ReadStoredAssets(EditorState, AssetsMode))
-                Assert(ReadStoredAssets(EditorState, AssetsMode));
-
+            // NOTE(pvlso): The tags first, assets.txt names them; the newest KET is the project's
+            AssetsMode->StoredHeader.MagicValue = KESA_MAGIC_VALUE;
+            AssetsMode->StoredHeader.TagsVersion = NewestTagsVersion(&AssetsMode->UtilityTempArena);
             if(!ReadTags(AssetsMode))
                 Assert(ReadTags(AssetsMode));
+
+            ConvertStoredAssets(EditorState, AssetsMode);
+            editor_meta *EditorMeta = &EditorState->EditorMeta;
+            AssetsMode->StoredHeader.Version = (((u32)EditorMeta->KESAVersion[0] << 24) |
+                                                ((u32)EditorMeta->KESAVersion[1] << 16) |
+                                                ((u32)EditorMeta->KESAVersion[2] <<  8) |
+                                                ((u32)EditorMeta->KESAVersion[3]));
+            ScanAssets(AssetsMode);
+            AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
             AssetsMode->AssetsInitialized = true;
         }
 
@@ -1585,16 +1662,17 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                     ClearEditModeData(EditorState, AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 RemoveAction(AssetsMode, AM_EditStoredAsset);
 
-                if(AssetsMode->LastEditMode == EditMode_None)
+                if(AssetsMode->EditMode == EditMode_Cut)
                 {
-                    AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-                    if(AssetsMode->CurrentAsset->Type == KESA_None)
-                    {
-                        InitAssetsMode(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
-                    }
+                    AssetsMode->NoAsset = {};
+                    AssetsMode->CurrentAsset = &AssetsMode->NoAsset;
+                }
+                else if(AssetsMode->EditMode != EditMode_None)
+                {
+                    SelectEditedAsset(AssetsMode, TextureOpQueue);
                 }
                 else
-                {
+{
                     AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
                     LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
                 }
@@ -1621,17 +1699,11 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
             else if(CheckRemoveAction(AssetsMode, AM_RemoveEditedTag))
                 UpdateEditorTags(AssetsMode, UpdateTagsOp_Remove);
 
-            if(IsAction(AssetsMode, AM_AddAsset) &&
-               !IsAction(AssetsMode, AM_EditStoredAsset))
+            if(CheckRemoveAction(AssetsMode, AM_WriteAssets))
             {
-                AddCurrentAsset(AssetsMode);
-                AssetsMode->CurrentAsset = AssetsMode->AssetsToAdd + AssetsMode->AddAssetCount;
-                AssetsMode->CurrentAsset->Type = KESAFromEditMode(AssetsMode->EditMode);
-
-                RemoveAction(AssetsMode, AM_AddAsset);
-//                WriteStoredAssets(EditorState, AssetsMode);
+                SaveAssetList(AssetsMode);
             }
-        
+
             r32 TileDim = 32.0f;
             r32 CanvasSize = 960.0f;
             r32 HalfCanvasSize = 0.5f*CanvasSize;
@@ -1651,10 +1723,12 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                                              &EditorState->AudioState);
                         LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset, true);
 
-                        AssetsMode->LastEditMode = AssetsMode->EditMode;            
-                        AssetsMode->StoredAssetChanged = true;
+                        // NOTE(pvlso): The edit mode's picker shows it, picking another file there edits that one
+                        AssetsMode->FileIndex = SourceFileIndexOf(AssetsMode, AssetsMode->CurrentAsset);
+                        AssetsMode->LastFileIndex = AssetsMode->FileIndex;
+                        AssetsMode->LastEditMode = AssetsMode->EditMode;
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
-                    }
+}
                     else if(AssetsMode->LastShowStoredAssetIndex != AssetsMode->ShowStoredAssetIndex)
                     {
                         kesa_asset *PreviousAsset = AssetsMode->StoredAssets + AssetsMode->LastShowStoredAssetIndex;
@@ -1667,29 +1741,28 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
                         AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
                     
-                    if(CheckRemoveAction(AssetsMode, AM_WriteAssets))
-                    {
-                        WriteStoredAssets(EditorState, AssetsMode);
-                        AssetsMode->StoredAssetChanged = false;
-                    }
-
-                    if(CheckRemoveAction(AssetsMode, AM_RemoveStoredAsset))
+                    // NOTE(pvlso): A build scans first, so files added since are in it
+                    b32 Build = CheckRemoveAction(AssetsMode, AM_WriteKEA);
+                    if(CheckRemoveAction(AssetsMode, AM_Rescan) || Build)
                     {
                         ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
                                              &EditorState->AudioState);
-                        RemoveStoredAsset(AssetsMode);
-
+                        RescanAssets(AssetsMode);
                         AssetsMode->CurrentAsset = AssetsMode->StoredAssets + AssetsMode->ShowStoredAssetIndex;
                         LoadStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset);
-
-                        AssetsMode->StoredAssetChanged = true;
+                        AssetsMode->LastShowStoredAssetIndex = AssetsMode->ShowStoredAssetIndex;
                     }
 
-                    if(CheckRemoveAction(AssetsMode, AM_WriteKEA))
+                    // NOTE(pvlso): The same build a Run or a changed folder starts (BuildProjectKEA)
+                    if(Build)
                     {
-                        temporary_memory TempMemory = BeginTemporaryMemory(&TranState->TranArena);
-                        BuildKEA(AssetsMode, TempMemory.Arena);
-                        EndTemporaryMemory(TempMemory);
+                        WaitForKEABuild(EditorState);
+                        BuildProjectKEA(EditorState, &TranState->TranArena, 0, 0, 0);
+                        editor_meta *EditorMeta = &EditorState->EditorMeta;
+                        AssetsMode->StoredHeader.Version = (((u32)EditorMeta->KESAVersion[0] << 24) |
+                                                            ((u32)EditorMeta->KESAVersion[1] << 16) |
+                                                            ((u32)EditorMeta->KESAVersion[2] <<  8) |
+                                                            ((u32)EditorMeta->KESAVersion[3]));
                     }
 
                 } break;
@@ -1755,9 +1828,11 @@ UpdateAndRenderAssetsMode(editor_state *EditorState, transient_state *TranState,
         {
             ClearStoredAssetData(AssetsMode, TextureOpQueue, AssetsMode->CurrentAsset->Type,
                                  &EditorState->AudioState);
+            SaveAssetList(AssetsMode);
             Platform.DeallocateMemory(AssetsMode->StoredAssets);
+            Platform.DeallocateMemory(AssetsMode->AssetNames);
             DeallocateAssetsModeTags(AssetsMode);
-            
+
             PlayTitleScreen(EditorState, TranState);
         }
     }

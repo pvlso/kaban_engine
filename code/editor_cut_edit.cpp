@@ -13,8 +13,8 @@
   0), a right click clears it, the arrows move it by a pixel (Shift: by Snap, or 8). Saved as a PNG in bmps/ it's a
   static sprite; frames (all the same size) saved side by side in spritesheets/ are an animation. Frames are best cut
   by Split: a selection over the whole row, from the first frame's left to the last one's right, cut into equal frames,
-  is the sheet's own pitch; added one by one, each frame is wherever the selection is. The files are then added as assets in Edit Bitmaps and
-  Edit SpriteSheets, where their foot is set.
+  is the sheet's own pitch; added one by one, each frame is wherever the selection is. A saved file is an asset at once
+  (a strip's frame size is written to data/assets.txt); its foot is set in Edit Bitmaps and Edit SpriteSheets.
 */
 
 // NOTE(pvlso): PNGs are written with stb_image_write, its allocations go through the platform. Only the cut tool uses it.
@@ -45,7 +45,8 @@
 #endif
 
 internal u32 CleanFileName(char *Name, char *Dest, u32 DestSize);
-internal void RelistSourceFiles(editor_mode_assets *AssetsMode, kesa_type Type);
+internal void RescanAssets(editor_mode_assets *AssetsMode);
+internal void SaveAssetList(editor_mode_assets *AssetsMode);
 
 struct cut_png_write
 {
@@ -377,7 +378,7 @@ SaveCutBitmap(editor_mode_assets *AssetsMode, cut_mode *CutMode)
         CopyCutRect(CutMode, Rect, Pixels, 4*Rect.W, 0);
         if(WriteCutPNG(FileName, PlatformFileType_BMP, Pixels, Rect.W, Rect.H))
         {
-            RelistSourceFiles(AssetsMode, KESA_Bitmap);
+            RescanAssets(AssetsMode);
             LOG("Cut bmps/%s, %d x %d, from %s", FileName, Rect.W, Rect.H, CutMode->Images[CutMode->ImageIndex]);
         }
         Platform.DeallocateMemory(Pixels);
@@ -401,7 +402,15 @@ SaveCutSpriteSheet(editor_mode_assets *AssetsMode, cut_mode *CutMode)
         }
         if(WriteCutPNG(FileName, PlatformFileType_SSBMP, Pixels, StripWidth, FrameHeight))
         {
-            RelistSourceFiles(AssetsMode, KESA_SpriteSheet);
+            // NOTE(pvlso): The strip is an asset at once; its frame size goes into data/assets.txt
+            RescanAssets(AssetsMode);
+            kesa_asset *Sheet = FindListedAsset(AssetsMode->StoredAssets, AssetsMode->StoredHeader.AssetCount,
+                                                KESA_SpriteSheet, FileName);
+            if(Sheet)
+            {
+                SetSpriteSheetFrame(&Sheet->SpriteSheet, (u32)StripWidth, (u32)FrameWidth, (u32)FrameHeight);
+                SaveAssetList(AssetsMode);
+            }
             LOG("Cut spritesheets/%s, %u frames of %d x %d, from %s", FileName, CutMode->FrameCount, FrameWidth,
                 FrameHeight, CutMode->Images[CutMode->ImageIndex]);
         }

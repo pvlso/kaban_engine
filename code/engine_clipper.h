@@ -3238,8 +3238,9 @@ GetNewActive(clipper *Clipper)
     else
     {
         clipper_active *Mem = (clipper_active *)ClipperMalloc(sizeof(clipper_active)*BASIC_ALLOCATE_COUNT);
+        // NOTE(pvlso): The list of blocks grows like the other lists (it stopped at 16 blocks before)
+        if(NeedIncrease(Clipper->DeallocActivesCount)) {IncreaseDeallocateActivesList(Clipper);}
         Clipper->DeallocActivesList[Clipper->DeallocActivesCount++] = Mem;
-        Assert(Clipper->DeallocActivesCount < BASIC_ALLOCATE_COUNT);
         
         for(s32 I = 0;
             I < BASIC_ALLOCATE_COUNT;
@@ -3285,8 +3286,9 @@ GetOutPt(clipper *Clipper, v2_s64 P, u32 OutRectIndex)
     else
     {
         output_point *Mem = MallocArray(BASIC_ALLOCATE_COUNT, output_point);
+        // NOTE(pvlso): The list of blocks grows like the other lists (it stopped at 16 blocks: 240 points)
+        if(NeedIncrease(Clipper->DeallocOutPtsCount)) {IncreaseDeallocateOutPtsList(Clipper);}
         Clipper->DeallocOutPtsList[Clipper->DeallocOutPtsCount++] = Mem;
-        Assert(Clipper->DeallocOutPtsCount < BASIC_ALLOCATE_COUNT);
         
         for(s32 I = 0;
             I < BASIC_ALLOCATE_COUNT;

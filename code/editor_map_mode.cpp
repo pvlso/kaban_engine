@@ -61,10 +61,7 @@ PlayMapEditor(editor_state *EditorState, transient_state *TranState, char *Proje
 internal void
 ReleaseMapTileset(platform_texture_op_queue *TextureOpQueue, map_tileset *Set)
 {
-    for(u32 TileIndex = 0; Set->Tiles && (TileIndex < Set->File.TileCount); ++TileIndex)
-    {
-        ReleaseTileTexture(TextureOpQueue, Set->Tiles + TileIndex);
-    }
+    ReleaseTileTexture(TextureOpQueue, &Set->Atlas.Bitmap);
     Clear(&Set->Arena);
     *Set = {};
 }
@@ -82,23 +79,21 @@ LoadMapTileset(platform_texture_op_queue *TextureOpQueue, map_tileset *Set, char
         Set->Sheets[SheetIndex] = LoadImageFile(File->Sheets[SheetIndex], PlatformFileType_DataRoot, Arena);
     }
 
-    Set->Tiles = PushArray(Arena, Maximum(1, File->TileCount), loaded_bitmap);
+    Set->Atlas = BuildTileAtlas(File, Set->Sheets, Arena);
+    if(Set->Atlas.Bitmap.Memory)
+    {
+        AllocateBitmap(TextureOpQueue, &Set->Atlas.Bitmap);
+    }
     u32 GridCells = Maximum(1, File->GridWidth*File->GridHeight);
     Set->TileAt = PushArray(Arena, GridCells, s32);
     for(u32 Index = 0; Index < GridCells; ++Index) {Set->TileAt[Index] = -1;}
     for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
     {
         tileset_file_tile *Tile = File->Tiles + TileIndex;
-        tileset_file_cell Cell = Tile->Frames[0];
-        loaded_bitmap *Bitmap = Set->Tiles + TileIndex;
-        *Bitmap = CutTilesetCell(Set->Sheets + Cell.Sheet, File->TileSize, Cell.X, Cell.Y, Arena);
-        if(Bitmap->Memory)
-        {
-            AllocateBitmap(TextureOpQueue, Bitmap);
-        }
         Set->TileAt[Tile->GridY*File->GridWidth + Tile->GridX] = (s32)TileIndex;
     }
-    LOG("Map editor: tile set %s, %u tiles", FileName, File->TileCount);
+    LOG("Map editor: tile set %s, %u tiles, a %d x %d atlas", FileName, File->TileCount, Set->Atlas.Bitmap.Width,
+        Set->Atlas.Bitmap.Height);
 }
 
 inline s32
@@ -403,7 +398,7 @@ LoadMapEntityDefs(editor_state *EditorState, platform_texture_op_queue *TextureO
     }
 
     kesa_header Header = {};
-    kesa_asset *Stored = ReadStoredAssetList(&EditorState->EditorMeta, &Header);
+    kesa_asset *Stored = ScanAssetList(&Header, 0, 0, Arena);
     for(u32 DefIndex = 0; DefIndex < MapMode->EntityDefCount; ++DefIndex)
     {
         map_entity_def *Def = MapMode->EntityDefs + DefIndex;
@@ -1803,6 +1798,7 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
     b32 OnMap = Inside && (CellX >= 0) && (CellY >= 0) && ((u32)CellX < MapMode->Width) && ((u32)CellY < MapMode->Height);
     MapMode->HoverX = OnMap ? CellX : -1;
     MapMode->HoverY = OnMap ? CellY : -1;
+    MapMode->HoverCell = MapCellOf(&View, MouseP);
 
     b32 CanPaint = MapMode->HasBrush && (MapMode->CurrentSet >= 0) && MapMode->LayerCount;
     b32 Busy = MapMode->Painting || MapMode->Erasing || MapMode->RectActive;
@@ -1920,10 +1916,15 @@ UpdateAndRenderMapView(editor_mode_map *MapMode, engine_input *Input, render_gro
                 {
                     map_tileset *Set = MapMode->Sets + Cell->Set - 1;
                     s32 TileIndex = MapTileAt(Set, Cell->X, Cell->Y);
-                    if((TileIndex >= 0) && Set->Tiles[TileIndex].Memory)
+                    if((TileIndex >= 0) && Set->Atlas.Bitmap.Memory)
                     {
-                        PushBitmap(RenderGroup, Flat, Set->Tiles + TileIndex, View.Cell, V3(CellCenter(&View, X, Y), Z),
-                                   Color);
+                        u32 AtlasCell = TileAtlasCell(&Set->Atlas, Set->File.Tiles + TileIndex, TileIndex,
+                                                      MapMode->Time);
+                        v2 MinUV, MaxUV;
+                        TileAtlasUV(&Set->Atlas, AtlasCell, &MinUV, &MaxUV);
+                        PushBitmapPart(RenderGroup, Flat, &Set->Atlas.Bitmap,
+                                       RectCenterDim(CellCenter(&View, X, Y), V2(View.Cell, View.Cell)), Z,
+                                       MinUV, MaxUV, Color);
                     }
                 }
             }
@@ -2031,10 +2032,13 @@ UpdateAndRenderPalette(editor_mode_map *MapMode, engine_input *Input, render_gro
         for(u32 TileIndex = 0; TileIndex < File->TileCount; ++TileIndex)
         {
             tileset_file_tile *Tile = File->Tiles + TileIndex;
-            if(Set->Tiles[TileIndex].Memory)
+            if(Set->Atlas.Bitmap.Memory)
             {
-                PushBitmap(RenderGroup, Flat, Set->Tiles + TileIndex, View.Cell,
-                           V3(CellCenter(&View, Tile->GridX, Tile->GridY), 6.0f));
+                v2 MinUV, MaxUV;
+                TileAtlasUV(&Set->Atlas, TileAtlasCell(&Set->Atlas, Tile, TileIndex, 0.0f), &MinUV, &MaxUV);
+                PushBitmapPart(RenderGroup, Flat, &Set->Atlas.Bitmap,
+                               RectCenterDim(CellCenter(&View, Tile->GridX, Tile->GridY), V2(View.Cell, View.Cell)),
+                               6.0f, MinUV, MaxUV);
             }
         }
         if(MapMode->HasBrush)
@@ -2280,6 +2284,12 @@ DrawMapEditorUI(editor_mode_map *MapMode, ui_state *UIState)
             nk_layout_row_dynamic(Nk, 28, 2);
             if(nk_button_label(Nk, MapMode->Dirty ? "Save *" : "Save")) {MapMode->SaveRequested = true;}
             if(nk_button_label(Nk, "Save as")) {MapMode->SaveAsRequested = true;}
+            nk_layout_row_template_begin(Nk, 28);
+            nk_layout_row_template_push_static(Nk, 100);
+            nk_layout_row_template_push_dynamic(Nk);
+            nk_layout_row_template_end(Nk);
+            if(nk_button_label(Nk, "Play")) {MapMode->PlayRequested = true;}
+            nk_label(Nk, "saves, F5 over the map: from there", NK_TEXT_LEFT);
         }
 
         if(MapMode->HasMap)
@@ -2477,6 +2487,7 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
     render_group *RenderGroup = &UIState->RenderGroup;
     object_transform Flat = DefaultFlatTransform();
     v2 MouseP = Unproject(RenderGroup, &Flat, V2(Input->MouseX, Input->MouseY)).xy;
+    MapMode->Time += Input->dtForFrame;
 
     if(!MapMode->EntityDefsLoaded)
     {
@@ -2510,6 +2521,29 @@ UpdateAndRenderMapEditor(editor_state *EditorState, transient_state *TranState, 
         PlayTitleScreen(EditorState, TranState);
         return(true);
     }
+
+    // NOTE(pvlso): Play (map editor plan, phase 7): the map is saved, so the KEA the game loads has it, and the game
+    // starts on it; F5 with the mouse over the map starts the hero there, on the current level. Not in the middle of
+    // a drag.
+    b32 PlayKey = WasPressed(GetController(Input, 0)->Play);
+    b32 Dragging = MapMode->Painting || MapMode->Erasing || MapMode->RectActive || MapMode->DraggingEntity ||
+        MapMode->Scattering || MapMode->NavDrawing || (MapMode->DragVertex >= 0) || MapMode->Panning;
+    if((PlayKey || MapMode->PlayRequested) && MapMode->HasMap && !Dragging)
+    {
+        b32 FromMouse = PlayKey && (MapMode->HoverX >= 0);
+        v2 StartP = MapMode->HoverCell;
+        MapMode->PlayRequested = false;
+        b32 WasDirty = MapMode->Dirty;
+        b32 Saved = !WasDirty || SaveMap(MapMode, MapMode->FileName, &TranState->TranArena);
+        if(Saved)
+        {
+            if(WasDirty) {ListMapFiles(MapMode, &EditorState->ModeArena);}
+            PlayGameFromMap(EditorState, TranState, MapMode, FromMouse, StartP, MapMode->CurrentLevel);
+            return(true);
+        }
+        LOG_ERROR("Play: %s couldn't be saved, the game isn't started", MapMode->FileName);
+    }
+    MapMode->PlayRequested = false;
 
     // NOTE(pvlso): The panel changed the selected placement (position, flip, overrides) last frame
     if((MapMode->SelectedEntity >= 0) && (MapMode->SelectedEntity == MapMode->LastSelectedIndex) &&

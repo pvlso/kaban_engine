@@ -79,5 +79,20 @@ struct tile_flag_names
     char KindNames[TILESET_MAX_KINDS][TILESET_FLAG_NAME_LENGTH];
 };
 
+// NOTE(pvlso): A tile set's pictures in one bitmap: every distinct sheet cell its tiles use (all frames of animated
+// ones) in a grid of TileSize + 2 cells, each tile with a border of its own edge pixels so nearest sampling at any
+// scale never takes a neighbour's. Rows from the bottom, like every loaded bitmap.
+struct tile_atlas
+{
+    loaded_bitmap Bitmap;
+    u32 TileSize;
+    u32 Columns;
+    u32 CellCount;
+    u32 *TileFirstFrame; // NOTE(pvlso): per tile, where its frames start in FrameCells
+    u32 *FrameCells;     // NOTE(pvlso): each frame's cell in the atlas; a tile that isn't animated has one
+    u32 FrameTotal;
+    tileset_file_cell *Cells; // NOTE(pvlso): the sheet cell in each atlas cell
+};
+
 #define ENGINE_TILESET_FILE_H
 #endif

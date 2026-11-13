@@ -37,8 +37,8 @@ struct map_layer
     map_cell *Cells; // NOTE(pvlso): Width*Height, row by row from the top; its own allocation
 };
 
-// NOTE(pvlso): A tile set loaded for painting: read from its file, each tile's first frame cut from its sheets, and its
-// tiles found by their place in the set's grid. Everything but the textures lives in Arena.
+// NOTE(pvlso): A tile set loaded for painting: read from its file, its tiles packed in one atlas texture (all their
+// frames), and its tiles found by their place in the set's grid. Everything but the texture lives in Arena.
 struct map_tileset
 {
     char FileName[64];
@@ -46,7 +46,7 @@ struct map_tileset
     tile_flag_names FlagNames;
     tileset_file File;
     loaded_bitmap Sheets[TILESET_MAX_SHEETS];
-    loaded_bitmap *Tiles;
+    tile_atlas Atlas;
     s32 *TileAt; // NOTE(pvlso): GridWidth*GridHeight, the tile index there or -1
 };
 
@@ -120,6 +120,7 @@ struct editor_mode_map
     r32 Zoom;
     v2 Pan;
     r32 PaletteZoom;
+    r32 Time; // NOTE(pvlso): seconds the map editor has been open, for animated tiles
     v2 PalettePan;
     s32 Panning; // NOTE(pvlso): 1 the map, 2 the palette
     v2 PanFrom;
@@ -130,6 +131,7 @@ struct editor_mode_map
     b32 DimOtherLayers;
     b32 DimOtherLevels;
     s32 HoverX, HoverY;             // NOTE(pvlso): the map cell under the mouse, -1 outside
+    v2 HoverCell;                   // NOTE(pvlso): the point under the mouse in cells, when HoverX isn't -1
     b32 Erasing;
     b32 RectActive;                 // NOTE(pvlso): a Shift drag: fill (left) or clear (right) a rectangle
     b32 RectErase;
@@ -143,6 +145,7 @@ struct editor_mode_map
     u32 MapFileIndex;
     b32 OpenRequested;
     b32 SaveRequested;
+    b32 PlayRequested; // NOTE(pvlso): the panel's Play: the game on this map, where it starts (F5: at the mouse)
     b32 SaveAsRequested;
     s32 NewWidth;
     s32 NewHeight;

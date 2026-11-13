@@ -28,6 +28,13 @@ GameEndRenderGroup(render_group *Group)
     }
 }
 
+// NOTE(pvlso): PushTriangle is overloaded, the table needs the one taking three corners
+internal void
+GamePushTriangle(render_group *Group, object_transform *ObjectTransform, v3 A, v3 B, v3 C, v4 Color)
+{
+    PushTriangle(Group, ObjectTransform, A, B, C, Color);
+}
+
 internal void
 GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id ID, r32 Height, v3 Offset,
                v4 Color, r32 CAlign, r32 Angle, bitmap_id NormalMap)
@@ -35,6 +42,16 @@ GamePushBitmap(render_group *Group, object_transform *ObjectTransform, bitmap_id
     if(Group->Assets)
     {
         PushBitmap(Group, ObjectTransform, ID, Height, Offset, Color, CAlign, Angle, NormalMap);
+    }
+}
+
+internal void
+GamePushTile(render_group *Group, object_transform *ObjectTransform, tile_info *Tile, v3 Corner, r32 Size, v4 Color)
+{
+    if(Group->Assets && Tile && Tile->Atlas.Value)
+    {
+        PushBitmapPart(Group, ObjectTransform, Tile->Atlas, RectMinDim(Corner.xy, V2(Size, Size)), Corner.z,
+                       Tile->MinUV, Tile->MaxUV, Color);
     }
 }
 
@@ -121,20 +138,6 @@ GameLoadedTileset(engine_assets *Assets, u32 TilesetIndex, kea_tileset **Info)
     return(Result);
 }
 
-internal bitmap_id
-GameGetTilesetTile(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex)
-{
-    bitmap_id Result = {};
-    kea_tileset *Info = 0;
-    loaded_tileset *Tileset = GameLoadedTileset(Assets, TilesetIndex, &Info);
-    if(Tileset && (TileIndex < Info->TileCount))
-    {
-        Result.Value = Tileset->Tiles[TileIndex].BitmapGUID;
-    }
-
-    return(Result);
-}
-
 internal tileset_info
 GameGetTilesetInfo(engine_assets *Assets, u32 TilesetIndex)
 {
@@ -160,17 +163,31 @@ GameGetTileInfo(engine_assets *Assets, u32 TilesetIndex, u32 TileIndex, r32 Time
     if(Tileset && (TileIndex < Info->TileCount))
     {
         kea_tile *Tile = Tileset->Tiles + TileIndex;
-        Result.Bitmap.Value = Tile->BitmapGUID;
         Result.Flags = Tile->Flags;
         Result.Kind = Tile->Kind;
         Result.GridX = Tile->GridX;
         Result.GridY = Tile->GridY;
         Result.Animated = (Tile->FrameCount > 1);
         FormatString(sizeof(Result.Name), Result.Name, "%.*s", KEA_TILE_NAME_LENGTH, Tile->Name);
+        u32 Cell = Tile->Cell;
         if(Result.Animated && (Tile->FirstFrame + Tile->FrameCount <= Info->FrameCount))
         {
             u32 Frame = (u32)FloorReal32ToInt32(Time*Tile->FramesPerSecond) % Tile->FrameCount;
-            Result.Bitmap = Tileset->Frames[Tile->FirstFrame + Frame];
+            Cell = Tileset->FrameCells[Tile->FirstFrame + Frame];
+        }
+
+        // NOTE(pvlso): The cell's inside, its border left out (engine_tileset_file.cpp, TileAtlasUV)
+        asset *Atlas = Info->AtlasGUID ? GetAssetByGUID(Assets, Info->AtlasGUID) : 0;
+        if(Atlas && Info->AtlasColumns && Atlas->KEA.Bitmap.Dim[0] && Atlas->KEA.Bitmap.Dim[1])
+        {
+            u32 Stride = Info->TileSize + 2;
+            r32 InvWidth = 1.0f / (r32)Atlas->KEA.Bitmap.Dim[0];
+            r32 InvHeight = 1.0f / (r32)Atlas->KEA.Bitmap.Dim[1];
+            r32 X = (r32)((Cell % Info->AtlasColumns)*Stride + 1);
+            r32 Y = (r32)((Cell / Info->AtlasColumns)*Stride + 1);
+            Result.Atlas.Value = Info->AtlasGUID;
+            Result.MinUV = V2(X*InvWidth, Y*InvHeight);
+            Result.MaxUV = V2((X + (r32)Info->TileSize)*InvWidth, (Y + (r32)Info->TileSize)*InvHeight);
         }
     }
 
@@ -292,6 +309,19 @@ GameFindEntity(engine_assets *Assets, char *Name)
         {
             Result = AssetIndex;
         }
+    }
+
+    return(Result);
+}
+
+internal u32
+GameFindMap(engine_assets *Assets, char *FileName)
+{
+    u32 Result = 0;
+    asset *Asset = (Assets && FileName && FileName[0]) ? GetAssetByGUID(Assets, GUIDFromString(FileName)) : 0;
+    if(Asset && (Asset->KEA.Type == KEAType_Map))
+    {
+        Result = (u32)(Asset - Assets->Assets);
     }
 
     return(Result);
@@ -433,6 +463,25 @@ GameGetNavPolyLevel(engine_assets *Assets, u32 MapIndex, s32 Poly)
 }
 
 internal u32
+GameGetNavPolyPoints(engine_assets *Assets, u32 MapIndex, s32 Poly, v2 *Points, u32 MaxPoints)
+{
+    u32 Result = 0;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map && (Poly >= 0) && ((u32)Poly < Map->Nav.PolyCount))
+    {
+        kea_nav_poly *Found = Map->Nav.Polys + Poly;
+        Result = Minimum(Found->PointCount, MaxPoints);
+        for(u32 Index = 0; Index < Result; ++Index)
+        {
+            Points[Index] = Map->Nav.Points[Found->FirstPoint + Index];
+        }
+    }
+
+    return(Result);
+}
+
+internal u32
 GameFindNavPath(engine_assets *Assets, u32 MapIndex, v2 From, s32 FromLevel, v2 To, s32 ToLevel, nav_path_point *Points,
                 u32 MaxPoints)
 {
@@ -456,6 +505,20 @@ GameMoveOnNav(engine_assets *Assets, u32 MapIndex, v2 From, s32 *Level, v2 To)
     if(Map && Map->Nav.PolyCount)
     {
         Result = MoveMapNav(&Map->Nav, From, Level, To);
+    }
+
+    return(Result);
+}
+
+internal v2
+GameClosestNavPointOnLevel(engine_assets *Assets, u32 MapIndex, v2 P, s32 Level)
+{
+    v2 Result = P;
+    kea_map *Info = 0;
+    loaded_map *Map = GameLoadedMap(Assets, MapIndex, &Info);
+    if(Map)
+    {
+        ClosestMapNavPointOnLevel(&Map->Nav, &Result, Level);
     }
 
     return(Result);
@@ -527,6 +590,8 @@ GetEngineAPI(void)
     Result.PushRect = PushRect;
     Result.PushLine = PushLine;
     Result.PushCircleOutline = PushCircleOutline;
+    Result.PushTriangle = GamePushTriangle;
+    Result.PushTile = GamePushTile;
 
     Result.GetFont = GameGetFont;
     Result.PushText = GamePushText;
@@ -534,18 +599,20 @@ GetEngineAPI(void)
 
     Result.GetBestMatchAssets = GameGetBestMatchAssets;
     Result.GetSprite = GameGetSprite;
-    Result.GetTilesetTile = GameGetTilesetTile;
     Result.GetTilesetInfo = GameGetTilesetInfo;
     Result.GetTileInfo = GameGetTileInfo;
     Result.GetMapInfo = GameGetMapInfo;
+    Result.FindMap = GameFindMap;
     Result.GetMapLayer = GameGetMapLayer;
     Result.GetMapTileset = GameGetMapTileset;
     Result.GetMapEntity = GameGetMapEntity;
     Result.FindNavPoly = GameFindNavPoly;
     Result.GetNavPolyLevel = GameGetNavPolyLevel;
+    Result.GetNavPolyPoints = GameGetNavPolyPoints;
     Result.FindNavPath = GameFindNavPath;
     Result.MoveOnNav = GameMoveOnNav;
     Result.ClosestNavPoint = GameClosestNavPoint;
+    Result.ClosestNavPointOnLevel = GameClosestNavPointOnLevel;
     Result.FindEntity = GameFindEntity;
     Result.FindEntityByGUID = GameFindEntityByGUID;
     Result.GetEntityInfo = GameGetEntityInfo;
@@ -591,41 +658,20 @@ ParseGameDataKEAVersion(char *Name, u32 *Version)
 }
 
 // NOTE(pvlso): The newest game_data_<version>.kea in the project's data/keas (the data root is the
-// project's while it runs), the assets mode writes those. Its name goes to FileName, empty when there's none.
+// project's while it runs), the assets mode writes those. Its name goes to FileName, empty when there's none. The
+// assets go into Arena, the game's own (editor_mode_game AssetArena), so a swap can free them.
 internal engine_assets *
-LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *FileName, umm FileNameCount)
+LoadGameAssets(memory_arena *Arena, transient_state *TranState, char *FileName, umm FileNameCount)
 {
     TIMED_FUNCTION();
 
     engine_assets *Result = 0;
-    FileName[0] = 0;
 
     temporary_memory TempMem = BeginTemporaryMemory(&TranState->TranArena);
-    u32 FileCount = Platform.ListFilesInDirectory(PlatformFileType_KEA, 0, 0);
-    if(FileCount)
+    if(NewestGameDataKEA(FileName, FileNameCount, TempMem.Arena))
     {
-        char **FileNames = PushArray(TempMem.Arena, FileCount, char *);
-        FileCount = Platform.ListFilesInDirectory(PlatformFileType_KEA, FileNames, TempMem.Arena);
-
-        char *BestFileName = 0;
-        u32 BestVersion = 0;
-        for(u32 FileIndex = 0; FileIndex < FileCount; ++FileIndex)
-        {
-            u32 Version = 0;
-            if(ParseGameDataKEAVersion(FileNames[FileIndex], &Version) &&
-               (!BestFileName || (Version > BestVersion)))
-            {
-                BestFileName = FileNames[FileIndex];
-                BestVersion = Version;
-            }
-        }
-
-        if(BestFileName)
-        {
-            Result = AllocateAssets(BestFileName, &EditorState->ModeArena, TempMem.Arena,
-                                    TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
-            FormatString(FileNameCount, FileName, "%s", BestFileName);
-        }
+        Result = AllocateAssets(FileName, Arena, TempMem.Arena,
+                                TranState->LowPriorityQueue, TranState->TextureOpQueue, Megabytes(128));
     }
     EndTemporaryMemory(TempMem);
 
@@ -633,6 +679,46 @@ LoadGameAssets(editor_state *EditorState, transient_state *TranState, char *File
 }
 
 #define GAME_SOURCE_CHECK_INTERVAL 0.5f
+#define GAME_DATA_CHECK_INTERVAL 0.5f
+
+// NOTE(pvlso): The data folders are checked like the sources: when what a KEA is built from changes (a map saved in
+// the map editor, a picture dropped in bmps/), a new KEA is built and the running game is swapped to it (see
+// SwapRequested).
+internal void
+UpdateGameData(editor_state *EditorState, editor_mode_game *Game, transient_state *TranState, f32 dt)
+{
+    Game->DataCheckTimer -= dt;
+    if(Game->DataCheckTimer <= 0.0f)
+    {
+        Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
+        u64 Signature = AssetDataSignature(&TranState->TranArena);
+        if(!Game->DataBuilding && !Game->LoadingAssets && (Signature != Game->BuiltDataSignature) &&
+           StartKEABuild(EditorState, TranState, Game->AssetFileName))
+        {
+            // NOTE(pvlso): Set before the build, a failed one isn't retried until the data changes again
+            Game->BuiltDataSignature = Signature;
+            Game->DataBuilding = true;
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: building a new KEA...");
+        }
+    }
+
+    // NOTE(pvlso): The game runs on while the worker builds, and swaps once it's done
+    kea_build_job *Job = &EditorState->KEABuild;
+    if(Game->DataBuilding && !Job->Running)
+    {
+        Game->DataBuilding = false;
+        if(Job->Result)
+        {
+            Game->SwapRequested = true;
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: %s built", Job->Built);
+        }
+        else
+        {
+            FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                         "The data changed, but building %s failed (see the log)", Job->Built);
+        }
+    }
+}
 
 internal void
 StartGameBuild(editor_mode_game *Game)
@@ -701,7 +787,7 @@ ReadGameBuildLog(editor_mode_game *Game, transient_state *TranState)
 }
 
 internal void
-UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
+UpdateGameBuild(editor_state *EditorState, editor_mode_game *Game, transient_state *TranState, f32 dt)
 {
     if(Game->Building)
     {
@@ -734,6 +820,10 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
                 Game->BuildFailed = false;
                 FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
                 LOG("%s %s", Game->ProjectName, (Game->LoadCount > 1) ? "reloaded" : "loaded");
+
+                game_code_memo *Memo = &EditorState->LastGameBuild;
+                FormatString(sizeof(Memo->ProjectName), Memo->ProjectName, "%s", Game->ProjectName);
+                Memo->SourceWriteTime = Game->BuiltSourceWriteTime;
             }
         }
     }
@@ -750,6 +840,76 @@ UpdateGameBuild(editor_mode_game *Game, transient_state *TranState, f32 dt)
     }
 }
 
+// NOTE(pvlso): The newest KEA loaded into the game mode, the older ones deleted
+internal void
+LoadGameModeAssets(editor_mode_game *Game, transient_state *TranState)
+{
+    Game->Assets = LoadGameAssets(&Game->AssetArena, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
+    if(Game->Assets)
+    {
+        LOG("%s assets: %s", Game->ProjectName, Game->AssetFileName);
+
+        // NOTE(pvlso): One a game held open while a newer one was built goes now
+        u32 Version;
+        if(ParseGameDataKEAVersion(Game->AssetFileName, &Version))
+        {
+            DeleteOlderKEAs(Version, Game->AssetFileName, &TranState->TranArena);
+        }
+    }
+    else
+    {
+        LOG_WARNING("%s has no game_data_<version>.kea in its data/keas", Game->ProjectName);
+    }
+}
+
+// NOTE(pvlso): The game mode, pushed on Arena: the mode arena for Run, PlayArena when the map editor's Play started it.
+// The KEA is built first on a worker when the data changed since the last one (the game waits for it, LoadingAssets),
+// while the game's library builds alongside; a library the last good build made this session from the same sources
+// loads without building.
+internal editor_mode_game *
+StartGame(editor_state *EditorState, transient_state *TranState, char *Name, memory_arena *Arena)
+{
+    f64 Start = Platform.GetSeconds();
+    UseDataOf(EditorState, Name);
+
+    editor_mode_game *Game = PushStruct(Arena, editor_mode_game);
+    FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
+    Game->BuiltDataSignature = AssetDataSignature(&TranState->TranArena);
+    Game->DataCheckTimer = GAME_DATA_CHECK_INTERVAL;
+    Game->StartSeconds = Start;
+    EditorState->Game = Game;
+
+    LOG("Run %s", Game->ProjectName);
+    if(ProjectKEAIsStale(&TranState->TranArena) && StartKEABuild(EditorState, TranState, 0))
+    {
+        LOG("The data changed since the last KEA, building a new one");
+        Game->LoadingAssets = true;
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "Building the KEA...");
+    }
+    else
+    {
+        LoadGameModeAssets(Game, TranState);
+    }
+
+    game_code_memo *Memo = &EditorState->LastGameBuild;
+    u64 SourceWriteTime = Platform.GetProjectWriteTime(Game->ProjectName);
+    if(StringsAreEqual(Memo->ProjectName, Game->ProjectName) && (Memo->SourceWriteTime == SourceWriteTime) &&
+       LoadGameCode(Game))
+    {
+        Game->BuiltSourceWriteTime = SourceWriteTime;
+        Game->SourceCheckTimer = GAME_SOURCE_CHECK_INTERVAL;
+        FormatString(sizeof(Game->Status), Game->Status, "Running %s", Game->ProjectName);
+        LOG("%s: no source changed since its last build, the library loads as it is", Game->ProjectName);
+    }
+    else
+    {
+        // NOTE(pvlso): The first Run of a session builds, so the library matches the sources and the editor's mode
+        StartGameBuild(Game);
+    }
+
+    return(Game);
+}
+
 internal void
 PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectName)
 {
@@ -758,27 +918,58 @@ PlayGame(editor_state *EditorState, transient_state *TranState, char *ProjectNam
     FormatString(sizeof(Name), Name, "%s", ProjectName);
 
     SetEditorMode(EditorState, TranState, EditorMode_Game);
+    EditorState->PausedMap = 0;
+    StartGame(EditorState, TranState, Name, &EditorState->ModeArena);
+}
 
-    // NOTE(pvlso): The game's assets come from its own data/
-    UseDataOf(EditorState, Name);
+// NOTE(pvlso): The map editor's Play (map editor plan, phase 7): the map editor, its map saved, waits in the mode arena
+// (EditorState->PausedMap) and the game starts on that map, at P on Level when HasP (cells from the map's top left,
+// y down), else where the game itself starts. Stop or F5 goes back (ReturnToMapEditor).
+internal void
+PlayGameFromMap(editor_state *EditorState, transient_state *TranState, editor_mode_map *MapMode, b32 HasP, v2 P,
+                s32 Level)
+{
+    Platform.CompleteAllWork(TranState->LowPriorityQueue);
 
-    editor_mode_game *Game = PushStruct(&EditorState->ModeArena, editor_mode_game);
-    FormatString(sizeof(Game->ProjectName), Game->ProjectName, "%s", Name);
-    Game->Assets = LoadGameAssets(EditorState, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
-    EditorState->Game = Game;
+    EditorState->PausedMap = MapMode;
+    EditorState->EditorMode = EditorMode_Game;
+    LOG("Editor mode: Game, from the map editor on %s%s", MapMode->FileName, HasP ? " at the mouse" : "");
 
-    LOG("Run %s", Game->ProjectName);
-    if(Game->Assets)
+    editor_mode_game *Game = StartGame(EditorState, TranState, MapMode->ProjectName, &EditorState->PlayArena);
+    Game->FromMap = true;
+    game_start *Start = &Game->Memory.Start;
+    FormatString(sizeof(Start->MapFileName), Start->MapFileName, "%s", MapMode->FileName);
+    Start->HasP = HasP;
+    Start->P = P;
+    Start->Level = Level;
+    if(HasP)
     {
-        LOG("%s assets: %s", Game->ProjectName, Game->AssetFileName);
+        LOG("Start on %s at %.1f,%.1f, level %d", Start->MapFileName, P.x, P.y, Level);
     }
-    else
-    {
-        LOG_WARNING("%s has no game_data_<version>.kea in its data/keas", Game->ProjectName);
-    }
+}
 
-    // NOTE(pvlso): Always builds first, so the library matches the sources and the editor's mode
-    StartGameBuild(Game);
+// NOTE(pvlso): Back from a game the map editor's Play started: the game mode goes with PlayArena, the map editor goes on
+// as it was. Drags it had going ended while the game ran.
+internal void
+ReturnToMapEditor(editor_state *EditorState, transient_state *TranState)
+{
+    Platform.CompleteAllWork(TranState->LowPriorityQueue);
+
+    editor_mode_map *MapMode = EditorState->PausedMap;
+    EditorState->PausedMap = 0;
+    Clear(&EditorState->PlayArena);
+
+    MapMode->Panning = 0;
+    MapMode->Painting = false;
+    MapMode->Erasing = false;
+    MapMode->RectActive = false;
+    MapMode->PickingBrush = false;
+    MapMode->DraggingEntity = false;
+    MapMode->Scattering = false;
+    MapMode->DragVertex = -1;
+    EditorState->EditorMode = EditorMode_MapEditor;
+    EditorState->MapMode = MapMode;
+    LOG("Editor mode: Map Editor, back on %s", MapMode->FileName);
 }
 
 internal void
@@ -789,8 +980,8 @@ ClearGameMemory(editor_mode_game *Game)
     Game->Memory.GameState = 0;
 }
 
-// NOTE(pvlso): Queues a delete for the texture of every loaded bitmap and closes the KEA. The
-// asset memory itself is in the mode arena, which the next mode frees.
+// NOTE(pvlso): Queues a delete for the texture of every loaded bitmap and closes the KEA. The asset memory itself
+// is in Game->AssetArena, which the caller clears.
 internal void
 FreeGameAssets(engine_assets *Assets)
 {
@@ -863,9 +1054,60 @@ FinishStopGame(editor_state *EditorState, transient_state *TranState)
     {
         FreeGameAssets(Game->Assets);
     }
+    Clear(&Game->AssetArena);
     FreeGameFonts(&Game->Fonts, TranState->TextureOpQueue);
 
-    PlayTitleScreen(EditorState, TranState);
+    if(Game->FromMap && EditorState->PausedMap)
+    {
+        ReturnToMapEditor(EditorState, TranState);
+    }
+    else
+    {
+        PlayTitleScreen(EditorState, TranState);
+    }
+}
+
+// NOTE(pvlso): The second frame of a swap (see SwapRequested): the loads the first frame finished have their
+// textures by now, so the old assets can go. The game is told by Memory.AssetSwapCount and reloads what it took
+// from them on this frame's update.
+internal void
+FinishAssetSwap(editor_mode_game *Game, transient_state *TranState)
+{
+    TIMED_FUNCTION();
+
+    Game->Swapping = false;
+
+    char OldFileName[256];
+    FormatString(sizeof(OldFileName), OldFileName, "%s", Game->AssetFileName);
+    if(Game->Assets)
+    {
+        FreeGameAssets(Game->Assets);
+        Game->Assets = 0;
+    }
+    Clear(&Game->AssetArena);
+
+    Game->Assets = LoadGameAssets(&Game->AssetArena, TranState, Game->AssetFileName, sizeof(Game->AssetFileName));
+    ++Game->Memory.AssetSwapCount;
+
+    if(Game->Assets)
+    {
+        LOG("%s assets swapped: %s -> %s", Game->ProjectName, OldFileName[0] ? OldFileName : "none",
+            Game->AssetFileName);
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed: the game swapped to %s",
+                     Game->AssetFileName);
+
+        // NOTE(pvlso): Closed by FreeGameAssets, so the one the game held goes now too
+        u32 Version;
+        if(ParseGameDataKEAVersion(Game->AssetFileName, &Version))
+        {
+            DeleteOlderKEAs(Version, Game->AssetFileName, &TranState->TranArena);
+        }
+    }
+    else
+    {
+        LOG_WARNING("%s: the swap found no game_data_<version>.kea in its data/keas", Game->ProjectName);
+        FormatString(sizeof(Game->AssetStatus), Game->AssetStatus, "The data changed, but no KEA was found to swap to");
+    }
 }
 
 internal void
@@ -920,6 +1162,11 @@ DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
 
     nk_layout_row_dynamic(Nk, 30, 1);
     nk_label(Nk, Game->Status, NK_TEXT_ALIGN_LEFT);
+    if(Game->FromMap)
+    {
+        nk_labelf(Nk, NK_TEXT_ALIGN_LEFT, "Started from the map editor on %s: Stop or F5 goes back",
+                  Game->Memory.Start.MapFileName);
+    }
 
     char Assets[320];
     if(Game->AssetFileName[0])
@@ -932,6 +1179,10 @@ DrawGameControls(editor_mode_game *Game, nk_context *Nk, r32 LogHeight)
                      Game->ProjectName);
     }
     nk_label(Nk, Assets, NK_TEXT_ALIGN_LEFT);
+    if(Game->AssetStatus[0])
+    {
+        nk_label(Nk, Game->AssetStatus, NK_TEXT_ALIGN_LEFT);
+    }
 
     char Counts[128];
     FormatString(sizeof(Counts), Counts, "Builds: %u   Reloads: %u", Game->BuildCount,
@@ -955,6 +1206,16 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     editor_mode_game *Game = EditorState->Game;
     nk_context *Nk = EditorState->UIState.Nk;
 
+    engine_button_state PlayKey = GetController(Input, 0)->Play;
+    if(Game->FromMap && Game->PlayKeyArmed && !Game->Stopping && WasPressed(PlayKey))
+    {
+        Game->StopRequested = true;
+    }
+    if(!PlayKey.EndedDown)
+    {
+        Game->PlayKeyArmed = true;
+    }
+
     if(Game->Stopping)
     {
         FinishStopGame(EditorState, TranState);
@@ -966,7 +1227,23 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
     }
     else
     {
-        UpdateGameBuild(Game, TranState, Input->dtForFrame);
+        UpdateGameBuild(EditorState, Game, TranState, Input->dtForFrame);
+        if(Game->LoadingAssets && !EditorState->KEABuild.Running)
+        {
+            Game->LoadingAssets = false;
+            Game->AssetStatus[0] = 0;
+            if(!EditorState->KEABuild.Result)
+            {
+                FormatString(sizeof(Game->AssetStatus), Game->AssetStatus,
+                             "Building %s failed (see the log), the newest KEA there is loads", EditorState->KEABuild.Built);
+            }
+            LoadGameModeAssets(Game, TranState);
+        }
+        if(Game->Swapping)
+        {
+            FinishAssetSwap(Game, TranState);
+        }
+        UpdateGameData(EditorState, Game, TranState, Input->dtForFrame);
 
 #if !EDITOR_INTERNAL
         DrawGameControls(Game, Nk, 400.0f);
@@ -980,8 +1257,20 @@ UpdateAndRenderGame(editor_state *EditorState, transient_state *TranState, engin
             LOG("Restart %s", Game->ProjectName);
         }
 
-        if(Game->UpdateAndRender)
+        if(Game->SwapRequested)
         {
+            // NOTE(pvlso): The first frame of a swap: the game doesn't run, so nothing new starts loading
+            Platform.CompleteAllWork(TranState->LowPriorityQueue);
+            Game->SwapRequested = false;
+            Game->Swapping = true;
+        }
+        else if(Game->UpdateAndRender && !Game->LoadingAssets)
+        {
+            if(!Game->StartLogged)
+            {
+                Game->StartLogged = true;
+                LOG("%s started in %.2f s", Game->ProjectName, Platform.GetSeconds() - Game->StartSeconds);
+            }
             Game->Memory.PlatformAPI = Platform;
             Game->Memory.EngineAPI = GetEngineAPI();
 #if EDITOR_INTERNAL
